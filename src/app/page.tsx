@@ -1623,8 +1623,9 @@ export default function Home() {
 
   if (showIntro) {
     return (
-      <main className="fixed inset-0 text-white flex flex-col font-sans overflow-hidden select-none">
-        <div className="flex-1 flex flex-col items-center justify-center p-8 max-w-md mx-auto text-center animate-in fade-in duration-500">
+      <main className="fixed inset-0 text-white flex flex-col font-sans overflow-y-auto select-none">
+        {/* m-auto centers vertically when there's room but lets the content scroll (instead of clipping) on short screens */}
+        <div className="flex flex-col items-center p-8 max-w-md m-auto text-center animate-in fade-in duration-500">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/garage-golfers-logo.png"
