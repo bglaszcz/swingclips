@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
+  // Hosts allowed to use dev-server resources (e.g. hot reload) when the app is
+  // opened from another device on the LAN. Set ALLOWED_ORIGINS in .env.local.
+  allowedDevOrigins: (process.env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim().replace(/:\d+$/, ""))
+    .filter(Boolean),
   async headers() {
     return [
       {
