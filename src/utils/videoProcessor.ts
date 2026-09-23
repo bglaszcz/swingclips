@@ -318,6 +318,74 @@ export async function extractThumbnail(clipBlob: Blob): Promise<string> {
   return base64;
 }
 
+/**
+ * Burn a per-frame overlay (skeleton, and any drawings rendered into it) onto a
+ * clip. `frames` are transparent PNGs at the video's own resolution, one per
+ * sampled frame at `overlayFps`; ffmpeg holds the last one when the video runs
+ * at a higher frame rate. `videoFps` pins the output rate — without it ffmpeg
+ * guesses from the container and can duplicate thousands of frames.
+ */
+export async function burnSequenceToVideo(
+  videoBlob: Blob,
+  frames: Uint8Array[],
+  overlayFps: number,
+  videoFps: number,
+  onProgress: (progress: string) => void
+): Promise<string> {
+  if (frames.length === 0) throw new Error('No overlay frames to burn');
+  const fm = await initFFmpeg(onProgress);
+  const ext = videoBlob.type.includes('mp4') ? 'mp4' : 'webm';
+  const inputFileName = `input_burn_seq.${ext}`;
+  const outputFileName = `output_burn_seq.mp4`;
+  const frameName = (i: number) => `pose_${String(i).padStart(4, '0')}.png`;
+
+  onProgress('Preparing video for burn-in...');
+  await fm.writeFile(inputFileName, await fetchFile(videoBlob));
+  for (let i = 0; i < frames.length; i++) {
+    await fm.writeFile(frameName(i), frames[i]);
+  }
+
+  onProgress('Burning skeleton into video (this takes a few seconds)...');
+  // ffmpeg's own stderr is the only clue when a filter graph fails, so keep it
+  // in the in-app debug log (long-press Download to copy it).
+  const onFfmpegLog = ({ message }: { message: string }) => scLog(`burnSeq ffmpeg: ${message}`);
+  fm.on('log', onFfmpegLog);
+  try {
+    const code = await execWithTimeout(fm, [
+      '-i', inputFileName,
+      '-framerate', String(overlayFps),
+      '-i', 'pose_%04d.png',
+      '-filter_complex', '[0:v][1:v]overlay=0:0:eof_action=repeat',
+      '-fps_mode', 'cfr',
+      '-r', String(videoFps),
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-crf', '28',
+      '-threads', '0',
+      '-c:a', 'copy',
+      outputFileName
+    ], 'burnSequence');
+    if (code !== 0) throw new Error(`ffmpeg exited with code ${code}`);
+    const data = await fm.readFile(outputFileName) as Uint8Array;
+    // Copy out of ffmpeg's heap into a plain buffer the Blob can own.
+    const safeData = new Uint8Array(data.byteLength);
+    safeData.set(data);
+    const clipBlob = new Blob([safeData], { type: 'video/mp4' });
+    return URL.createObjectURL(clipBlob);
+  } catch (err) {
+    scError('burnSequenceToVideo failed', err);
+    throw err;
+  } finally {
+    fm.off('log', onFfmpegLog);
+    // Always clear the virtual filesystem; a 4s clip is ~120 PNGs of memory.
+    await fm.deleteFile(inputFileName).catch(() => {});
+    await fm.deleteFile(outputFileName).catch(() => {});
+    for (let i = 0; i < frames.length; i++) {
+      await fm.deleteFile(frameName(i)).catch(() => {});
+    }
+  }
+}
+
 export async function burnLinesToVideo(
   videoBlob: Blob,
   imageBlob: Blob,

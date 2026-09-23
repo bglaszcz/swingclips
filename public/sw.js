@@ -37,8 +37,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Custom caching for FFMPEG assets
-  if (url.pathname.includes('/ffmpeg/')) {
+  // Custom caching for FFMPEG and MediaPipe (pose) assets
+  if (url.pathname.includes('/ffmpeg/') || url.pathname.includes('/mediapipe/')) {
     event.respondWith(
       caches.match(event.request).then((cached) => {
         return cached || fetch(event.request).then((response) => {

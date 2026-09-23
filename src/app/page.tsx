@@ -1,8 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
-import { Video, Square, Loader2, RotateCcw, Download, Archive, X, ChevronLeft, ChevronRight, Share2, FileText, ClipboardList, Eraser, Play, Pause, Gauge, History, Trash2, Circle as CircleIcon, Camera, Star, Plus, Minus } from 'lucide-react';
-import { processSwings, burnLinesToVideo, resetFFmpeg, clearDebugLog, getDebugLog } from '@/utils/videoProcessor';
+import { Video, Square, Loader2, RotateCcw, Download, Archive, X, ChevronLeft, ChevronRight, Share2, FileText, ClipboardList, Eraser, Play, Pause, Gauge, History, Trash2, Circle as CircleIcon, Camera, Star, Plus, Minus, PersonStanding, LayoutGrid, SlidersHorizontal } from 'lucide-react';
+import PoseOverlay from '@/components/PoseOverlay';
+import KeyPositions from '@/components/KeyPositions';
+import type { LeadSide } from '@/utils/swingPhases';
+import { processSwings, burnLinesToVideo, burnSequenceToVideo, resetFFmpeg, clearDebugLog, getDebugLog, PRE_IMPACT_SECONDS } from '@/utils/videoProcessor';
+import { analyzeClip, cachePose, getCachedPose, POSE_SAMPLE_FPS, type PoseResult } from '@/utils/poseAnalyzer';
+import { renderPoseSequence, drawPoseScene, frameAt, referenceSpine, styleForWidth } from '@/utils/poseRender';
 import { Session, getAllSessions, saveSession, deleteSession, getSession } from '@/utils/db';
 import JSZip from 'jszip';
 
@@ -14,7 +19,14 @@ const MAX_RECORDING_MINUTES = 5;
 const MAX_SHOTS = 30;
 
 // High-framerate testing flag (Set to false to revert to standard 30fps logic)
-const USE_HIGH_FRAMERATE = false;
+// Capture frame rates offered in the UI. Higher is better for frame-by-frame
+// review and pose tracking, but the phone may ignore it and clips take longer to
+// process, so it stays the user's choice (stored per device).
+const CAPTURE_FPS_OPTIONS = [30, 60, 120] as const;
+type CaptureFps = (typeof CAPTURE_FPS_OPTIONS)[number];
+const FPS_STORAGE_KEY = 'swingclips.captureFps';
+const LEAD_SIDE_STORAGE_KEY = 'swingclips.leadSide';
+
 
 // --- MEMOIZED SUB-COMPONENTS ---
 
@@ -102,6 +114,40 @@ interface HistoryListProps {
   onLoad: (session: Session) => void;
   onDelete: (e: React.MouseEvent, id: number) => void;
 }
+
+// Tool drawer building blocks. Rows are full-width and labeled, which is easier
+// to hit on a phone than a row of icon-only buttons.
+const DrawerSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="px-3 py-3 border-b border-white/5">
+    <p className="px-2 pb-2 text-[10px] font-bold uppercase tracking-widest text-white/40">{title}</p>
+    <div className="flex flex-col gap-1">{children}</div>
+  </div>
+);
+
+interface DrawerItemProps {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  danger?: boolean;
+  onClick: (e: React.MouseEvent) => void;
+  onPointerDown?: () => void;
+  onPointerUp?: () => void;
+  onPointerLeave?: () => void;
+}
+
+const DrawerItem = ({ icon, label, active, danger, ...handlers }: DrawerItemProps) => (
+  <button
+    {...handlers}
+    className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors active:scale-[0.98] ${active
+      ? 'bg-emerald-500 text-black'
+      : danger
+        ? 'bg-white/5 text-red-400 hover:bg-red-900/30'
+        : 'bg-white/5 text-white/80 hover:bg-white/10'}`}
+  >
+    {icon}
+    {label}
+  </button>
+);
 
 const HistoryList = memo(({ sessions, currentSessionId, onLoad, onDelete }: HistoryListProps) => {
   return (
@@ -483,6 +529,23 @@ export default function Home() {
   const [currentShape, setCurrentShape] = useState<{ type: 'line' | 'circle', start: { x: number, y: number }, end: { x: number, y: number } } | null>(null);
   const [draggedHandle, setDraggedHandle] = useState<{ shapeIndex: number, handle: 'start' | 'end' } | null>(null);
   const [drawColor] = useState('#22c55e'); // Green
+  const [showPose, setShowPose] = useState(false);
+  // A burned clip waiting for the user's tap to actually share it.
+  const [pendingShare, setPendingShare] = useState<{ url: string; index: number } | null>(null);
+  const [captureFps, setCaptureFps] = useState<CaptureFps>(30);
+  const [cameraInfo, setCameraInfo] = useState<{
+    width: number; height: number; fps: number; maxFps: number | null;
+    label: string; maxWidth: number | null; maxHeight: number | null;
+  } | null>(null);
+  // What each getUserMedia attempt returned, for the camera diagnostics readout.
+  const [cameraAttempts, setCameraAttempts] = useState<string[]>([]);
+  const [showCameraInfo, setShowCameraInfo] = useState(false);
+  const fpsLongPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showTools, setShowTools] = useState(false);
+  const [showKeyPositions, setShowKeyPositions] = useState(false);
+  const [keyPositionsPose, setKeyPositionsPose] = useState<PoseResult | null>(null);
+  // 'left' lead arm = right-handed golfer, the common case.
+  const [leadSide, setLeadSide] = useState<LeadSide>('left');
 
   // Redraw canvas whenever lines change
   useEffect(() => {
@@ -888,6 +951,10 @@ export default function Home() {
 
   useEffect(() => {
     selectedClipIndexRef.current = selectedClipIndex;
+    // Key positions belong to one clip; drop them when the clip changes.
+    setShowTools(false);
+    setShowKeyPositions(false);
+    setKeyPositionsPose(null);
     if (selectedClipIndex !== null) {
       setIsPlaying(true);
       setCurrentTime(0);
@@ -897,11 +964,11 @@ export default function Home() {
     }
   }, [selectedClipIndex]);
 
-  const generateOverlayBlob = async (): Promise<Blob | null> => {
-    if (shapes.length === 0 && !currentShape) return null;
+  /** Paint the telestrator shapes onto a canvas that is the size of the video itself. */
+  const drawShapesToVideoContext = (ctx: CanvasRenderingContext2D) => {
     const video = mainVideoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return null;
+    if (!video || !canvas) return;
 
     const vw = video.videoWidth;
     const vh = video.videoHeight;
@@ -913,12 +980,6 @@ export default function Home() {
     const dh = vh * scale;
     const offsetX = (cw - dw) / 2;
     const offsetY = (ch - dh) / 2;
-
-    const offscreen = document.createElement('canvas');
-    offscreen.width = vw;
-    offscreen.height = vh;
-    const ctx = offscreen.getContext('2d');
-    if (!ctx) return null;
 
     ctx.strokeStyle = drawColor;
     ctx.lineWidth = 4 / scale; // Scaled line width for video
@@ -946,10 +1007,100 @@ export default function Home() {
 
     shapes.forEach(drawShapeToCtx);
     if (currentShape) drawShapeToCtx(currentShape);
+  };
+
+  const generateOverlayBlob = async (): Promise<Blob | null> => {
+    if (shapes.length === 0 && !currentShape) return null;
+    const video = mainVideoRef.current;
+    if (!video) return null;
+
+    const offscreen = document.createElement('canvas');
+    offscreen.width = video.videoWidth;
+    offscreen.height = video.videoHeight;
+    const ctx = offscreen.getContext('2d');
+    if (!ctx) return null;
+
+    drawShapesToVideoContext(ctx);
 
     return new Promise((resolve) => {
       offscreen.toBlob((blob) => resolve(blob), 'image/png');
     });
+  };
+
+  /**
+   * Key positions needs the pose track. If the skeleton was never switched on
+   * for this clip, analyse it now (the result is cached for both features).
+   */
+  const handleOpenKeyPositions = async () => {
+    if (selectedClipIndex === null) return;
+    const url = clips[selectedClipIndex];
+    if (!url) return;
+
+    setShowKeyPositions(true);
+    const cached = getCachedPose(url);
+    if (cached) { setKeyPositionsPose(cached); return; }
+    try {
+      const result = await analyzeClip(url);
+      cachePose(url, result);
+      setKeyPositionsPose(result);
+    } catch (err) {
+      console.error('Pose analysis failed:', err);
+      setShowKeyPositions(false);
+      alert("Couldn't analyze this clip.");
+    }
+  };
+
+  /** Save the frame on screen, with skeleton and drawings, as a JPEG. */
+  const handleSavePhoto = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const video = mainVideoRef.current;
+    if (!video || selectedClipIndex === null) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    drawShapesToVideoContext(ctx);
+
+    const pose = showPose ? getCachedPose(clips[selectedClipIndex] as string) : null;
+    const frame = pose ? frameAt(pose, video.currentTime) : null;
+    if (pose && frame?.landmarks) {
+      const style = styleForWidth(canvas.width, (p) => ({ x: p.x * canvas.width, y: p.y * canvas.height }));
+      drawPoseScene(ctx, frame.landmarks, referenceSpine(pose), pose.videoWidth, pose.videoHeight, style);
+    }
+
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/jpeg', 0.92);
+    link.download = buildPhotoFilename(selectedClipIndex, video.currentTime);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  /**
+   * Produce a clip with whatever is on screen burned in. The skeleton moves, so
+   * it needs one overlay image per frame; drawings alone need only one.
+   * Returns null when there's nothing to burn.
+   */
+  const buildBurnedClip = async (url: string): Promise<string | null> => {
+    const poseResult = showPose ? getCachedPose(url) : null;
+    const overlayBlob = await generateOverlayBlob();
+    if (!poseResult && !overlayBlob) return null;
+
+    const videoBlob = await (await fetch(url)).blob();
+
+    if (poseResult) {
+      setBurnProgress('Drawing skeleton frames...');
+      const frames = await renderPoseSequence(poseResult, {
+        extraDraw: overlayBlob ? drawShapesToVideoContext : undefined,
+        onProgress: (f) => setBurnProgress(`Drawing skeleton frames... ${Math.round(f * 100)}%`),
+      });
+      return burnSequenceToVideo(videoBlob, frames, POSE_SAMPLE_FPS, frameRateRef.current, setBurnProgress);
+    }
+    return burnLinesToVideo(videoBlob, overlayBlob!, setBurnProgress);
   };
 
   const handleFullscreenDownload = async (e: React.MouseEvent) => {
@@ -958,21 +1109,14 @@ export default function Home() {
     const url = clips[selectedClipIndex];
     if (!url) return;
 
-    const overlayBlob = await generateOverlayBlob();
-    if (!overlayBlob) {
-      downloadClip(url, selectedClipIndex, false);
-      return;
-    }
-
     setIsBurning(true);
-    setBurnProgress('Processing lines...');
+    setBurnProgress('Processing overlay...');
     try {
-      const videoRes = await fetch(url);
-      const videoBlob = await videoRes.blob();
-      const finalUrl = await burnLinesToVideo(videoBlob, overlayBlob, setBurnProgress);
-      downloadClip(finalUrl, selectedClipIndex, true);
+      const finalUrl = await buildBurnedClip(url);
+      downloadClip(finalUrl ?? url, selectedClipIndex, finalUrl !== null);
     } catch (err) {
-      alert("Failed to process video lines.");
+      console.error(err);
+      alert("Failed to process video overlay.");
     } finally {
       setIsBurning(false);
     }
@@ -984,21 +1128,21 @@ export default function Home() {
     const url = clips[selectedClipIndex];
     if (!url) return;
 
-    const overlayBlob = await generateOverlayBlob();
-    if (!overlayBlob) {
-      shareClip(url, selectedClipIndex, false);
-      return;
-    }
-
     setIsBurning(true);
-    setBurnProgress('Processing lines...');
+    setBurnProgress('Processing overlay...');
     try {
-      const videoRes = await fetch(url);
-      const videoBlob = await videoRes.blob();
-      const finalUrl = await burnLinesToVideo(videoBlob, overlayBlob, setBurnProgress);
-      await shareClip(finalUrl, selectedClipIndex, true);
+      const finalUrl = await buildBurnedClip(url);
+      if (!finalUrl) {
+        // Nothing to burn: still inside the tap, so share straight away.
+        await shareClip(url, selectedClipIndex, false);
+        return;
+      }
+      // Burning takes seconds, which uses up the tap that Android requires for
+      // sharing, so ask for a fresh tap instead of failing with NotAllowedError.
+      setPendingShare({ url: finalUrl, index: selectedClipIndex });
     } catch (err) {
-      alert("Failed to process video lines.");
+      console.error(err);
+      alert("Failed to process video overlay.");
     } finally {
       setIsBurning(false);
     }
@@ -1132,25 +1276,25 @@ export default function Home() {
   };
 
   const startCamera = useCallback(async () => {
-    if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+      // Android needs a moment to release the camera; reopening immediately
+      // fails with NotReadableError.
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
     try {
-      const constraints: MediaStreamConstraints = {
-        video: selectedDeviceId
-          ? {
-            deviceId: { exact: selectedDeviceId },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: USE_HIGH_FRAMERATE ? { ideal: 60 } : { ideal: 30 }
-          }
-          : {
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: USE_HIGH_FRAMERATE ? { ideal: 60 } : { ideal: 30 }
-          },
-        audio: true
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const source = selectedDeviceId
+        ? { deviceId: { exact: selectedDeviceId } }
+        : { facingMode: 'environment' as const };
+
+      // Open the camera at a rate we know works, then ask the live track to go
+      // faster only if it says it can. Opening repeatedly with rates the camera
+      // refuses can leave it unable to start at all (NotReadableError).
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { ...source, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: captureFps } },
+        audio: true,
+      });
       streamRef.current = stream;
       setActiveStream(stream);
       if (videoRef.current) videoRef.current.srcObject = stream;
@@ -1158,6 +1302,26 @@ export default function Home() {
 
 
       const track = stream.getVideoTracks()[0];
+      const capabilities0 = typeof track.getCapabilities === 'function' ? track.getCapabilities() : undefined;
+      const maxFps = capabilities0?.frameRate?.max;
+      const attemptLog: string[] = [];
+
+      if (captureFps > 30) {
+        if (maxFps && maxFps + 0.5 < captureFps) {
+          attemptLog.push(`Camera reports max ${Math.round(maxFps)}fps, so ${captureFps}fps isn't available`);
+        } else {
+          // Push the live track rather than reopening the camera: if it refuses,
+          // we still have a working stream at the rate it gave us.
+          try {
+            await track.applyConstraints({ frameRate: { exact: captureFps } });
+            attemptLog.push(`OK: track accepted exact ${captureFps}fps`);
+          } catch (err) {
+            attemptLog.push(`${(err as Error).name}: track refused exact ${captureFps}fps`);
+          }
+        }
+      }
+      setCameraAttempts(attemptLog);
+
       const settings = track.getSettings();
 
       // Detect actual achieved frame rate
@@ -1168,6 +1332,19 @@ export default function Home() {
         frameRateRef.current = 30; // Fallback
       }
 
+      // Report what the camera actually gave us — phones silently cap the
+      // frame rate, so the request and the result often differ.
+      const capabilities = typeof track.getCapabilities === 'function' ? track.getCapabilities() : undefined;
+      setCameraInfo({
+        width: settings.width ?? 0,
+        height: settings.height ?? 0,
+        fps: Math.round(settings.frameRate ?? 30),
+        maxFps: capabilities?.frameRate?.max ? Math.round(capabilities.frameRate.max) : null,
+        label: track.label || 'camera',
+        maxWidth: capabilities?.width?.max ?? null,
+        maxHeight: capabilities?.height?.max ?? null,
+      });
+
       // Enumerate devices now that we have permissions
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoInputs = devices.filter(d => d.kind === 'videoinput');
@@ -1176,7 +1353,7 @@ export default function Home() {
       console.error("Error accessing camera", err);
       alert("Could not access camera. Please allow camera and microphone permissions.");
     }
-  }, [selectedDeviceId]);
+  }, [selectedDeviceId, captureFps]);
 
   useEffect(() => {
     if (appState === 'camera' && showIntro === false) startCamera();
@@ -1192,6 +1369,34 @@ export default function Home() {
   useEffect(() => {
     loadHistory();
   }, []);
+
+  // Remember the capture frame rate across visits.
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem(FPS_STORAGE_KEY));
+      if (CAPTURE_FPS_OPTIONS.includes(saved as CaptureFps)) setCaptureFps(saved as CaptureFps);
+    } catch { /* private mode / blocked storage: keep the default */ }
+  }, []);
+
+  // Handedness decides which arm is the "lead" arm for the P3/P5 checkpoints.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LEAD_SIDE_STORAGE_KEY);
+      if (saved === 'left' || saved === 'right') setLeadSide(saved);
+    } catch { /* ignore */ }
+  }, []);
+
+  const toggleLeadSide = () => {
+    const next: LeadSide = leadSide === 'left' ? 'right' : 'left';
+    setLeadSide(next);
+    try { localStorage.setItem(LEAD_SIDE_STORAGE_KEY, next); } catch { /* ignore */ }
+  };
+
+  const cycleCaptureFps = () => {
+    const next = CAPTURE_FPS_OPTIONS[(CAPTURE_FPS_OPTIONS.indexOf(captureFps) + 1) % CAPTURE_FPS_OPTIONS.length];
+    setCaptureFps(next);
+    try { localStorage.setItem(FPS_STORAGE_KEY, String(next)); } catch { /* ignore */ }
+  };
 
   const toggleCamera = () => {
     if (isRecording || videoDevices.length === 0) return;
@@ -1495,6 +1700,10 @@ export default function Home() {
     return `swing-${ymd}-${hm}-${num}${withLines ? '-l' : ''}.mp4`;
   };
 
+  /** Photo filename carries the clip time, so stills from one swing sort in order. */
+  const buildPhotoFilename = (index: number, timeSeconds: number): string =>
+    buildClipFilename(index).replace(/\.mp4$/, `-${timeSeconds.toFixed(2).replace('.', 'p')}s.jpg`);
+
   const downloadClip = (url: string, index: number, withLines?: boolean) => {
     const a = document.createElement('a');
     a.href = url;
@@ -1684,8 +1893,65 @@ export default function Home() {
                   <button onClick={() => { loadHistory(); setAppState('history'); }} className="p-3 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md border border-white/10 shadow-lg transition-all active:scale-90"><History className="w-6 h-6 text-white" /></button>
                   <button onClick={toggleCamera} className="p-3 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md border border-white/10 shadow-lg transition-all active:scale-90"><Camera className="w-6 h-6 text-white" /></button>
                 </div>
-              )}            </div>
+              )}
+              {!isRecording && (
+                <button
+                  onClick={cycleCaptureFps}
+                  onPointerDown={() => {
+                    // Long-press: what this phone's camera actually supports. This is
+                    // the only reliable way to tell "the app asked wrong" from
+                    // "the browser can't do it on this device".
+                    fpsLongPressRef.current = setTimeout(() => {
+                      fpsLongPressRef.current = null;
+                      setShowCameraInfo(true);
+                    }, 700);
+                  }}
+                  onPointerUp={() => { clearTimeout(fpsLongPressRef.current ?? undefined); fpsLongPressRef.current = null; }}
+                  onPointerLeave={() => { clearTimeout(fpsLongPressRef.current ?? undefined); fpsLongPressRef.current = null; }}
+                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-full backdrop-blur-md border border-white/10 shadow-lg transition-all active:scale-90 text-[11px] font-bold text-white/90 whitespace-nowrap"
+                  title={cameraInfo
+                    ? `Capturing ${cameraInfo.width}x${cameraInfo.height} at ${cameraInfo.fps}fps (asked for ${captureFps}${cameraInfo.maxFps ? `, camera max ${cameraInfo.maxFps}` : ''}). Tap to change.`
+                    : 'Capture frame rate (tap to change)'}
+                >
+                  {/* Kept short so it can't crowd the buttons above it. */}
+                  {cameraInfo
+                    ? `${cameraInfo.fps}fps${cameraInfo.maxFps && cameraInfo.maxFps <= cameraInfo.fps ? ' max' : cameraInfo.fps < captureFps ? '*' : ''}`
+                    : `${captureFps}fps`}
+                </button>
+              )}
+            </div>
           </div>
+
+          {showCameraInfo && (
+            <div className="absolute inset-0 z-[120] bg-black/85 backdrop-blur-sm flex items-center justify-center p-5" onClick={() => setShowCameraInfo(false)}>
+              <div className="w-full max-w-sm bg-neutral-900 border border-white/10 rounded-2xl p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-white font-bold mb-3">Camera capabilities</h3>
+                <dl className="text-xs text-white/80 space-y-1.5 font-mono">
+                  <div>Requested: {captureFps}fps</div>
+                  <div>Getting: {cameraInfo ? `${cameraInfo.width}x${cameraInfo.height} @ ${cameraInfo.fps}fps` : 'unknown'}</div>
+                  <div>Camera max fps: {cameraInfo?.maxFps ?? 'not reported'}</div>
+                  <div>Camera max size: {cameraInfo?.maxWidth && cameraInfo?.maxHeight ? `${cameraInfo.maxWidth}x${cameraInfo.maxHeight}` : 'not reported'}</div>
+                  <div className="break-words">Device: {cameraInfo?.label ?? 'unknown'}</div>
+                  <div>Cameras found: {videoDevices.length}</div>
+                  <div>Recording as: {typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('video/mp4') ? 'mp4' : 'webm'}</div>
+                </dl>
+                {cameraAttempts.length > 0 && (
+                  <>
+                    <p className="mt-3 mb-1 text-[10px] font-bold uppercase tracking-widest text-white/40">Attempts</p>
+                    <ul className="text-[11px] text-white/70 space-y-1 font-mono">
+                      {cameraAttempts.map((a, i) => <li key={i} className="break-words">{a}</li>)}
+                    </ul>
+                  </>
+                )}
+                <button
+                  onClick={() => setShowCameraInfo(false)}
+                  className="mt-4 w-full py-2.5 bg-white/10 text-white font-semibold rounded-xl active:scale-95 transition-transform"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Camera Switch Toast */}
           <div className={`absolute top-24 inset-x-0 flex justify-center z-20 pointer-events-none transition-all duration-300 ${showDeviceToast ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
@@ -1877,6 +2143,12 @@ export default function Home() {
                   className="w-full h-full object-cover absolute inset-0 z-0"
                 />
 
+                <PoseOverlay
+                  videoRef={mainVideoRef}
+                  src={clips[selectedClipIndex] as string}
+                  enabled={showPose}
+                />
+
                 {/* Telestrator Canvas */}
                 <canvas
                   ref={canvasRef}
@@ -1928,42 +2200,16 @@ export default function Home() {
                       </span>
                     )}
                   </div>
-                  <div className="flex gap-1.5 mt-1">
-                    <button
-                      onClick={() => setDrawMode(drawMode === 'line' ? 'circle' : 'line')}
-                      className={`flex items-center justify-center p-2 rounded-lg transition-colors ${(drawMode === 'circle' || drawMode === 'line') ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}
-                      title={`Switch to ${drawMode === 'circle' ? 'Line' : 'Circle'}`}
-                    >
-                      {drawMode === 'circle' ? <CircleIcon className="w-4 h-4" /> : (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                          <line x1="5" y1="19" x2="19" y2="5" />
-                          <circle cx="5" cy="19" r="1.5" fill="currentColor" />
-                          <circle cx="19" cy="5" r="1.5" fill="currentColor" />
-                        </svg>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setDrawMode(drawMode === 'erase' ? 'line' : 'erase')}
-                      className={`flex items-center justify-center p-2 rounded-lg transition-colors ${drawMode === 'erase' ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60 hover:text-white'}`}
-                      title="Eraser"
-                    >
-                      <Eraser className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={clearCanvas}
-                      className="flex items-center justify-center p-2 rounded-lg bg-white/10 text-white/60 hover:text-white transition-colors"
-                      title="Clear All"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setShowNotes(!showNotes)}
-                      className={`flex items-center justify-center p-2 rounded-lg transition-colors ${showNotes ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}
-                      title="Toggle Notes"
-                    >
-                      <FileText className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {/* One button instead of a row of them: at phone width the old
+                      row ran into the actions on the right and pushed them off screen. */}
+                  <button
+                    onClick={() => setShowTools(true)}
+                    className={`flex items-center gap-1.5 mt-1 px-3 py-2 rounded-lg transition-colors ${showPose || showNotes || shapes.length > 0 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/80'}`}
+                    title="Tools"
+                  >
+                    <SlidersHorizontal className="w-4 h-4" />
+                    <span className="text-xs font-bold">Tools</span>
+                  </button>
                 </div>
                 <div className="flex items-center gap-2 pointer-events-auto">
                   <button
@@ -1974,29 +2220,161 @@ export default function Home() {
                     <Star className={`w-5 h-5 ${selectedClipIndex !== null && favorites[selectedClipIndex] ? 'fill-current' : ''}`} />
                   </button>
                   <button onClick={handleFullscreenShare} className="p-2.5 bg-green-600 rounded-full text-white shadow-lg active:scale-90 transition-transform" title="Share"><Share2 className="w-5 h-5" /></button>
-                  <button
-                    onClick={handleFullscreenDownload}
-                    onPointerDown={() => {
-                      downloadLongPressRef.current = setTimeout(() => {
-                        downloadLongPressRef.current = null;
-                        navigator.clipboard.writeText(getDebugLog()).catch(() => {});
-                      }, 700);
-                    }}
-                    onPointerUp={() => { clearTimeout(downloadLongPressRef.current ?? undefined); downloadLongPressRef.current = null; }}
-                    onPointerLeave={() => { clearTimeout(downloadLongPressRef.current ?? undefined); downloadLongPressRef.current = null; }}
-                    className="p-2.5 bg-emerald-500 rounded-full text-white shadow-lg active:scale-90 transition-transform"
-                    title="Download (long-press to copy debug log)"
-                  ><Download className="w-5 h-5" /></button>
-                  <button
-                    onClick={(e) => selectedClipIndex !== null && deleteClip(selectedClipIndex, e)}
-                    className="p-2.5 bg-white/10 text-red-400 rounded-full shadow-lg active:scale-90 transition-transform hover:bg-red-900/40"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
                   <button onClick={(e) => { e.stopPropagation(); setSelectedClipIndex(null); }} className="p-2.5 bg-white/10 rounded-full text-white shadow-lg active:scale-90 transition-transform" title="Close"><X className="w-5 h-5" /></button>
                 </div>
               </div>
+
+              {/* Tool drawer: everything that used to crowd the header row. */}
+              {showTools && (
+                <div className="absolute inset-0 z-[115]" onClick={() => setShowTools(false)}>
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                  <div
+                    className="absolute inset-y-0 right-0 w-72 max-w-[85%] bg-neutral-900 border-l border-white/10 shadow-2xl overflow-y-auto animate-in slide-in-from-right duration-200"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                      <h3 className="text-white font-bold">Tools</h3>
+                      <button onClick={() => setShowTools(false)} className="p-2 rounded-full bg-white/10 text-white active:scale-90 transition-transform">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <DrawerSection title="Analysis">
+                      <DrawerItem
+                        icon={<PersonStanding className="w-4 h-4" />}
+                        label="Skeleton"
+                        active={showPose}
+                        onClick={() => setShowPose(!showPose)}
+                      />
+                      <DrawerItem
+                        icon={<LayoutGrid className="w-4 h-4" />}
+                        label="Key positions"
+                        onClick={() => { setShowTools(false); handleOpenKeyPositions(); }}
+                      />
+                    </DrawerSection>
+
+                    <DrawerSection title="Draw">
+                      <DrawerItem
+                        icon={drawMode === 'circle' ? <CircleIcon className="w-4 h-4" /> : (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                            <line x1="5" y1="19" x2="19" y2="5" />
+                            <circle cx="5" cy="19" r="1.5" fill="currentColor" />
+                            <circle cx="19" cy="5" r="1.5" fill="currentColor" />
+                          </svg>
+                        )}
+                        label={drawMode === 'circle' ? 'Circle' : 'Line'}
+                        active={drawMode === 'line' || drawMode === 'circle'}
+                        onClick={() => setDrawMode(drawMode === 'line' ? 'circle' : 'line')}
+                      />
+                      <DrawerItem
+                        icon={<Eraser className="w-4 h-4" />}
+                        label="Eraser"
+                        active={drawMode === 'erase'}
+                        onClick={() => setDrawMode(drawMode === 'erase' ? 'line' : 'erase')}
+                      />
+                      <DrawerItem icon={<X className="w-4 h-4" />} label="Clear drawings" onClick={clearCanvas} />
+                    </DrawerSection>
+
+                    <DrawerSection title="This clip">
+                      <DrawerItem
+                        icon={<FileText className="w-4 h-4" />}
+                        label="Notes"
+                        active={showNotes}
+                        onClick={() => { setShowNotes(!showNotes); setShowTools(false); }}
+                      />
+                      <DrawerItem
+                        icon={<Camera className="w-4 h-4" />}
+                        label="Save this frame"
+                        onClick={(e) => { setShowTools(false); handleSavePhoto(e); }}
+                      />
+                      <DrawerItem
+                        icon={<Download className="w-4 h-4" />}
+                        label="Save clip"
+                        onClick={(e) => { setShowTools(false); handleFullscreenDownload(e); }}
+                        onPointerDown={() => {
+                          downloadLongPressRef.current = setTimeout(() => {
+                            downloadLongPressRef.current = null;
+                            navigator.clipboard.writeText(getDebugLog()).catch(() => {});
+                          }, 700);
+                        }}
+                        onPointerUp={() => { clearTimeout(downloadLongPressRef.current ?? undefined); downloadLongPressRef.current = null; }}
+                        onPointerLeave={() => { clearTimeout(downloadLongPressRef.current ?? undefined); downloadLongPressRef.current = null; }}
+                      />
+                      <DrawerItem
+                        icon={<Trash2 className="w-4 h-4" />}
+                        label="Delete clip"
+                        danger
+                        onClick={(e) => { setShowTools(false); if (selectedClipIndex !== null) deleteClip(selectedClipIndex, e); }}
+                      />
+                    </DrawerSection>
+                  </div>
+                </div>
+              )}
+
+              {showKeyPositions && (
+                keyPositionsPose ? (
+                  <KeyPositions
+                    src={clips[selectedClipIndex] as string}
+                    pose={keyPositionsPose}
+                    impactHint={PRE_IMPACT_SECONDS}
+                    withSkeleton={showPose}
+                    leadSide={leadSide}
+                    onToggleLeadSide={toggleLeadSide}
+                    filenameBase={buildClipFilename(selectedClipIndex).replace(/\.mp4$/, '')}
+                    onSeek={(t) => {
+                      if (mainVideoRef.current) {
+                        mainVideoRef.current.pause();
+                        mainVideoRef.current.currentTime = t;
+                        setCurrentTime(t);
+                      }
+                    }}
+                    onClose={() => setShowKeyPositions(false)}
+                  />
+                ) : (
+                  <div className="absolute inset-0 z-[120] bg-black/90 flex items-center justify-center gap-2 text-white">
+                    <Loader2 className="w-5 h-5 animate-spin text-emerald-400" /> Analyzing swing…
+                  </div>
+                )
+              )}
+
+              {/* Share confirmation: Android only allows sharing from a tap, and
+                  the burn-in above outlives the original one. */}
+              {pendingShare && (
+                <div className="absolute inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6">
+                  <div className="w-full max-w-sm bg-neutral-900 border border-white/10 rounded-2xl p-6 text-center shadow-2xl">
+                    <h3 className="text-white font-bold text-lg mb-2">Clip ready</h3>
+                    <p className="text-white/70 text-sm mb-6">Your swing has been rendered with the overlay.</p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={async () => {
+                          const { url, index } = pendingShare;
+                          setPendingShare(null);
+                          await shareClip(url, index, true);
+                        }}
+                        className="w-full py-3 bg-green-600 text-white font-bold rounded-xl active:scale-95 transition-transform"
+                      >
+                        Share
+                      </button>
+                      <button
+                        onClick={() => {
+                          const { url, index } = pendingShare;
+                          setPendingShare(null);
+                          downloadClip(url, index, true);
+                        }}
+                        className="w-full py-3 bg-emerald-500 text-black font-bold rounded-xl active:scale-95 transition-transform"
+                      >
+                        Save to device
+                      </button>
+                      <button
+                        onClick={() => setPendingShare(null)}
+                        className="w-full py-3 bg-white/10 text-white/80 font-semibold rounded-xl active:scale-95 transition-transform"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Notes Overlay */}
               {showNotes && (
