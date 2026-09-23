@@ -239,10 +239,13 @@ async def upload(name: str, request: Request):
 # are paired with clips by time: the capture app names each clip after the second it heard the
 # strike, and the launch monitor's report arrives a moment later.
 SHOTS_FILE = Path(os.environ.get("SWINGCLIPS_SHOTS", CLIPS_DIR.parent / "shots.jsonl"))
-# How long after a strike its shot report can arrive, and how early (clock differences). Square's
-# own app may only save a shot once its ball-flight animation has played, hence the slack; each
-# match records its gap so this can be tightened from real sessions.
-SHOT_AFTER_S, SHOT_BEFORE_S = 15.0, 1.0
+# Typical seconds from strike to report, per source. Square's own app saves a shot ~14 s after the
+# strike (measured 13.6-14.2 s over a real session; its ball-flight animation plays first, or the
+# laptop clock runs ahead); the GSPro connector reports within about a second. A shot pairs with
+# the clip whose gap is closest to its source's delay, within SHOT_SLACK_S of it.
+SHOT_DELAY_S = {"square-app": 14.0}
+DEFAULT_SHOT_DELAY_S = 1.0
+SHOT_SLACK_S = 5.0
 
 
 @app.post("/api/shots")
@@ -250,7 +253,12 @@ async def add_shot(request: Request):
     shot = await request.json()
     if not isinstance(shot, dict) or "received" not in shot or "ball" not in shot:
         raise HTTPException(400, "Expected a shot with 'received' and 'ball'")
-    datetime.fromisoformat(shot["received"])  # rejects a bad timestamp
+    sent = datetime.fromisoformat(shot["received"])  # rejects a bad timestamp
+    # Our own clock too: the difference shows whether the sending PC's clock is off.
+    shot["serverReceived"] = datetime.now().astimezone().isoformat(timespec="milliseconds")
+    skew = datetime.now().astimezone().timestamp() - sent.timestamp()
+    if abs(skew) > 3:
+        print(f"Shot: sender's clock is {-skew:+.1f} s off from this server's", flush=True)
     SHOTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with files_lock, open(SHOTS_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(shot, separators=(",", ":")) + "\n")
@@ -276,10 +284,11 @@ def match_shots(clip_times: dict[str, float]) -> dict[str, dict]:
     """Clip name -> the shot reported just after its strike. Each shot goes to one clip at most."""
     pairs = []
     for s in load_shots():
+        delay = SHOT_DELAY_S.get(s.get("source"), DEFAULT_SHOT_DELAY_S)
         for name, t in clip_times.items():
             gap = s["_t"] - t
-            if -SHOT_BEFORE_S <= gap <= SHOT_AFTER_S:
-                pairs.append((abs(gap), name, s))
+            if gap >= -1.0 and abs(gap - delay) <= SHOT_SLACK_S:
+                pairs.append((abs(gap - delay), name, s))
     matched, used = {}, set()
     for _, name, s in sorted(pairs, key=lambda p: p[0]):
         if name in matched or id(s) in used:
