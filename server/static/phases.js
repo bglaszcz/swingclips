@@ -103,15 +103,24 @@
    * @param frames [{t, lm}] from the server's pose file (lm = flat [x, y, visibility] * 33 or null)
    * @param aspect picture width / height as displayed
    * @param leadSide "left" for a right-handed golfer
+   * @param impactWindow optional [from, to] clip seconds when the strike was heard
    * @returns [{key, tag, label, t, index, estimated}] - index is into `frames`
    */
-  function detect(frames, aspect, leadSide = "left") {
+  function detect(frames, aspect, leadSide = "left", impactWindow = null) {
     const ms = metrics(frames, aspect, leadSide);
     if (ms.length < 20) return [];
 
+    // With a heard strike, impact must be in that window; without one, anywhere in the clip.
+    const [from, to] = impactWindow || [-Infinity, Infinity];
+
     // The hands move fastest around impact, and that's the one moment that stands out in any clip.
-    let fastest = 0;
-    ms.forEach((m, i) => { if (m.speed > ms[fastest].speed) fastest = i; });
+    // (A follow-through can be as fast, which is what the strike window guards against.)
+    let fastest = -1;
+    ms.forEach((m, i) => {
+      if (m.t < from - 0.1 || m.t > to + 0.1) return;
+      if (fastest < 0 || m.speed > ms[fastest].speed) fastest = i;
+    });
+    if (fastest < 0) return [];
 
     // P4 top: hands highest in the two seconds before that.
     let top = -1;
@@ -138,6 +147,7 @@
     // works down the line; face-on, the hands keep dropping for a moment after impact.)
     let impact = -1;
     for (let i = top + 1; i < ms.length && ms[i].t <= ms[fastest].t + 0.15; i++) {
+      if (ms[i].t < from - 0.05 || ms[i].t > to + 0.05) continue;
       const gap = Math.hypot(ms[i].hand.x - ms[address].hand.x, ms[i].hand.y - ms[address].hand.y);
       const best = impact < 0 ? Infinity
         : Math.hypot(ms[impact].hand.x - ms[address].hand.x, ms[impact].hand.y - ms[address].hand.y);

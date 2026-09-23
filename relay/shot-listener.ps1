@@ -99,7 +99,11 @@ $selfTest.Close()
 
 $reply = [System.Text.Encoding]::UTF8.GetBytes('{"Code":200,"Message":"Shot received successfully"}')
 
+Say "Close this window (or press Ctrl+C) to stop."
+
 while ($true) {
+    # Wait in short naps rather than one blocking call, which Ctrl+C can't interrupt.
+    while (-not $listener.Pending()) { Start-Sleep -Milliseconds 200 }
     $client = $listener.AcceptTcpClient()
     $peer = $client.Client.RemoteEndPoint
     $isSelfTest = $false
@@ -109,7 +113,11 @@ while ($true) {
     $bytes = New-Object byte[] 65536
     $buf = New-Object System.Text.StringBuilder
     try {
+        $socket = $client.Client
         while ($true) {
+            # Same here: poll for up to 0.2 s at a time so Ctrl+C gets a look in.
+            if (-not $socket.Poll(200000, [System.Net.Sockets.SelectMode]::SelectRead)) { continue }
+            if ($socket.Available -eq 0) { break }  # readable with nothing to read = closed
             $n = $stream.Read($bytes, 0, $bytes.Length)
             if ($n -le 0) { break }
             $received = Get-Date

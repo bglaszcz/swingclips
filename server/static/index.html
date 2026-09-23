@@ -451,7 +451,10 @@ async function buildPositions(name) {
   handBtn.textContent = leadSide === "left" ? "Right-handed" : "Left-handed";
   await whenReady(video, "loadedmetadata", () => video.videoWidth > 0);
   if (run !== positionsRun || current !== name || !pose) return;
-  positions = SwingPhases.detect(pose.frames, video.videoWidth / video.videoHeight, leadSide);
+  // The capture app cuts each clip 2 s before the strike it heard, starting on a keyframe (every
+  // 0.25 s), so the strike is 2.0-2.25 s in. Anchoring impact there beats guessing from motion.
+  const strikeWindow = name.startsWith("swing_") ? [2.0, 2.25] : null;
+  positions = SwingPhases.detect(pose.frames, video.videoWidth / video.videoHeight, leadSide, strikeWindow);
   positionsBox.hidden = false;
   document.getElementById("pos-note").textContent = positions.length
     ? "Tap one to jump there. ~ = estimated (depends on the club, which isn't tracked)."
