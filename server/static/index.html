@@ -8,11 +8,13 @@
   :root {
     --bg: #f4f6f4; --panel: #ffffff; --text: #17201a; --muted: #5d6b62;
     --line: #dde3de; --accent: #1f8a4c; --accent-text: #ffffff; --sel: #e3f3e9;
+    --warn: #b45309;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0f1411; --panel: #171e19; --text: #e6ece7; --muted: #93a197;
       --line: #27312a; --accent: #3cb46e; --accent-text: #08120c; --sel: #1d3325;
+      --warn: #f59e0b;
     }
   }
   * { box-sizing: border-box; }
@@ -31,17 +33,22 @@
   #list li { padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
   #list li:hover { background: var(--sel); }
   #list li.sel { background: var(--sel); box-shadow: inset 3px 0 var(--accent); }
-  #list .when { font-weight: 600; }
+  #list .when { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
+  #list .pose { font-weight: 400; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #list .pose.failed { color: var(--warn); }
   #list .meta { color: var(--muted); font-size: 12px; word-break: break-all; }
   #viewer { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   @media (max-width: 899px) { #viewer { order: -1; position: sticky; top: 0; background: var(--bg);
                                         border-bottom: 1px solid var(--line); z-index: 1; } }
-  video { width: 100%; max-height: 70vh; background: #000; border-radius: 6px; }
-  @media (max-width: 899px) { video { max-height: 45vh; } }
+  .stage { position: relative; }
+  video { display: block; width: 100%; height: 70vh; background: #000; border-radius: 6px; }
+  @media (max-width: 899px) { video { height: 45vh; } }
+  #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--line);
            background: var(--panel); color: var(--text); cursor: pointer; min-width: 44px; }
   button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: default; }
   .sep { width: 1px; height: 28px; background: var(--line); }
   #title { color: var(--muted); font-size: 13px; word-break: break-all; }
   #frame { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -53,12 +60,17 @@
 <main>
   <ul id="list"></ul>
   <section id="viewer" hidden>
-    <video id="video" controls playsinline muted preload="auto"></video>
+    <div class="stage">
+      <video id="video" controls playsinline muted preload="auto"></video>
+      <canvas id="overlay"></canvas>
+    </div>
     <div class="controls">
       <button id="prev" title="Previous frame (←)">‹ Frame</button>
       <button id="next" title="Next frame (→)">Frame ›</button>
       <span class="sep"></span>
       <span id="speeds"></span>
+      <span class="sep"></span>
+      <button id="skeleton" title="Show the pose skeleton (S)">Skeleton</button>
       <span id="frame"></span>
     </div>
     <div id="title"></div>
@@ -66,13 +78,44 @@
 </main>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
+const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
+
+// MediaPipe BlazePose landmark indices and the bones between them (same as the phone app).
+const LM = { NOSE: 0, L_SHOULDER: 11, R_SHOULDER: 12, L_ELBOW: 13, R_ELBOW: 14, L_WRIST: 15, R_WRIST: 16,
+             L_HIP: 23, R_HIP: 24, L_KNEE: 25, R_KNEE: 26, L_ANKLE: 27, R_ANKLE: 28,
+             L_HEEL: 29, R_HEEL: 30, L_FOOT: 31, R_FOOT: 32 };
+const SKELETON = [
+  [LM.L_SHOULDER, LM.R_SHOULDER],
+  [LM.L_SHOULDER, LM.L_ELBOW], [LM.L_ELBOW, LM.L_WRIST],
+  [LM.R_SHOULDER, LM.R_ELBOW], [LM.R_ELBOW, LM.R_WRIST],
+  [LM.L_SHOULDER, LM.L_HIP], [LM.R_SHOULDER, LM.R_HIP],
+  [LM.L_HIP, LM.R_HIP],
+  [LM.L_HIP, LM.L_KNEE], [LM.L_KNEE, LM.L_ANKLE],
+  [LM.R_HIP, LM.R_KNEE], [LM.R_KNEE, LM.R_ANKLE],
+  [LM.L_ANKLE, LM.L_HEEL], [LM.L_HEEL, LM.L_FOOT], [LM.L_ANKLE, LM.L_FOOT],
+  [LM.R_ANKLE, LM.R_HEEL], [LM.R_HEEL, LM.R_FOOT], [LM.R_ANKLE, LM.R_FOOT],
+];
+const JOINTS = [...new Set([...SKELETON.flat(), LM.NOSE])];
+// Kept low on purpose: hands are often hidden behind the body mid-swing but still tracked well.
+const MIN_VISIBILITY = 0.25;
+const BONE_COLOR = "rgba(255, 255, 255, 0.85)", JOINT_COLOR = "#22c55e";
+const SPINE_COLOR = "#f59e0b", REF_SPINE_COLOR = "rgba(255, 255, 255, 0.6)";
+
 const list = document.getElementById("list");
 const video = document.getElementById("video");
+const canvas = document.getElementById("overlay");
 const viewer = document.getElementById("viewer");
+const skeletonBtn = document.getElementById("skeleton");
+
+let clips = [];
+let current = null;       // name of the open clip
+let pose = null;          // { frames: [{t, lm}], reference } for the open clip
 let fps = 30;
 let speed = 1;
+let showSkeleton = true;
+try { showSkeleton = localStorage.getItem("skeleton") !== "off"; } catch {}
 
-// Probe clips are named like c0_1920x1080_240_hs_1789123456.mp4 - the number after the size is fps.
+// Probe clips are named like cam0_1920x1080_240fps_hs_1789123456.mp4 - the number after the size is fps.
 function fpsFromName(name) {
   const m = name.match(/_\d+x\d+_(\d+)/);
   return m ? Number(m[1]) : 30;
@@ -87,61 +130,256 @@ function fmtWhen(iso) {
     { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+// ---- Pose geometry ----
+
+function point(lm, i) {
+  const v = lm[i * 3 + 2];
+  return v >= MIN_VISIBILITY ? { x: lm[i * 3], y: lm[i * 3 + 1] } : null;
+}
+
+/** Mid-hip to mid-shoulder, and how far it leans from vertical in the picture (degrees). */
+function spineLine(lm) {
+  const ls = point(lm, LM.L_SHOULDER), rs = point(lm, LM.R_SHOULDER);
+  const lh = point(lm, LM.L_HIP), rh = point(lm, LM.R_HIP);
+  if (!ls || !rs || !lh || !rh) return null;
+  const shoulder = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
+  const hip = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
+  const dx = (shoulder.x - hip.x) * video.videoWidth;
+  const dy = (hip.y - shoulder.y) * video.videoHeight;
+  return { hip, shoulder, angle: Math.abs(Math.atan2(dx, dy) * 180 / Math.PI) };
+}
+
+/** Index of the frame on screen at time t: the last one that starts at or before t. */
+function frameIndexAt(t) {
+  const f = pose.frames;
+  let lo = 0, hi = f.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (f[mid].t <= t + 0.0005) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+}
+
+// ---- Drawing ----
+
+/** Where the picture sits inside the <video> box (it's letterboxed to keep its shape). */
+function pictureRect() {
+  const W = canvas.width, H = canvas.height, vw = video.videoWidth, vh = video.videoHeight;
+  const k = Math.min(W / vw, H / vh);
+  return { x: (W - vw * k) / 2, y: (H - vh * k) / 2, w: vw * k, h: vh * k };
+}
+
+function drawSpine(ctx, spine, toPx, lineWidth, isReference) {
+  const hip = toPx(spine.hip), sh = toPx(spine.shoulder);
+  // Extend past the shoulders toward the head so the angle is easy to judge.
+  const top = { x: sh.x + (sh.x - hip.x) * 0.35, y: sh.y + (sh.y - hip.y) * 0.35 };
+  ctx.save();
+  ctx.lineWidth = isReference ? lineWidth * 0.7 : lineWidth * 1.3;
+  ctx.strokeStyle = isReference ? REF_SPINE_COLOR : SPINE_COLOR;
+  if (isReference) ctx.setLineDash([lineWidth * 3, lineWidth * 2]);
+  ctx.beginPath();
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(top.x, top.y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawLabel(ctx, text, at, fontSize) {
+  ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
+  const padX = fontSize * 0.6, h = fontSize * 1.9;
+  const w = ctx.measureText(text).width + padX * 2;
+  const x = Math.min(Math.max(8, at.x - w / 2), canvas.width - w - 8);
+  const y = Math.min(at.y + fontSize, canvas.height - h - 8);
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, h / 2);
+  ctx.fill();
+  ctx.fillStyle = SPINE_COLOR;
+  ctx.fillText(text, x + padX, y + h * 0.7);
+}
+
+function draw(t) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.round(canvas.clientWidth * dpr), H = Math.round(canvas.clientHeight * dpr);
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, W, H);
+  showFrameLabel(t);
+  if (!showSkeleton || !pose || !pose.frames.length || !video.videoWidth) return;
+  const lm = pose.frames[frameIndexAt(t)].lm;
+  if (!lm) return;
+
+  const r = pictureRect();
+  const toPx = p => ({ x: r.x + p.x * r.w, y: r.y + p.y * r.h });
+  const k = r.w / 400; // sizes were tuned on a ~400px-wide picture in the phone app
+  const lineWidth = Math.max(2, 3 * k), radius = Math.max(2, 4 * k), fontSize = Math.max(12, 14 * k);
+
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = BONE_COLOR;
+  for (const [a, b] of SKELETON) {
+    const p = point(lm, a), q = point(lm, b);
+    if (!p || !q) continue;
+    const P = toPx(p), Q = toPx(q);
+    ctx.beginPath();
+    ctx.moveTo(P.x, P.y);
+    ctx.lineTo(Q.x, Q.y);
+    ctx.stroke();
+  }
+  ctx.fillStyle = JOINT_COLOR;
+  for (const i of JOINTS) {
+    const p = point(lm, i);
+    if (!p) continue;
+    const P = toPx(p);
+    ctx.beginPath();
+    ctx.arc(P.x, P.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (pose.reference) drawSpine(ctx, pose.reference, toPx, lineWidth, true);
+  const spine = spineLine(lm);
+  if (spine) {
+    drawSpine(ctx, spine, toPx, lineWidth, false);
+    const text = pose.reference
+      ? `Spine ${spine.angle.toFixed(0)}°  (start ${pose.reference.angle.toFixed(0)}°)`
+      : `Spine ${spine.angle.toFixed(0)}°`;
+    drawLabel(ctx, text, toPx(spine.hip), fontSize);
+  }
+}
+
+function showFrameLabel(t) {
+  const el = document.getElementById("frame");
+  if (pose && pose.frames.length) {
+    el.textContent = `frame ${frameIndexAt(t) + 1} of ${pose.frames.length} · ${fps} fps`;
+  } else {
+    el.textContent = `frame ${Math.floor(t * fps + 0.01)} · ${fps} fps`;
+  }
+}
+
+// Redraw on every frame the browser actually presents, using that frame's own timestamp.
+function onVideoFrame(_now, meta) {
+  draw(meta.mediaTime);
+  video.requestVideoFrameCallback(onVideoFrame);
+}
+if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
+  video.requestVideoFrameCallback(onVideoFrame);
+} else {
+  video.addEventListener("timeupdate", () => draw(video.currentTime));
+}
+video.addEventListener("seeked", () => draw(video.currentTime));
+video.addEventListener("loadedmetadata", () => draw(video.currentTime));
+new ResizeObserver(() => draw(video.currentTime)).observe(canvas);
+
+// ---- Controls ----
+
 function setSpeed(s) {
   speed = s;
   video.playbackRate = s;
   document.querySelectorAll("#speeds button").forEach(b => b.classList.toggle("on", Number(b.dataset.s) === s));
 }
 
-function currentFrame() {
-  return Math.floor(video.currentTime * fps + 0.01);
-}
-
 function step(frames) {
   video.pause();
+  if (pose && pose.frames.length) {
+    // Real frame timestamps: phone clips drop frames now and then, so 1/fps steps would drift.
+    const f = pose.frames;
+    const i = Math.max(0, Math.min(f.length - 1, frameIndexAt(video.currentTime) + frames));
+    // Aim between this frame's start and the next one's, not at the exact edge.
+    video.currentTime = i + 1 < f.length ? (f[i].t + f[i + 1].t) / 2 : f[i].t + 0.001;
+    return;
+  }
+  const cur = Math.floor(video.currentTime * fps + 0.01);
   const last = Math.floor((video.duration || 0) * fps) - 1;
-  const target = Math.max(0, Math.min(last, currentFrame() + frames));
-  // Aim for the middle of the frame: seeking to its exact start can round down and show the one before.
-  video.currentTime = (target + 0.5) / fps;
+  video.currentTime = (Math.max(0, Math.min(last, cur + frames)) + 0.5) / fps;
 }
 
-function showFrame() {
-  document.getElementById("frame").textContent = `frame ${currentFrame()} · ${fps} fps`;
+function setSkeleton(on) {
+  showSkeleton = on;
+  skeletonBtn.classList.toggle("on", on);
+  try { localStorage.setItem("skeleton", on ? "on" : "off"); } catch {}
+  draw(video.currentTime);
+}
+
+function updateSkeletonButton() {
+  const c = clips.find(c => c.name === current);
+  const state = c ? c.pose : "done";
+  skeletonBtn.disabled = !pose;
+  skeletonBtn.textContent = pose ? "Skeleton" : `Skeleton (${POSE_LABELS[state] || "loading…"})`;
+}
+
+async function loadPose(name) {
+  pose = null;
+  updateSkeletonButton();
+  const c = clips.find(c => c.name === name);
+  if (!c || c.pose !== "done") return;
+  const res = await fetch("/api/pose/" + encodeURIComponent(name));
+  if (!res.ok || current !== name) return;
+  const data = await res.json();
+  if (current !== name) return;
+  // The address position: the first frame where the spine can be measured.
+  let reference = null;
+  for (const f of data.frames) {
+    if (f.lm && (reference = spineLine(f.lm))) break;
+  }
+  pose = { frames: data.frames, reference };
+  updateSkeletonButton();
+  draw(video.currentTime);
 }
 
 function open(name) {
+  current = name;
   document.querySelectorAll("#list li").forEach(li => li.classList.toggle("sel", li.dataset.name === name));
   fps = fpsFromName(name);
+  pose = null;
   video.src = "/clips/" + encodeURIComponent(name);
   video.playbackRate = speed;
   document.getElementById("title").textContent = name;
   viewer.hidden = false;
   history.replaceState(null, "", "#" + encodeURIComponent(name));
+  loadPose(name);
 }
 
-async function load() {
-  const res = await fetch("/api/clips");
-  if (!res.ok) {
-    list.innerHTML = `<li class="empty">${(await res.json()).detail || "Couldn't load clips."}</li>`;
-    return;
-  }
-  const clips = await res.json();
+// ---- Clip list ----
+
+function renderList() {
   document.getElementById("count").textContent = `${clips.length} clip${clips.length === 1 ? "" : "s"}`;
   if (!clips.length) {
-    list.innerHTML = `<li class="empty">No clips yet. Run "Pull clips" to copy them from the phone.</li>`;
+    list.innerHTML = `<li class="empty">No clips yet. Run "Pull clips" on the PC to copy them from the phone.</li>`;
     return;
   }
   list.replaceChildren(...clips.map(c => {
     const li = document.createElement("li");
     li.dataset.name = c.name;
-    li.innerHTML = `<div class="when"></div><div class="meta"></div>`;
-    li.querySelector(".when").textContent = fmtWhen(c.recorded);
+    li.classList.toggle("sel", c.name === current);
+    li.innerHTML = `<div class="when"><span></span><span class="pose"></span></div><div class="meta"></div>`;
+    li.querySelector(".when span").textContent = fmtWhen(c.recorded);
+    const p = li.querySelector(".pose");
+    p.textContent = POSE_LABELS[c.pose] || "";
+    p.classList.toggle("failed", c.pose === "failed");
     li.querySelector(".meta").textContent = `${c.name} · ${fmtSize(c.size)}`;
     li.onclick = () => open(c.name);
     return li;
   }));
-  const wanted = decodeURIComponent(location.hash.slice(1));
-  open(clips.some(c => c.name === wanted) ? wanted : clips[0].name);
+}
+
+async function refresh() {
+  const res = await fetch("/api/clips");
+  if (!res.ok) {
+    list.innerHTML = `<li class="empty">${(await res.json()).detail || "Couldn't load clips."}</li>`;
+    return;
+  }
+  const before = clips.find(c => c.name === current);
+  clips = await res.json();
+  renderList();
+  if (current === null && clips.length) {
+    const wanted = decodeURIComponent(location.hash.slice(1));
+    open(clips.some(c => c.name === wanted) ? wanted : clips[0].name);
+  } else {
+    // The open clip's pose may have just finished.
+    const now = clips.find(c => c.name === current);
+    if (now && now.pose === "done" && (!before || before.pose !== "done")) loadPose(current);
+    else updateSkeletonButton();
+  }
 }
 
 document.getElementById("speeds").replaceChildren(...SPEEDS.map(s => {
@@ -152,15 +390,19 @@ document.getElementById("speeds").replaceChildren(...SPEEDS.map(s => {
   return b;
 }));
 setSpeed(1);
+setSkeleton(showSkeleton);
+skeletonBtn.onclick = () => setSkeleton(!showSkeleton);
 document.getElementById("prev").onclick = () => step(-1);
 document.getElementById("next").onclick = () => step(1);
-video.addEventListener("timeupdate", showFrame);
-video.addEventListener("seeked", showFrame);
 document.addEventListener("keydown", e => {
   if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
   if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
+  if (e.key === "s" || e.key === "S") setSkeleton(!showSkeleton);
 });
-load();
+
+// Pick up new clips and finished analyses without a manual reload.
+refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, 10000);
 </script>
 </body>
 </html>

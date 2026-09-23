@@ -1,10 +1,20 @@
 """SwingClips home server: lists the clips in CLIPS_DIR and serves them to any browser on the LAN.
+A background worker runs pose on each new clip and saves it to POSE_DIR for the skeleton overlay.
 
 Run with "Start server.cmd", or:  .venv\\Scripts\\python.exe app.py
-Settings (environment variables): SWINGCLIPS_CLIPS (clips folder), SWINGCLIPS_PORT (default 8000).
+Settings (environment variables): SWINGCLIPS_CLIPS (clips folder), SWINGCLIPS_POSE (pose results,
+default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 8000).
 """
+import gzip
+import json
 import os
 import re
+import threading
+import time
+import traceback
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -12,15 +22,91 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
+import pose
+
 CLIPS_DIR = Path(os.environ.get("SWINGCLIPS_CLIPS", r"D:\SwingClips\clips"))
+POSE_DIR = Path(os.environ.get("SWINGCLIPS_POSE", CLIPS_DIR.parent / "pose"))
 PORT = int(os.environ.get("SWINGCLIPS_PORT", "8000"))
 STATIC_DIR = Path(__file__).parent / "static"
 VIDEO_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}
+# Leave a few cores for serving video; pose splits each clip across this many processes.
+POSE_WORKERS = max(1, min(4, (os.cpu_count() or 4) // 3))
+# A clip still being copied in keeps changing; wait until it has been left alone this long.
+SETTLE_SECONDS = 15
 
 # Probe clips end in _<unix seconds>.mp4, e.g. c0_1920x1080_240_hs_1789123456.mp4
 UNIX_TIME_SUFFIX = re.compile(r"_(\d{10})$")
 
-app = FastAPI(title="SwingClips")
+# Name of the clip the worker is on right now, if any.
+pose_busy: str | None = None
+
+
+def clip_paths():
+    if not CLIPS_DIR.is_dir():
+        return []
+    return [p for p in CLIPS_DIR.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_TYPES]
+
+
+def pose_file(name: str) -> Path:
+    # Stored gzipped (~800 KB of JSON per clip shrinks about 3x) and sent as-is with Content-Encoding.
+    return POSE_DIR / (name + ".json.gz")
+
+
+def error_file(name: str) -> Path:
+    return POSE_DIR / (name + ".error.txt")
+
+
+def pose_state(name: str) -> str:
+    if pose_file(name).exists():
+        return "done"
+    if error_file(name).exists():
+        return "failed"
+    return "processing" if name == pose_busy else "queued"
+
+
+def pose_worker(stop: threading.Event):
+    """Forever: find clips without pose results, newest first, and analyze them one at a time."""
+    global pose_busy
+    POSE_DIR.mkdir(parents=True, exist_ok=True)
+    # Kept between clips so the worker processes only pay for importing MediaPipe once.
+    pool = ProcessPoolExecutor(POSE_WORKERS)
+    while not stop.is_set():
+        todo = [p for p in clip_paths()
+                if pose_state(p.name) == "queued" and time.time() - p.stat().st_mtime > SETTLE_SECONDS]
+        if not todo:
+            stop.wait(5)
+            continue
+        clip = max(todo, key=recorded_at)
+        pose_busy = clip.name
+        print(f"Pose: {clip.name} ...", flush=True)
+        try:
+            result = pose.analyze(str(clip), pool, POSE_WORKERS)
+            tmp = pose_file(clip.name).with_suffix(".tmp")
+            tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
+            tmp.replace(pose_file(clip.name))
+            found = sum(f["lm"] is not None for f in result["frames"])
+            print(f"Pose: {clip.name} done in {result['seconds']} s, "
+                  f"{found}/{len(result['frames'])} frames with a person", flush=True)
+        except Exception as e:
+            error_file(clip.name).write_text(traceback.format_exc())
+            print(f"Pose: {clip.name} FAILED - see {error_file(clip.name)}", flush=True)
+            if isinstance(e, BrokenProcessPool):
+                # A worker process died (e.g. a bad video crashed the decoder); start fresh ones.
+                pool = ProcessPoolExecutor(POSE_WORKERS)
+        finally:
+            pose_busy = None
+    pool.shutdown(cancel_futures=True)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    stop = threading.Event()
+    threading.Thread(target=pose_worker, args=(stop,), daemon=True).start()
+    yield
+    stop.set()
+
+
+app = FastAPI(title="SwingClips", lifespan=lifespan)
 
 
 def recorded_at(path: Path) -> float:
@@ -37,27 +123,41 @@ def list_clips():
     if not CLIPS_DIR.is_dir():
         raise HTTPException(503, f"Clips folder not found: {CLIPS_DIR}")
     clips = []
-    for p in CLIPS_DIR.iterdir():
-        if p.is_file() and p.suffix.lower() in VIDEO_TYPES:
-            t = recorded_at(p)
-            clips.append({
-                "name": p.name,
-                "size": p.stat().st_size,
-                "recorded": datetime.fromtimestamp(t).isoformat(timespec="seconds"),
-                "_t": t,
-            })
+    for p in clip_paths():
+        t = recorded_at(p)
+        clips.append({
+            "name": p.name,
+            "size": p.stat().st_size,
+            "recorded": datetime.fromtimestamp(t).isoformat(timespec="seconds"),
+            "pose": pose_state(p.name),
+            "_t": t,
+        })
     clips.sort(key=lambda c: c.pop("_t"), reverse=True)
     return clips
 
 
-@app.get("/clips/{name}")
-def get_clip(name: str):
+def checked_clip(name: str) -> Path:
     # Only plain filenames of videos directly inside CLIPS_DIR - no paths.
     path = CLIPS_DIR / name
     if Path(name).name != name or path.suffix.lower() not in VIDEO_TYPES or not path.is_file():
         raise HTTPException(404, "No such clip")
+    return path
+
+
+@app.get("/clips/{name}")
+def get_clip(name: str):
+    path = checked_clip(name)
     # FileResponse handles Range requests, which browsers need to seek in a video.
     return FileResponse(path, media_type=VIDEO_TYPES[path.suffix.lower()])
+
+
+@app.get("/api/pose/{name}")
+def get_pose(name: str):
+    checked_clip(name)
+    state = pose_state(name)
+    if state != "done":
+        raise HTTPException(404, f"Pose is {state}")
+    return FileResponse(pose_file(name), media_type="application/json", headers={"Content-Encoding": "gzip"})
 
 
 @app.get("/")
@@ -66,6 +166,6 @@ def index():
 
 
 if __name__ == "__main__":
-    print(f"Serving clips from {CLIPS_DIR}")
+    print(f"Serving clips from {CLIPS_DIR}, pose results in {POSE_DIR}")
     print(f"Open http://localhost:{PORT} here, or http://<this PC's name>:{PORT} from other devices")
     uvicorn.run(app, host="0.0.0.0", port=PORT)
