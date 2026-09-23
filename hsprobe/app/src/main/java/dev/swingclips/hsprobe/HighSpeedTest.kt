@@ -38,7 +38,8 @@ class HighSpeedTest(
     private val recordMs: Long,
     private val onRecording: () -> Unit,
     private val progress: (String) -> Unit,
-    private val done: (String) -> Unit,
+    /** Full summary, and the share of frames missing from the file (null if the test failed). */
+    private val done: (String, Double?) -> Unit,
 ) {
     private val thread = HandlerThread("hstest").apply { start() }
     private val handler = Handler(thread.looper)
@@ -52,6 +53,7 @@ class HighSpeedTest(
 
     private var recording = false
     private var finished = false
+    private var dropPct: Double? = null
     private var startNs = 0L
 
     // Latest auto-exposure values before recording, used to pick the manual ISO.
@@ -291,9 +293,10 @@ class HighSpeedTest(
                 if (firstDropS < 0) firstDropS = (times[i - 1] - times[0]) / 1e6
             }
         }
+        dropPct = missing * 100.0 / (times.size + missing)
         if (gaps == 0) return "drops: none"
-        return "drops: %d gaps, ~%d frames missing, longest %.1f ms, first at %.2f s"
-            .format(gaps, missing, longestUs / 1000.0, firstDropS)
+        return "drops: %d gaps, ~%d frames missing (%.1f%%), longest %.1f ms, first at %.2f s"
+            .format(gaps, missing, dropPct, longestUs / 1000.0, firstDropS)
     }
 
     private fun copyToGallery(f: File): String {
@@ -339,7 +342,7 @@ class HighSpeedTest(
         if (finished) return
         finished = true
         thread.quitSafely()
-        done(summary)
+        done(summary, if (summary.startsWith("OK")) dropPct else null)
     }
 
     private fun cleanup() {
