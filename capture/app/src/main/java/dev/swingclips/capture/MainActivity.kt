@@ -63,6 +63,8 @@ class MainActivity : Activity() {
     /** Only saves swings after Start is pressed; the camera and meter run before that for setup. */
     @Volatile private var armed = false
     private lateinit var startButton: Button
+    private lateinit var minusButton: Button
+    private lateinit var plusButton: Button
 
     // The preview surface has to be exactly the recording size before the camera starts.
     private var surfaceSize: Size? = null
@@ -197,6 +199,12 @@ class MainActivity : Activity() {
     /** Status line and Start/Stop button for the current state. */
     private fun showState() {
         val count = if (saved > 0) " · $saved saved" else ""
+        // Settings are for setting up; while recording they're locked so a stray tap can't
+        // change them (or restart the camera mid-session). Stop to change them.
+        for (b in listOf(minusButton, plusButton, modeButton, serverButton)) {
+            b.isEnabled = !armed
+            b.alpha = if (armed) 0.4f else 1f
+        }
         if (armed) {
             setStatus("Recording swings$count", Color.rgb(74, 222, 128))
             startButton.text = "Stop"
@@ -384,10 +392,12 @@ class MainActivity : Activity() {
             addView(sensitivityView)
             addView(sensLabel)
         }
+        minusButton = button("−") { setSensitivity(prefs.getInt("sensitivity", 100) - 10) }
+        plusButton = button("+") { setSensitivity(prefs.getInt("sensitivity", 100) + 10) }
         panel.addView(row(
-            button("−") { setSensitivity(prefs.getInt("sensitivity", 100) - 10) },
+            minusButton,
             sensBox,
-            button("+") { setSensitivity(prefs.getInt("sensitivity", 100) + 10) },
+            plusButton,
             button("Save now") { if (recorder != null) { listener?.holdOff(); onImpact(System.nanoTime()) } },
         ))
 
