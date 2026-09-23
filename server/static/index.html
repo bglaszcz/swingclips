@@ -549,19 +549,26 @@ function showShot(c) {
   const s = c && c.shot;
   if (!s) { box.hidden = true; box.replaceChildren(); return; }
   const b = s.ball || {}, k = s.clubData || {};
-  const items = [
-    ["club", clubName(s.club), "Club"],
-    ["", `${num(b.speed)}`, "Ball mph"],
-    ["", `${num(b.vla)}°`, "Launch"],
-    ["", side(b.hla), "Direction"],
-    ["", `${num(b.totalSpin, 0)}`, "Spin rpm"],
-    ["", `${signed(b.spinAxis)}°`, "Spin axis"],
-  ];
-  if (s.clubData) {
-    items.push(["", `${signed(k.angleOfAttack)}°`, "Attack"], ["", `${signed(k.path)}°`, "Path"],
-               ["", `${signed(k.faceToTarget)}°`, "Face"], ["", `${num(k.loft)}°`, "Dyn. loft"]);
-    if (k.speed) items.push(["", num(k.speed), "Club mph"]);
-  }
+  const has = v => v !== null && v !== undefined && !isNaN(v);
+  // Only what this shot's source reported: Square's app gives carry, club speed and more; its GSPro
+  // connector doesn't.
+  const items = [["club", clubName(s.club), "Club"]];
+  const add = (ok, value, label) => { if (ok) items.push(["", value, label]); };
+  add(b.carry > 0, `${num(b.carry, 0)}`, "Carry yd");
+  add(b.total > 0, `${num(b.total, 0)}`, "Total yd");
+  add(has(b.speed), num(b.speed), "Ball mph");
+  add(k.speed > 0, num(k.speed), "Club mph");
+  add(k.smash > 0, num(k.smash, 2), "Smash");
+  add(has(b.vla), `${num(b.vla)}°`, "Launch");
+  add(has(b.hla), side(b.hla), "Direction");
+  add(has(b.side), side(b.side).replace("°", " yd"), "Offline");
+  add(has(b.totalSpin), num(b.totalSpin, 0), "Spin rpm");
+  add(has(b.spinAxis), side(b.spinAxis), "Spin axis");
+  add(b.apexFt > 0, num(b.apexFt, 0), "Apex ft");
+  add(has(k.angleOfAttack), `${signed(k.angleOfAttack)}°`, "Attack");
+  add(has(k.path), `${signed(k.path)}°`, "Path");
+  add(has(k.faceToTarget), `${signed(k.faceToTarget)}°`, "Face");
+  add(k.loft > 0, `${num(k.loft)}°`, "Dyn. loft");
   box.replaceChildren(...items.map(([cls, value, label]) => {
     const el = document.createElement("div");
     el.className = "metric " + cls;
@@ -638,7 +645,9 @@ function clipRow(c) {
   li.innerHTML = `<div class="info"><div class="when"></div><div class="meta"></div></div><span class="pose"></span>`;
   li.querySelector(".when").textContent = new Date(c.recorded)
     .toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
-  const shotText = c.shot ? `${num(c.shot.ball?.speed)} mph ${clubName(c.shot.club)}` : "";
+  const shotText = !c.shot ? "" : c.shot.ball?.carry > 0
+    ? `${clubName(c.shot.club)} ${num(c.shot.ball.carry, 0)} yd`
+    : `${clubName(c.shot.club)} ${num(c.shot.ball?.speed)} mph`;
   li.querySelector(".meta").textContent = [shotText, modeOf(c.name), fmtSize(c.size)].filter(Boolean).join(" · ");
   const p = li.querySelector(".pose");
   p.textContent = POSE_LABELS[c.pose] || "";

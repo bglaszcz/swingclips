@@ -239,8 +239,10 @@ async def upload(name: str, request: Request):
 # are paired with clips by time: the capture app names each clip after the second it heard the
 # strike, and the launch monitor's report arrives a moment later.
 SHOTS_FILE = Path(os.environ.get("SWINGCLIPS_SHOTS", CLIPS_DIR.parent / "shots.jsonl"))
-# How long after a strike its shot report can arrive, and how early (clock differences).
-SHOT_AFTER_S, SHOT_BEFORE_S = 10.0, 1.0
+# How long after a strike its shot report can arrive, and how early (clock differences). Square's
+# own app may only save a shot once its ball-flight animation has played, hence the slack; each
+# match records its gap so this can be tightened from real sessions.
+SHOT_AFTER_S, SHOT_BEFORE_S = 15.0, 1.0
 
 
 @app.post("/api/shots")
@@ -283,6 +285,7 @@ def match_shots(clip_times: dict[str, float]) -> dict[str, dict]:
         if name in matched or id(s) in used:
             continue
         matched[name] = {k: v for k, v in s.items() if k != "_t"}
+        matched[name]["gap"] = round(s["_t"] - clip_times[name], 1)  # seconds from strike to report
         used.add(id(s))
     return matched
 
