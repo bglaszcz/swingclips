@@ -22,11 +22,14 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 import pose
 
 CLIPS_DIR = Path(os.environ.get("SWINGCLIPS_CLIPS", r"D:\SwingClips\clips"))
 POSE_DIR = Path(os.environ.get("SWINGCLIPS_POSE", CLIPS_DIR.parent / "pose"))
+# Deleted clips (and their pose files) go here rather than being erased, so a delete can be undone.
+TRASH_DIR = Path(os.environ.get("SWINGCLIPS_TRASH", CLIPS_DIR.parent / "trash"))
 PORT = int(os.environ.get("SWINGCLIPS_PORT", "8000"))
 STATIC_DIR = Path(__file__).parent / "static"
 VIDEO_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}
@@ -40,6 +43,10 @@ UNIX_TIME_SUFFIX = re.compile(r"_(\d{10})$")
 
 # Name of the clip the worker is on right now, if any.
 pose_busy: str | None = None
+# Deleted but not yet moved: Windows can't move a file that's open (being analyzed, or streaming to a
+# browser), so these are hidden right away and moved as soon as they're free.
+pending_trash: set[str] = set()
+files_lock = threading.Lock()
 
 
 def clip_paths():
@@ -72,13 +79,17 @@ def pose_worker(stop: threading.Event):
     # Kept between clips so the worker processes only pay for importing MediaPipe once.
     pool = ProcessPoolExecutor(POSE_WORKERS)
     while not stop.is_set():
+        retry_pending_trash()
         todo = [p for p in clip_paths()
                 if pose_state(p.name) == "queued" and time.time() - p.stat().st_mtime > SETTLE_SECONDS]
         if not todo:
             stop.wait(5)
             continue
         clip = max(todo, key=recorded_at)
-        pose_busy = clip.name
+        with files_lock:
+            if not clip.exists() or clip.name in pending_trash:
+                continue
+            pose_busy = clip.name
         print(f"Pose: {clip.name} ...", flush=True)
         try:
             result = pose.analyze(str(clip), pool, POSE_WORKERS)
@@ -95,8 +106,41 @@ def pose_worker(stop: threading.Event):
                 # A worker process died (e.g. a bad video crashed the decoder); start fresh ones.
                 pool = ProcessPoolExecutor(POSE_WORKERS)
         finally:
-            pose_busy = None
+            with files_lock:
+                pose_busy = None
     pool.shutdown(cancel_futures=True)
+
+
+def try_trash(name: str) -> None:
+    """Moves a pending clip to the trash if nothing has it open. Call with files_lock held."""
+    if name == pose_busy:
+        return
+    try:
+        move_clip(name, to_trash=True)
+        pending_trash.discard(name)
+    except OSError:
+        pass  # still open somewhere; the worker loop tries again
+
+
+def retry_pending_trash() -> None:
+    with files_lock:
+        for name in list(pending_trash):
+            try_trash(name)
+
+
+def move_clip(name: str, to_trash: bool) -> bool:
+    """Moves a clip and its pose files into the trash, or back out. False if it isn't there."""
+    src_clips, dst_clips = (CLIPS_DIR, TRASH_DIR) if to_trash else (TRASH_DIR, CLIPS_DIR)
+    src_pose, dst_pose = (POSE_DIR, TRASH_DIR / "pose") if to_trash else (TRASH_DIR / "pose", POSE_DIR)
+    if not (src_clips / name).is_file():
+        return False
+    dst_clips.mkdir(parents=True, exist_ok=True)
+    dst_pose.mkdir(parents=True, exist_ok=True)
+    (src_clips / name).replace(dst_clips / name)
+    for suffix in (".json.gz", ".error.txt"):
+        if (src_pose / (name + suffix)).exists():
+            (src_pose / (name + suffix)).replace(dst_pose / (name + suffix))
+    return True
 
 
 @asynccontextmanager
@@ -126,6 +170,8 @@ def list_clips():
         raise HTTPException(503, f"Clips folder not found: {CLIPS_DIR}")
     clips = []
     for p in clip_paths():
+        if p.name in pending_trash:
+            continue
         t = recorded_at(p)
         clips.append({
             "name": p.name,
@@ -182,6 +228,42 @@ async def upload(name: str, request: Request):
         part.unlink(missing_ok=True)
     print(f"Upload: {name} ({size / 1e6:.1f} MB)", flush=True)
     return {"ok": True, "size": size}
+
+
+class ClipNames(BaseModel):
+    names: list[str]
+
+
+@app.post("/api/delete")
+def delete_clips(body: ClipNames):
+    """Moves clips to the trash folder (undo with /api/restore)."""
+    moved = []
+    for name in body.names:
+        if Path(name).name != name:
+            continue
+        with files_lock:
+            if (CLIPS_DIR / name).is_file():
+                pending_trash.add(name)
+                try_trash(name)
+                moved.append(name)
+    print(f"Trash: {len(moved)} clip(s)", flush=True)
+    return {"moved": moved}
+
+
+@app.post("/api/restore")
+def restore_clips(body: ClipNames):
+    """Brings clips back out of the trash."""
+    restored = []
+    for name in body.names:
+        if Path(name).name != name:
+            continue
+        with files_lock:
+            if name in pending_trash:
+                pending_trash.discard(name)
+                restored.append(name)
+            elif not (CLIPS_DIR / name).exists() and move_clip(name, to_trash=False):
+                restored.append(name)
+    return {"restored": restored}
 
 
 @app.get("/api/pose/{name}")

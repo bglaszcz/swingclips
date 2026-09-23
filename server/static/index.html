@@ -18,6 +18,8 @@
     }
   }
   * { box-sizing: border-box; }
+  /* The hidden attribute must win over the display: flex set on some of these elements. */
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--text);
          font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
   header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex;
@@ -27,17 +29,42 @@
   main { display: grid; grid-template-columns: 1fr; }
   @media (min-width: 900px) {
     main { grid-template-columns: 320px 1fr; height: calc(100vh - 49px); }
-    #list { overflow-y: auto; border-right: 1px solid var(--line); }
+    #side { overflow-y: auto; border-right: 1px solid var(--line); }
     #viewer { overflow-y: auto; }
   }
-  #list { list-style: none; margin: 0; padding: 0; }
-  #list li { padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
-  #list li:hover { background: var(--sel); }
-  #list li.sel { background: var(--sel); box-shadow: inset 3px 0 var(--accent); }
-  #list .when { font-weight: 600; display: flex; justify-content: space-between; gap: 8px; }
-  #list .pose { font-weight: 400; font-size: 12px; color: var(--muted); white-space: nowrap; }
-  #list .pose.failed { color: var(--warn); }
-  #list .meta { color: var(--muted); font-size: 12px; word-break: break-all; }
+  #listbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line);
+             position: sticky; top: 0; background: var(--bg); z-index: 1; }
+  #listbar .grow { flex: 1; color: var(--muted); font-size: 13px; }
+  /* On phones the player already sticks to the top. */
+  @media (max-width: 899px) { #listbar { position: static; } }
+  button.danger { color: var(--warn); }
+  button.small { padding: 4px 10px; font-size: 13px; }
+  .session { border-bottom: 1px solid var(--line); }
+  .shead { display: flex; align-items: center; gap: 8px; padding: 10px 16px; cursor: pointer; user-select: none;
+           background: var(--panel); }
+  .shead .chev { width: 12px; color: var(--muted); transition: transform 0.15s; }
+  .session.closed .chev { transform: rotate(-90deg); }
+  .shead .stitle { flex: 1; min-width: 0; }
+  .shead .sname { font-weight: 600; }
+  .shead .ssub { color: var(--muted); font-size: 12px; }
+  .session.closed ul { display: none; }
+  .session ul { list-style: none; margin: 0; padding: 0; }
+  .session li { display: flex; align-items: center; gap: 10px; padding: 8px 16px 8px 36px;
+                border-top: 1px solid var(--line); cursor: pointer; }
+  .session li:hover { background: var(--sel); }
+  .session li.sel { background: var(--sel); box-shadow: inset 3px 0 var(--accent); }
+  .session li .info { flex: 1; min-width: 0; }
+  .session li .when { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .session li .meta { color: var(--muted); font-size: 12px; }
+  .session li .pose { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .session li .pose.failed { color: var(--warn); }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 10;
+           display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: 8px;
+           background: var(--text); color: var(--bg); box-shadow: 0 4px 16px rgba(0,0,0,0.3); max-width: calc(100% - 32px); }
+  #toast button { background: transparent; color: var(--bg); border-color: var(--bg); }
+  .title-row { display: flex; align-items: center; gap: 12px; }
+  .title-row #title { flex: 1; min-width: 0; }
   #viewer { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   @media (max-width: 899px) { #viewer { order: -1; position: sticky; top: 0; background: var(--bg);
                                         border-bottom: 1px solid var(--line); z-index: 1; } }
@@ -71,7 +98,10 @@
 <body>
 <header><h1>SwingClips</h1><span class="count" id="count"></span></header>
 <main>
-  <ul id="list"></ul>
+  <aside id="side">
+    <div id="listbar"></div>
+    <div id="list"></div>
+  </aside>
   <section id="viewer" hidden>
     <div class="stage">
       <video id="video" controls playsinline muted preload="auto"></video>
@@ -94,9 +124,13 @@
       <div id="pos-note"></div>
       <div id="pos-list"></div>
     </div>
-    <div id="title"></div>
+    <div class="title-row">
+      <div id="title"></div>
+      <button id="delete-clip" class="small danger" title="Move this clip to the trash">Delete clip</button>
+    </div>
   </section>
 </main>
+<div id="toast" hidden><span id="toast-text"></span><button id="toast-undo" class="small">Undo</button></div>
 <script src="/static/phases.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
@@ -470,6 +504,9 @@ handBtn.onclick = () => {
 function open(name) {
   current = name;
   document.querySelectorAll("#list li").forEach(li => li.classList.toggle("sel", li.dataset.name === name));
+  // Opening a clip in a closed session opens the session.
+  const row = document.querySelector(`#list li[data-name="${CSS.escape(name)}"]`);
+  row?.closest(".session")?.classList.remove("closed");
   fps = fpsFromName(name);
   pose = null;
   positions = [];
@@ -484,33 +521,216 @@ function open(name) {
   loadPose(name);
 }
 
-// ---- Clip list ----
+// ---- Clip list, grouped into sessions ----
+
+// Clips less than this far apart belong to the same session (one trip to the bay).
+const SESSION_GAP_MS = 45 * 60 * 1000;
+const listbar = document.getElementById("listbar");
+let selecting = false;
+const selected = new Set();
+// Sessions the viewer opened or closed by hand, by key; the rest: newest open, others closed.
+let openState = {};
+try { openState = JSON.parse(localStorage.getItem("sessions") || "{}"); } catch {}
+
+/** Newest-first clips -> newest-first sessions, each with its clips newest first. */
+function sessionsOf(list) {
+  const out = [];
+  for (const c of list) {
+    const t = new Date(c.recorded).getTime();
+    const s = out[out.length - 1];
+    if (s && s.start - t < SESSION_GAP_MS) { s.clips.push(c); s.start = t; }
+    else out.push({ clips: [c], start: t, end: t });
+  }
+  // Keyed by its first clip, which doesn't change as new swings are added at the end.
+  for (const s of out) s.key = s.clips[s.clips.length - 1].name;
+  return out;
+}
+
+function sessionTitle(s) {
+  const start = new Date(s.start), end = new Date(s.end);
+  const day = new Date(start); day.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((today - day) / 86400000);
+  const date = days === 0 ? "Today" : days === 1 ? "Yesterday"
+    : start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  const time = d => d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return s.clips.length === 1 ? `${date} · ${time(start)}` : `${date} · ${time(start)} – ${time(end)}`;
+}
+
+/** "240 fps · 1080p" from names like swing_1920x1080_240fps_... or cam0_1920x1080_240fps_hs_... */
+function modeOf(name) {
+  const m = name.match(/_(\d+)x(\d+)_(\d+)/);
+  return m ? `${m[3]} fps · ${Math.min(+m[1], +m[2])}p` : "";
+}
+
+function renderListbar() {
+  if (selecting) {
+    listbar.innerHTML = `<span class="grow"></span><button class="small danger" id="del-sel">Delete</button>` +
+      `<button class="small" id="cancel-sel">Done</button>`;
+    listbar.querySelector(".grow").textContent = selected.size ? `${selected.size} selected` : "Tick clips to delete";
+    listbar.querySelector("#del-sel").disabled = !selected.size;
+    listbar.querySelector("#del-sel").onclick = () => deleteClips([...selected]);
+    listbar.querySelector("#cancel-sel").onclick = () => { selecting = false; selected.clear(); renderList(); };
+  } else {
+    listbar.innerHTML = `<span class="grow"></span><button class="small" id="start-sel">Select</button>`;
+    listbar.querySelector(".grow").textContent = clips.length ? "" : "";
+    listbar.querySelector("#start-sel").disabled = !clips.length;
+    listbar.querySelector("#start-sel").onclick = () => { selecting = true; renderList(); };
+  }
+}
+
+function clipRow(c) {
+  const li = document.createElement("li");
+  li.dataset.name = c.name;
+  li.classList.toggle("sel", c.name === current);
+  li.innerHTML = `<div class="info"><div class="when"></div><div class="meta"></div></div><span class="pose"></span>`;
+  li.querySelector(".when").textContent = new Date(c.recorded)
+    .toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  li.querySelector(".meta").textContent = [modeOf(c.name), fmtSize(c.size)].filter(Boolean).join(" · ");
+  const p = li.querySelector(".pose");
+  p.textContent = POSE_LABELS[c.pose] || "";
+  p.classList.toggle("failed", c.pose === "failed");
+  if (selecting) {
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = selected.has(c.name);
+    box.onclick = e => e.stopPropagation();
+    box.onchange = () => { box.checked ? selected.add(c.name) : selected.delete(c.name); renderList(); };
+    li.prepend(box);
+    li.onclick = () => box.click();
+  } else {
+    li.onclick = () => open(c.name);
+  }
+  return li;
+}
 
 function renderList() {
   document.getElementById("count").textContent = `${clips.length} clip${clips.length === 1 ? "" : "s"}`;
+  for (const n of [...selected]) if (!clips.some(c => c.name === n)) selected.delete(n);
+  renderListbar();
   if (!clips.length) {
-    list.innerHTML = `<li class="empty">No clips yet. Run "Pull clips" on the PC to copy them from the phone.</li>`;
+    list.innerHTML = `<div class="empty">No clips yet. Swings from the SwingClips phone app show up here.</div>`;
     return;
   }
-  list.replaceChildren(...clips.map(c => {
-    const li = document.createElement("li");
-    li.dataset.name = c.name;
-    li.classList.toggle("sel", c.name === current);
-    li.innerHTML = `<div class="when"><span></span><span class="pose"></span></div><div class="meta"></div>`;
-    li.querySelector(".when span").textContent = fmtWhen(c.recorded);
-    const p = li.querySelector(".pose");
-    p.textContent = POSE_LABELS[c.pose] || "";
-    p.classList.toggle("failed", c.pose === "failed");
-    li.querySelector(".meta").textContent = `${c.name} · ${fmtSize(c.size)}`;
-    li.onclick = () => open(c.name);
-    return li;
+  const sessions = sessionsOf(clips);
+  list.replaceChildren(...sessions.map((s, i) => {
+    const el = document.createElement("section");
+    el.className = "session";
+    const isOpen = openState[s.key] ?? (i === 0 || s.clips.some(c => c.name === current));
+    el.classList.toggle("closed", !isOpen);
+
+    const head = document.createElement("div");
+    head.className = "shead";
+    head.innerHTML = `<span class="chev">▾</span><div class="stitle"><div class="sname"></div><div class="ssub"></div></div>`;
+    head.querySelector(".sname").textContent = sessionTitle(s);
+    head.querySelector(".ssub").textContent = `${s.clips.length} clip${s.clips.length === 1 ? "" : "s"}`;
+    if (selecting) {
+      const all = document.createElement("input");
+      all.type = "checkbox";
+      all.title = "Select this whole session";
+      all.checked = s.clips.every(c => selected.has(c.name));
+      all.onclick = e => e.stopPropagation();
+      all.onchange = () => {
+        for (const c of s.clips) all.checked ? selected.add(c.name) : selected.delete(c.name);
+        renderList();
+      };
+      head.append(all);
+    } else {
+      const del = document.createElement("button");
+      del.className = "small danger";
+      del.textContent = "Delete";
+      del.title = "Move this whole session to the trash";
+      del.onclick = e => {
+        e.stopPropagation();
+        const n = s.clips.length;
+        if (confirm(`Delete this session (${sessionTitle(s)}, ${n} clip${n === 1 ? "" : "s"})?\n\n` +
+                    "They go to the trash folder on the server, and you can undo right after.")) {
+          deleteClips(s.clips.map(c => c.name));
+        }
+      };
+      head.append(del);
+    }
+    head.onclick = () => {
+      const nowOpen = el.classList.toggle("closed") === false;
+      openState[s.key] = nowOpen;
+      try { localStorage.setItem("sessions", JSON.stringify(openState)); } catch {}
+    };
+
+    const ul = document.createElement("ul");
+    ul.replaceChildren(...s.clips.map(clipRow));
+    el.append(head, ul);
+    return el;
   }));
 }
 
+// ---- Deleting ----
+
+const toast = document.getElementById("toast");
+let toastTimer = 0;
+
+function showToast(text, onUndo) {
+  document.getElementById("toast-text").textContent = text;
+  const undo = document.getElementById("toast-undo");
+  undo.hidden = !onUndo;
+  undo.onclick = async () => { toast.hidden = true; await onUndo(); };
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, 8000);
+}
+
+async function deleteClips(names) {
+  if (!names.length) return;
+  // Let go of the video first: Windows can't move a file the server is still streaming.
+  if (names.includes(current)) {
+    const order = clips.map(c => c.name);
+    const next = order.slice(order.indexOf(current) + 1).find(n => !names.includes(n))
+      ?? order.slice(0, order.indexOf(current)).reverse().find(n => !names.includes(n));
+    closeViewer();
+    if (next) open(next);
+  }
+  const res = await fetch("/api/delete", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names }),
+  });
+  if (!res.ok) { showToast("Couldn't delete - is the server up to date?"); return; }
+  const { moved } = await res.json();
+  selecting = false;
+  selected.clear();
+  clips = clips.filter(c => !moved.includes(c.name));
+  renderList();
+  showToast(`${moved.length} clip${moved.length === 1 ? "" : "s"} moved to the trash`, async () => {
+    await fetch("/api/restore", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names: moved }),
+    });
+    await refresh();
+  });
+}
+
+function closeViewer() {
+  current = null;
+  pose = null;
+  positions = [];
+  positionsRun++;
+  video.removeAttribute("src");
+  video.load();
+  thumbVideo.removeAttribute("src");
+  thumbVideo.load();
+  viewer.hidden = true;
+  history.replaceState(null, "", location.pathname);
+}
+
+document.getElementById("delete-clip").onclick = () => { if (current) deleteClips([current]); };
+
 async function refresh() {
-  const res = await fetch("/api/clips");
+  let res;
+  try {
+    res = await fetch("/api/clips");
+  } catch {
+    // Server restarting or off: keep what's on screen, say so, and try again on the next tick.
+    document.getElementById("count").textContent = "can't reach the server";
+    return;
+  }
   if (!res.ok) {
-    list.innerHTML = `<li class="empty">${(await res.json()).detail || "Couldn't load clips."}</li>`;
+    list.innerHTML = `<div class="empty">${(await res.json()).detail || "Couldn't load clips."}</div>`;
     return;
   }
   const before = clips.find(c => c.name === current);
