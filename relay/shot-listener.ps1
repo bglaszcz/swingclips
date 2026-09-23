@@ -16,6 +16,20 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$diagLog = Join-Path $LogDir "listener-log.txt"
+
+function Say([string]$text, [string]$color = "Gray") {
+    # To the window and to listener-log.txt, so a problem on the sim laptop can be read afterwards.
+    Write-Host $text -ForegroundColor $color
+    try { Add-Content -Path $diagLog -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')  $text" -Encoding UTF8 } catch {}
+}
+
+Say "Shot listener starting (PowerShell $($PSVersionTable.PSVersion), $([Environment]::OSVersion.VersionString))"
+trap {
+    Say "STOPPED BY AN ERROR: $($_.Exception.Message)" "Red"
+    Say "  at: $($_.InvocationInfo.PositionMessage -replace '\s+', ' ')" "Red"
+    exit 1
+}
 
 function Split-JsonObjects([System.Text.StringBuilder]$buf) {
     # Pulls every complete top-level {...} out of $buf (string-aware), leaving any partial tail.
@@ -64,23 +78,33 @@ function Describe($msg) {
     return ($parts -join " | ")
 }
 
-$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+$listener = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::Loopback), $Port
 try {
     $listener.Start()
 } catch {
-    Write-Host "Can't listen on port $Port - is GSPro (or another listener) already running? Close it and try again." -ForegroundColor Yellow
+    Say "Can't listen on port $Port - is GSPro (or another listener) already running? Close it and try again." "Yellow"
+    Say "  ($($_.Exception.Message))" "Yellow"
     exit 1
 }
-Write-Host "Listening on 127.0.0.1:$Port as if I were GSPro. Start Square's software now; Ctrl+C to stop." -ForegroundColor Green
-Write-Host "Log: $(Join-Path $LogDir ("shots-" + (Get-Date -Format yyyy-MM-dd) + ".jsonl"))"
+Say "Listening on 127.0.0.1:$Port as if I were GSPro." "Green"
+Say "Shots will be saved to $(Join-Path $LogDir ("shots-" + (Get-Date -Format yyyy-MM-dd) + ".jsonl"))"
+
+# Prove the listener works on this PC before blaming anything else: send ourselves one message.
+# It connects into the listen queue now and is read by the loop below as the first connection.
+$selfTest = New-Object System.Net.Sockets.TcpClient
+$selfTest.Connect([System.Net.IPAddress]::Loopback, $Port)
+$testBytes = [System.Text.Encoding]::UTF8.GetBytes('{"DeviceID":"self-test","ShotDataOptions":{"IsHeartBeat":true}}')
+$selfTest.GetStream().Write($testBytes, 0, $testBytes.Length)
+$selfTest.Close()
 
 $reply = [System.Text.Encoding]::UTF8.GetBytes('{"Code":200,"Message":"Shot received successfully"}')
 
 while ($true) {
     $client = $listener.AcceptTcpClient()
     $peer = $client.Client.RemoteEndPoint
+    $isSelfTest = $false
     Write-Host ""
-    Write-Host "$(Get-Date -Format HH:mm:ss) Connected: $peer" -ForegroundColor Cyan
+    Say "Connected: $peer" "Cyan"
     $stream = $client.GetStream()
     $bytes = New-Object byte[] 65536
     $buf = New-Object System.Text.StringBuilder
@@ -91,6 +115,11 @@ while ($true) {
             $received = Get-Date
             [void]$buf.Append([System.Text.Encoding]::UTF8.GetString($bytes, 0, $n))
             foreach ($json in (Split-JsonObjects $buf)) {
+                if ($json -match '"DeviceID":"self-test"') {
+                    $isSelfTest = $true
+                    Say "Self-test OK: the listener works on this PC. Now start Square's software and hit a ball." "Green"
+                    continue
+                }
                 # Reply first: the connector may be waiting on it.
                 $stream.Write($reply, 0, $reply.Length)
                 $stream.Flush()
@@ -107,9 +136,9 @@ while ($true) {
             }
         }
     } catch {
-        Write-Host "Connection error: $($_.Exception.Message)" -ForegroundColor Yellow
+        Say "Connection error: $($_.Exception.Message)" "Yellow"
     } finally {
         $client.Close()
-        Write-Host "$(Get-Date -Format HH:mm:ss) Disconnected" -ForegroundColor Cyan
+        if (-not $isSelfTest) { Say "Disconnected" "Cyan" }
     }
 }

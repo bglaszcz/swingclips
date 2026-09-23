@@ -60,6 +60,9 @@ class MainActivity : Activity() {
     private lateinit var uploader: Uploader
     private var saved = 0
     private var resumed = false
+    /** Only saves swings after Start is pressed; the camera and meter run before that for setup. */
+    @Volatile private var armed = false
+    private lateinit var startButton: Button
 
     // The preview surface has to be exactly the recording size before the camera starts.
     private var surfaceSize: Size? = null
@@ -86,6 +89,8 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         resumed = false
+        // Leaving the app ends recording; coming back needs another Start.
+        setArmed(false)
         stopSession()
         super.onPause()
     }
@@ -124,12 +129,15 @@ class MainActivity : Activity() {
         }.also { it.start() }
         listener = ImpactListener(this,
             onLevel = { level -> main.post { meter.level = level } },
-            onImpact = { at -> onImpact(at) },
+            onImpact = { at ->
+                if (armed) onImpact(at)
+                else main.post { flashStatus("Heard a strike (not recording)") }
+            },
         ).also {
             it.sensitivity = prefs.getInt("sensitivity", 100)
             it.start()
         }
-        setStatus(listeningText(), Color.rgb(74, 222, 128))
+        showState()
     }
 
     private fun stopSession() {
@@ -171,7 +179,7 @@ class MainActivity : Activity() {
             main.post {
                 if (at != null && tmp.renameTo(File(outbox, name))) {
                     saved++
-                    setStatus(listeningText(), Color.rgb(74, 222, 128))
+                    showState()
                     uploader.poke()
                 } else {
                     tmp.delete()
@@ -181,8 +189,33 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun listeningText() =
-        "Listening for swings" + if (saved > 0) " · $saved saved" else ""
+    private fun setArmed(on: Boolean) {
+        armed = on
+        if (::startButton.isInitialized) showState()
+    }
+
+    /** Status line and Start/Stop button for the current state. */
+    private fun showState() {
+        val count = if (saved > 0) " · $saved saved" else ""
+        if (armed) {
+            setStatus("Recording swings$count", Color.rgb(74, 222, 128))
+            startButton.text = "Stop"
+            startButton.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(185, 28, 28))
+        } else {
+            setStatus("Not recording$count — tap Start when you're set up", Color.WHITE)
+            startButton.text = "Start recording swings"
+            startButton.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(22, 128, 61))
+        }
+    }
+
+    /** A short note in the status line, then back to the normal state text. */
+    private fun flashStatus(text: String) {
+        setStatus(text, Color.rgb(250, 204, 21))
+        main.removeCallbacks(restoreState)
+        main.postDelayed(restoreState, 1500)
+    }
+
+    private val restoreState = Runnable { showState() }
 
     // ---- Settings ----
 
@@ -325,6 +358,15 @@ class MainActivity : Activity() {
 
         statusView = TextView(this).apply { textSize = 20f; setTypeface(null, Typeface.BOLD) }
         panel.addView(statusView)
+
+        startButton = button("") { setArmed(!armed) }.apply {
+            textSize = 20f
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.WHITE)
+        }
+        panel.addView(startButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)).apply {
+            topMargin = dp(8)
+        })
 
         meter = MeterView(this)
         panel.addView(meter, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(14)).apply {
