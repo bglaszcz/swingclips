@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -151,6 +151,37 @@ def get_clip(name: str):
     path = checked_clip(name)
     # FileResponse handles Range requests, which browsers need to seek in a video.
     return FileResponse(path, media_type=VIDEO_TYPES[path.suffix.lower()])
+
+
+UPLOAD_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,120}\.(mp4|mov|webm)$")
+
+
+@app.post("/api/upload")
+async def upload(name: str, request: Request):
+    """The capture app sends each clip as the raw request body: POST /api/upload?name=<file name>."""
+    if not UPLOAD_NAME.match(name) or name.startswith("."):
+        raise HTTPException(400, "Bad clip name")
+    CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+    final = CLIPS_DIR / name
+    # A retry after a lost response: already have it, so say so rather than keep a second copy.
+    if final.exists():
+        return {"ok": True, "size": final.stat().st_size, "duplicate": True}
+    # Written under a name the clip list and pose worker ignore, then renamed once complete.
+    part = CLIPS_DIR / (name + ".part")
+    size = 0
+    try:
+        with open(part, "wb") as f:
+            async for chunk in request.stream():
+                f.write(chunk)
+                size += len(chunk)
+        expected = request.headers.get("x-clip-size")
+        if expected is not None and int(expected) != size:
+            raise HTTPException(400, f"Upload cut short: got {size} of {expected} bytes")
+        part.replace(final)
+    finally:
+        part.unlink(missing_ok=True)
+    print(f"Upload: {name} ({size / 1e6:.1f} MB)", flush=True)
+    return {"ok": True, "size": size}
 
 
 @app.get("/api/pose/{name}")
