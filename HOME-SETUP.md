@@ -1,6 +1,6 @@
 # SwingClips at home
 
-This fork adds a home setup on top of the original phone web app (see [README.md](README.md)):
+This fork adds a home setup on top of the original phone web app ([danny2p/swingclips](https://github.com/danny2p/swingclips)):
 a phone app records each swing when it hears the strike, a home server analyzes every clip and
 serves a review page to any browser on the network, and each clip is tagged with the launch
 monitor's numbers for that shot.

@@ -1,78 +1,45 @@
-# SwingClips ⛳️
+# SwingClips (home setup fork) ⛳️
 
-**SwingClips** is a free, **open-source**, golf swing analysis tool built for the modern golfer. No apps to install, no internet required, **it works completely offline.** Once you visit swing.garage.golf on your phone's browser, (or install locally as a PWA), no internet connection is required. Everything runs locally on your device—your videos are never uploaded to the cloud, ensuring your data is fully self-contained and private.
+A fork of Danny's [SwingClips](https://github.com/danny2p/swingclips) web app, grown into a home
+golf-sim system. A phone records each swing when it hears the strike, a home server analyzes every
+clip and serves a review page to any browser on the network, and each clip is tagged with the
+Square Omni's numbers for that shot.
 
-It transforms your mobile device into a swing recording and review station, automatically detecting ball impacts by sound and generating perfectly sliced clips for immediate feedback.
+```
+ Phone (capture app)          Home server (http://192.168.86.250:8000)       Sim laptop (Square Omni)
+ hears strike -> 2 s + 2 s -> clips, pose, key positions, review page  <---  Square watcher: each new
+ clip, uploads over Wi-Fi                                                     shot from Square's app
+```
 
-As my YouTube channel is focused on Garage Golf (https://www.youtube.com/@garagegolfers), that's the space this app is intended for. It relies on detecting the sound of your impact to slice each clip.  This will probably work outside in your backyard net, but won't work well at a crowded/loud driving range.
+## A session
 
----
+1. **Server** - running (`server\Start server.cmd`).
+2. **Laptop** - open Square Golf's app on the driving range, then run `Square watcher.cmd`.
+3. **Phone** - open **SwingClips**, set sensitivity and mode, then **Start recording swings**.
+4. **Review** - `http://homeserver:8000` on a PC, or `http://192.168.86.250:8000` on a phone.
 
-## 💡 How to Use
+## What's in the repo
 
-1. **Set Up:** Place your phone on a tripod or stand facing your swing path. (https://amzn.to/4mqd6VZ is the $20 tripid I use, this is an affiliate link and buying through this link helps support development)
-2. **Check Audio:** Before hitting record, ensure a loud soud like a clap, or golf club impact triggers the audio preview meter and should register an audible chime. Sensitivity defaults to max (100), but you can reduce sensitivity if your environment is a little noisier.
-2. **Record:** Tap the Record button.
-3. **Swing:** Hit as many balls as you like. Wait ~3 seconds between shots. The app essentially mutes for 3 seconds to reduce registration of peripheral sounds.
-4. **Review:** Stop recording and wait for processing. Each swing will appear in your gallery with full analysis tools (Slow-mo, Drawing, Notes) ready to go.
+| Folder | Runs on | What it does |
+| --- | --- | --- |
+| `capture/` | Android phone | Kotlin/Camera2 app. Keeps the last few seconds of video in memory and cuts a clip 2 s either side of each strike (240/120/30 fps). Uploads each clip to the server, retrying until it's confirmed. |
+| `server/` | Home server (Windows) | Python/FastAPI. Stores clips, runs MediaPipe pose on every frame, and serves the review page: skeleton overlay, spine angle, key positions P1-P8, sessions, delete to trash with Undo, and each clip's shot numbers. |
+| `relay/` | Sim laptop | `square-watcher.ps1` reads new shots from Square Golf's local shot database and posts them to the server, which pairs each one with its clip by time. `shot-listener.ps1` is an unused alternative that stands in for GSPro. |
+| `src/` | Phone browser | The original web app (Next.js), plus this fork's pose overlay and key-position stills. Still works on its own, but a phone's browser can't record above 30 fps, which is why `capture/` exists. |
 
----
+Setup, build, deploy and network details are in **[HOME-SETUP.md](HOME-SETUP.md)**.
 
-## 🚀 Key Features
+## Quick reference
 
-### 🎙️ Smart Acoustic Impact Detection
-- **Auto-Slicing:** Uses high-precision audio transient analysis to detect the distinct sound of a ball impact. 
-- **Hands-Free:** Just hit record and swing. The app automatically isolates each 4-second swing clip (2 seconds before and 2 seconds after impact).
-- **High Sensitivity:** Fine-tuned to catch even quiet shots while filtering out background noise.
+- **Deploy the server:** on the server, `git -C D:\SwingClips\app pull`, then restart
+  `Start server.cmd` (it creates its Python environment and installs `requirements.txt` on first run).
+- **Build the phone app:** in `capture/`, Gradle `assembleDebug` with JDK 21, then
+  `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+- **Run the web app locally:** `npm install`, then `npm run dev` and open http://localhost:3000.
+  Camera and microphone need HTTPS or localhost.
 
-### 🎥 Advanced Video Review
-- **Frame-by-frame stepping:** Optimized video engine (FFmpeg) re-encodes clips with frequent keyframes for a native-feeling, frame-by-frame review experience.
-- **Slow-Motion Playback:** Toggle between normal speed and **0.25x speed** to analyze every detail of your tempo and form.
-- **Telestrator (Drawing):** Draw directly on the screen with your finger to analyze swing planes, head movement, and alignment.
+## Credits and license
 
-### 📱 Local Processing and Storage
-- **PWA Support:** Install SwingClips as a standalone app on your iPhone or Android device.
-- **Native Sharing:** Use the built-in Share and Download button to save annotated swings directly to your device or share them via text/social media.
-- **Session Reporting:** Add notes to individual swings or the entire session, and export everything as a convenient ZIP archive.
-
----
-
-## 🛠️ Technical Stack
-
-- **Framework:** [Next.js](https://nextjs.org/) (App Router, TypeScript)
-- **Styling:** Tailwind CSS
-- **Video Engine:** `@ffmpeg/ffmpeg` (WASM-based processing)
-- **Acoustic Detection:** Web Audio API for high-precision transient analysis
-- **Persistence:** PWA / Service Workers for offline-capable performance
-- **Icons:** Lucide React
-
----
-
-## 🏃‍♂️ Local Development
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/danny2p/swingclips.git
-   cd swingclips
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Run the development server:**
-   ```bash
-   npm run dev
-   ```
-
-4. **Access the app:**
-   Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-> **Note:** For audio/video features to work correctly, the app must be served over **HTTPS** (or localhost) due to browser security policies regarding camera and microphone access.
-
----
-
-## 📄 License
-
-MIT License - feel free to use and improve!
+The original SwingClips web app, including its sound-triggered strike detection, is by
+[Danny](https://github.com/danny2p/swingclips) ([Garage Golf on YouTube](https://www.youtube.com/@garagegolfers)).
+MIT License.
