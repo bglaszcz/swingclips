@@ -21,6 +21,7 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 import pose
 
@@ -107,6 +108,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="SwingClips", lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 def recorded_at(path: Path) -> float:

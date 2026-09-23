@@ -1,0 +1,180 @@
+// The P1-P8 swing checkpoints, found from the pose track. Ported from the phone app
+// (src/utils/swingPhases.ts), with two changes for the server's clips:
+//  - no impact sound to go on (probe clips have no audio), so impact comes from the hand path;
+//  - 240 fps frames are ~4 ms apart, where raw hand speed is mostly tracking jitter, so positions
+//    are smoothed and speed is measured over ~1/30 s.
+// P2, P6 and P8 are defined by the club shaft, which body tracking can't see: they are estimates.
+//
+// Works in the browser (window.SwingPhases) and in Node (module.exports) for testing.
+(function (root) {
+  const LM = { L_SHOULDER: 11, R_SHOULDER: 12, L_ELBOW: 13, R_ELBOW: 14, L_WRIST: 15, R_WRIST: 16, L_HIP: 23, R_HIP: 24 };
+  const LABELS = {
+    p1: "Address", p2: "Shaft parallel (back)", p3: "Lead arm parallel (back)", p4: "Top",
+    p5: "Lead arm parallel (down)", p6: "Shaft parallel (down)", p7: "Impact", p8: "Shaft parallel (through)",
+  };
+  const CLUB_DEFINED = ["p2", "p6", "p8"];
+  const TORSO_MIN_VISIBILITY = 0.25;
+  // Down-the-line, the hands spend much of the swing behind the body, so MediaPipe reports low
+  // "visibility" while still placing them well. Trust them; the torso gates the frame.
+  const HAND_MIN_VISIBILITY = 0.1;
+  const SMOOTH_SECONDS = 1 / 60;   // half-width of the position smoothing window
+  const SPEED_SECONDS = 1 / 60;    // half-width of the span speed is measured over
+
+  function lmAt(lm, i) {
+    return { x: lm[i * 3], y: lm[i * 3 + 1], v: lm[i * 3 + 2] };
+  }
+
+  function handPoint(lm) {
+    const lw = lmAt(lm, LM.L_WRIST), rw = lmAt(lm, LM.R_WRIST);
+    const hasL = lw.v >= HAND_MIN_VISIBILITY, hasR = rw.v >= HAND_MIN_VISIBILITY;
+    if (hasL && hasR) {
+      // Both hands grip the same club; when they disagree, lean on the one the model is surer of.
+      const w = lw.v + rw.v;
+      return { x: (lw.x * lw.v + rw.x * rw.v) / w, y: (lw.y * lw.v + rw.y * rw.v) / w };
+    }
+    if (hasL) return { x: lw.x, y: lw.y };
+    if (hasR) return { x: rw.x, y: rw.y };
+    // Both hands lost: the elbows follow the same arc closely enough.
+    const le = lmAt(lm, LM.L_ELBOW), re = lmAt(lm, LM.R_ELBOW);
+    return { x: (le.x + re.x) / 2, y: (le.y + re.y) / 2 };
+  }
+
+  /** Per-frame hand position, lead-arm angle and hand speed, for frames with a clear torso. */
+  function metrics(frames, aspect, leadSide) {
+    const lead = leadSide === "left" ? LM.L_SHOULDER : LM.R_SHOULDER;
+    const raw = [];
+    frames.forEach((f, index) => {
+      if (!f.lm) return;
+      const ls = lmAt(f.lm, LM.L_SHOULDER), rs = lmAt(f.lm, LM.R_SHOULDER);
+      const lh = lmAt(f.lm, LM.L_HIP), rh = lmAt(f.lm, LM.R_HIP);
+      if (![ls, rs, lh, rh].every(p => p.v >= TORSO_MIN_VISIBILITY)) return;
+      const hand = handPoint(f.lm);
+      const ps = lmAt(f.lm, lead);
+      raw.push({
+        index, t: f.t,
+        // x scaled by the picture's aspect so distances are comparable in both directions.
+        hand: { x: hand.x * aspect, y: hand.y },
+        leadShoulder: { x: ps.x * aspect, y: ps.y },
+        shoulderWidth: Math.abs(ls.x - rs.x) * aspect,
+      });
+    });
+
+    // Smooth hand positions over a short time window (by time, so dropped frames don't matter).
+    const out = raw.map((m, i) => {
+      let sx = 0, sy = 0, n = 0;
+      for (let j = i; j >= 0 && m.t - raw[j].t <= SMOOTH_SECONDS; j--) { sx += raw[j].hand.x; sy += raw[j].hand.y; n++; }
+      for (let j = i + 1; j < raw.length && raw[j].t - m.t <= SMOOTH_SECONDS; j++) { sx += raw[j].hand.x; sy += raw[j].hand.y; n++; }
+      return { ...m, hand: { x: sx / n, y: sy / n } };
+    });
+
+    let a = 0, b = 0;
+    for (let i = 0; i < out.length; i++) {
+      const m = out[i];
+      // Lead arm: lead shoulder -> hands. 0 degrees = parallel to the ground.
+      let angle = Math.atan2(m.hand.y - m.leadShoulder.y, m.hand.x - m.leadShoulder.x) * 180 / Math.PI;
+      if (angle > 90) angle -= 180;
+      if (angle < -90) angle += 180;
+      m.armAngle = angle;
+      // Speed over [t - SPEED_SECONDS, t + SPEED_SECONDS].
+      while (out[a].t < m.t - SPEED_SECONDS) a++;
+      if (b < i) b = i;
+      while (b + 1 < out.length && out[b + 1].t <= m.t + SPEED_SECONDS) b++;
+      const dt = out[b].t - out[a].t;
+      m.speed = dt > 0 ? Math.hypot(out[b].hand.x - out[a].hand.x, out[b].hand.y - out[a].hand.y) / dt : 0;
+    }
+    return out;
+  }
+
+  function nearest(ms, t) {
+    let best = 0;
+    ms.forEach((m, i) => { if (Math.abs(m.t - t) < Math.abs(ms[best].t - t)) best = i; });
+    return best;
+  }
+
+  function armParallel(ms, from, to) {
+    let best = -1;
+    for (let i = Math.max(0, from); i < to && i < ms.length; i++) {
+      if (best < 0 || Math.abs(ms[i].armAngle) < Math.abs(ms[best].armAngle)) best = i;
+    }
+    return best;
+  }
+
+  /**
+   * @param frames [{t, lm}] from the server's pose file (lm = flat [x, y, visibility] * 33 or null)
+   * @param aspect picture width / height as displayed
+   * @param leadSide "left" for a right-handed golfer
+   * @returns [{key, tag, label, t, index, estimated}] - index is into `frames`
+   */
+  function detect(frames, aspect, leadSide = "left") {
+    const ms = metrics(frames, aspect, leadSide);
+    if (ms.length < 20) return [];
+
+    // The hands move fastest around impact, and that's the one moment that stands out in any clip.
+    let fastest = 0;
+    ms.forEach((m, i) => { if (m.speed > ms[fastest].speed) fastest = i; });
+
+    // P4 top: hands highest in the two seconds before that.
+    let top = -1;
+    for (let i = 0; i < fastest; i++) {
+      if (ms[fastest].t - ms[i].t > 2) continue;
+      if (top < 0 || ms[i].hand.y < ms[top].hand.y) top = i;
+    }
+    if (top < 0) return [];
+
+    // P1 address: the hands pause at the top too, so require a sustained still stretch, walking
+    // back from the top.
+    const still = ms[fastest].speed * 0.06;
+    let address = 0, quietSince = -1;
+    for (let i = top; i >= 0; i--) {
+      if (ms[i].speed <= still) {
+        if (quietSince < 0) quietSince = i;
+        if (ms[quietSince].t - ms[i].t >= 0.2) { address = quietSince; break; }
+      } else {
+        quietSince = -1;
+      }
+    }
+
+    // P7 impact: the hands come back to about where they were at address. ("Lowest hands" only
+    // works down the line; face-on, the hands keep dropping for a moment after impact.)
+    let impact = -1;
+    for (let i = top + 1; i < ms.length && ms[i].t <= ms[fastest].t + 0.15; i++) {
+      const gap = Math.hypot(ms[i].hand.x - ms[address].hand.x, ms[i].hand.y - ms[address].hand.y);
+      const best = impact < 0 ? Infinity
+        : Math.hypot(ms[impact].hand.x - ms[address].hand.x, ms[impact].hand.y - ms[address].hand.y);
+      if (gap < best) impact = i;
+    }
+    if (impact < 0) return [];
+
+    // Not a swing (e.g. someone waving at the camera): the phases don't fit together.
+    const backswing = ms[top].t - ms[address].t, downswing = ms[impact].t - ms[top].t;
+    if (backswing < 0.3 || backswing > 2 || downswing < 0.15 || downswing > 0.6) return [];
+
+    // P3 / P5: lead arm parallel to the ground, going back and coming down.
+    const p3 = armParallel(ms, address + 1, top);
+    const p5 = armParallel(ms, top + 1, impact);
+
+    // P2 (estimated): shaft parallel in the takeaway is roughly when the hands have travelled
+    // about 1.5 shoulder widths from address.
+    let p2 = -1;
+    for (let i = address + 1; i <= top; i++) {
+      const moved = Math.hypot(ms[i].hand.x - ms[address].hand.x, ms[i].hand.y - ms[address].hand.y);
+      if (moved >= ms[address].shoulderWidth * 1.5) { p2 = i; break; }
+    }
+
+    // P6 / P8 (estimated): the shaft passes horizontal roughly this long either side of impact.
+    const p6 = Math.min(impact - 1, nearest(ms, ms[impact].t - 0.06));
+    const p8 = Math.max(impact + 1, nearest(ms, ms[impact].t + 0.06));
+
+    const picks = [["p1", address], ["p2", p2], ["p3", p3], ["p4", top], ["p5", p5], ["p6", p6], ["p7", impact], ["p8", p8]];
+    return picks
+      .filter(([, i]) => i >= 0 && i < ms.length)
+      .map(([key, i]) => ({
+        key, tag: key.toUpperCase(), label: LABELS[key], t: ms[i].t, index: ms[i].index,
+        estimated: CLUB_DEFINED.includes(key),
+      }));
+  }
+
+  const api = { detect };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  else root.SwingPhases = api;
+})(typeof window !== "undefined" ? window : globalThis);

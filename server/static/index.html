@@ -28,6 +28,7 @@
   @media (min-width: 900px) {
     main { grid-template-columns: 320px 1fr; height: calc(100vh - 49px); }
     #list { overflow-y: auto; border-right: 1px solid var(--line); }
+    #viewer { overflow-y: auto; }
   }
   #list { list-style: none; margin: 0; padding: 0; }
   #list li { padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
@@ -41,7 +42,7 @@
   @media (max-width: 899px) { #viewer { order: -1; position: sticky; top: 0; background: var(--bg);
                                         border-bottom: 1px solid var(--line); z-index: 1; } }
   .stage { position: relative; }
-  video { display: block; width: 100%; height: 70vh; background: #000; border-radius: 6px; }
+  video { display: block; width: 100%; height: 60vh; background: #000; border-radius: 6px; }
   @media (max-width: 899px) { video { height: 45vh; } }
   #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -53,6 +54,18 @@
   #title { color: var(--muted); font-size: 13px; word-break: break-all; }
   #frame { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
   .empty { padding: 24px 16px; color: var(--muted); }
+  #positions { display: flex; flex-direction: column; gap: 8px; }
+  .pos-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .pos-head strong { font-size: 15px; }
+  #pos-note { color: var(--muted); font-size: 13px; }
+  #pos-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+  .pos { flex: 0 0 auto; width: 96px; padding: 0; border-radius: 6px; overflow: hidden; text-align: left;
+         background: var(--panel); }
+  .pos.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .pos canvas { display: block; width: 96px; height: 128px; background: #000; }
+  .pos span { display: block; padding: 4px 6px; font-size: 11px; line-height: 1.25; }
+  .pos b { color: var(--accent); }
+  .pos i { color: var(--warn); font-style: normal; }
 </style>
 </head>
 <body>
@@ -73,9 +86,18 @@
       <button id="skeleton" title="Show the pose skeleton (S)">Skeleton</button>
       <span id="frame"></span>
     </div>
+    <div id="positions" hidden>
+      <div class="pos-head">
+        <strong>Key positions</strong>
+        <button id="hand" title="Which hand you swing with - sets the lead arm"></button>
+      </div>
+      <div id="pos-note"></div>
+      <div id="pos-list"></div>
+    </div>
     <div id="title"></div>
   </section>
 </main>
+<script src="/static/phases.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
@@ -162,9 +184,9 @@ function frameIndexAt(t) {
 
 // ---- Drawing ----
 
-/** Where the picture sits inside the <video> box (it's letterboxed to keep its shape). */
-function pictureRect() {
-  const W = canvas.width, H = canvas.height, vw = video.videoWidth, vh = video.videoHeight;
+/** Where a picture of the video's shape sits inside a W x H box (letterboxed to keep its shape). */
+function fitRect(W, H) {
+  const vw = video.videoWidth, vh = video.videoHeight;
   const k = Math.min(W / vw, H / vh);
   return { x: (W - vw * k) / 2, y: (H - vh * k) / 2, w: vw * k, h: vh * k };
 }
@@ -188,8 +210,8 @@ function drawLabel(ctx, text, at, fontSize) {
   ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
   const padX = fontSize * 0.6, h = fontSize * 1.9;
   const w = ctx.measureText(text).width + padX * 2;
-  const x = Math.min(Math.max(8, at.x - w / 2), canvas.width - w - 8);
-  const y = Math.min(at.y + fontSize, canvas.height - h - 8);
+  const x = Math.min(Math.max(8, at.x - w / 2), ctx.canvas.width - w - 8);
+  const y = Math.min(at.y + fontSize, ctx.canvas.height - h - 8);
   ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, h / 2);
@@ -198,21 +220,11 @@ function drawLabel(ctx, text, at, fontSize) {
   ctx.fillText(text, x + padX, y + h * 0.7);
 }
 
-function draw(t) {
-  const dpr = window.devicePixelRatio || 1;
-  const W = Math.round(canvas.clientWidth * dpr), H = Math.round(canvas.clientHeight * dpr);
-  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, W, H);
-  showFrameLabel(t);
-  if (!showSkeleton || !pose || !pose.frames.length || !video.videoWidth) return;
-  const lm = pose.frames[frameIndexAt(t)].lm;
-  if (!lm) return;
-
-  const r = pictureRect();
+/** Skeleton and spine for one frame's landmarks, into rectangle r of ctx's canvas. */
+function drawPose(ctx, lm, r, withLabel) {
   const toPx = p => ({ x: r.x + p.x * r.w, y: r.y + p.y * r.h });
   const k = r.w / 400; // sizes were tuned on a ~400px-wide picture in the phone app
-  const lineWidth = Math.max(2, 3 * k), radius = Math.max(2, 4 * k), fontSize = Math.max(12, 14 * k);
+  const lineWidth = Math.max(1.5, 3 * k), radius = Math.max(1.5, 4 * k), fontSize = Math.max(12, 14 * k);
 
   ctx.lineWidth = lineWidth;
   ctx.lineCap = "round";
@@ -240,11 +252,26 @@ function draw(t) {
   const spine = spineLine(lm);
   if (spine) {
     drawSpine(ctx, spine, toPx, lineWidth, false);
-    const text = pose.reference
-      ? `Spine ${spine.angle.toFixed(0)}°  (start ${pose.reference.angle.toFixed(0)}°)`
-      : `Spine ${spine.angle.toFixed(0)}°`;
-    drawLabel(ctx, text, toPx(spine.hip), fontSize);
+    if (withLabel) {
+      const text = pose.reference
+        ? `Spine ${spine.angle.toFixed(0)}°  (start ${pose.reference.angle.toFixed(0)}°)`
+        : `Spine ${spine.angle.toFixed(0)}°`;
+      drawLabel(ctx, text, toPx(spine.hip), fontSize);
+    }
   }
+}
+
+function draw(t) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.round(canvas.clientWidth * dpr), H = Math.round(canvas.clientHeight * dpr);
+  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, W, H);
+  showFrameLabel(t);
+  markPosition(t);
+  if (!showSkeleton || !pose || !pose.frames.length || !video.videoWidth) return;
+  const lm = pose.frames[frameIndexAt(t)].lm;
+  if (lm) drawPose(ctx, lm, fitRect(W, H), true);
 }
 
 function showFrameLabel(t) {
@@ -324,13 +351,131 @@ async function loadPose(name) {
   pose = { frames: data.frames, reference };
   updateSkeletonButton();
   draw(video.currentTime);
+  buildPositions(name);
 }
+
+// ---- Key positions ----
+
+const positionsBox = document.getElementById("positions");
+const posList = document.getElementById("pos-list");
+const handBtn = document.getElementById("hand");
+// A second, hidden player to grab the thumbnails, so the visible one isn't disturbed.
+const thumbVideo = Object.assign(document.createElement("video"), { muted: true, playsInline: true, preload: "auto" });
+let positions = [];
+let positionsRun = 0;
+let leadSide = "left";
+try { if (localStorage.getItem("lead") === "right") leadSide = "right"; } catch {}
+
+function whenReady(v, event, test) {
+  return test() ? Promise.resolve() : new Promise(r => v.addEventListener(event, r, { once: true }));
+}
+
+/**
+ * One crop (in video pixels, card-shaped) around the golfer in all the positions, so the
+ * thumbnails show the swing rather than the whole room, and line up with each other.
+ */
+function cropFor(list, cardAspect) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+  for (const p of list) {
+    const lm = pose.frames[p.index].lm;
+    if (!lm) continue;
+    for (let i = 0; i < 33; i++) {
+      if (lm[i * 3 + 2] < MIN_VISIBILITY) continue;
+      x0 = Math.min(x0, lm[i * 3]); x1 = Math.max(x1, lm[i * 3]);
+      y0 = Math.min(y0, lm[i * 3 + 1]); y1 = Math.max(y1, lm[i * 3 + 1]);
+    }
+  }
+  if (x1 <= x0 || y1 <= y0) return { x: 0, y: 0, w: vw, h: vh };
+  // Room for the club: most above the head (the top of the swing), some to the sides.
+  let w = (x1 - x0) * vw * 1.6, h = (y1 - y0) * vh * 1.5;
+  const cx = (x0 + x1) / 2 * vw, cy = ((y0 + y1) / 2 - (y1 - y0) * 0.12) * vh;
+  if (w / h > cardAspect) h = w / cardAspect; else w = h * cardAspect;
+  w = Math.min(w, vw); h = Math.min(h, vh);
+  return {
+    x: Math.max(0, Math.min(vw - w, cx - w / 2)),
+    y: Math.max(0, Math.min(vh - h, cy - h / 2)),
+    w, h,
+  };
+}
+
+async function grabThumb(canvasEl, p, crop) {
+  thumbVideo.currentTime = p.t + 0.001;
+  await new Promise(r => thumbVideo.addEventListener("seeked", r, { once: true }));
+  const ctx = canvasEl.getContext("2d");
+  const W = canvasEl.width, H = canvasEl.height;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(thumbVideo, crop.x, crop.y, crop.w, crop.h, 0, 0, W, H);
+  // Where the whole picture would land at this crop, so landmarks map onto the card.
+  const sx = W / crop.w, sy = H / crop.h;
+  const r = { x: -crop.x * sx, y: -crop.y * sy, w: video.videoWidth * sx, h: video.videoHeight * sy };
+  const lm = pose.frames[p.index].lm;
+  if (lm) drawPose(ctx, lm, r, false);
+}
+
+async function buildPositions(name) {
+  const run = ++positionsRun;
+  handBtn.textContent = leadSide === "left" ? "Right-handed" : "Left-handed";
+  await whenReady(video, "loadedmetadata", () => video.videoWidth > 0);
+  if (run !== positionsRun || current !== name || !pose) return;
+  positions = SwingPhases.detect(pose.frames, video.videoWidth / video.videoHeight, leadSide);
+  positionsBox.hidden = false;
+  document.getElementById("pos-note").textContent = positions.length
+    ? "Tap one to jump there. ~ = estimated (depends on the club, which isn't tracked)."
+    : "No swing found in this clip.";
+
+  const cards = positions.map(p => {
+    const b = document.createElement("button");
+    b.className = "pos";
+    b.title = `${p.tag} ${p.label} - ${p.t.toFixed(3)} s`;
+    b.innerHTML = `<canvas width="192" height="256"></canvas><span><b></b> <i></i><br></span>`;
+    b.querySelector("b").textContent = p.tag;
+    b.querySelector("i").textContent = p.estimated ? "~" : "";
+    b.querySelector("span").append(p.label);
+    b.onclick = () => jumpTo(p.index);
+    return b;
+  });
+  posList.replaceChildren(...cards);
+  markPosition(video.currentTime);
+
+  thumbVideo.src = video.src;
+  await whenReady(thumbVideo, "loadeddata", () => thumbVideo.readyState >= 2);
+  const crop = cropFor(positions, 192 / 256);
+  for (let i = 0; i < cards.length; i++) {
+    if (run !== positionsRun) return;
+    await grabThumb(cards[i].querySelector("canvas"), positions[i], crop);
+  }
+}
+
+function jumpTo(index) {
+  video.pause();
+  const f = pose.frames;
+  video.currentTime = index + 1 < f.length ? (f[index].t + f[index + 1].t) / 2 : f[index].t + 0.001;
+}
+
+/** Highlight the position card for the frame on screen, if it's one of them. */
+function markPosition(t) {
+  if (!positions.length || !pose) return;
+  const i = frameIndexAt(t);
+  posList.querySelectorAll(".pos").forEach((b, k) => b.classList.toggle("here", positions[k].index === i));
+}
+
+handBtn.onclick = () => {
+  leadSide = leadSide === "left" ? "right" : "left";
+  try { localStorage.setItem("lead", leadSide); } catch {}
+  if (pose && current) buildPositions(current);
+};
 
 function open(name) {
   current = name;
   document.querySelectorAll("#list li").forEach(li => li.classList.toggle("sel", li.dataset.name === name));
   fps = fpsFromName(name);
   pose = null;
+  positions = [];
+  positionsRun++;
+  positionsBox.hidden = true;
+  posList.replaceChildren();
   video.src = "/clips/" + encodeURIComponent(name);
   video.playbackRate = speed;
   document.getElementById("title").textContent = name;
