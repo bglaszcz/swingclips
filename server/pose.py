@@ -1,7 +1,7 @@
 """Pose for whole clips: MediaPipe on every frame, split across worker processes at keyframes.
 
-Adapted from posebench/bench2.py. Frames keep their real timestamps, because high-fps phone clips
-have dropped frames and index / fps would drift.
+Grew out of a timing benchmark (posebench/bench2.py, since removed; see git history). Frames keep
+their real timestamps, because high-fps phone clips have dropped frames and index / fps would drift.
 """
 import os
 import time
