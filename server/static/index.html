@@ -64,6 +64,11 @@
            background: var(--text); color: var(--bg); box-shadow: 0 4px 16px rgba(0,0,0,0.3); max-width: calc(100% - 32px); }
   #toast button { background: transparent; color: var(--bg); border-color: var(--bg); }
   .session li .trash { min-width: 36px; padding: 4px 8px; }
+  #shotdata { display: flex; flex-wrap: wrap; gap: 6px; }
+  .metric { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; min-width: 64px; }
+  .metric b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .metric span { font-size: 11px; color: var(--muted); }
+  .metric.club b { color: var(--accent); }
   #viewer { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   /* Phones: player above the list. Not sticky: it's taller than a phone screen, so pinning it
      would hide its own bottom and cover the list. */
@@ -117,6 +122,7 @@
       <button id="delete-clip" class="danger" title="Move this clip to the trash">Delete</button>
       <span id="frame"></span>
     </div>
+    <div id="shotdata" hidden title="From the launch monitor, via the shot listener"></div>
     <div id="positions" hidden>
       <div class="pos-head">
         <strong>Key positions</strong>
@@ -519,7 +525,52 @@ function open(name) {
   document.getElementById("title").textContent = name;
   viewer.hidden = false;
   history.replaceState(null, "", "#" + encodeURIComponent(name));
+  showShot(clips.find(c => c.name === name));
   loadPose(name);
+}
+
+// ---- Launch monitor numbers ----
+
+const CLUB_NAMES = { DR: "Driver", PW: "PW", GW: "GW", SW: "SW", LW: "LW", PT: "Putter" };
+function clubName(code) {
+  if (!code) return "";
+  if (CLUB_NAMES[code]) return CLUB_NAMES[code];
+  const m = code.match(/^([WHI])(\d)$/);
+  return m ? `${m[2]}${{ W: " wood", H: " hybrid", I: " iron" }[m[1]]}` : code;
+}
+
+const num = (v, d = 1) => (v === null || v === undefined || isNaN(v)) ? "–" : Number(v).toFixed(d);
+const signed = v => (v > 0 ? "+" : "") + num(v);
+// Launch monitors report left as negative.
+const side = v => Math.abs(v) < 0.05 ? "0.0°" : `${num(Math.abs(v))}° ${v < 0 ? "L" : "R"}`;
+
+function showShot(c) {
+  const box = document.getElementById("shotdata");
+  const s = c && c.shot;
+  if (!s) { box.hidden = true; box.replaceChildren(); return; }
+  const b = s.ball || {}, k = s.clubData || {};
+  const items = [
+    ["club", clubName(s.club), "Club"],
+    ["", `${num(b.speed)}`, "Ball mph"],
+    ["", `${num(b.vla)}°`, "Launch"],
+    ["", side(b.hla), "Direction"],
+    ["", `${num(b.totalSpin, 0)}`, "Spin rpm"],
+    ["", `${signed(b.spinAxis)}°`, "Spin axis"],
+  ];
+  if (s.clubData) {
+    items.push(["", `${signed(k.angleOfAttack)}°`, "Attack"], ["", `${signed(k.path)}°`, "Path"],
+               ["", `${signed(k.faceToTarget)}°`, "Face"], ["", `${num(k.loft)}°`, "Dyn. loft"]);
+    if (k.speed) items.push(["", num(k.speed), "Club mph"]);
+  }
+  box.replaceChildren(...items.map(([cls, value, label]) => {
+    const el = document.createElement("div");
+    el.className = "metric " + cls;
+    el.innerHTML = "<b></b><span></span>";
+    el.querySelector("b").textContent = value;
+    el.querySelector("span").textContent = label;
+    return el;
+  }));
+  box.hidden = false;
 }
 
 // ---- Clip list, grouped into sessions ----
@@ -587,7 +638,8 @@ function clipRow(c) {
   li.innerHTML = `<div class="info"><div class="when"></div><div class="meta"></div></div><span class="pose"></span>`;
   li.querySelector(".when").textContent = new Date(c.recorded)
     .toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
-  li.querySelector(".meta").textContent = [modeOf(c.name), fmtSize(c.size)].filter(Boolean).join(" · ");
+  const shotText = c.shot ? `${num(c.shot.ball?.speed)} mph ${clubName(c.shot.club)}` : "";
+  li.querySelector(".meta").textContent = [shotText, modeOf(c.name), fmtSize(c.size)].filter(Boolean).join(" · ");
   const p = li.querySelector(".pose");
   p.textContent = POSE_LABELS[c.pose] || "";
   p.classList.toggle("failed", c.pose === "failed");
@@ -723,6 +775,7 @@ function closeViewer() {
   thumbVideo.removeAttribute("src");
   thumbVideo.load();
   viewer.hidden = true;
+  showShot(null);
   history.replaceState(null, "", location.pathname);
 }
 
@@ -748,8 +801,9 @@ async function refresh() {
     const wanted = decodeURIComponent(location.hash.slice(1));
     open(clips.some(c => c.name === wanted) ? wanted : clips[0].name);
   } else {
-    // The open clip's pose may have just finished.
+    // The open clip's pose may have just finished, or its shot just arrived.
     const now = clips.find(c => c.name === current);
+    showShot(now);
     if (now && now.pose === "done" && (!before || before.pose !== "done")) loadPose(current);
     else updateSkeletonButton();
   }

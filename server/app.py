@@ -180,6 +180,10 @@ def list_clips():
             "pose": pose_state(p.name),
             "_t": t,
         })
+    # Only the capture app's clips are named after the strike itself.
+    shots = match_shots({c["name"]: c["_t"] for c in clips if c["name"].startswith("swing_")})
+    for c in clips:
+        c["shot"] = shots.get(c["name"])
     clips.sort(key=lambda c: c.pop("_t"), reverse=True)
     return clips
 
@@ -228,6 +232,59 @@ async def upload(name: str, request: Request):
         part.unlink(missing_ok=True)
     print(f"Upload: {name} ({size / 1e6:.1f} MB)", flush=True)
     return {"ok": True, "size": size}
+
+
+# ---- Launch monitor shots ----
+# The shot listener on the sim laptop posts each shot here as the launch monitor reports it. Shots
+# are paired with clips by time: the capture app names each clip after the second it heard the
+# strike, and the launch monitor's report arrives a moment later.
+SHOTS_FILE = Path(os.environ.get("SWINGCLIPS_SHOTS", CLIPS_DIR.parent / "shots.jsonl"))
+# How long after a strike its shot report can arrive, and how early (clock differences).
+SHOT_AFTER_S, SHOT_BEFORE_S = 10.0, 1.0
+
+
+@app.post("/api/shots")
+async def add_shot(request: Request):
+    shot = await request.json()
+    if not isinstance(shot, dict) or "received" not in shot or "ball" not in shot:
+        raise HTTPException(400, "Expected a shot with 'received' and 'ball'")
+    datetime.fromisoformat(shot["received"])  # rejects a bad timestamp
+    SHOTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with files_lock, open(SHOTS_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(shot, separators=(",", ":")) + "\n")
+    print(f"Shot: {shot.get('club')} ball {shot['ball'].get('speed')} mph", flush=True)
+    return {"ok": True}
+
+
+def load_shots() -> list[dict]:
+    if not SHOTS_FILE.exists():
+        return []
+    shots = []
+    for line in SHOTS_FILE.read_text(encoding="utf-8").splitlines():
+        try:
+            s = json.loads(line)
+            s["_t"] = datetime.fromisoformat(s["received"]).timestamp()
+            shots.append(s)
+        except (ValueError, KeyError):
+            continue
+    return shots
+
+
+def match_shots(clip_times: dict[str, float]) -> dict[str, dict]:
+    """Clip name -> the shot reported just after its strike. Each shot goes to one clip at most."""
+    pairs = []
+    for s in load_shots():
+        for name, t in clip_times.items():
+            gap = s["_t"] - t
+            if -SHOT_BEFORE_S <= gap <= SHOT_AFTER_S:
+                pairs.append((abs(gap), name, s))
+    matched, used = {}, set()
+    for _, name, s in sorted(pairs, key=lambda p: p[0]):
+        if name in matched or id(s) in used:
+            continue
+        matched[name] = {k: v for k, v in s.items() if k != "_t"}
+        used.add(id(s))
+    return matched
 
 
 class ClipNames(BaseModel):

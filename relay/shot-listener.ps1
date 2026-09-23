@@ -18,7 +18,9 @@ param(
     [int]$Port = 921,
     [string]$LogDir = $PSScriptRoot,
     [string]$Club = "DR",
-    [ValidateSet("RH", "LH")] [string]$Handed = "RH"
+    [ValidateSet("RH", "LH")] [string]$Handed = "RH",
+    # The SwingClips home server, which matches each shot to its swing clip. "" = don't send.
+    [string]$Server = "http://192.168.86.250:8000"
 )
 
 $ErrorActionPreference = "Stop"
@@ -65,25 +67,83 @@ function Split-JsonObjects([System.Text.StringBuilder]$buf) {
     return $objects
 }
 
-function Describe($msg) {
+function Kind($msg) {
+    # Square's connector sends each shot as TWO messages, both flagged IsHeartBeat=true: ball data
+    # first, then club data ~0.5 s later. Each also carries stale copies of the other half (the
+    # ball message has the previous shot's club numbers), so only the Contains* flags count.
     $o = $msg.ShotDataOptions
-    $flags = "ready=$($o.LaunchMonitorIsReady), ball detected=$($o.LaunchMonitorBallDetected)"
-    if ($o -and $o.IsHeartBeat) { return "heartbeat ($flags)" }
-    $ballSpeed = if ($msg.BallData) { [double]$msg.BallData.Speed } else { 0 }
-    if (-not $o -or (-not $o.ContainsBallData -and -not $o.ContainsClubData) -or $ballSpeed -eq 0) {
-        return "status ($flags)"
-    }
-    $parts = @("SHOT #$($msg.ShotNumber)")
+    if (-not $o) { return "status" }
+    if ($o.ContainsBallData -and $msg.BallData -and [double]$msg.BallData.Speed -gt 0) { return "ball" }
+    if ($o.ContainsClubData -and $msg.ClubData) { return "club" }
+    return "status"
+}
+
+function Fmt($v, [string]$unit = "") { "{0:0.0}{1}" -f [double]$v, $unit }
+
+function Describe-Ball($msg) {
     $b = $msg.BallData
-    $parts += "ball $($b.Speed) mph"
-    $parts += "launch $($b.VLA)/$($b.HLA) deg"
-    $parts += "spin $($b.TotalSpin)"
-    if ($b.CarryDistance) { $parts += "carry $($b.CarryDistance)" }
-    if ($msg.ClubData -and $o.ContainsClubData) {
-        $c = $msg.ClubData
-        $parts += "club $($c.Speed), path $($c.Path), face $($c.FaceToTarget), AoA $($c.AngleOfAttack)"
+    "SHOT #$($msg.ShotNumber)  ball $(Fmt $b.Speed ' mph') | launch $(Fmt $b.VLA ([char]0xB0)) up, $(Fmt $b.HLA ([char]0xB0)) side | spin $([int]$b.TotalSpin) (axis $(Fmt $b.SpinAxis ([char]0xB0)))"
+}
+
+function Describe-Club($msg) {
+    $c = $msg.ClubData
+    "         club  AoA $(Fmt $c.AngleOfAttack ([char]0xB0)) | face $(Fmt $c.FaceToTarget ([char]0xB0)) | path $(Fmt $c.Path ([char]0xB0)) | loft $(Fmt $c.Loft ([char]0xB0))"
+}
+
+# ---- Forwarding shots to the home server ----
+# One shot = the ball message plus the club message that follows. Sent once the club half arrives,
+# or after a couple of seconds without it. Shots the server doesn't take are retried later.
+$pending = $null
+$unsent = New-Object System.Collections.Generic.List[object]
+$lastRetry = Get-Date
+
+function New-Shot($msg, [datetime]$received) {
+    $b = $msg.BallData
+    [ordered]@{
+        received = $received.ToString("o")
+        device = $msg.DeviceID
+        shotNumber = $msg.ShotNumber
+        club = $script:Club
+        ball = [ordered]@{
+            speed = $b.Speed; vla = $b.VLA; hla = $b.HLA; totalSpin = $b.TotalSpin
+            backSpin = $b.BackSpin; sideSpin = $b.SideSpin; spinAxis = $b.SpinAxis; carry = $b.CarryDistance
+        }
+        clubData = $null
     }
-    return ($parts -join " | ")
+}
+
+function Add-ClubData($shot, $msg) {
+    $c = $msg.ClubData
+    $shot.clubData = [ordered]@{
+        speed = $c.Speed; angleOfAttack = $c.AngleOfAttack; faceToTarget = $c.FaceToTarget
+        path = $c.Path; loft = $c.Loft; lie = $c.Lie
+        faceImpactH = $c.HorizontalFaceImpact; faceImpactV = $c.VerticalFaceImpact
+    }
+}
+
+function Send-Shot($shot) {
+    if (-not $Server) { return }
+    try {
+        $body = $shot | ConvertTo-Json -Depth 5 -Compress
+        Invoke-RestMethod -Uri ($Server.TrimEnd('/') + "/api/shots") -Method Post -Body $body `
+            -ContentType "application/json" -TimeoutSec 3 | Out-Null
+        Say "         sent to the server" "DarkGray"
+    } catch {
+        $unsent.Add($shot)
+        Say "         couldn't reach the server ($($_.Exception.Message)) - will retry" "Yellow"
+    }
+}
+
+function Flush-Pending([bool]$force) {
+    if ($script:pending -and ($force -or ((Get-Date) - [datetime]$script:pending.received).TotalSeconds -gt 2.5)) {
+        Send-Shot $script:pending
+        $script:pending = $null
+    }
+    if ($unsent.Count -gt 0 -and ((Get-Date) - $script:lastRetry).TotalSeconds -gt 15) {
+        $script:lastRetry = Get-Date
+        $retry = @($unsent); $unsent.Clear()
+        foreach ($s in $retry) { Send-Shot $s }
+    }
 }
 
 function Send-Json($stream, [string]$json) {
@@ -153,7 +213,7 @@ Say "Close this window (or press Ctrl+C) to stop."
 
 while ($true) {
     # Wait in short naps rather than one blocking call, which Ctrl+C can't interrupt.
-    while (-not $listener.Pending()) { Check-Keys $null; Start-Sleep -Milliseconds 200 }
+    while (-not $listener.Pending()) { Check-Keys $null; Flush-Pending $false; Start-Sleep -Milliseconds 200 }
     $client = $listener.AcceptTcpClient()
     $peer = $client.Client.RemoteEndPoint
     $isSelfTest = $false
@@ -167,6 +227,7 @@ while ($true) {
         while ($true) {
             # Same here: poll for up to 0.2 s at a time so Ctrl+C and typed clubs get a look in.
             Check-Keys $(if ($greeted) { $stream } else { $null })
+            Flush-Pending $false
             if (-not $socket.Poll(200000, [System.Net.Sockets.SelectMode]::SelectRead)) { continue }
             if ($socket.Available -eq 0) { break }  # readable with nothing to read = closed
             $n = $stream.Read($bytes, 0, $bytes.Length)
@@ -192,14 +253,25 @@ while ($true) {
                 try {
                     $msg = $json | ConvertFrom-Json
                     $line = @{ received = $received.ToString("o"); club = $Club; message = $msg } | ConvertTo-Json -Depth 10 -Compress
-                    $ready = $msg.ShotDataOptions.LaunchMonitorIsReady
-                    $what = Describe $msg
-                    if ($what.StartsWith("SHOT")) {
-                        Say "$($received.ToString('HH:mm:ss.fff'))  $what  [$Club]" "White"
-                    } elseif ($ready -ne $lastReady) {
-                        Say "$($received.ToString('HH:mm:ss.fff'))  launch monitor $(if ($ready) { 'READY' } else { 'not ready' }): $what" $(if ($ready) { "Green" } else { "Yellow" })
+                    $kind = Kind $msg
+                    if ($kind -eq "ball") {
+                        Flush-Pending $true   # a previous shot still waiting for its club half
+                        Say "$($received.ToString('HH:mm:ss.fff'))  $(Describe-Ball $msg)  [$Club]" "White"
+                        $pending = New-Shot $msg $received
+                    } elseif ($kind -eq "club") {
+                        Say (Describe-Club $msg) "White"
+                        if ($pending -and $pending.shotNumber -eq $msg.ShotNumber) {
+                            Add-ClubData $pending $msg
+                            Flush-Pending $true
+                        }
+                    } else {
+                        $ready = $msg.ShotDataOptions.LaunchMonitorIsReady
+                        if ($ready -ne $lastReady) {
+                            if ($ready) { Say "$($received.ToString('HH:mm:ss.fff'))  launch monitor READY - ball detected, go ahead" "Green" }
+                            else { Say "$($received.ToString('HH:mm:ss.fff'))  launch monitor waiting for a ball" "DarkYellow" }
+                        }
+                        $lastReady = $ready
                     }
-                    $lastReady = $ready
                 } catch {
                     $line = @{ received = $received.ToString("o"); unparsed = $json } | ConvertTo-Json -Compress
                     Say "$($received.ToString('HH:mm:ss.fff'))  (not valid JSON) $json" "Yellow"
