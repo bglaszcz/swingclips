@@ -63,11 +63,11 @@
            display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: 8px;
            background: var(--text); color: var(--bg); box-shadow: 0 4px 16px rgba(0,0,0,0.3); max-width: calc(100% - 32px); }
   #toast button { background: transparent; color: var(--bg); border-color: var(--bg); }
-  .title-row { display: flex; align-items: center; gap: 12px; }
-  .title-row #title { flex: 1; min-width: 0; }
+  .session li .trash { min-width: 36px; padding: 4px 8px; }
   #viewer { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  @media (max-width: 899px) { #viewer { order: -1; position: sticky; top: 0; background: var(--bg);
-                                        border-bottom: 1px solid var(--line); z-index: 1; } }
+  /* Phones: player above the list. Not sticky: it's taller than a phone screen, so pinning it
+     would hide its own bottom and cover the list. */
+  @media (max-width: 899px) { #viewer { order: -1; border-bottom: 1px solid var(--line); } }
   .stage { position: relative; }
   video { display: block; width: 100%; height: 60vh; background: #000; border-radius: 6px; }
   @media (max-width: 899px) { video { height: 45vh; } }
@@ -114,6 +114,7 @@
       <span id="speeds"></span>
       <span class="sep"></span>
       <button id="skeleton" title="Show the pose skeleton (S)">Skeleton</button>
+      <button id="delete-clip" class="danger" title="Move this clip to the trash">Delete</button>
       <span id="frame"></span>
     </div>
     <div id="positions" hidden>
@@ -124,10 +125,7 @@
       <div id="pos-note"></div>
       <div id="pos-list"></div>
     </div>
-    <div class="title-row">
-      <div id="title"></div>
-      <button id="delete-clip" class="small danger" title="Move this clip to the trash">Delete clip</button>
-    </div>
+    <div id="title"></div>
   </section>
 </main>
 <div id="toast" hidden><span id="toast-text"></span><button id="toast-undo" class="small">Undo</button></div>
@@ -600,6 +598,13 @@ function clipRow(c) {
     li.onclick = () => box.click();
   } else {
     li.onclick = () => open(c.name);
+    const del = document.createElement("button");
+    del.className = "small danger trash";
+    del.textContent = "🗑";
+    del.title = "Move this clip to the trash";
+    del.setAttribute("aria-label", "Delete clip");
+    del.onclick = e => { e.stopPropagation(); deleteClips([c.name]); };
+    li.append(del);
   }
   return li;
 }
