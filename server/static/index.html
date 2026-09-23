@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SwingClips</title>
+<style>
+  :root {
+    --bg: #f4f6f4; --panel: #ffffff; --text: #17201a; --muted: #5d6b62;
+    --line: #dde3de; --accent: #1f8a4c; --accent-text: #ffffff; --sel: #e3f3e9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1411; --panel: #171e19; --text: #e6ece7; --muted: #93a197;
+      --line: #27312a; --accent: #3cb46e; --accent-text: #08120c; --sel: #1d3325;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex;
+           align-items: baseline; gap: 12px; }
+  header h1 { margin: 0; font-size: 18px; }
+  header .count { color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: 1fr; }
+  @media (min-width: 900px) {
+    main { grid-template-columns: 320px 1fr; height: calc(100vh - 49px); }
+    #list { overflow-y: auto; border-right: 1px solid var(--line); }
+  }
+  #list { list-style: none; margin: 0; padding: 0; }
+  #list li { padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  #list li:hover { background: var(--sel); }
+  #list li.sel { background: var(--sel); box-shadow: inset 3px 0 var(--accent); }
+  #list .when { font-weight: 600; }
+  #list .meta { color: var(--muted); font-size: 12px; word-break: break-all; }
+  #viewer { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  @media (max-width: 899px) { #viewer { order: -1; position: sticky; top: 0; background: var(--bg);
+                                        border-bottom: 1px solid var(--line); z-index: 1; } }
+  video { width: 100%; max-height: 70vh; background: #000; border-radius: 6px; }
+  @media (max-width: 899px) { video { max-height: 45vh; } }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--text); cursor: pointer; min-width: 44px; }
+  button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .sep { width: 1px; height: 28px; background: var(--line); }
+  #title { color: var(--muted); font-size: 13px; word-break: break-all; }
+  #frame { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .empty { padding: 24px 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header><h1>SwingClips</h1><span class="count" id="count"></span></header>
+<main>
+  <ul id="list"></ul>
+  <section id="viewer" hidden>
+    <video id="video" controls playsinline muted preload="auto"></video>
+    <div class="controls">
+      <button id="prev" title="Previous frame (←)">‹ Frame</button>
+      <button id="next" title="Next frame (→)">Frame ›</button>
+      <span class="sep"></span>
+      <span id="speeds"></span>
+      <span id="frame"></span>
+    </div>
+    <div id="title"></div>
+  </section>
+</main>
+<script>
+const SPEEDS = [1, 0.25, 0.125, 0.0625];
+const list = document.getElementById("list");
+const video = document.getElementById("video");
+const viewer = document.getElementById("viewer");
+let fps = 30;
+let speed = 1;
+
+// Probe clips are named like c0_1920x1080_240_hs_1789123456.mp4 - the number after the size is fps.
+function fpsFromName(name) {
+  const m = name.match(/_\d+x\d+_(\d+)/);
+  return m ? Number(m[1]) : 30;
+}
+
+function fmtSize(bytes) {
+  return bytes >= 1e9 ? (bytes / 1e9).toFixed(1) + " GB" : (bytes / 1e6).toFixed(1) + " MB";
+}
+
+function fmtWhen(iso) {
+  return new Date(iso).toLocaleString(undefined,
+    { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function setSpeed(s) {
+  speed = s;
+  video.playbackRate = s;
+  document.querySelectorAll("#speeds button").forEach(b => b.classList.toggle("on", Number(b.dataset.s) === s));
+}
+
+function currentFrame() {
+  return Math.floor(video.currentTime * fps + 0.01);
+}
+
+function step(frames) {
+  video.pause();
+  const last = Math.floor((video.duration || 0) * fps) - 1;
+  const target = Math.max(0, Math.min(last, currentFrame() + frames));
+  // Aim for the middle of the frame: seeking to its exact start can round down and show the one before.
+  video.currentTime = (target + 0.5) / fps;
+}
+
+function showFrame() {
+  document.getElementById("frame").textContent = `frame ${currentFrame()} · ${fps} fps`;
+}
+
+function open(name) {
+  document.querySelectorAll("#list li").forEach(li => li.classList.toggle("sel", li.dataset.name === name));
+  fps = fpsFromName(name);
+  video.src = "/clips/" + encodeURIComponent(name);
+  video.playbackRate = speed;
+  document.getElementById("title").textContent = name;
+  viewer.hidden = false;
+  history.replaceState(null, "", "#" + encodeURIComponent(name));
+}
+
+async function load() {
+  const res = await fetch("/api/clips");
+  if (!res.ok) {
+    list.innerHTML = `<li class="empty">${(await res.json()).detail || "Couldn't load clips."}</li>`;
+    return;
+  }
+  const clips = await res.json();
+  document.getElementById("count").textContent = `${clips.length} clip${clips.length === 1 ? "" : "s"}`;
+  if (!clips.length) {
+    list.innerHTML = `<li class="empty">No clips yet. Run "Pull clips" to copy them from the phone.</li>`;
+    return;
+  }
+  list.replaceChildren(...clips.map(c => {
+    const li = document.createElement("li");
+    li.dataset.name = c.name;
+    li.innerHTML = `<div class="when"></div><div class="meta"></div>`;
+    li.querySelector(".when").textContent = fmtWhen(c.recorded);
+    li.querySelector(".meta").textContent = `${c.name} · ${fmtSize(c.size)}`;
+    li.onclick = () => open(c.name);
+    return li;
+  }));
+  const wanted = decodeURIComponent(location.hash.slice(1));
+  open(clips.some(c => c.name === wanted) ? wanted : clips[0].name);
+}
+
+document.getElementById("speeds").replaceChildren(...SPEEDS.map(s => {
+  const b = document.createElement("button");
+  b.dataset.s = s;
+  b.textContent = s === 1 ? "1×" : "1/" + (1 / s) + "×";
+  b.onclick = () => setSpeed(s);
+  return b;
+}));
+setSpeed(1);
+document.getElementById("prev").onclick = () => step(-1);
+document.getElementById("next").onclick = () => step(1);
+video.addEventListener("timeupdate", showFrame);
+video.addEventListener("seeked", showFrame);
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
+  if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
+});
+load();
+</script>
+</body>
+</html>
