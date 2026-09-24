@@ -160,8 +160,50 @@
     return { r, n, needed: t / Math.sqrt(df + t * t), slope: sxx > 0 ? sxy / sxx : null, mx, my };
   }
 
+  /**
+   * Where the golfer is in one camera's picture at address, in picture heights: hips (x, y) and
+   * height (nose to ankles). A phone that moves between sessions shifts the body numbers without the
+   * swing changing; comparing these shows when the setup changed.
+   */
+  function framing(input, index) {
+    const f = index == null ? null : input.frames[index];
+    if (!f || !f.lm) return null;
+    const lm = f.lm, y = i => lm[i * 3 + 1];
+    return {
+      x: (lm[23 * 3] + lm[24 * 3]) / 2 * input.aspect, y: (y(23) + y(24)) / 2,
+      h: Math.max(y(27), y(28)) - y(0),
+    };
+  }
+
+  /**
+   * Everything the trends keep about one swing, from its pose files (the server calls this too):
+   * {body: bodyNumbers, quality: what could be measured, setup: framing per camera}.
+   * Inputs as for analyze(), except aspect may be left out when `rotation` (from the pose file) is given.
+   */
+  function summarize(main, other, leadSide) {
+    for (const c of [main, other]) if (c && c.aspect == null) c.aspect = aspectOf(c.name, c.rotation);
+    const a = analyze(main, other, leadSide);
+    const pos = key => a.positions.find(p => p.key === key);
+    const p1 = pos("p1"), p6 = pos("p6");
+    return {
+      body: bodyNumbers(a),
+      quality: {
+        swingFound: a.positions.length > 0,
+        // Impact from the ball leaving the mat (frame-exact) rather than the heard strike.
+        ballFace: main.angle === "dtl" ? null : main.impact != null,
+        dtl: !!a.dtl, ballDtl: a.dtl ? a.dtl.impact != null : null,
+        p6Estimated: p6 ? !!p6.estimated : null,
+      },
+      setup: {
+        face: main.angle === "dtl" || !p1 ? null
+          : { ...framing(main, a.metrics ? a.metrics.address : p1.index), scale: a.metrics ? a.metrics.scale : null },
+        dtl: a.dtlMetrics ? { ...framing(a.dtl, a.dtlMetrics.address), scale: a.dtlMetrics.scale } : null,
+      },
+    };
+  }
+
   const api = { VERSION, BODY, SHOT, frameIndexAt, syncOffset, aspectOf, strikeWindow, analyze, bodyNumbers,
-                shotNumbers, correlation };
+                shotNumbers, correlation, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingSummary = api;
 })(typeof window !== "undefined" ? window : globalThis);

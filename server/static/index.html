@@ -27,12 +27,12 @@
   header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex;
            align-items: baseline; gap: 12px; }
   header h1 { margin: 0; font-size: 18px; }
-  header .count { color: var(--muted); font-size: 13px; }
+  header .count { color: var(--muted); font-size: 13px; flex: 1; }
   main { display: grid; grid-template-columns: 1fr; }
   @media (min-width: 900px) {
     main { grid-template-columns: 320px 1fr; height: calc(100vh - 49px); }
     #side { overflow-y: auto; border-right: 1px solid var(--line); }
-    #viewer, #trends { overflow-y: auto; }
+    #viewer, #trends, #progress { overflow-y: auto; }
   }
   #listbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line);
              position: sticky; top: 0; background: var(--bg); z-index: 1; }
@@ -123,7 +123,49 @@
   #numbers tr.group th { text-align: left; padding-top: 10px; color: var(--text); }
   /* Session trends: the launch monitor's numbers against the swing's, one dot per swing. */
   #trends { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  @media (max-width: 899px) { #trends { order: -1; border-bottom: 1px solid var(--line); } }
+  @media (max-width: 899px) { #trends, #progress { order: -1; border-bottom: 1px solid var(--line); } }
+  #progress { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  #p-status { color: var(--muted); font-size: 13px; flex: 1; }
+  #p-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .p-tile { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line);
+            border-radius: 6px; cursor: pointer; min-width: 0; }
+  .p-tile:hover { background: var(--sel); }
+  .p-label { font-size: 12px; color: var(--muted); }
+  .p-tile b { font-size: 20px; font-weight: 600; }
+  .p-delta { font-size: 11px; color: var(--muted); }
+  .p-delta em { font-style: normal; font-weight: 600; }
+  .p-delta em.better { color: var(--accent); }
+  .p-delta em.worse { color: var(--warn); }
+  .p-spark { width: 100%; height: 24px; margin-top: 4px; }
+  .p-spark-line { fill: none; stroke: var(--muted); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .p-spark-end { fill: var(--dot); }
+  .p-chart-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  #p-chart svg, #p-pattern { display: block; width: 100%; height: 300px; overflow: visible; }
+  #p-hcp { display: block; width: 100%; height: 180px; }
+  .p-swing { fill: var(--muted); fill-opacity: 0.35; }
+  .p-iqr { stroke: var(--dot); stroke-width: 4; stroke-linecap: round; stroke-opacity: 0.35; }
+  .p-line { fill: none; stroke: var(--dot); stroke-width: 2; stroke-linejoin: round; }
+  .p-break { stroke: var(--warn); stroke-width: 1; }
+  .p-latest { fill: var(--dot); stroke: var(--panel); stroke-width: 1.5; }
+  .p-before { fill: var(--muted); fill-opacity: 0.45; }
+  .p-latest-ring { fill: var(--dot); fill-opacity: 0.08; stroke: var(--dot); stroke-width: 2; }
+  .p-before-ring { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+  .p-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); }
+  .p-legend span { display: flex; align-items: center; gap: 6px; }
+  .p-key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+  .p-key.p-latest { background: var(--dot); } .p-key.p-before { background: var(--muted); opacity: 0.6; }
+  #p-hcp-list { display: flex; flex-direction: column; }
+  .p-hcp-row { display: flex; align-items: center; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .p-hcp-row span { flex: 1; color: var(--muted); }
+  input { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  #p-sessions { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  #p-sessions th, #p-sessions td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  #p-sessions th { color: var(--muted); font-weight: 600; white-space: normal; vertical-align: bottom; }
+  #p-sessions th:first-child, #p-sessions td:first-child, #p-sessions td.p-note, #p-sessions th:last-child { text-align: left; }
+  #p-sessions tbody tr { cursor: pointer; }
+  #p-sessions tbody tr:hover { background: var(--sel); }
+  .p-note { white-space: normal !important; min-width: 160px; }
+  .p-note span { margin-right: 8px; }
   .t-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .t-head strong { font-size: 16px; }
   #t-status { color: var(--muted); font-size: 13px; flex: 1; }
@@ -142,10 +184,10 @@
   .t-dot { fill: var(--dot); stroke: var(--panel); stroke-width: 2; pointer-events: none; }
   .t-ring { fill: none; stroke: var(--text); stroke-width: 2; pointer-events: none; }
   .t-hit { fill: transparent; cursor: pointer; outline: none; }
-  #t-tip { position: absolute; z-index: 2; pointer-events: none; background: var(--text); color: var(--bg);
+  #t-tip, .tip { position: absolute; z-index: 2; pointer-events: none; background: var(--text); color: var(--bg);
            padding: 6px 10px; border-radius: 6px; font-size: 12px; line-height: 1.45; white-space: nowrap;
            box-shadow: 0 4px 16px rgba(0,0,0,0.25); font-variant-numeric: tabular-nums; }
-  #t-tip b { font-size: 13px; }
+  #t-tip b, .tip b { font-size: 13px; }
   #t-r { font-size: 13px; }
   #t-r .muted, .t-card .note { color: var(--muted); font-size: 12px; }
   .t-row { display: grid; grid-template-columns: minmax(0, 1fr) 48px 96px; gap: 10px; align-items: center;
@@ -171,7 +213,8 @@
 </style>
 </head>
 <body>
-<header><h1>SwingClips</h1><span class="count" id="count"></span></header>
+<header><h1>SwingClips</h1><span class="count" id="count"></span>
+  <button id="progress-btn" class="small" title="How your swing and results are changing across sessions">Progress</button></header>
 <main>
   <aside id="side">
     <div id="listbar"></div>
@@ -202,6 +245,7 @@
       <button id="handpath" title="Show the path of the hands through the swing (H)">Hand path</button>
       <button id="headbox" title="Show where the head was at address">Head</button>
       <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane</button>
+      <button id="exclude" title="Leave this swing out of the trends and progress (someone else's swing, a practice waggle…)">Leave out</button>
       <button id="delete-clip" class="danger" title="Move this clip to the trash">Delete</button>
       <span id="frame"></span>
     </div>
@@ -258,6 +302,55 @@
     <div class="t-card">
       <strong>All swings</strong>
       <div style="overflow-x: auto"><table id="t-table"></table></div>
+    </div>
+  </section>
+  <section id="progress" hidden>
+    <div class="t-head">
+      <strong>Progress</strong><span id="p-status"></span>
+      <button id="p-close" class="small">Close</button>
+    </div>
+    <div class="t-filters">
+      <label>Club <select id="p-club"></select></label>
+      <label>Period <select id="p-period">
+        <option value="30">Last 30 days</option><option value="90">Last 90 days</option>
+        <option value="365">Last year</option><option value="0">All</option>
+      </select></label>
+    </div>
+    <div class="t-card">
+      <strong>Latest session</strong>
+      <div id="p-tiles"></div>
+      <div class="note" id="p-tiles-note"></div>
+    </div>
+    <div class="t-card" id="p-chart">
+      <div class="p-chart-head"><strong>Over time</strong><select id="p-metric" aria-label="Number to chart"></select></div>
+      <svg role="img"></svg>
+      <div id="p-tip" class="tip" hidden></div>
+      <div class="note">One column per session with this club. Faint dots are single swings; the colored dot is the
+        session's median, the bar its middle half. Consistency numbers are the spread (standard deviation)
+        of the session's shots: lower is more consistent. "Camera moved" marks where a phone was moved, so
+        body numbers either side don't compare. Tap a session to open its trends.</div>
+    </div>
+    <div class="t-card">
+      <strong>Shot pattern</strong>
+      <svg id="p-pattern" role="img" aria-label="Where shots finished: carry against offline"></svg>
+      <div class="p-legend" id="p-pattern-legend"><span><i class="p-key p-latest"></i>Latest session</span>
+        <span><i class="p-key p-before"></i>Sessions before it</span></div>
+      <div class="note">The rings hold about two shots in three: a smaller ring is a tighter pattern.</div>
+    </div>
+    <div class="t-card">
+      <strong>Handicap index</strong>
+      <svg id="p-hcp" role="img" aria-label="Handicap index over time"></svg>
+      <form id="p-hcp-form" class="t-filters">
+        <input type="date" id="p-hcp-date" aria-label="Date">
+        <input id="p-hcp-index" inputmode="decimal" placeholder="Index, e.g. 16.4" aria-label="Handicap index" size="12">
+        <button class="small">Add</button>
+      </form>
+      <div id="p-hcp-list"></div>
+      <div class="note">Typed in from the GHIN app when it changes (GHIN has no way for this page to read it).</div>
+    </div>
+    <div class="t-card">
+      <strong>Sessions</strong>
+      <div style="overflow-x: auto"><table id="p-sessions"></table></div>
     </div>
   </section>
 </main>
@@ -1097,7 +1190,6 @@ handBtn.onclick = () => {
   leadSide = leadSide === "left" ? "right" : "left";
   try { localStorage.setItem("lead", leadSide); } catch {}
   if (pose && current) buildPositions(current);
-  if (trendsKey) renderTrends();
 };
 
 /** A swing's down-the-line clip is listed and opened through its face-on one. */
@@ -1134,7 +1226,7 @@ function open(name) {
   const c0 = clips.find(c => c.name === name);
   if (c0 && isSecondary(c0)) name = c0.partner;
   current = name;
-  if (trendsKey) { trendsKey = null; trendsBox.hidden = true; tipEl.hidden = true; renderList(); }
+  leaveTrendViews();
   document.querySelectorAll("#list li").forEach(li => li.classList.toggle("sel", li.dataset.name === name));
   // Opening a clip in a closed session opens the session.
   const row = document.querySelector(`#list li[data-name="${CSS.escape(name)}"]`);
@@ -1154,6 +1246,7 @@ function open(name) {
   viewer.hidden = false;
   history.replaceState(null, "", "#" + encodeURIComponent(name));
   showShot(clips.find(c => c.name === name));
+  updateExcludeButton();
   loadPose(name);
 }
 
@@ -1316,7 +1409,8 @@ function clipRow(c) {
   const other = c.partner && clips.find(x => x.name === c.partner);
   const angles = other ? "2 angles" : c.angle === "dtl" ? "down the line" : "";
   const size = c.size + (other ? other.size : 0);
-  li.querySelector(".meta").textContent = [shotText, angles, modeOf(c.name), fmtSize(size)].filter(Boolean).join(" · ");
+  li.querySelector(".meta").textContent = [shotText, angles, c.excluded ? "left out of trends" : "", modeOf(c.name), fmtSize(size)]
+    .filter(Boolean).join(" · ");
   // The swing's analysis is as far along as its slower angle.
   const state = [c, other].filter(Boolean).map(x => x.pose).find(s => s !== "done") ?? "done";
   const p = li.querySelector(".pose");
@@ -1409,381 +1503,6 @@ function renderList() {
   }));
 }
 
-// ---- Session trends ----
-
-const trendsBox = document.getElementById("trends");
-const tipEl = document.getElementById("t-tip");
-let trendsKey = null;     // the session shown, by its key (see sessionsOf)
-// Each swing's body numbers, by cache key (see summaryKey); in memory, and in localStorage so a
-// session doesn't have to be worked out again on the next visit.
-const bodyCache = new Map();
-const bodyPending = new Set();
-const trendPick = { x: "earlyExt", y: "path", club: null };
-try { Object.assign(trendPick, JSON.parse(localStorage.getItem("trends") || "{}"), { club: null }); } catch {}
-
-const DECIMALS = { ":1": 1, s: 2, in: 1, "°": 1, yd: 1, mph: 1, rpm: 0, "": 2, mm: 1 };
-const FIELDS = [
-  { key: "order", label: "Swing order", unit: "", group: "", dec: 0 },
-  ...SwingSummary.SHOT.map(f => ({ ...f, group: "Launch monitor", shot: true })),
-  ...SwingSummary.BODY.map(f => ({ ...f, group: f.view === "dtl" ? "Down the line" : "Face-on" })),
-].map(f => ({ dec: DECIMALS[f.unit] ?? 1, ...f }));
-const field = key => FIELDS.find(f => f.key === key) || FIELDS[0];
-const fieldName = f => f.unit && f.unit !== ":1" ? `${f.label} (${f.unit})` : f.label;
-
-function fmtField(f, v) {
-  if (v == null) return "–";
-  if (f.unit === ":1") return `${v.toFixed(1)} : 1`;
-  const n = v.toFixed(f.dec);
-  const plain = f.shot || f.unit === "s" || f.key === "order" || v <= 0 || Number(n) === 0;
-  return (plain ? n : "+" + n).replace(/^-0(\.0+)?$/, "0");
-}
-
-function summaryKey(c) {
-  return `sum:${SwingSummary.VERSION}:${leadSide}:${c.name}|${c.partner || ""}`;
-}
-
-/** A clip's pose file in the shape SwingSummary.analyze takes. */
-async function analysisInputFromServer(c) {
-  const res = await fetch("/api/pose/" + encodeURIComponent(c.name));
-  if (!res.ok) throw new Error("pose " + res.status);
-  const d = await res.json();
-  return { name: c.name, strike: c.strike ?? null, angle: c.angle || "face", aspect: SwingSummary.aspectOf(c.name, d.rotation),
-           frames: d.frames, impact: d.impact ?? null, ball: d.ball ?? null };
-}
-
-/** A swing's body numbers if they're known yet (else null; see fillBodies). */
-function cachedBody(c) {
-  const k = summaryKey(c);
-  if (bodyCache.has(k)) return bodyCache.get(k);
-  try {
-    const v = localStorage.getItem(k);
-    if (v) { const b = JSON.parse(v); bodyCache.set(k, b); return b; }
-  } catch {}
-  return null;
-}
-
-/** Whether a swing's clips are all analyzed, so its numbers can be worked out (and kept). */
-function swingReady(c) {
-  const other = c.partner && clips.find(x => x.name === c.partner);
-  return c.pose === "done" && (!c.partner || (!!other && other.pose === "done"));
-}
-
-/** Works out the body numbers of these swings, two at a time, redrawing as each one lands. */
-async function fillBodies(list) {
-  const todo = list.filter(c => swingReady(c) && !cachedBody(c) && !bodyPending.has(summaryKey(c)));
-  todo.forEach(c => bodyPending.add(summaryKey(c)));
-  const worker = async () => {
-    for (let c; (c = todo.shift());) {
-      const k = summaryKey(c);
-      try {
-        const other = c.partner && clips.find(x => x.name === c.partner);
-        const [main, dtl] = await Promise.all([analysisInputFromServer(c), other ? analysisInputFromServer(other) : null]);
-        const body = SwingSummary.bodyNumbers(SwingSummary.analyze(main, dtl, leadSide));
-        bodyCache.set(k, body);
-        try { localStorage.setItem(k, JSON.stringify(body)); } catch {}
-      } catch {
-        bodyCache.set(k, {});   // couldn't be read: counts as done, with no numbers
-      }
-      bodyPending.delete(k);
-      if (trendsKey) renderTrends();
-    }
-  };
-  await Promise.all([worker(), worker()]);
-}
-
-function openTrends(key) {
-  trendsKey = key;
-  video.pause();
-  viewer.hidden = true;
-  trendsBox.hidden = false;
-  renderTrends();
-  trendsBox.scrollTop = 0;
-  if (window.innerWidth < 900) trendsBox.scrollIntoView();
-}
-
-function closeTrends() {
-  trendsKey = null;
-  trendsBox.hidden = true;
-  tipEl.hidden = true;
-  if (current) viewer.hidden = false;
-  renderList();
-}
-document.getElementById("t-close").onclick = closeTrends;
-
-/** Round tick positions covering [lo, hi]. */
-function niceTicks(lo, hi, count = 5) {
-  if (!(hi > lo)) { lo -= 1; hi += 1; }
-  const raw = (hi - lo) / count, mag = 10 ** Math.floor(Math.log10(raw)), e = raw / mag;
-  const step = (e >= 7.5 ? 10 : e >= 3.5 ? 5 : e >= 1.5 ? 2 : 1) * mag;
-  const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step;
-  const ticks = [];
-  for (let v = a; v <= b + step / 2; v += step) ticks.push(Math.abs(v) < step / 1e6 ? 0 : v);
-  return { lo: a, hi: b, ticks, dec: Math.max(0, -Math.floor(Math.log10(step) + 1e-9)) };
-}
-
-function svgEl(tag, attrs, parent) {
-  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const k in attrs) el.setAttribute(k, attrs[k]);
-  if (parent) parent.append(el);
-  return el;
-}
-
-function fillSelect(sel, groups, value) {
-  sel.replaceChildren(...groups.map(([name, fs]) => {
-    const parent = name ? Object.assign(document.createElement("optgroup"), { label: name }) : document.createDocumentFragment();
-    for (const f of fs) parent.append(Object.assign(document.createElement("option"), { value: f.key, textContent: fieldName(f) }));
-    return parent;
-  }));
-  sel.value = value;
-}
-
-const byGroup = names => names.map(g => [g, FIELDS.filter(f => f.group === g)]);
-
-function saveTrendPick() {
-  try { localStorage.setItem("trends", JSON.stringify({ x: trendPick.x, y: trendPick.y })); } catch {}
-}
-
-function renderTrends() {
-  const session = sessionsOf(shownClips()).find(s => s.key === trendsKey);
-  if (!session) { closeTrends(); return; }
-  fillBodies(session.clips);
-  // Oldest first, numbered in the order they were hit.
-  const all = [...session.clips].reverse().map((c, i) => {
-    const body = cachedBody(c);
-    return { c, order: i + 1, club: c.shot ? c.shot.club : null, body,
-             ...SwingSummary.shotNumbers(c.shot), ...(body || {}) };
-  });
-  document.getElementById("t-title").textContent = `Trends · ${sessionTitle(session)}`;
-  const waiting = session.clips.filter(c => !swingReady(c)).length;
-  const working = all.filter(r => !r.body && swingReady(r.c)).length;
-  document.getElementById("t-status").textContent = [
-    `${all.length} swing${all.length === 1 ? "" : "s"}`,
-    working ? `working out ${working}…` : "",
-    waiting ? `${waiting} still being analyzed on the server` : "",
-  ].filter(Boolean).join(" · ");
-
-  // Mixing clubs would mostly show the difference between clubs: one club at a time by default.
-  const counts = {};
-  for (const r of all) if (r.club) counts[r.club] = (counts[r.club] || 0) + 1;
-  const clubs = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-  if (trendPick.club == null || (trendPick.club !== "" && !counts[trendPick.club])) trendPick.club = clubs[0] ?? "";
-  const clubSel = document.getElementById("t-club");
-  document.getElementById("t-club-wrap").hidden = clubs.length < 2;
-  clubSel.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "All clubs" }),
-    ...clubs.map(k => Object.assign(document.createElement("option"), { value: k, textContent: `${clubName(k)} (${counts[k]})` })));
-  clubSel.value = trendPick.club;
-  const rows = trendPick.club ? all.filter(r => r.club === trendPick.club) : all;
-  renderClubFix(rows);
-
-  const fx = field(trendPick.x), fy = field(trendPick.y === "order" ? "path" : trendPick.y);
-  fillSelect(document.getElementById("t-y"), byGroup(["Launch monitor", "Face-on", "Down the line"]), fy.key);
-  fillSelect(document.getElementById("t-x"), [["", [field("order")]], ...byGroup(["Face-on", "Down the line", "Launch monitor"])], fx.key);
-
-  drawScatter(rows, fx, fy);
-  renderRanking(rows, fx, fy);
-  renderTrendTable(rows, fx, fy);
-}
-
-/** "Change club…" for the swings shown: for when the club wasn't changed in Square's app. */
-function renderClubFix(rows) {
-  const box = document.getElementById("t-fix");
-  const withShot = rows.filter(r => r.c.shot);
-  if (!withShot.length) { box.replaceChildren(); return; }
-  if (box.contains(document.activeElement)) return;   // don't swap it out while it's open
-  const n = withShot.length;
-  const sel = clubSelect(null, null);
-  sel.prepend(Object.assign(document.createElement("option"), { value: "", textContent: "Change club…" }));
-  sel.value = "";
-  sel.title = `Set the club for the ${n} swing${n === 1 ? "" : "s"} shown`;
-  sel.onchange = async () => {
-    const club = sel.value;
-    if (!club) return;
-    if (!confirm(`Mark ${n === 1 ? "this swing" : `these ${n} swings`} as ${clubName(club)}?`)) { sel.value = ""; return; }
-    // Each swing goes back to Square's club if that's what it said.
-    const groups = {};
-    for (const r of withShot) {
-      const square = r.c.shot.squareClub || r.c.shot.club;
-      (groups[square] = groups[square] || []).push(r.c.name);
-    }
-    sel.blur();
-    trendPick.club = club;
-    for (const square in groups) await setClub(groups[square], club, square);
-    renderTrends();
-  };
-  box.replaceChildren(sel);
-}
-
-for (const [id, key] of [["t-y", "y"], ["t-x", "x"], ["t-club", "club"]]) {
-  document.getElementById(id).onchange = e => {
-    trendPick[key] = e.target.value;
-    saveTrendPick();
-    renderTrends();
-  };
-}
-
-function drawScatter(rows, fx, fy) {
-  const svg = document.querySelector("#t-chart svg");
-  const pts = rows.filter(r => r[fx.key] != null && r[fy.key] != null);
-  const W = Math.max(280, svg.clientWidth || 600), H = 320, m = { l: 52, r: 16, t: 24, b: 44 };
-  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  svg.setAttribute("aria-label", `${fieldName(fy)} against ${fieldName(fx)}, one dot per swing`);
-  svg.replaceChildren();
-  tipEl.hidden = true;
-  const xs = pts.map(r => r[fx.key]), ys = pts.map(r => r[fy.key]);
-  const padded = vs => {
-    if (!vs.length) return [0, 1];
-    const lo = Math.min(...vs), hi = Math.max(...vs), d = (hi - lo) * 0.08 || 1;
-    return [lo - d, hi + d];
-  };
-  const X = niceTicks(...padded(xs)), Y = niceTicks(...padded(ys));
-  const sx = v => m.l + (v - X.lo) / (X.hi - X.lo) * (W - m.l - m.r);
-  const sy = v => H - m.b - (v - Y.lo) / (Y.hi - Y.lo) * (H - m.t - m.b);
-
-  for (const v of Y.ticks) {
-    svgEl("line", { x1: m.l, x2: W - m.r, y1: sy(v), y2: sy(v), class: v === 0 ? "t-zero" : "t-grid" }, svg);
-    svgEl("text", { x: m.l - 6, y: sy(v) + 4, "text-anchor": "end", class: "t-axis" }, svg).textContent = v.toFixed(Y.dec);
-  }
-  for (const v of X.ticks) {
-    if (v === 0) svgEl("line", { x1: sx(v), x2: sx(v), y1: m.t, y2: H - m.b, class: "t-zero" }, svg);
-    svgEl("text", { x: sx(v), y: H - m.b + 16, "text-anchor": "middle", class: "t-axis" }, svg).textContent = v.toFixed(X.dec);
-  }
-  svgEl("text", { x: m.l, y: 12, class: "t-title" }, svg).textContent = fieldName(fy);
-  svgEl("text", { x: W - m.r, y: H - 6, "text-anchor": "end", class: "t-title" }, svg).textContent = fieldName(fx);
-
-  const cor = SwingSummary.correlation(rows.map(r => r[fx.key]), rows.map(r => r[fy.key]));
-  if (cor.r != null && cor.slope != null) {
-    const a = Math.min(...xs), b = Math.max(...xs), at = x => cor.my + cor.slope * (x - cor.mx);
-    svgEl("line", { x1: sx(a), x2: sx(b), y1: sy(at(a)), y2: sy(at(b)), class: "t-fit" }, svg);
-  }
-
-  for (const r of pts) svgEl("circle", { cx: sx(r[fx.key]), cy: sy(r[fy.key]), r: 5, class: "t-dot" }, svg);
-  const ring = svgEl("circle", { r: 8, class: "t-ring", visibility: "hidden" }, svg);
-  for (const r of pts) {
-    const cx = sx(r[fx.key]), cy = sy(r[fy.key]);
-    const hit = svgEl("circle", { cx, cy, r: 13, class: "t-hit", tabindex: 0, role: "button" }, svg);
-    hit.setAttribute("aria-label", `Swing ${r.order}: ${fy.label} ${fmtField(fy, r[fy.key])}, ${fx.label} ${fmtField(fx, r[fx.key])}`);
-    const show = () => {
-      ring.setAttribute("cx", cx); ring.setAttribute("cy", cy); ring.setAttribute("visibility", "visible");
-      const when = new Date(r.c.recorded).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
-      tipEl.replaceChildren();
-      const line = (value, label) => {
-        const d = document.createElement("div");
-        d.append(Object.assign(document.createElement("b"), { textContent: value }), " " + label);
-        tipEl.append(d);
-      };
-      line(fmtField(fy, r[fy.key]), fieldName(fy));
-      line(fmtField(fx, r[fx.key]), fieldName(fx));
-      tipEl.append(Object.assign(document.createElement("div"), {
-        textContent: `Swing ${r.order} · ${when}${r.club ? " · " + clubName(r.club) : ""}`,
-      }));
-      tipEl.hidden = false;
-      // Beside the dot, kept inside the card.
-      const box = svg.getBoundingClientRect(), card = svg.parentElement.getBoundingClientRect();
-      const k = box.width / W, px = box.left - card.left + cx * k, py = box.top - card.top + cy * k;
-      const tw = tipEl.offsetWidth, th = tipEl.offsetHeight;
-      const left = px + 14 + tw > card.width ? px - tw - 14 : px + 14;
-      tipEl.style.left = `${Math.max(4, Math.min(card.width - tw - 4, left))}px`;
-      tipEl.style.top = `${Math.max(4, py - th / 2)}px`;
-    };
-    const hide = () => { ring.setAttribute("visibility", "hidden"); tipEl.hidden = true; };
-    hit.addEventListener("pointerenter", show);
-    hit.addEventListener("focus", show);
-    hit.addEventListener("pointerleave", hide);
-    hit.addEventListener("blur", hide);
-    hit.addEventListener("click", () => open(r.c.name));
-    hit.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(r.c.name); } });
-  }
-
-  const rEl = document.getElementById("t-r");
-  rEl.replaceChildren();
-  if (cor.n < 5 || cor.r == null) {
-    rEl.textContent = `${cor.n} swing${cor.n === 1 ? "" : "s"} with both numbers. It takes at least 5 to say anything.`;
-    return;
-  }
-  const out = Math.abs(cor.r) >= cor.needed;
-  const words = Math.abs(cor.r) < 0.2 ? "no real link"
-    : `more ${fx.label.toLowerCase()} goes with ${cor.r > 0 ? "more" : "less"} ${fy.label.toLowerCase()}`;
-  const muted = Object.assign(document.createElement("span"), {
-    className: "muted",
-    textContent: ` · ${cor.n} swings · ${out ? "stands out from chance" : "could be chance"} (needs ±${cor.needed.toFixed(2)})`,
-  });
-  rEl.append(Object.assign(document.createElement("b"), { textContent: `r = ${fmtR(cor.r)}` }), ` · ${words}`, muted);
-}
-
-const fmtR = r => `${r >= 0 ? "+" : "−"}${Math.abs(r).toFixed(2)}`;
-
-/** Every number on the other side (body vs launch monitor), ranked by how closely it goes with fy. */
-function renderRanking(rows, fx, fy) {
-  const others = FIELDS.filter(f => f.key !== "order" && !!f.shot !== !!fy.shot);
-  document.getElementById("t-rank-title").textContent = `What goes with ${fy.label.toLowerCase()}`;
-  const ranked = others
-    .map(f => ({ f, ...SwingSummary.correlation(rows.map(r => r[f.key]), rows.map(r => r[fy.key])) }))
-    .map(x => ({ ...x, r: x.n >= 5 ? x.r : null }))
-    .sort((a, b) => (b.r == null ? -1 : Math.abs(b.r)) - (a.r == null ? -1 : Math.abs(a.r)));
-  document.getElementById("t-rank").replaceChildren(...ranked.map(x => {
-    const row = document.createElement("button");
-    row.className = "t-row" + (x.f.key === fx.key ? " cur" : "") + (x.r == null ? " none" : "");
-    const out = x.r != null && Math.abs(x.r) >= x.needed;
-    const name = Object.assign(document.createElement("span"), { textContent: x.f.label });
-    if (out) name.append(Object.assign(document.createElement("em"), { textContent: "stands out" }));
-    const r = Object.assign(document.createElement("span"), { className: "r", textContent: x.r == null ? "–" : fmtR(x.r) });
-    const bar = Object.assign(document.createElement("span"), { className: "t-bar" });
-    if (x.r != null) {
-      const fill = document.createElement("i"), tick = document.createElement("s");
-      fill.style.width = `${Math.abs(x.r) * 100}%`;
-      fill.classList.toggle("out", out);
-      tick.style.left = `${Math.min(1, x.needed) * 100}%`;
-      bar.append(fill, tick);
-    }
-    row.title = x.r == null ? `Fewer than 5 swings have ${x.f.label.toLowerCase()}` : `${x.n} swings`;
-    row.append(name, r, bar);
-    row.onclick = () => {
-      trendPick.x = x.f.key;
-      saveTrendPick();
-      renderTrends();
-      document.getElementById("t-chart").scrollIntoView({ block: "nearest" });
-    };
-    return row;
-  }));
-}
-
-/** Every swing, every number: the table twin of the chart. */
-function renderTrendTable(rows, fx, fy) {
-  const cols = FIELDS.filter(f => f.key !== "order");
-  const head = document.createElement("tr");
-  for (const t of ["#", "Time", "Club"]) head.append(Object.assign(document.createElement("th"), { textContent: t }));
-  for (const f of cols) {
-    const th = Object.assign(document.createElement("th"), { textContent: fieldName(f), title: f.group });
-    th.classList.toggle("sel", f.key === fx.key || f.key === fy.key);
-    head.append(th);
-  }
-  const thead = document.createElement("thead"), tbody = document.createElement("tbody");
-  thead.append(head);
-  for (const r of rows) {
-    const tr = document.createElement("tr");
-    const when = new Date(r.c.recorded).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
-    for (const t of [r.order, when, r.club ? clubName(r.club) : "–"]) {
-      tr.append(Object.assign(document.createElement("td"), { textContent: t }));
-    }
-    for (const f of cols) {
-      const pending = !f.shot && !r.body;
-      tr.append(Object.assign(document.createElement("td"), {
-        textContent: pending ? (swingReady(r.c) ? "…" : "–") : fmtField(f, r[f.key]),
-      }));
-    }
-    tr.onclick = () => open(r.c.name);
-    tbody.append(tr);
-  }
-  document.getElementById("t-table").replaceChildren(thead, tbody);
-}
-
-// The chart is drawn to its width.
-let trendsWidth = 0;
-new ResizeObserver(() => {
-  const w = trendsBox.clientWidth;
-  if (trendsKey && w !== trendsWidth) { trendsWidth = w; renderTrends(); }
-}).observe(trendsBox);
-
 // ---- Deleting ----
 
 const toast = document.getElementById("toast");
@@ -1846,6 +1565,24 @@ function closeViewer() {
   history.replaceState(null, "", location.pathname);
 }
 
+/** The Leave out button shows whether the open swing counts in the trends. */
+function updateExcludeButton() {
+  const c = clips.find(c => c.name === current), b = document.getElementById("exclude");
+  b.classList.toggle("on", !!(c && c.excluded));
+  b.textContent = c && c.excluded ? "Left out of trends" : "Leave out";
+}
+
+document.getElementById("exclude").onclick = async () => {
+  const c = clips.find(c => c.name === current);
+  if (!c) return;
+  const res = await fetch("/api/exclude", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names: [c.name], exclude: !c.excluded }),
+  });
+  if (!res.ok) { showToast("Couldn't change that - is the server up to date?"); return; }
+  await refresh();
+  updateExcludeButton();
+};
+
 document.getElementById("delete-clip").onclick = () => { if (current) deleteClips([current]); };
 
 async function refresh() {
@@ -1867,7 +1604,8 @@ async function refresh() {
   clips = await res.json();
   renderList();
   // New swings, finished analyses and shots show up in the trends as they arrive.
-  if (trendsKey && JSON.stringify(clips) !== was) renderTrends();
+  trendsTick();
+  if (JSON.stringify(clips) !== was) updateExcludeButton();
   const now = clips.find(c => c.name === current);
   if (current === null && clips.length) {
     const wanted = decodeURIComponent(location.hash.slice(1));
@@ -1915,5 +1653,6 @@ document.addEventListener("keydown", e => {
 refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, 10000);
 </script>
+<script src="/static/trends.js"></script>
 </body>
 </html>

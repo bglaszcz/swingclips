@@ -63,7 +63,8 @@ monitor's numbers for that shot.
 
 ### `server/` - the home server (Python, FastAPI)
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON), `shots.jsonl` (launch
-  monitor shots), `clubs.json` (clubs corrected on the review page), `trash` (deleted clips; emptied by hand, never automatically).
+  monitor shots), `clubs.json` (clubs corrected on the review page), `swings.json` (each swing's
+  numbers), `journal.json` (handicap and session notes), `excluded.json` (swings left out), `trash` (deleted clips; emptied by hand, never automatically).
 - A background worker runs MediaPipe pose on every frame of each new clip (4 processes, split at
   keyframes), then smooths it over the whole clip (median, then a local curve fit, so it doesn't lag
   fast hands). It also finds the ball on the mat near the golfer's feet and the first frame it's
@@ -95,9 +96,24 @@ monitor's numbers for that shot.
   path, carry, offline, strike and so on). A scatter chart of any two, with the straight-line fit
   and r; a list ranking every number on the other side by how closely it goes with the chosen one;
   and a table of every swing. One club at a time by default. A link "stands out" when |r| is past
-  what chance gives with that many swings (p < 0.05); fewer than 5 swings, nothing is ranked. The
-  page works the numbers out from the pose files and keeps them in the browser (localStorage);
-  bump `VERSION` in summary.js when a change should recompute them. It updates as swings arrive.
+  what chance gives with that many swings (p < 0.05); fewer than 5 swings, nothing is ranked. It
+  updates as swings arrive.
+- **Swing numbers on the server** (`swings.py`): once a swing's clips are analyzed, a background
+  worker runs the page's own JavaScript (phases.js, metrics.js, summary.js) in an embedded V8
+  (`mini-racer`) and keeps each swing's body numbers, what could be measured (ball found, down the
+  line, P6 estimated) and where the golfer stood in each picture, in `swings.json`
+  (`/api/swings`). The records carry a fingerprint of that JavaScript: after an update that
+  changes it, every swing is worked out again (~0.2 s each). Right-handed only, for now.
+- **Progress** (button at the top): all sessions with one club over time. Tiles compare the latest
+  session with the ones before it (median, or spread for consistency numbers), saying "better" /
+  "worse" only when the change is bigger than the usual session-to-session difference; a chart of
+  any number per session (swings, median, middle half); the shot pattern (carry vs offline, with
+  a ring holding about two shots in three); the handicap index; and each session with a note
+  (`journal.json`). When a phone is moved (the golfer's place in its picture shifts by 0.02
+  picture heights or size by 6%; within a session it varies ~0.004 and ~2%), the chart marks
+  "camera moved" and the tiles only compare that camera's numbers since then.
+- **Leave out**: a swing that isn't yours (a friend hitting while the phones listen) is left out of
+  Trends and Progress with the swing's Leave out button (`excluded.json`).
 - **Wrong club?** When the club wasn't changed in Square's app, pick the right one on the swing's
   Club tile, or use "Change club…" in Trends for all the swings shown. The correction is kept per
   swing in `clubs.json` (Square's own club stays in `shots.jsonl` and shows as "(Square)" in the
@@ -134,9 +150,23 @@ The phone's browser can't record above 30 fps, which is why the capture app exis
 - The server needs inbound TCP 8000 allowed on private networks.
 
 ## Planned
-1. **Compare two swings** (next): a reference swing (a good one, or last week's) next to the current one,
-   synced on impact, key-position cards lined up (the two-angle sync code carries over).
-2. **Later, maybe: 3D from both cameras.** With the two phones' positions calibrated once,
+Toward a single-digit handicap (16.4 in Sept 2026): see how the swing changes and which changes
+help. Done so far: swing numbers on the server, Progress, Leave out, handicap log and notes.
+
+1. **What helps, what hurts** (next): pool swings across sessions with one club and relate each
+   move to each result. Within-session first ("on swings where I extended more than my usual that
+   day, what did path do?"), which cancels day-to-day differences (warm-up, fatigue, camera
+   placement); then between sessions. With ~18 moves x ~16 results, some links look strong by luck,
+   so: a false-discovery correction, and a label per link: confirmed (same direction in most
+   sessions), emerging, or could be chance; in plain words with the size of the effect ("each inch
+   of early extension ≈ 0.8° more out-to-in path, 6 of 7 sessions"). Needs ~5-10 sessions of 20+
+   swings with one club to say much.
+2. **Focus tracking**: set a focus (a move, which way, optional target, start date) and see how the
+   move and the results changed since, against the usual session-to-session variation.
+3. **Compare two swings**: a reference swing (a good one, or one from before a focus) next to the
+   current one, synced on impact, key-position cards lined up (the two-angle sync code carries
+   over).
+4. **Later, maybe: 3D from both cameras.** With the two phones' positions calibrated once,
    triangulate real 3D joint positions. That would replace the estimated face-on turns and could
    make a kinematic sequence possible. A much bigger project; only worth it if the estimated
    turns stop being good enough.

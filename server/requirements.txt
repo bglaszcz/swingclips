@@ -4,3 +4,4 @@ mediapipe==1.0.1
 av==18.1.0
 opencv-python==5.0.0.93
 numpy==2.5.3
+mini-racer==0.14.1

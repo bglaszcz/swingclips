@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import pose
+import swings
 
 CLIPS_DIR = Path(os.environ.get("SWINGCLIPS_CLIPS", r"D:\SwingClips\clips"))
 POSE_DIR = Path(os.environ.get("SWINGCLIPS_POSE", CLIPS_DIR.parent / "pose"))
@@ -51,6 +52,12 @@ SWING_NAME = re.compile(r"^swing_(?:(face|dtl)_)?\d+x\d+_\d+fps_\d{10}(?:_(\d+)m
 # Two phones' clips of one swing are named after the strike each heard, on the server's clock
 # (each phone reads it from /api/time). Strikes are at least 3 s apart (the app's cooldown).
 PAIR_SLACK_S = 2.0
+
+# Each swing's numbers for the trends (see swings.py), by the clip it's listed by; kept in SWINGS_FILE.
+SWINGS_FILE = Path(os.environ.get("SWINGCLIPS_SWINGS", CLIPS_DIR.parent / "swings.json"))
+swing_records: dict[str, dict] = {}
+swings_code = ""   # fingerprint of the JavaScript the records are worked out with
+records_lock = threading.Lock()
 
 # Name of the clip the worker is on right now, if any.
 pose_busy: str | None = None
@@ -124,6 +131,49 @@ def pose_worker(stop: threading.Event):
     pool.shutdown(cancel_futures=True)
 
 
+def swing_worker(stop: threading.Event):
+    """Forever: work out the numbers of each analyzed swing that has none, or old ones."""
+    global swing_records, swings_code
+    summarizer = swings.Summarizer(STATIC_DIR)
+    swings_code = summarizer.code
+    with records_lock:
+        swing_records = swings.load(SWINGS_FILE)
+    try:
+        while not stop.is_set():
+            clips = {c["name"]: c for c in listed_clips(with_shots=False)}
+            done = 0
+            for c in clips.values():
+                if stop.is_set() or c["pose"] != "done" or (c["partner"] and c["angle"] != "face"):
+                    continue
+                other = clips.get(c["partner"] or "")
+                if other and other["pose"] not in ("done", "failed"):
+                    continue  # wait for the other angle
+                other = other if other and other["pose"] == "done" else None
+                old = swing_records.get(c["name"])
+                if old and old.get("code") == swings_code and old.get("partner") == (other and other["name"]):
+                    continue
+                try:
+                    record = summarizer.summarize(swings.pose_input(c, pose_file(c["name"])),
+                                                  swings.pose_input(other, pose_file(other["name"])) if other else None)
+                except FileNotFoundError:
+                    continue  # just deleted
+                except Exception:
+                    record = {"error": traceback.format_exc(limit=2)}
+                record.update(code=swings_code, partner=other and other["name"])
+                with records_lock:
+                    swing_records[c["name"]] = record
+                done += 1
+                if done % 25 == 0:
+                    swings.save(SWINGS_FILE, swing_records)
+            if done:
+                with records_lock:
+                    swings.save(SWINGS_FILE, swing_records)
+                print(f"Swings: worked out the numbers of {done} swing(s)", flush=True)
+            stop.wait(5)
+    finally:
+        summarizer.close()
+
+
 def try_trash(name: str) -> None:
     """Moves a pending clip to the trash if nothing has it open. Call with files_lock held."""
     if name == pose_busy:
@@ -160,8 +210,11 @@ def move_clip(name: str, to_trash: bool) -> bool:
 async def lifespan(app: FastAPI):
     stop = threading.Event()
     threading.Thread(target=pose_worker, args=(stop,), daemon=True).start()
+    worker = threading.Thread(target=swing_worker, args=(stop,), daemon=True)
+    worker.start()
     yield
     stop.set()
+    worker.join(timeout=5)  # lets it close its JavaScript engine, which otherwise holds up the exit
 
 
 app = FastAPI(title="SwingClips", lifespan=lifespan)
@@ -181,6 +234,11 @@ def recorded_at(path: Path) -> float:
 def list_clips():
     if not CLIPS_DIR.is_dir():
         raise HTTPException(503, f"Clips folder not found: {CLIPS_DIR}")
+    return listed_clips()
+
+
+def listed_clips(with_shots: bool = True) -> list[dict]:
+    """The clips, newest first, with their pose state, angle, strike, partner and (optionally) shot."""
     clips = []
     for p in clip_paths():
         if p.name in pending_trash:
@@ -199,11 +257,18 @@ def list_clips():
             "_t": t,
         })
     # Only the capture app's clips are named after the strike itself.
-    swings = [c for c in clips if SWING_NAME.match(c["name"])]
-    pair_angles(swings)
-    # One shot per swing: paired by the face-on clip (or the only one), then shown on both angles.
+    swing_clips = [c for c in clips if SWING_NAME.match(c["name"])]
+    pair_angles(swing_clips)
     by_name = {c["name"]: c for c in clips}
-    shots = match_shots({c["name"]: c["_t"] for c in swings if not (c["partner"] and c["angle"] != "face")})
+    excluded = set(load_excluded())
+    for c in clips:
+        c["excluded"] = c["name"] in excluded or (c["partner"] or "") in excluded
+    if not with_shots:
+        for c in clips:
+            c.pop("_t")
+        return clips
+    # One shot per swing: paired by the face-on clip (or the only one), then shown on both angles.
+    shots = match_shots({c["name"]: c["_t"] for c in swing_clips if not (c["partner"] and c["angle"] != "face")})
     clubs = load_clubs()
     for name, shot in shots.items():
         # The club as corrected on the review page, if it was (Square's own is kept alongside).
@@ -428,6 +493,109 @@ def restore_clips(body: ClipNames):
             elif not (CLIPS_DIR / name).exists() and move_clip(name, to_trash=False):
                 restored.append(name)
     return {"restored": restored}
+
+
+# ---- Swings left out of the trends ----
+# Someone else's swings (a friend hitting while the phones listen) shouldn't count as yours.
+EXCLUDED_FILE = Path(os.environ.get("SWINGCLIPS_EXCLUDED", CLIPS_DIR.parent / "excluded.json"))
+
+
+def load_excluded() -> list[str]:
+    try:
+        return json.loads(EXCLUDED_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+class Exclusion(BaseModel):
+    names: list[str]
+    exclude: bool
+
+
+@app.post("/api/exclude")
+def set_excluded(body: Exclusion):
+    """Leaves these swings out of the trends, or puts them back."""
+    with files_lock:
+        names = set(load_excluded())
+        for name in body.names:
+            if Path(name).name == name:
+                (names.add if body.exclude else names.discard)(name)
+        EXCLUDED_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = EXCLUDED_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(sorted(names), indent=1), encoding="utf-8")
+        tmp.replace(EXCLUDED_FILE)
+    return {"ok": True}
+
+
+# ---- Journal: handicap index over time, and a note per practice session ----
+JOURNAL_FILE = Path(os.environ.get("SWINGCLIPS_JOURNAL", CLIPS_DIR.parent / "journal.json"))
+
+
+def load_journal() -> dict:
+    try:
+        j = json.loads(JOURNAL_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        j = {}
+    return {"handicap": j.get("handicap", []), "notes": j.get("notes", {})}
+
+
+def save_journal(j: dict) -> None:
+    JOURNAL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = JOURNAL_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(j, indent=1), encoding="utf-8")
+    tmp.replace(JOURNAL_FILE)
+
+
+@app.get("/api/journal")
+def get_journal():
+    return load_journal()
+
+
+class HandicapEntry(BaseModel):
+    date: str             # YYYY-MM-DD
+    index: float | None   # None: remove that day's entry
+
+
+@app.post("/api/journal/handicap")
+def set_handicap(body: HandicapEntry):
+    datetime.strptime(body.date, "%Y-%m-%d")  # rejects a bad date
+    if body.index is not None and not -10 <= body.index <= 54:
+        raise HTTPException(400, "A handicap index is between +10 and 54")
+    with files_lock:
+        j = load_journal()
+        j["handicap"] = [e for e in j["handicap"] if e["date"] != body.date]
+        if body.index is not None:
+            j["handicap"].append({"date": body.date, "index": body.index})
+        j["handicap"].sort(key=lambda e: e["date"])
+        save_journal(j)
+    return {"ok": True}
+
+
+class SessionNote(BaseModel):
+    key: str   # the session's first clip
+    note: str  # empty: remove
+
+
+@app.post("/api/journal/note")
+def set_note(body: SessionNote):
+    with files_lock:
+        j = load_journal()
+        if body.note.strip():
+            j["notes"][body.key] = body.note.strip()[:500]
+        else:
+            j["notes"].pop(body.key, None)
+        save_journal(j)
+    return {"ok": True}
+
+
+@app.get("/api/swings")
+def get_swings():
+    """Each analyzed swing's numbers, by the clip it's listed by (see swings.py)."""
+    # Only swings listed now, by the clip they're listed by (a lone angle may since have been paired).
+    listed = {c["name"] for c in listed_clips(with_shots=False) if not (c["partner"] and c["angle"] != "face")}
+    with records_lock:
+        records = {k: v for k, v in swing_records.items() if k in listed}
+    return {"code": swings_code, "swings": records}
 
 
 @app.get("/api/pose/{name}")
