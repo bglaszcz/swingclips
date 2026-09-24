@@ -82,7 +82,7 @@ monitor's numbers for that shot.
   curve fit that leans on confident frames and drops one-frame glitches), and ends once a wrist is
   lost behind the head in the finish. A kinematic
   sequence isn't attempted: from face-on alone the turn speeds come out in the wrong order.
-- Pose files are named by version (`<clip>.v4.json.gz`); when `pose.py` changes enough to bump
+- Pose files are named by version (`<clip>.v5.json.gz`); when `pose.py` changes enough to bump
   `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
   ~14 s, GSPro connector ~1 s); each match records its gap.

@@ -21,7 +21,7 @@ import club
 # at another .task file to compare.
 MODEL = os.environ.get("SWINGCLIPS_POSE_MODEL", os.path.join(
     os.path.dirname(__file__), "..", "public", "mediapipe", "pose_landmarker_full.task"))
-VERSION = 4
+VERSION = 5
 # MediaPipe works on a 256px input internally, so half size loses nothing and halves the conversion.
 SCALE = 0.5
 ROTATE_CW = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
@@ -37,8 +37,11 @@ SMOOTH_SECONDS = 0.02   # half-width of the curve-fitting window
 BALL_CANDIDATES = 6
 BALL_STEP_SECONDS = 0.15
 # The hands peak in the follow-through, at impact they are at ~40% of that or more; anything "leaving"
-# while the hands are slower than this share of their peak isn't the ball.
+# while the hands are slower than this share of their peak isn't the ball. Down the line the hands
+# move mostly away from the camera right at impact and look nearly still, so it's their fastest
+# within HANDS_WINDOW_SECONDS either side.
 HANDS_AT_IMPACT = 0.2
+HANDS_WINDOW_SECONDS = 0.1
 
 
 def probe(path):
@@ -166,16 +169,38 @@ def smooth(times, landmarks, spatial=2):
     return result
 
 
-def ball_candidates(path, rotation, frames):
-    """Places near the feet that look like a ball at the start of the clip and are gone at the end.
+def frame_at(path, rotation, t):
+    """The upright grayscale frame on screen at time t (s)."""
+    with av.open(path) as c:
+        s = c.streams.video[0]
+        tb = float(s.time_base)
+        c.seek(int(t / tb), stream=s, backward=True)
+        got = None
+        for f in c.decode(s):
+            if got is not None and f.pts * tb > t + 1e-6:
+                break
+            got = f
+        return upright_gray(got, rotation)
+
+
+def top_of_backswing(frames):
+    """When the hands are highest before their fastest moment (the downswing), or None."""
+    speed = hand_speed(frames)
+    if speed is None:
+        return None
+    peak = speed[0][int(np.argmax(speed[1]))]
+    rows = [(t, (lm[15][1] + lm[16][1]) / 2) for t, lm, *_ in frames if lm is not None and t < peak]
+    return min(rows, key=lambda r: r[1])[0] if rows else None
+
+
+def ball_candidates(path, rotation, frames, first):
+    """Places near the feet that look like a ball in frame `first` and are gone at the end.
 
     Returns [(cx, cy, r)] in upright full-size pixels, best first.
     """
     lm = next((lm for _, lm, *_ in frames if lm is not None), None)
     if lm is None:
         return []
-    with av.open(path) as c:
-        first = upright_gray(next(c.decode(video=0)), rotation)
     with av.open(path) as c:
         s = c.streams.video[0]
         if s.duration:
@@ -290,12 +315,25 @@ def hand_speed(frames):
 
 
 def find_impact(path, rotation, frames, jobs, pool):
-    """The ball's spot and the time of the first frame it's gone from, or (None, None)."""
-    candidates = ball_candidates(path, rotation, frames)
-    if not candidates:
-        return None, None
+    """The ball's spot and the time of the first frame it's gone from, or (None, None).
+
+    The ball is looked for at the start of the clip (address) and, failing that, at the top of the
+    backswing: from down the line the clubhead sits between the camera and the ball at address.
+    """
     with av.open(path) as c:
         first = upright_gray(next(c.decode(video=0)), rotation)
+    found = find_impact_from(path, rotation, frames, jobs, pool, first)
+    top = top_of_backswing(frames)
+    if found[1] is None and top is not None:
+        found = find_impact_from(path, rotation, frames, jobs, pool, frame_at(path, rotation, top))
+    return found
+
+
+def find_impact_from(path, rotation, frames, jobs, pool, first):
+    """find_impact, with the ball looked for in the frame `first`."""
+    candidates = ball_candidates(path, rotation, frames, first)
+    if not candidates:
+        return None, None
     refs = [ball_patch(first, cand) for cand in candidates]
     rows = sorted((r for chunk in pool.map(run_ball_chunk, [j + (candidates, refs) for j in jobs]) for r in chunk),
                   key=lambda r: r[0])
@@ -307,8 +345,8 @@ def find_impact(path, rotation, frames, jobs, pool):
         # Something else near the feet can change for good too (a leg, a shadow); the ball leaves
         # while the hands are moving fast.
         if found and speed is not None:
-            at = int(np.argmin(np.abs(speed[0] - times[found[0]])))
-            if speed[1][at] < HANDS_AT_IMPACT * speed[1].max():
+            near = np.abs(speed[0] - times[found[0]]) <= HANDS_WINDOW_SECONDS
+            if not near.any() or speed[1][near].max() < HANDS_AT_IMPACT * speed[1].max():
                 found = None
         if found and (best is None or found[1] > best[1]):
             best = (found[0], found[1], cand)
