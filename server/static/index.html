@@ -5,16 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SwingClips</title>
 <style>
+  /* Browser-drawn parts (scrollbars, dropdowns) follow the theme too. */
+  :root { color-scheme: light dark; }
   :root {
     --bg: #f4f6f4; --panel: #ffffff; --text: #17201a; --muted: #5d6b62;
     --line: #dde3de; --accent: #1f8a4c; --accent-text: #ffffff; --sel: #e3f3e9;
-    --warn: #b45309;
+    --warn: #b45309; --dot: #1f8a4c;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0f1411; --panel: #171e19; --text: #e6ece7; --muted: #93a197;
       --line: #27312a; --accent: #3cb46e; --accent-text: #08120c; --sel: #1d3325;
-      --warn: #f59e0b;
+      --warn: #f59e0b; --dot: #34a865;
     }
   }
   * { box-sizing: border-box; }
@@ -30,7 +32,7 @@
   @media (min-width: 900px) {
     main { grid-template-columns: 320px 1fr; height: calc(100vh - 49px); }
     #side { overflow-y: auto; border-right: 1px solid var(--line); }
-    #viewer { overflow-y: auto; }
+    #viewer, #trends { overflow-y: auto; }
   }
   #listbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line);
              position: sticky; top: 0; background: var(--bg); z-index: 1; }
@@ -115,6 +117,53 @@
   #numbers th:first-child, #numbers td:first-child { text-align: left; color: var(--muted); }
   #numbers .note { color: var(--muted); font-size: 12px; }
   #numbers tr.group th { text-align: left; padding-top: 10px; color: var(--text); }
+  /* Session trends: the launch monitor's numbers against the swing's, one dot per swing. */
+  #trends { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  @media (max-width: 899px) { #trends { order: -1; border-bottom: 1px solid var(--line); } }
+  .t-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .t-head strong { font-size: 16px; }
+  #t-status { color: var(--muted); font-size: 13px; flex: 1; }
+  .t-filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  .t-filters label { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+  select { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line);
+           background: var(--panel); color: var(--text); max-width: 100%; }
+  .t-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
+            position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  #t-chart svg { display: block; width: 100%; height: 320px; overflow: visible; }
+  .t-axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .t-title { fill: var(--text); font-size: 12px; }
+  .t-grid { stroke: var(--line); stroke-width: 1; }
+  .t-zero { stroke: var(--muted); stroke-width: 1; stroke-opacity: 0.6; }
+  .t-fit { stroke: var(--muted); stroke-width: 1.5; stroke-opacity: 0.8; }
+  .t-dot { fill: var(--dot); stroke: var(--panel); stroke-width: 2; pointer-events: none; }
+  .t-ring { fill: none; stroke: var(--text); stroke-width: 2; pointer-events: none; }
+  .t-hit { fill: transparent; cursor: pointer; outline: none; }
+  #t-tip { position: absolute; z-index: 2; pointer-events: none; background: var(--text); color: var(--bg);
+           padding: 6px 10px; border-radius: 6px; font-size: 12px; line-height: 1.45; white-space: nowrap;
+           box-shadow: 0 4px 16px rgba(0,0,0,0.25); font-variant-numeric: tabular-nums; }
+  #t-tip b { font-size: 13px; }
+  #t-r { font-size: 13px; }
+  #t-r .muted, .t-card .note { color: var(--muted); font-size: 12px; }
+  .t-row { display: grid; grid-template-columns: minmax(0, 1fr) 48px 96px; gap: 10px; align-items: center;
+           padding: 6px 4px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px;
+           background: none; border-radius: 0; border-left: 0; border-right: 0; border-top: 0; text-align: left;
+           color: var(--text); width: 100%; min-width: 0; }
+  .t-row:hover { background: var(--sel); }
+  .t-row.cur { box-shadow: inset 3px 0 var(--accent); }
+  .t-row.none { color: var(--muted); }
+  .t-row .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .t-row em { font-style: normal; font-weight: 600; font-size: 11px; margin-left: 6px; }
+  .t-bar { position: relative; height: 8px; background: var(--line); border-radius: 4px; }
+  .t-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--muted); }
+  .t-bar i.out { background: var(--dot); }
+  .t-bar s { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text); }
+  #t-table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  #t-table th, #t-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  #t-table th { color: var(--muted); font-weight: 600; vertical-align: bottom; white-space: normal; min-width: 76px; }
+  #t-table th:nth-child(-n+3), #t-table td:nth-child(-n+3) { text-align: left; }
+  #t-table tbody tr { cursor: pointer; }
+  #t-table tbody tr:hover { background: var(--sel); }
+  #t-table th.sel { color: var(--text); }
 </style>
 </head>
 <body>
@@ -176,10 +225,41 @@
     </div>
     <div id="title"></div>
   </section>
+  <section id="trends" hidden>
+    <div class="t-head">
+      <strong id="t-title">Session trends</strong><span id="t-status"></span>
+      <button id="t-close" class="small">Close</button>
+    </div>
+    <div class="t-filters">
+      <label>Result <select id="t-y"></select></label>
+      <label>against <select id="t-x"></select></label>
+      <label id="t-club-wrap">Club <select id="t-club"></select></label>
+    </div>
+    <div class="t-card" id="t-chart">
+      <svg role="img"></svg>
+      <div id="t-tip" hidden></div>
+      <div id="t-r"></div>
+      <div class="note">One dot per swing; tap one to open it. The line is the straight-line fit. Launch
+        monitor: left is -, right is + (path + = in-to-out, face + = open, for a right-hander).</div>
+    </div>
+    <div class="t-card">
+      <strong id="t-rank-title"></strong>
+      <div id="t-rank"></div>
+      <div class="note">r runs from -1 to +1: how closely the two go up and down together (0 = no link;
+        - = one goes up as the other goes down). The tick marks how big it must be to stand out from
+        chance with this many swings; below that it could easily be luck. Even one that stands out is a
+        lead to test, not proof that one causes the other.</div>
+    </div>
+    <div class="t-card">
+      <strong>All swings</strong>
+      <div style="overflow-x: auto"><table id="t-table"></table></div>
+    </div>
+  </section>
 </main>
 <div id="toast" hidden><span id="toast-text"></span><button id="toast-undo" class="small">Undo</button></div>
 <script src="/static/phases.js"></script>
 <script src="/static/metrics.js"></script>
+<script src="/static/summary.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
@@ -661,16 +741,9 @@ function syncPoint(name, p) {
   return { impact: p ? p.impact : null, strike: c ? c.strike : null };
 }
 
-/**
- * Seconds to add to a time in the open clip to get the same moment in the down-the-line one. Both
- * clips' impacts line up: by the ball when both saw it go, else by the strike each phone heard.
- */
+/** Seconds to add to a time in the open clip to get the same moment in the down-the-line one. */
 function partnerOffset() {
-  const a = syncPoint(current, pose), b = syncPoint(partner.name, partner.pose);
-  if (a.impact != null && b.impact != null) return b.impact - a.impact;
-  if (a.strike != null && b.strike != null) return b.strike - a.strike;
-  // Mixed or missing: the capture app puts the strike about 2 s in.
-  return (b.impact ?? b.strike ?? 2.0) - (a.impact ?? a.strike ?? 2.0);
+  return SwingSummary.syncOffset(syncPoint(current, pose), syncPoint(partner.name, partner.pose));
 }
 
 function toPartnerTime(t) {
@@ -887,27 +960,25 @@ async function grabThumb(canvasEl, box, tv, p, index, crop) {
   ctx.restore();
 }
 
+/** A loaded clip in the shape SwingSummary.analyze takes. */
+function analysisInput(name, p) {
+  const c = clips.find(c => c.name === name);
+  return { name, strike: c ? c.strike : null, angle: p.angle, aspect: p.video.videoWidth / p.video.videoHeight,
+           frames: p.frames, impact: p.impact, ball: p.ball };
+}
+
 async function buildPositions(name) {
   const run = ++positionsRun;
   handBtn.textContent = leadSide === "left" ? "Right-handed" : "Left-handed";
   await whenReady(video, "loadedmetadata", () => video.videoWidth > 0);
   if (run !== positionsRun || current !== name || !pose) return;
-  // Impact is when the ball leaves the mat, if the server saw it go. If not: the capture app cuts
-  // each clip 2 s before the strike it heard, starting on a keyframe (every 0.25 s), so the strike
-  // is about 2.0-2.25 s in; real impacts have landed 1.97-2.33 s in, so allow a little either side.
-  // Newer capture clips say exactly where the strike was heard.
-  const strike = clips.find(c => c.name === name)?.strike;
-  const strikeWindow = strike != null ? [strike - 0.15, strike + 0.15] : name.startsWith("swing_") ? [1.9, 2.4] : null;
-  positions = SwingPhases.detect(pose.frames, video.videoWidth / video.videoHeight, leadSide, strikeWindow,
-                                 pose.impact);
-  // The swing numbers read turns and sway from a face-on picture; they'd be wrong from down the line.
-  metrics = pose.angle === "dtl" ? null
-    : SwingMetrics.compute(pose.frames, video.videoWidth / video.videoHeight, leadSide, positions);
-  // Down the line: the swing's other clip, or this one if it was filmed from there alone.
-  const dp = partner ? partner.pose : pose.angle === "dtl" ? pose : null;
-  const dAddress = positions.length && dp ? positionIndex("p1", dp) : null;
-  dtlMetrics = dAddress == null ? null
-    : SwingMetrics.computeDTL(dp.frames, dp.video.videoWidth / dp.video.videoHeight, dAddress, dp.ball);
+  // Key positions and the numbers from both angles (the face-on ones are left out for a lone
+  // down-the-line clip: they read turns and sway from a face-on picture).
+  const a = SwingSummary.analyze(analysisInput(name, pose), partner && partner.pose ? analysisInput(partner.name, partner.pose) : null,
+                                 leadSide);
+  positions = a.positions;
+  metrics = a.metrics;
+  dtlMetrics = a.dtlMetrics;
   showNumbers();
   redraw();
   positionsBox.hidden = false;
@@ -1021,6 +1092,7 @@ handBtn.onclick = () => {
   leadSide = leadSide === "left" ? "right" : "left";
   try { localStorage.setItem("lead", leadSide); } catch {}
   if (pose && current) buildPositions(current);
+  if (trendsKey) renderTrends();
 };
 
 /** A swing's down-the-line clip is listed and opened through its face-on one. */
@@ -1057,6 +1129,7 @@ function open(name) {
   const c0 = clips.find(c => c.name === name);
   if (c0 && isSecondary(c0)) name = c0.partner;
   current = name;
+  if (trendsKey) { trendsKey = null; trendsBox.hidden = true; tipEl.hidden = true; renderList(); }
   document.querySelectorAll("#list li").forEach(li => li.classList.toggle("sel", li.dataset.name === name));
   // Opening a clip in a closed session opens the session.
   const row = document.querySelector(`#list li[data-name="${CSS.escape(name)}"]`);
@@ -1261,6 +1334,12 @@ function renderList() {
       };
       head.append(all);
     } else {
+      const tr = document.createElement("button");
+      tr.className = "small" + (s.key === trendsKey ? " on" : "");
+      tr.textContent = "Trends";
+      tr.title = "This session's swings against the launch monitor's numbers";
+      tr.onclick = e => { e.stopPropagation(); openTrends(s.key); renderList(); };
+      head.append(tr);
       const del = document.createElement("button");
       del.className = "small danger";
       del.textContent = "Delete";
@@ -1287,6 +1366,351 @@ function renderList() {
     return el;
   }));
 }
+
+// ---- Session trends ----
+
+const trendsBox = document.getElementById("trends");
+const tipEl = document.getElementById("t-tip");
+let trendsKey = null;     // the session shown, by its key (see sessionsOf)
+// Each swing's body numbers, by cache key (see summaryKey); in memory, and in localStorage so a
+// session doesn't have to be worked out again on the next visit.
+const bodyCache = new Map();
+const bodyPending = new Set();
+const trendPick = { x: "earlyExt", y: "path", club: null };
+try { Object.assign(trendPick, JSON.parse(localStorage.getItem("trends") || "{}"), { club: null }); } catch {}
+
+const DECIMALS = { ":1": 1, s: 2, in: 1, "°": 1, yd: 1, mph: 1, rpm: 0, "": 2, mm: 1 };
+const FIELDS = [
+  { key: "order", label: "Swing order", unit: "", group: "", dec: 0 },
+  ...SwingSummary.SHOT.map(f => ({ ...f, group: "Launch monitor", shot: true })),
+  ...SwingSummary.BODY.map(f => ({ ...f, group: f.view === "dtl" ? "Down the line" : "Face-on" })),
+].map(f => ({ dec: DECIMALS[f.unit] ?? 1, ...f }));
+const field = key => FIELDS.find(f => f.key === key) || FIELDS[0];
+const fieldName = f => f.unit && f.unit !== ":1" ? `${f.label} (${f.unit})` : f.label;
+
+function fmtField(f, v) {
+  if (v == null) return "–";
+  if (f.unit === ":1") return `${v.toFixed(1)} : 1`;
+  const n = v.toFixed(f.dec);
+  const plain = f.shot || f.unit === "s" || f.key === "order" || v <= 0 || Number(n) === 0;
+  return (plain ? n : "+" + n).replace(/^-0(\.0+)?$/, "0");
+}
+
+function summaryKey(c) {
+  return `sum:${SwingSummary.VERSION}:${leadSide}:${c.name}|${c.partner || ""}`;
+}
+
+/** A clip's pose file in the shape SwingSummary.analyze takes. */
+async function analysisInputFromServer(c) {
+  const res = await fetch("/api/pose/" + encodeURIComponent(c.name));
+  if (!res.ok) throw new Error("pose " + res.status);
+  const d = await res.json();
+  return { name: c.name, strike: c.strike ?? null, angle: c.angle || "face", aspect: SwingSummary.aspectOf(c.name, d.rotation),
+           frames: d.frames, impact: d.impact ?? null, ball: d.ball ?? null };
+}
+
+/** A swing's body numbers if they're known yet (else null; see fillBodies). */
+function cachedBody(c) {
+  const k = summaryKey(c);
+  if (bodyCache.has(k)) return bodyCache.get(k);
+  try {
+    const v = localStorage.getItem(k);
+    if (v) { const b = JSON.parse(v); bodyCache.set(k, b); return b; }
+  } catch {}
+  return null;
+}
+
+/** Whether a swing's clips are all analyzed, so its numbers can be worked out (and kept). */
+function swingReady(c) {
+  const other = c.partner && clips.find(x => x.name === c.partner);
+  return c.pose === "done" && (!c.partner || (!!other && other.pose === "done"));
+}
+
+/** Works out the body numbers of these swings, two at a time, redrawing as each one lands. */
+async function fillBodies(list) {
+  const todo = list.filter(c => swingReady(c) && !cachedBody(c) && !bodyPending.has(summaryKey(c)));
+  todo.forEach(c => bodyPending.add(summaryKey(c)));
+  const worker = async () => {
+    for (let c; (c = todo.shift());) {
+      const k = summaryKey(c);
+      try {
+        const other = c.partner && clips.find(x => x.name === c.partner);
+        const [main, dtl] = await Promise.all([analysisInputFromServer(c), other ? analysisInputFromServer(other) : null]);
+        const body = SwingSummary.bodyNumbers(SwingSummary.analyze(main, dtl, leadSide));
+        bodyCache.set(k, body);
+        try { localStorage.setItem(k, JSON.stringify(body)); } catch {}
+      } catch {
+        bodyCache.set(k, {});   // couldn't be read: counts as done, with no numbers
+      }
+      bodyPending.delete(k);
+      if (trendsKey) renderTrends();
+    }
+  };
+  await Promise.all([worker(), worker()]);
+}
+
+function openTrends(key) {
+  trendsKey = key;
+  video.pause();
+  viewer.hidden = true;
+  trendsBox.hidden = false;
+  renderTrends();
+  trendsBox.scrollTop = 0;
+  if (window.innerWidth < 900) trendsBox.scrollIntoView();
+}
+
+function closeTrends() {
+  trendsKey = null;
+  trendsBox.hidden = true;
+  tipEl.hidden = true;
+  if (current) viewer.hidden = false;
+  renderList();
+}
+document.getElementById("t-close").onclick = closeTrends;
+
+/** Round tick positions covering [lo, hi]. */
+function niceTicks(lo, hi, count = 5) {
+  if (!(hi > lo)) { lo -= 1; hi += 1; }
+  const raw = (hi - lo) / count, mag = 10 ** Math.floor(Math.log10(raw)), e = raw / mag;
+  const step = (e >= 7.5 ? 10 : e >= 3.5 ? 5 : e >= 1.5 ? 2 : 1) * mag;
+  const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step;
+  const ticks = [];
+  for (let v = a; v <= b + step / 2; v += step) ticks.push(Math.abs(v) < step / 1e6 ? 0 : v);
+  return { lo: a, hi: b, ticks, dec: Math.max(0, -Math.floor(Math.log10(step) + 1e-9)) };
+}
+
+function svgEl(tag, attrs, parent) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  if (parent) parent.append(el);
+  return el;
+}
+
+function fillSelect(sel, groups, value) {
+  sel.replaceChildren(...groups.map(([name, fs]) => {
+    const parent = name ? Object.assign(document.createElement("optgroup"), { label: name }) : document.createDocumentFragment();
+    for (const f of fs) parent.append(Object.assign(document.createElement("option"), { value: f.key, textContent: fieldName(f) }));
+    return parent;
+  }));
+  sel.value = value;
+}
+
+const byGroup = names => names.map(g => [g, FIELDS.filter(f => f.group === g)]);
+
+function saveTrendPick() {
+  try { localStorage.setItem("trends", JSON.stringify({ x: trendPick.x, y: trendPick.y })); } catch {}
+}
+
+function renderTrends() {
+  const session = sessionsOf(shownClips()).find(s => s.key === trendsKey);
+  if (!session) { closeTrends(); return; }
+  fillBodies(session.clips);
+  // Oldest first, numbered in the order they were hit.
+  const all = [...session.clips].reverse().map((c, i) => {
+    const body = cachedBody(c);
+    return { c, order: i + 1, club: c.shot ? c.shot.club : null, body,
+             ...SwingSummary.shotNumbers(c.shot), ...(body || {}) };
+  });
+  document.getElementById("t-title").textContent = `Trends · ${sessionTitle(session)}`;
+  const waiting = session.clips.filter(c => !swingReady(c)).length;
+  const working = all.filter(r => !r.body && swingReady(r.c)).length;
+  document.getElementById("t-status").textContent = [
+    `${all.length} swing${all.length === 1 ? "" : "s"}`,
+    working ? `working out ${working}…` : "",
+    waiting ? `${waiting} still being analyzed on the server` : "",
+  ].filter(Boolean).join(" · ");
+
+  // Mixing clubs would mostly show the difference between clubs: one club at a time by default.
+  const counts = {};
+  for (const r of all) if (r.club) counts[r.club] = (counts[r.club] || 0) + 1;
+  const clubs = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  if (trendPick.club == null || (trendPick.club !== "" && !counts[trendPick.club])) trendPick.club = clubs[0] ?? "";
+  const clubSel = document.getElementById("t-club");
+  document.getElementById("t-club-wrap").hidden = clubs.length < 2;
+  clubSel.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "All clubs" }),
+    ...clubs.map(k => Object.assign(document.createElement("option"), { value: k, textContent: `${clubName(k)} (${counts[k]})` })));
+  clubSel.value = trendPick.club;
+  const rows = trendPick.club ? all.filter(r => r.club === trendPick.club) : all;
+
+  const fx = field(trendPick.x), fy = field(trendPick.y === "order" ? "path" : trendPick.y);
+  fillSelect(document.getElementById("t-y"), byGroup(["Launch monitor", "Face-on", "Down the line"]), fy.key);
+  fillSelect(document.getElementById("t-x"), [["", [field("order")]], ...byGroup(["Face-on", "Down the line", "Launch monitor"])], fx.key);
+
+  drawScatter(rows, fx, fy);
+  renderRanking(rows, fx, fy);
+  renderTrendTable(rows, fx, fy);
+}
+
+for (const [id, key] of [["t-y", "y"], ["t-x", "x"], ["t-club", "club"]]) {
+  document.getElementById(id).onchange = e => {
+    trendPick[key] = e.target.value;
+    saveTrendPick();
+    renderTrends();
+  };
+}
+
+function drawScatter(rows, fx, fy) {
+  const svg = document.querySelector("#t-chart svg");
+  const pts = rows.filter(r => r[fx.key] != null && r[fy.key] != null);
+  const W = Math.max(280, svg.clientWidth || 600), H = 320, m = { l: 52, r: 16, t: 24, b: 44 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("aria-label", `${fieldName(fy)} against ${fieldName(fx)}, one dot per swing`);
+  svg.replaceChildren();
+  tipEl.hidden = true;
+  const xs = pts.map(r => r[fx.key]), ys = pts.map(r => r[fy.key]);
+  const padded = vs => {
+    if (!vs.length) return [0, 1];
+    const lo = Math.min(...vs), hi = Math.max(...vs), d = (hi - lo) * 0.08 || 1;
+    return [lo - d, hi + d];
+  };
+  const X = niceTicks(...padded(xs)), Y = niceTicks(...padded(ys));
+  const sx = v => m.l + (v - X.lo) / (X.hi - X.lo) * (W - m.l - m.r);
+  const sy = v => H - m.b - (v - Y.lo) / (Y.hi - Y.lo) * (H - m.t - m.b);
+
+  for (const v of Y.ticks) {
+    svgEl("line", { x1: m.l, x2: W - m.r, y1: sy(v), y2: sy(v), class: v === 0 ? "t-zero" : "t-grid" }, svg);
+    svgEl("text", { x: m.l - 6, y: sy(v) + 4, "text-anchor": "end", class: "t-axis" }, svg).textContent = v.toFixed(Y.dec);
+  }
+  for (const v of X.ticks) {
+    if (v === 0) svgEl("line", { x1: sx(v), x2: sx(v), y1: m.t, y2: H - m.b, class: "t-zero" }, svg);
+    svgEl("text", { x: sx(v), y: H - m.b + 16, "text-anchor": "middle", class: "t-axis" }, svg).textContent = v.toFixed(X.dec);
+  }
+  svgEl("text", { x: m.l, y: 12, class: "t-title" }, svg).textContent = fieldName(fy);
+  svgEl("text", { x: W - m.r, y: H - 6, "text-anchor": "end", class: "t-title" }, svg).textContent = fieldName(fx);
+
+  const cor = SwingSummary.correlation(rows.map(r => r[fx.key]), rows.map(r => r[fy.key]));
+  if (cor.r != null && cor.slope != null) {
+    const a = Math.min(...xs), b = Math.max(...xs), at = x => cor.my + cor.slope * (x - cor.mx);
+    svgEl("line", { x1: sx(a), x2: sx(b), y1: sy(at(a)), y2: sy(at(b)), class: "t-fit" }, svg);
+  }
+
+  for (const r of pts) svgEl("circle", { cx: sx(r[fx.key]), cy: sy(r[fy.key]), r: 5, class: "t-dot" }, svg);
+  const ring = svgEl("circle", { r: 8, class: "t-ring", visibility: "hidden" }, svg);
+  for (const r of pts) {
+    const cx = sx(r[fx.key]), cy = sy(r[fy.key]);
+    const hit = svgEl("circle", { cx, cy, r: 13, class: "t-hit", tabindex: 0, role: "button" }, svg);
+    hit.setAttribute("aria-label", `Swing ${r.order}: ${fy.label} ${fmtField(fy, r[fy.key])}, ${fx.label} ${fmtField(fx, r[fx.key])}`);
+    const show = () => {
+      ring.setAttribute("cx", cx); ring.setAttribute("cy", cy); ring.setAttribute("visibility", "visible");
+      const when = new Date(r.c.recorded).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
+      tipEl.replaceChildren();
+      const line = (value, label) => {
+        const d = document.createElement("div");
+        d.append(Object.assign(document.createElement("b"), { textContent: value }), " " + label);
+        tipEl.append(d);
+      };
+      line(fmtField(fy, r[fy.key]), fieldName(fy));
+      line(fmtField(fx, r[fx.key]), fieldName(fx));
+      tipEl.append(Object.assign(document.createElement("div"), {
+        textContent: `Swing ${r.order} · ${when}${r.club ? " · " + clubName(r.club) : ""}`,
+      }));
+      tipEl.hidden = false;
+      // Beside the dot, kept inside the card.
+      const box = svg.getBoundingClientRect(), card = svg.parentElement.getBoundingClientRect();
+      const k = box.width / W, px = box.left - card.left + cx * k, py = box.top - card.top + cy * k;
+      const tw = tipEl.offsetWidth, th = tipEl.offsetHeight;
+      const left = px + 14 + tw > card.width ? px - tw - 14 : px + 14;
+      tipEl.style.left = `${Math.max(4, Math.min(card.width - tw - 4, left))}px`;
+      tipEl.style.top = `${Math.max(4, py - th / 2)}px`;
+    };
+    const hide = () => { ring.setAttribute("visibility", "hidden"); tipEl.hidden = true; };
+    hit.addEventListener("pointerenter", show);
+    hit.addEventListener("focus", show);
+    hit.addEventListener("pointerleave", hide);
+    hit.addEventListener("blur", hide);
+    hit.addEventListener("click", () => open(r.c.name));
+    hit.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(r.c.name); } });
+  }
+
+  const rEl = document.getElementById("t-r");
+  rEl.replaceChildren();
+  if (cor.n < 5 || cor.r == null) {
+    rEl.textContent = `${cor.n} swing${cor.n === 1 ? "" : "s"} with both numbers. It takes at least 5 to say anything.`;
+    return;
+  }
+  const out = Math.abs(cor.r) >= cor.needed;
+  const words = Math.abs(cor.r) < 0.2 ? "no real link"
+    : `more ${fx.label.toLowerCase()} goes with ${cor.r > 0 ? "more" : "less"} ${fy.label.toLowerCase()}`;
+  const muted = Object.assign(document.createElement("span"), {
+    className: "muted",
+    textContent: ` · ${cor.n} swings · ${out ? "stands out from chance" : "could be chance"} (needs ±${cor.needed.toFixed(2)})`,
+  });
+  rEl.append(Object.assign(document.createElement("b"), { textContent: `r = ${fmtR(cor.r)}` }), ` · ${words}`, muted);
+}
+
+const fmtR = r => `${r >= 0 ? "+" : "−"}${Math.abs(r).toFixed(2)}`;
+
+/** Every number on the other side (body vs launch monitor), ranked by how closely it goes with fy. */
+function renderRanking(rows, fx, fy) {
+  const others = FIELDS.filter(f => f.key !== "order" && !!f.shot !== !!fy.shot);
+  document.getElementById("t-rank-title").textContent = `What goes with ${fy.label.toLowerCase()}`;
+  const ranked = others
+    .map(f => ({ f, ...SwingSummary.correlation(rows.map(r => r[f.key]), rows.map(r => r[fy.key])) }))
+    .map(x => ({ ...x, r: x.n >= 5 ? x.r : null }))
+    .sort((a, b) => (b.r == null ? -1 : Math.abs(b.r)) - (a.r == null ? -1 : Math.abs(a.r)));
+  document.getElementById("t-rank").replaceChildren(...ranked.map(x => {
+    const row = document.createElement("button");
+    row.className = "t-row" + (x.f.key === fx.key ? " cur" : "") + (x.r == null ? " none" : "");
+    const out = x.r != null && Math.abs(x.r) >= x.needed;
+    const name = Object.assign(document.createElement("span"), { textContent: x.f.label });
+    if (out) name.append(Object.assign(document.createElement("em"), { textContent: "stands out" }));
+    const r = Object.assign(document.createElement("span"), { className: "r", textContent: x.r == null ? "–" : fmtR(x.r) });
+    const bar = Object.assign(document.createElement("span"), { className: "t-bar" });
+    if (x.r != null) {
+      const fill = document.createElement("i"), tick = document.createElement("s");
+      fill.style.width = `${Math.abs(x.r) * 100}%`;
+      fill.classList.toggle("out", out);
+      tick.style.left = `${Math.min(1, x.needed) * 100}%`;
+      bar.append(fill, tick);
+    }
+    row.title = x.r == null ? `Fewer than 5 swings have ${x.f.label.toLowerCase()}` : `${x.n} swings`;
+    row.append(name, r, bar);
+    row.onclick = () => {
+      trendPick.x = x.f.key;
+      saveTrendPick();
+      renderTrends();
+      document.getElementById("t-chart").scrollIntoView({ block: "nearest" });
+    };
+    return row;
+  }));
+}
+
+/** Every swing, every number: the table twin of the chart. */
+function renderTrendTable(rows, fx, fy) {
+  const cols = FIELDS.filter(f => f.key !== "order");
+  const head = document.createElement("tr");
+  for (const t of ["#", "Time", "Club"]) head.append(Object.assign(document.createElement("th"), { textContent: t }));
+  for (const f of cols) {
+    const th = Object.assign(document.createElement("th"), { textContent: fieldName(f), title: f.group });
+    th.classList.toggle("sel", f.key === fx.key || f.key === fy.key);
+    head.append(th);
+  }
+  const thead = document.createElement("thead"), tbody = document.createElement("tbody");
+  thead.append(head);
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    const when = new Date(r.c.recorded).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
+    for (const t of [r.order, when, r.club ? clubName(r.club) : "–"]) {
+      tr.append(Object.assign(document.createElement("td"), { textContent: t }));
+    }
+    for (const f of cols) {
+      const pending = !f.shot && !r.body;
+      tr.append(Object.assign(document.createElement("td"), {
+        textContent: pending ? (swingReady(r.c) ? "…" : "–") : fmtField(f, r[f.key]),
+      }));
+    }
+    tr.onclick = () => open(r.c.name);
+    tbody.append(tr);
+  }
+  document.getElementById("t-table").replaceChildren(thead, tbody);
+}
+
+// The chart is drawn to its width.
+let trendsWidth = 0;
+new ResizeObserver(() => {
+  const w = trendsBox.clientWidth;
+  if (trendsKey && w !== trendsWidth) { trendsWidth = w; renderTrends(); }
+}).observe(trendsBox);
 
 // ---- Deleting ----
 
@@ -1367,8 +1791,11 @@ async function refresh() {
   }
   const before = clips.find(c => c.name === current);
   const beforePartner = partner && clips.find(c => c.name === partner.name);
+  const was = JSON.stringify(clips);
   clips = await res.json();
   renderList();
+  // New swings, finished analyses and shots show up in the trends as they arrive.
+  if (trendsKey && JSON.stringify(clips) !== was) renderTrends();
   const now = clips.find(c => c.name === current);
   if (current === null && clips.length) {
     const wanted = decodeURIComponent(location.hash.slice(1));

@@ -89,6 +89,15 @@ monitor's numbers for that shot.
   curve fit that leans on confident frames and drops one-frame glitches), and ends once a wrist is
   lost behind the head in the finish. A kinematic
   sequence isn't attempted: from face-on alone the turn speeds come out in the wrong order.
+- **Session trends** (Trends on a session in the list; `static/summary.js`): each swing's numbers
+  (tempo, turns and sway at the top / impact, and the down-the-line ones: hips and bend at impact,
+  hands to plane at P6 and the top, hand height and depth) against Square's (path, face, face to
+  path, carry, offline, strike and so on). A scatter chart of any two, with the straight-line fit
+  and r; a list ranking every number on the other side by how closely it goes with the chosen one;
+  and a table of every swing. One club at a time by default. A link "stands out" when |r| is past
+  what chance gives with that many swings (p < 0.05); fewer than 5 swings, nothing is ranked. The
+  page works the numbers out from the pose files and keeps them in the browser (localStorage);
+  bump `VERSION` in summary.js when a change should recompute them. It updates as swings arrive.
 - Pose files are named by version (`<clip>.v5.json.gz`); when `pose.py` changes enough to bump
   `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
@@ -121,12 +130,9 @@ The phone's browser can't record above 30 fps, which is why the capture app exis
 - The server needs inbound TCP 8000 allowed on private networks.
 
 ## Planned
-1. **Session trends** (next): chart tempo, early extension, P6 plane numbers and the like against
-   Square's club path, face and carry across a session's swings, to see which moves go with a push
-   or a pull.
-2. **Compare two swings**: a reference swing (a good one, or last week's) next to the current one,
+1. **Compare two swings** (next): a reference swing (a good one, or last week's) next to the current one,
    synced on impact, key-position cards lined up (the two-angle sync code carries over).
-3. **Later, maybe: 3D from both cameras.** With the two phones' positions calibrated once,
+2. **Later, maybe: 3D from both cameras.** With the two phones' positions calibrated once,
    triangulate real 3D joint positions. That would replace the estimated face-on turns and could
    make a kinematic sequence possible. A much bigger project; only worth it if the estimated
    turns stop being good enough.
