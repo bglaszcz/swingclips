@@ -3,8 +3,10 @@ A background worker runs pose on each new clip and saves it to POSE_DIR for the 
 
 Run with "Start server.cmd", or:  .venv\\Scripts\\python.exe app.py
 Settings (environment variables): SWINGCLIPS_CLIPS (clips folder), SWINGCLIPS_POSE (pose results,
-default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 8000).
+default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 8000),
+SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landmarker_full.task).
 """
+import glob
 import gzip
 import json
 import os
@@ -57,7 +59,8 @@ def clip_paths():
 
 def pose_file(name: str) -> Path:
     # Stored gzipped (~800 KB of JSON per clip shrinks about 3x) and sent as-is with Content-Encoding.
-    return POSE_DIR / (name + ".json.gz")
+    # Named by version, so clips analyzed by an older pose.py are simply analyzed again.
+    return POSE_DIR / f"{name}.v{pose.VERSION}.json.gz"
 
 
 def error_file(name: str) -> Path:
@@ -97,8 +100,9 @@ def pose_worker(stop: threading.Event):
             tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
             tmp.replace(pose_file(clip.name))
             found = sum(f["lm"] is not None for f in result["frames"])
+            impact = f"impact at {result['impact']} s" if result["impact"] is not None else "ball not found"
             print(f"Pose: {clip.name} done in {result['seconds']} s, "
-                  f"{found}/{len(result['frames'])} frames with a person", flush=True)
+                  f"{found}/{len(result['frames'])} frames with a person, {impact}", flush=True)
         except Exception as e:
             error_file(clip.name).write_text(traceback.format_exc())
             print(f"Pose: {clip.name} FAILED - see {error_file(clip.name)}", flush=True)
@@ -137,9 +141,9 @@ def move_clip(name: str, to_trash: bool) -> bool:
     dst_clips.mkdir(parents=True, exist_ok=True)
     dst_pose.mkdir(parents=True, exist_ok=True)
     (src_clips / name).replace(dst_clips / name)
-    for suffix in (".json.gz", ".error.txt"):
-        if (src_pose / (name + suffix)).exists():
-            (src_pose / (name + suffix)).replace(dst_pose / (name + suffix))
+    # Every pose file for the clip, older versions included.
+    for f in src_pose.glob(glob.escape(name) + ".*"):
+        f.replace(dst_pose / f.name)
     return True
 
 

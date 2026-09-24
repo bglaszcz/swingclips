@@ -1,6 +1,7 @@
 // The P1-P8 swing checkpoints, found from the pose track. Ported from the phone app
 // (src/utils/swingPhases.ts), with two changes for the server's clips:
-//  - no impact sound to go on (probe clips have no audio), so impact comes from the hand path;
+//  - impact is the first frame the ball is gone from the mat, when the server found the ball
+//    (see server/pose.py); otherwise it comes from the hand path;
 //  - 240 fps frames are ~4 ms apart, where raw hand speed is mostly tracking jitter, so positions
 //    are smoothed and speed is measured over ~1/30 s.
 // P2, P6 and P8 are defined by the club shaft, which body tracking can't see: they are estimates.
@@ -104,14 +105,17 @@
    * @param aspect picture width / height as displayed
    * @param leadSide "left" for a right-handed golfer
    * @param impactWindow optional [from, to] clip seconds when the strike was heard
+   * @param impactTime optional clip seconds of the first frame without the ball
    * @returns [{key, tag, label, t, index, estimated}] - index is into `frames`
    */
-  function detect(frames, aspect, leadSide = "left", impactWindow = null) {
+  function detect(frames, aspect, leadSide = "left", impactWindow = null, impactTime = null) {
     const ms = metrics(frames, aspect, leadSide);
     if (ms.length < 20) return [];
 
-    // With a heard strike, impact must be in that window; without one, anywhere in the clip.
-    const [from, to] = impactWindow || [-Infinity, Infinity];
+    // Impact must be in this window: around the ball leaving, else when the strike was heard,
+    // else anywhere in the clip.
+    const [from, to] = impactTime != null ? [impactTime - 0.02, impactTime + 0.02]
+      : impactWindow || [-Infinity, Infinity];
 
     // The hands move fastest around impact, and that's the one moment that stands out in any clip.
     // (A follow-through can be as fast, which is what the strike window guards against.)
@@ -143,17 +147,18 @@
       }
     }
 
-    // P7 impact: the hands come back to about where they were at address. ("Lowest hands" only
-    // works down the line; face-on, the hands keep dropping for a moment after impact.)
-    let impact = -1;
-    for (let i = top + 1; i < ms.length && ms[i].t <= ms[fastest].t + 0.15; i++) {
+    // P7 impact: the ball leaving, when known. Otherwise the hands come back to about where they
+    // were at address. ("Lowest hands" only works down the line; face-on, the hands keep dropping
+    // for a moment after impact.)
+    let impact = impactTime != null ? nearest(ms, impactTime) : -1;
+    for (let i = top + 1; impactTime == null && i < ms.length && ms[i].t <= ms[fastest].t + 0.15; i++) {
       if (ms[i].t < from - 0.05 || ms[i].t > to + 0.05) continue;
       const gap = Math.hypot(ms[i].hand.x - ms[address].hand.x, ms[i].hand.y - ms[address].hand.y);
       const best = impact < 0 ? Infinity
         : Math.hypot(ms[impact].hand.x - ms[address].hand.x, ms[impact].hand.y - ms[address].hand.y);
       if (gap < best) impact = i;
     }
-    if (impact < 0) return [];
+    if (impact <= top) return [];
 
     // Not a swing (e.g. someone waving at the camera): the phases don't fit together.
     const backswing = ms[top].t - ms[address].t, downswing = ms[impact].t - ms[top].t;
@@ -164,16 +169,17 @@
     const p5 = armParallel(ms, top + 1, impact);
 
     // P2 (estimated): shaft parallel in the takeaway is roughly when the hands have travelled
-    // about 1.5 shoulder widths from address.
+    // about 1.2 shoulder widths from address (1.1-1.35 measured on real swings, face-on).
     let p2 = -1;
     for (let i = address + 1; i <= top; i++) {
       const moved = Math.hypot(ms[i].hand.x - ms[address].hand.x, ms[i].hand.y - ms[address].hand.y);
-      if (moved >= ms[address].shoulderWidth * 1.5) { p2 = i; break; }
+      if (moved >= ms[address].shoulderWidth * 1.2) { p2 = i; break; }
     }
 
-    // P6 / P8 (estimated): the shaft passes horizontal roughly this long either side of impact.
-    const p6 = Math.min(impact - 1, nearest(ms, ms[impact].t - 0.06));
-    const p8 = Math.max(impact + 1, nearest(ms, ms[impact].t + 0.06));
+    // P6 / P8 (estimated): the shaft passes horizontal roughly this long either side of impact
+    // (~55-60 ms before and ~70 ms after on real 7-iron swings).
+    const p6 = Math.min(impact - 1, nearest(ms, ms[impact].t - 0.055));
+    const p8 = Math.max(impact + 1, nearest(ms, ms[impact].t + 0.07));
 
     const picks = [["p1", address], ["p2", p2], ["p3", p3], ["p4", top], ["p5", p5], ["p6", p6], ["p7", impact], ["p8", p8]];
     return picks

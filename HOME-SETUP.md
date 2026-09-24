@@ -36,9 +36,15 @@ monitor's numbers for that shot.
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON), `shots.jsonl` (launch
   monitor shots), `trash` (deleted clips; emptied by hand, never automatically).
 - A background worker runs MediaPipe pose on every frame of each new clip (4 processes, split at
-  keyframes). The page draws the skeleton and spine angle, finds P1-P8 (`static/phases.js`,
-  anchored on the strike 2.0-2.25 s into capture clips), groups clips into sessions, deletes to
-  the trash with Undo, and shows each clip's shot numbers.
+  keyframes), then smooths it over the whole clip (median, then a local curve fit, so it doesn't lag
+  fast hands). It also finds the ball on the mat near the golfer's feet and the first frame it's
+  gone: that's impact, exact to the frame.
+- The page draws the skeleton and spine angle, finds P1-P8 (`static/phases.js`, anchored on that
+  impact, or on the heard strike ~2 s into capture clips if the ball wasn't found), groups clips
+  into sessions, deletes to the trash with Undo, and shows each clip's shot numbers. P2, P6 and P8
+  depend on the club, which isn't tracked, so they're estimated from the hands and impact.
+- Pose files are named by version (`<clip>.v2.json.gz`); when `pose.py` changes enough to bump
+  `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
   ~14 s, GSPro connector ~1 s); each match records its gap.
 - Deploy on the server: `git -C D:\SwingClips\app pull`, then restart `Start server.cmd`.

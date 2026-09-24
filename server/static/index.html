@@ -386,7 +386,7 @@ async function loadPose(name) {
   for (const f of data.frames) {
     if (f.lm && (reference = spineLine(f.lm))) break;
   }
-  pose = { frames: data.frames, reference };
+  pose = { frames: data.frames, reference, impact: data.impact ?? null };
   updateSkeletonButton();
   draw(video.currentTime);
   buildPositions(name);
@@ -457,10 +457,12 @@ async function buildPositions(name) {
   handBtn.textContent = leadSide === "left" ? "Right-handed" : "Left-handed";
   await whenReady(video, "loadedmetadata", () => video.videoWidth > 0);
   if (run !== positionsRun || current !== name || !pose) return;
-  // The capture app cuts each clip 2 s before the strike it heard, starting on a keyframe (every
-  // 0.25 s), so the strike is 2.0-2.25 s in. Anchoring impact there beats guessing from motion.
-  const strikeWindow = name.startsWith("swing_") ? [2.0, 2.25] : null;
-  positions = SwingPhases.detect(pose.frames, video.videoWidth / video.videoHeight, leadSide, strikeWindow);
+  // Impact is when the ball leaves the mat, if the server saw it go. If not: the capture app cuts
+  // each clip 2 s before the strike it heard, starting on a keyframe (every 0.25 s), so the strike
+  // is about 2.0-2.25 s in; real impacts have landed 1.97-2.33 s in, so allow a little either side.
+  const strikeWindow = name.startsWith("swing_") ? [1.9, 2.4] : null;
+  positions = SwingPhases.detect(pose.frames, video.videoWidth / video.videoHeight, leadSide, strikeWindow,
+                                 pose.impact);
   positionsBox.hidden = false;
   document.getElementById("pos-note").textContent = positions.length
     ? "Tap one to jump there. ~ = estimated (depends on the club, which isn't tracked)."
