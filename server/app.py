@@ -6,6 +6,7 @@ Settings (environment variables): SWINGCLIPS_CLIPS (clips folder), SWINGCLIPS_PO
 default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 8000),
 SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landmarker_full.task).
 """
+import asyncio
 import bisect
 import glob
 import gzip
@@ -619,9 +620,22 @@ class QuietPolling(logging.Filter):
         return not any(f'"GET {path} ' in record.getMessage() for path in ("/api/clips", "/api/time"))
 
 
+class QuietShutdown(logging.Filter):
+    """Leaves out the reports of video streams cancelled on purpose when the server stops: a
+    browser with clips open holds their downloads open, and each one printed a long traceback."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        exc = record.exc_info[1] if record.exc_info else None
+        if isinstance(exc, (asyncio.CancelledError, KeyboardInterrupt)):
+            return False
+        message = record.getMessage()
+        return not ("CancelledError" in message or "timeout graceful shutdown exceeded" in message)
+
+
 if __name__ == "__main__":
     print(f"Serving clips from {CLIPS_DIR}, pose results in {POSE_DIR}")
     print(f"Open http://localhost:{PORT} here, or http://<this PC's name>:{PORT} from other devices")
     logging.getLogger("uvicorn.access").addFilter(QuietPolling())
+    logging.getLogger("uvicorn.error").addFilter(QuietShutdown())
     # Ctrl+C: don't wait on open browser connections (a review page or a video keeps one open).
     uvicorn.run(app, host="0.0.0.0", port=PORT, timeout_graceful_shutdown=2)
