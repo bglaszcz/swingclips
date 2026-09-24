@@ -77,7 +77,10 @@ monitor's numbers for that shot.
   impact: pelvis and shoulder turn, X-factor, lead arm, shaft, spine tilt, forward bend, hip and
   shoulder tilt, head sway / rise, hip sway, and tempo. Turns come from how much narrower the hips
   and shoulders look than at address; MediaPipe's 3D estimate (saved per frame as `w`) is only used
-  for forward bend and for scale. Overlays: hand path, head position vs address. A kinematic
+  for forward bend and for scale. Overlays: hand path, head position vs address. The hand path is
+  the wrists and index fingers weighted by MediaPipe's confidence, smoothed over ±45 ms (a local
+  curve fit that leans on confident frames and drops one-frame glitches), and ends once a wrist is
+  lost behind the head in the finish. A kinematic
   sequence isn't attempted: from face-on alone the turn speeds come out in the wrong order.
 - Pose files are named by version (`<clip>.v4.json.gz`); when `pose.py` changes enough to bump
   `VERSION`, every clip is analyzed again on its own.

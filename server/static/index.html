@@ -438,22 +438,101 @@ function positionIndex(key, p = pose) {
   return frameIndexAt(toPartnerTime(pos.t), p);
 }
 
-/** The hands' path from address to the end of the clip: back in yellow, down and through in pink. */
+// The hand path: the wrists and index fingers together, smoothed over this half-width (s); it ends
+// once a wrist's visibility falls below HAND_LOST after impact (the hands go behind the head in the
+// finish, and from there MediaPipe only guesses).
+const HAND_POINTS = [LM.L_WRIST, LM.R_WRIST, L_INDEX, R_INDEX];
+const HAND_SMOOTH_S = 0.045, HAND_LOST = 0.3;
+
+/** Weighted least-squares fit of a + b·u + c·u² at u = 0 (u = time offset / window), or null if underdetermined. */
+function quadAt(u, vals, w, lo, hi) {
+  let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, v0 = 0, v1 = 0, v2 = 0;
+  for (let j = lo; j <= hi; j++) {
+    const wj = w[j];
+    if (!(wj > 0)) continue;
+    const a = u[j], a2 = a * a;
+    s0 += wj; s1 += wj * a; s2 += wj * a2; s3 += wj * a2 * a; s4 += wj * a2 * a2;
+    v0 += wj * vals[j]; v1 += wj * vals[j] * a; v2 += wj * vals[j] * a2;
+  }
+  // Cramer's rule for the constant term.
+  const det = s0 * (s2 * s4 - s3 * s3) - s1 * (s1 * s4 - s3 * s2) + s2 * (s1 * s3 - s2 * s2);
+  if (Math.abs(det) < 1e-12) return s0 > 0 ? v0 / s0 : null;
+  return (v0 * (s2 * s4 - s3 * s3) - s1 * (v1 * s4 - s3 * v2) + s2 * (v1 * s3 - s2 * v2)) / det;
+}
+
+/**
+ * The hands in each frame of clip p (null where there's no pose), smoothed: the wrists and index
+ * fingers weighted by how sure MediaPipe is of each, then a local quadratic over ±HAND_SMOOTH_S that
+ * leans on confident frames (the hands are half hidden at the top) and, on a second pass, drops
+ * frames far off the curve (one-frame glitches). A quadratic follows the turn at the top and the
+ * fast hands through impact without cutting the corner. Worked out once per clip.
+ */
+function handPath(p) {
+  if (p.handPath) return p.handPath;
+  const idx = [], t = [], xs = [], ys = [], conf = [];
+  p.frames.forEach((f, i) => {
+    if (!f.lm) return;
+    let sw = 0, sx = 0, sy = 0, sv = 0;
+    for (const k of HAND_POINTS) {
+      const v = f.lm[k * 3 + 2], w = Math.max(v, 1e-3);
+      sw += w; sx += f.lm[k * 3] * w; sy += f.lm[k * 3 + 1] * w; sv += v;
+    }
+    idx.push(i); t.push(f.t); xs.push(sx / sw); ys.push(sy / sw); conf.push(sv / HAND_POINTS.length);
+  });
+  const n = idx.length, robust = new Array(n).fill(1);
+  let out = [];
+  for (let pass = 0; pass < 2; pass++) {
+    out = [];
+    let lo = 0, hi = 0;
+    for (let i = 0; i < n; i++) {
+      while (t[lo] < t[i] - HAND_SMOOTH_S) lo++;
+      while (hi + 1 < n && t[hi + 1] <= t[i] + HAND_SMOOTH_S) hi++;
+      const u = [], w = [];
+      for (let j = lo; j <= hi; j++) {
+        const d = (t[j] - t[i]) / (HAND_SMOOTH_S * 1.001);
+        u[j] = d;
+        w[j] = (1 - Math.abs(d) ** 3) ** 3 * conf[j] ** 2 * robust[j];
+      }
+      const x = quadAt(u, xs, w, lo, hi), y = quadAt(u, ys, w, lo, hi);
+      out.push(x == null || y == null ? { x: xs[i], y: ys[i] } : { x, y });
+    }
+    // Bisquare weights from how far each raw point is from the curve: glitches drop out.
+    const res = out.map((q, i) => Math.hypot(q.x - xs[i], q.y - ys[i]));
+    const s = 6 * [...res].sort((a, b) => a - b)[n >> 1] + 1e-9;
+    res.forEach((e, i) => { robust[i] = e < s ? (1 - (e / s) ** 2) ** 2 : 0; });
+  }
+  const path = new Array(p.frames.length).fill(null);
+  idx.forEach((i, k) => { path[i] = out[k]; });
+  return (p.handPath = path);
+}
+
+/** Last frame of clip p to draw the hand path to: just before the hands are lost in the finish. */
+function handPathEnd(p) {
+  const f = p.frames, impact = positionIndex("p7", p);
+  if (impact == null) return f.length - 1;
+  for (let i = impact; i < f.length; i++) {
+    const lm = f[i].lm;
+    if (f[i].t < f[impact].t + 0.05 || !lm) continue;
+    if (Math.min(lm[LM.L_WRIST * 3 + 2], lm[LM.R_WRIST * 3 + 2]) < HAND_LOST) return i - 1;
+  }
+  return f.length - 1;
+}
+
+/** The hands' path from address into the finish: back in yellow, down and through in pink. */
 function drawHandPath(ctx, r, lineWidth, p = pose) {
-  const f = p.frames, top = positionIndex("p4", p);
-  const from = positionIndex("p1", p) ?? 0, split = top ?? f.length;
+  const path = handPath(p), top = positionIndex("p4", p);
+  const from = positionIndex("p1", p) ?? 0, end = handPathEnd(p), split = Math.min(top ?? end, end);
   ctx.save();
   ctx.lineWidth = lineWidth;
   ctx.lineJoin = ctx.lineCap = "round";
-  for (const [a, b, color] of [[from, split, PATH_BACK_COLOR], [split, f.length - 1, PATH_DOWN_COLOR]]) {
+  for (const [a, b, color] of [[from, split, PATH_BACK_COLOR], [split, end, PATH_DOWN_COLOR]]) {
     ctx.strokeStyle = color;
     ctx.beginPath();
     let started = false;
-    for (let i = a; i <= b && i < f.length; i++) {
-      const lm = f[i].lm;
-      if (!lm) continue;
-      const x = r.x + (lm[L_INDEX * 3] + lm[R_INDEX * 3]) / 2 * r.w;
-      const y = r.y + (lm[L_INDEX * 3 + 1] + lm[R_INDEX * 3 + 1]) / 2 * r.h;
+    for (let i = a; i <= b; i++) {
+      const q = path[i];
+      if (!q) continue;
+      const x = r.x + q.x * r.w, y = r.y + q.y * r.h;
       if (started) ctx.lineTo(x, y); else { ctx.moveTo(x, y); started = true; }
     }
     ctx.stroke();
