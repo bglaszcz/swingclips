@@ -40,7 +40,7 @@ On the **server** (Command Prompt; these work from any folder):
 :: Stop the server, wherever it's running (see below)
 "D:\SwingClips\app\server\Stop server.cmd"
 
-:: Start it in a window (Ctrl+C or closing the window stops it)
+:: Start it in a window (Ctrl+C or closing the window stops it; Ctrl+C takes ~2 s)
 "D:\SwingClips\app\server\Start server.cmd"
 
 :: Deploy the latest version: pull, then stop and start

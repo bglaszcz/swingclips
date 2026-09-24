@@ -10,6 +10,7 @@ import bisect
 import glob
 import gzip
 import json
+import logging
 import os
 import re
 import threading
@@ -443,7 +444,16 @@ def index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+class QuietPolling(logging.Filter):
+    """Leaves out the requests every open review page (and phone) makes every few seconds."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not any(f'"GET {path} ' in record.getMessage() for path in ("/api/clips", "/api/time"))
+
+
 if __name__ == "__main__":
     print(f"Serving clips from {CLIPS_DIR}, pose results in {POSE_DIR}")
     print(f"Open http://localhost:{PORT} here, or http://<this PC's name>:{PORT} from other devices")
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    logging.getLogger("uvicorn.access").addFilter(QuietPolling())
+    # Ctrl+C: don't wait on open browser connections (a review page or a video keeps one open).
+    uvicorn.run(app, host="0.0.0.0", port=PORT, timeout_graceful_shutdown=2)
