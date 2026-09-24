@@ -32,7 +32,7 @@
   @media (min-width: 900px) {
     main { grid-template-columns: 320px 1fr; height: calc(100vh - 49px); }
     #side { overflow-y: auto; border-right: 1px solid var(--line); }
-    #viewer, #trends, #progress { overflow-y: auto; }
+    #viewer, #trends, #progress, #setup { overflow-y: auto; }
   }
   #listbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line);
              position: sticky; top: 0; background: var(--bg); z-index: 1; }
@@ -126,7 +126,23 @@
   #numbers tr.group th { text-align: left; padding-top: 10px; color: var(--text); }
   /* Session trends: the launch monitor's numbers against the swing's, one dot per swing. */
   #trends { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  @media (max-width: 899px) { #trends, #progress { order: -1; border-bottom: 1px solid var(--line); } }
+  @media (max-width: 899px) { #trends, #progress, #setup { order: -1; border-bottom: 1px solid var(--line); } }
+  #setup { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  #setup .note, .s-note { color: var(--muted); font-size: 12px; }
+  .s-note { flex: 1; }
+  .s-cams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .s-cam { border: 2px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column;
+           gap: 8px; min-width: 0; background: var(--panel); }
+  .s-cam.ok { border-color: var(--accent); }
+  .s-cam.bad { border-color: var(--warn); }
+  .s-title { display: flex; justify-content: space-between; align-items: baseline; }
+  .s-age { color: var(--muted); font-size: 12px; }
+  .s-verdict { font-size: 16px; font-weight: 600; min-height: 2.8em; }
+  .s-cam.ok .s-verdict { color: var(--accent); }
+  .s-cam.bad .s-verdict { color: var(--warn); }
+  .s-pic { position: relative; }
+  .s-pic img { display: block; width: 100%; max-height: 62vh; object-fit: contain; background: #000; border-radius: 6px; }
+  .s-pic canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
   #progress { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   #p-status { color: var(--muted); font-size: 13px; flex: 1; }
   #p-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
@@ -217,6 +233,7 @@
 </head>
 <body>
 <header><h1>SwingClips</h1><span class="count" id="count"></span>
+  <button id="setup-btn" class="small" title="Check both cameras before you start: live pictures from the phones">Camera setup</button>
   <button id="progress-btn" class="small" title="How your swing and results are changing across sessions">Progress</button></header>
 <main>
   <aside id="side">
@@ -307,6 +324,27 @@
       <strong>All swings</strong>
       <div style="overflow-x: auto"><table id="t-table"></table></div>
     </div>
+  </section>
+  <section id="setup" hidden>
+    <div class="t-head">
+      <strong>Camera setup</strong>
+      <span class="s-note">Stand at the ball as if to hit; each phone checks it can see all of you.</span>
+      <button id="s-close" class="small">Close</button>
+    </div>
+    <div class="s-cams">
+      <div class="s-cam" id="setup-face">
+        <div class="s-title"><strong>Face-on</strong><span class="s-age"></span></div>
+        <div class="s-verdict"></div>
+        <div class="s-pic"><img alt="Face-on camera" hidden><canvas hidden></canvas></div>
+      </div>
+      <div class="s-cam" id="setup-dtl">
+        <div class="s-title"><strong>Down the line</strong><span class="s-age"></span></div>
+        <div class="s-verdict"></div>
+        <div class="s-pic"><img alt="Down-the-line camera" hidden><canvas hidden></canvas></div>
+      </div>
+    </div>
+    <div class="note">The phones send a picture about once a second while they aren't recording, say what to fix out
+      loud, and focus on you. Once both say good, tap Start on each phone.</div>
   </section>
   <section id="progress" hidden>
     <div class="t-head">
@@ -1682,5 +1720,6 @@ refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, 10000);
 </script>
 <script src="/static/trends.js"></script>
+<script src="/static/setup.js"></script>
 </body>
 </html>

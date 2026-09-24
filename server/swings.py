@@ -27,12 +27,16 @@ class Summarizer:
         self.ctx: MiniRacer | None = None
 
     def summarize(self, main: dict, other: dict | None) -> dict:
+        return self.call("summarize", main, other, LEAD_SIDE)
+
+    def call(self, function: str, *args):
+        """SwingSummary.<function>(*args), with the arguments and result passed as JSON."""
         if self.ctx is None:
             self.ctx = MiniRacer()
             for source in self.sources:
                 self.ctx.eval(source)
-        args = json.dumps([main, other, LEAD_SIDE], separators=(",", ":"))
-        return json.loads(self.ctx.eval(f"JSON.stringify(SwingSummary.summarize(...{args}))"))
+        args = json.dumps(list(args), separators=(",", ":"))
+        return json.loads(self.ctx.eval(f"JSON.stringify(SwingSummary.{function}(...{args}))"))
 
     def close(self) -> None:
         if self.ctx is not None:

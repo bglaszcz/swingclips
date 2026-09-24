@@ -88,10 +88,12 @@ function swingRow(c) {
            ...SwingSummary.shotNumbers(c.shot), ...(body || {}) };
 }
 
-/** The page shows one view at a time: a swing, one session's trends, or progress. */
+/** The page shows one view at a time: a swing, one session's trends, progress, or camera setup. */
 function showView(which) {
   trendsBox.hidden = which !== "trends";
   progressBox.hidden = which !== "progress";
+  document.getElementById("setup").hidden = which !== "setup";
+  document.getElementById("setup-btn").classList.toggle("on", which === "setup");
   viewer.hidden = which !== "swing" || !current;
   tipEl.hidden = pTipEl.hidden = true;
   if (which !== "swing") video.pause();
@@ -102,7 +104,7 @@ function showView(which) {
 
 /** Called when a swing is opened: back to the swing view. */
 function leaveTrendViews() {
-  if (!trendsKey && !progressOpen) return;
+  if (!trendsKey && !progressOpen && document.getElementById("setup").hidden) return;
   showView("swing");
   renderList();
 }

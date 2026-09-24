@@ -25,11 +25,12 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import pose
+import setup
 import swings
 
 CLIPS_DIR = Path(os.environ.get("SWINGCLIPS_CLIPS", r"D:\SwingClips\clips"))
@@ -216,10 +217,21 @@ async def lifespan(app: FastAPI):
     yield
     stop.set()
     worker.join(timeout=5)  # lets it close its JavaScript engine, which otherwise holds up the exit
+    camera_setup.close()
 
 
 app = FastAPI(title="SwingClips", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.middleware("http")
+async def revalidate_page(request: Request, call_next):
+    """The page and its scripts are checked for a newer copy on every load (a quick 304 when there
+    isn't one): otherwise, after an update, a browser can run new HTML with an old cached script."""
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 def recorded_at(path: Path) -> float:
@@ -599,6 +611,37 @@ def get_swings():
     return {"code": swings_code, "swings": records}
 
 
+# ---- Camera setup ----
+camera_setup = setup.Setup(STATIC_DIR)
+
+
+@app.post("/api/setup/{angle}")
+async def setup_still(angle: str, request: Request, rotation: int = 0):
+    """A phone's preview still (JPEG body): finds the golfer, returns what to fix (see setup.py)."""
+    if angle not in setup.ANGLES:
+        raise HTTPException(404, "No such camera angle")
+    body = await request.body()
+    if not body or len(body) > 5_000_000:
+        raise HTTPException(400, "Expected a JPEG")
+    try:
+        return await asyncio.to_thread(camera_setup.judge, angle, body, rotation)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/setup")
+def setup_status():
+    return camera_setup.status()
+
+
+@app.get("/api/setup/{angle}.jpg")
+def setup_picture(angle: str):
+    jpeg = camera_setup.picture(angle)
+    if jpeg is None:
+        raise HTTPException(404, "No picture from that camera yet")
+    return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
 @app.get("/api/pose/{name}")
 def get_pose(name: str):
     checked_clip(name)
@@ -614,10 +657,12 @@ def index():
 
 
 class QuietPolling(logging.Filter):
-    """Leaves out the requests every open review page (and phone) makes every few seconds."""
+    """Leaves out the requests every open review page (and phone) makes every second or few."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        return not any(f'"GET {path} ' in record.getMessage() for path in ("/api/clips", "/api/time"))
+        message = record.getMessage()
+        # The phones' setup stills come every second; so do the Camera setup page's checks.
+        return not any(path in message for path in ('"GET /api/clips ', '"GET /api/time ', " /api/setup"))
 
 
 class QuietShutdown(logging.Filter):

@@ -200,6 +200,44 @@
     return out;
   }
 
+  /**
+   * Camera setup, from one still of a phone's preview with the golfer at address: what's wrong and
+   * what to do, written and spoken, and where the golfer is for the phone to focus on.
+   * @param lm flat [x, y, visibility] * 33 in the upright picture, or null when no one was found
+   * @param angle "face" or "dtl"
+   * @returns {ok, codes, text, say, focus: {x, y, w, h} (share of the picture) | null}
+   */
+  function setupAdvice(lm, angle) {
+    const cam = angle === "dtl" ? "Down the line" : "Face on";
+    if (!lm) return { ok: false, codes: ["nobody"], text: "Can't see you: stand at the ball.", say: `${cam}: I can't see you.`, focus: null };
+    const codes = cameraCheck({ frames: [{ lm }] }, 0, null);
+    const x = i => lm[i * 3], y = i => lm[i * 3 + 1];
+    const xs = IN_PICTURE.map(x), ys = IN_PICTURE.map(y);
+    const tips = [];
+    if (codes.includes("out") || codes.includes("edge")) {
+      const offTop = Math.min(...ys) < MARGIN, offBottom = Math.max(...ys) > 1 - MARGIN;
+      if (offTop && offBottom) tips.push("move the phone back");
+      else if (offTop) tips.push("tilt the phone up");
+      else if (offBottom) tips.push("tilt the phone down");
+      const hx = (x(23) + x(24)) / 2;
+      if (Math.min(...xs) < MARGIN || Math.max(...xs) > 1 - MARGIN || hx < EDGE || hx > 1 - EDGE) {
+        tips.push(`you're at the ${hx < 0.5 ? "left" : "right"} edge: aim the phone more toward you`);
+      }
+    }
+    if (codes.includes("small")) tips.push("move the phone closer");
+    // Focus on the body from head to knees: the part that fills the frame.
+    const pts = [0, 11, 12, 23, 24, 25, 26].map(i => [x(i), y(i)]);
+    const x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
+    const y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+    const clamp = v => Math.max(0, Math.min(1, v));
+    const focus = { x: clamp(x0 - 0.02), y: clamp(y0 - 0.02) };
+    focus.w = clamp(x1 + 0.02) - focus.x;
+    focus.h = clamp(y1 + 0.02) - focus.y;
+    const ok = !codes.length;
+    const text = ok ? "Good: all of you is in the picture." : tips.join("; ").replace(/^./, c => c.toUpperCase()) + ".";
+    return { ok, codes, text, say: ok ? `${cam}: good.` : `${cam}: ${tips.join(", and ")}.`, focus };
+  }
+
   /** cameraCheck for both angles of an analyzed swing: {face, dtl}, each a list of codes or null. */
   function cameras(a, main) {
     const p = key => a.positions.find(q => q.key === key);
@@ -239,7 +277,7 @@
   }
 
   const api = { BODY, SHOT, frameIndexAt, syncOffset, aspectOf, strikeWindow, analyze, bodyNumbers,
-                shotNumbers, correlation, summarize, cameras };
+                shotNumbers, correlation, summarize, cameras, setupAdvice };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingSummary = api;
 })(typeof window !== "undefined" ? window : globalThis);
