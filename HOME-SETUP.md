@@ -48,11 +48,16 @@ monitor's numbers for that shot.
   down-the-line video follows the face-on one: exactly when paused or stepping frames, and nudged
   back if it drifts while playing. They're lined up on impact: the frame the ball is gone in each
   clip when the server found the ball in both, else the strike each phone heard.
-- Key-position cards show both angles; P1-P8 and the swing numbers come from the face-on clip (the
-  numbers assume face-on) and are carried across by the sync. Down the line shows the skeleton,
-  shaft, forward bend vs address ("Bend"), hand path, and the **plane line**: the shaft's line at
-  address, across the picture (P). Deleting a swing moves both clips to the trash.
-- A down-the-line clip with no face-on partner shows on its own, without the swing numbers.
+- Key-position cards show both angles; P1-P8 come from the face-on clip and are carried across by
+  the sync. Down the line shows the skeleton, shaft, hand path, and the **plane line**: the shaft's
+  line at address, across the picture (P). Deleting a swing moves both clips to the trash.
+- Down-the-line numbers (`computeDTL` in `static/metrics.js`), on that video (Angles) and in their
+  own section of the swing-numbers table, read at the face-on clip's P1 / P4 / P6 / P7: forward
+  bend and its change from address, hips and head toward (+) or away from the ball (hips + at impact
+  = early extension), hand height above and depth behind the middle of the shoulders, hands above (+)
+  or below the plane line, and the shaft's angle vs the plane line (+ = steeper). The shaft is
+  usually a blur in the downswing, so that last one is often blank; the hands are always tracked.
+- A down-the-line clip with no face-on partner shows on its own, with only the down-the-line numbers.
 - Placing the down-the-line phone: behind the golfer on the target line (through the hands or the
   ball), at about hand height, far enough back to fit the club at the top. Portrait, like face-on.
 
@@ -70,11 +75,13 @@ monitor's numbers for that shot.
   that impact, or on the heard strike ~2 s into capture clips if the ball wasn't found), groups
   clips into sessions, deletes to the trash with Undo, and shows each clip's shot numbers. P2, P6
   and P8 are when the shaft passes horizontal; marked ~ when the shaft wasn't clearly seen then.
+  A P6 crossing only counts 30-100 ms before impact (otherwise it's put 55 ms before, marked ~): in
+  the downswing the tracker can latch onto the arms and "cross" right after the top.
   P1 (address) is 0.1 s before the shaft starts moving back. This assumes a face-on camera (see
   "Two angles" for the down-the-line one). Newer clips carry the heard strike's exact time, which
   narrows the impact search to ±0.15 s around it.
 - Swing numbers (`static/metrics.js`), on the video (Angles) and in a table at address / top /
-  impact: pelvis and shoulder turn, X-factor, lead arm, shaft, spine tilt, forward bend, hip and
+  P6 / impact: pelvis and shoulder turn, X-factor, lead arm, shaft, spine tilt, forward bend, hip and
   shoulder tilt, head sway / rise, hip sway, and tempo. Turns come from how much narrower the hips
   and shoulders look than at address; MediaPipe's 3D estimate (saved per frame as `w`) is only used
   for forward bend and for scale. Overlays: hand path, head position vs address. The hand path is

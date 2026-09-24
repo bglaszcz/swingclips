@@ -17,6 +17,10 @@
   const CLUB_DEFINED = ["p2", "p6", "p8"];
   // A shaft crossing counts as seen (not estimated) with a clear sighting of the shaft this close.
   const SHAFT_CONFIDENT = 0.35, SHAFT_SEEN_SECONDS = 0.02;
+  // In the downswing a driver is a blur at 240 fps and the tracker mostly fills in (or latches onto
+  // the arms), so a "crossing" can land right after the top. The shaft goes from horizontal to
+  // vertical in ~45-60 ms, so a P6 crossing only counts this long before impact.
+  const P6_BEFORE_IMPACT = [0.03, 0.1];
   // Address: the shaft holds within REST_DEGREES for at least REST_SECONDS before the takeaway;
   // P1 is put ADDRESS_LEAD before the takeaway starts, so the club is clearly still at rest.
   const REST_SECONDS = 0.3, REST_DEGREES = 2, ADDRESS_LEAD = 0.1;
@@ -245,7 +249,7 @@
     // impact, the first after.
     const shaft = {
       p2: shaftHorizontal(frames, ms[address].t, ms[top].t)[0],
-      p6: shaftHorizontal(frames, ms[top].t, ms[impact].t).pop(),
+      p6: shaftHorizontal(frames, ms[impact].t - P6_BEFORE_IMPACT[1], ms[impact].t - P6_BEFORE_IMPACT[0]).pop(),
       p8: shaftHorizontal(frames, ms[impact].t, ms[impact].t + 0.4)[0],
     };
     for (const p of found) {

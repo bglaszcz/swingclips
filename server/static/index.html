@@ -114,6 +114,7 @@
   #numbers th, #numbers td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
   #numbers th:first-child, #numbers td:first-child { text-align: left; color: var(--muted); }
   #numbers .note { color: var(--muted); font-size: 12px; }
+  #numbers tr.group th { text-align: left; padding-top: 10px; color: var(--text); }
 </style>
 </head>
 <body>
@@ -164,10 +165,14 @@
       <strong>Swing numbers</strong>
       <div id="tempo"></div>
       <div style="overflow-x: auto"><table id="num-table"></table></div>
-      <div class="note">Turns are from how much narrower the hips and shoulders look than at address;
+      <div class="note" id="face-note">Face-on: turns are from how much narrower the hips and shoulders look than at address;
         inches are scaled from the body's estimated size. Both are estimates from one camera: best
         for comparing your own swings. Turn + = closed (going back), - = open; tilt + = lead side higher /
         spine away from the target; sway + = toward the target.</div>
+      <div class="note" id="dtl-note">Down the line: "to ball" + = moved toward the ball since address (hips +
+        at impact = early extension). Hand height is above the middle of the shoulders, hand depth behind
+        them (away from the ball). The plane is the shaft's line at address: hands to plane + = above it;
+        shaft to plane + = steeper than at address (-- where the shaft was a blur and couldn't be seen).</div>
     </div>
     <div id="title"></div>
   </section>
@@ -229,6 +234,7 @@ for (const k in overlays) {
   try { const v = localStorage.getItem("overlay-" + k); if (v) overlays[k] = v === "on"; } catch {}
 }
 let metrics = null;       // SwingMetrics.compute for the open clip
+let dtlMetrics = null;    // SwingMetrics.computeDTL for the swing's down-the-line clip
 
 // Probe clips are named like cam0_1920x1080_240fps_hs_1789123456.mp4 - the number after the size is fps.
 function fpsFromName(name) {
@@ -388,6 +394,13 @@ const READOUT = [
   ["Hip tilt", "pelvisTilt", "°"], ["Shoulder tilt", "shoulderTilt", "°"],
   ["Head sway", "headSway", "in"], ["Head rise", "headRise", "in"], ["Hip sway", "hipSway", "in"],
 ];
+// The same from down the line (SwingMetrics.computeDTL).
+const DTL_READOUT = [
+  ["Forward bend", "bend", "°"], ["Bend vs address", "bendChange", "°"],
+  ["Hips to ball", "hipDepth", "in"], ["Head to ball", "headDepth", "in"],
+  ["Hand height", "handHeight", "in"], ["Hand depth", "handDepth", "in"],
+  ["Hands to plane", "handsPlane", "in"], ["Shaft to plane", "shaftPlane", "°"],
+];
 const PATH_BACK_COLOR = "#facc15", PATH_DOWN_COLOR = "#f472b6", HEAD_COLOR = "#a78bfa";
 
 function fmtValue(v, key, unit) {
@@ -404,21 +417,21 @@ function fmtValue(v, key, unit) {
  * The numbers for the frame on screen: beside the picture if the black bars have room for them
  * (a portrait clip in a wide player), else over its top left corner.
  */
-function drawAngles(ctx, v, r) {
+function drawAngles(ctx, v, r, readout = READOUT) {
   const dpr = window.devicePixelRatio || 1;
   const fontSize = Math.max(11 * dpr, Math.min(15 * dpr, ctx.canvas.height / 34));
   const lh = fontSize * 1.35, pad = fontSize * 0.6;
   ctx.save();
   ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
-  const labelW = Math.max(...READOUT.map(([l]) => ctx.measureText(l).width));
+  const labelW = Math.max(...readout.map(([l]) => ctx.measureText(l).width));
   const valueW = ctx.measureText("+100.0\" ~").width;
-  const w = labelW + valueW + pad * 3, h = READOUT.length * lh + pad * 1.4;
+  const w = labelW + valueW + pad * 3, h = readout.length * lh + pad * 1.4;
   const x = r.x >= w + 16 ? r.x - w - 8 : r.x + 8, y = r.y + 8;
   ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, 6);
   ctx.fill();
-  READOUT.forEach(([label, key, unit], i) => {
+  readout.forEach(([label, key, unit], i) => {
     const ty = y + pad + lh * (i + 0.8);
     ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
     ctx.textAlign = "left";
@@ -613,9 +626,12 @@ function draw(t) {
   const lineWidth = Math.max(1.5, 3 * r.w / 400);
   if (positions.length && overlays.handpath) drawHandPath(ctx, r, lineWidth);
   if (pose.angle === "dtl" && positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, pose);
-  if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !(metrics && overlays.angles));
+  // A down-the-line clip on its own has its own numbers.
+  const dtlHere = pose.angle === "dtl" && dtlMetrics;
+  if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !((metrics || dtlHere) && overlays.angles));
   if (metrics && overlays.headbox && frame.lm) drawHead(ctx, frame.lm, r, lineWidth);
   if (metrics && overlays.angles) drawAngles(ctx, metrics.values[i], r);
+  if (dtlHere && overlays.angles) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
 }
 
 /** The down-the-line view: skeleton, bend, shaft, plane line and hand path, at its own time t. */
@@ -623,11 +639,13 @@ function draw2(t) {
   const ctx = freshCanvas(canvas2), W = canvas2.width, H = canvas2.height;
   const p = partner && partner.pose;
   if (!p || !p.frames.length || !video2.videoWidth) return;
-  const frame = p.frames[frameIndexAt(t, p)], r = fitRect(W, H, video2);
+  const i = frameIndexAt(t, p), frame = p.frames[i], r = fitRect(W, H, video2);
   const lineWidth = Math.max(1.5, 3 * r.w / 400);
+  const numbers = dtlMetrics && overlays.angles;
   if (positions.length && overlays.handpath) drawHandPath(ctx, r, lineWidth, p);
   if (positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, p);
-  if (showSkeleton && frame.lm) drawPose(ctx, frame, r, true, p);
+  if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !numbers, p);
+  if (numbers) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
 }
 
 function redraw() {
@@ -774,12 +792,13 @@ async function fetchPose(name, v) {
     if (f.lm && (reference = spineLine(f.lm, v))) break;
   }
   return { frames: data.frames, reference, impact: data.impact ?? null, clubLength: data.clubLength ?? null,
-           video: v, angle: c.angle || "face" };
+           ball: data.ball ?? null, video: v, angle: c.angle || "face" };
 }
 
 async function loadPose(name) {
   pose = null;
   metrics = null;
+  dtlMetrics = null;
   updateSkeletonButton();
   const p = await fetchPose(name, video);
   if (!p || current !== name) return;
@@ -884,6 +903,11 @@ async function buildPositions(name) {
   // The swing numbers read turns and sway from a face-on picture; they'd be wrong from down the line.
   metrics = pose.angle === "dtl" ? null
     : SwingMetrics.compute(pose.frames, video.videoWidth / video.videoHeight, leadSide, positions);
+  // Down the line: the swing's other clip, or this one if it was filmed from there alone.
+  const dp = partner ? partner.pose : pose.angle === "dtl" ? pose : null;
+  const dAddress = positions.length && dp ? positionIndex("p1", dp) : null;
+  dtlMetrics = dAddress == null ? null
+    : SwingMetrics.computeDTL(dp.frames, dp.video.videoWidth / dp.video.videoHeight, dAddress, dp.ball);
   showNumbers();
   redraw();
   positionsBox.hidden = false;
@@ -928,13 +952,15 @@ async function buildPositions(name) {
   }
 }
 
-/** Tempo, and the numbers at address, the top and impact. */
+/** Tempo, and the numbers at address, the top, P6 and impact: face-on, then down the line. */
 function showNumbers() {
   const box = document.getElementById("numbers");
-  const cols = ["p1", "p4", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
-  box.hidden = !metrics || !cols.length;
+  const cols = ["p1", "p4", "p6", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
+  box.hidden = !(metrics || dtlMetrics) || !cols.length;
   if (box.hidden) return;
-  const tp = metrics.tempo;
+  document.getElementById("face-note").hidden = !metrics;
+  document.getElementById("dtl-note").hidden = !dtlMetrics;
+  const tp = metrics && metrics.tempo;
   document.getElementById("tempo").textContent = tp
     ? `Tempo ${tp.ratio.toFixed(1)} : 1 - backswing ${tp.back.toFixed(2)} s (from takeaway), downswing ${tp.down.toFixed(2)} s`
     : "";
@@ -943,21 +969,38 @@ function showNumbers() {
   head.innerHTML = "<th></th>";
   for (const p of cols) {
     const th = document.createElement("th");
-    th.textContent = `${p.tag} ${p.label}`;
+    th.textContent = `${p.tag} ${p.label}${p.estimated ? " ~" : ""}`;
     head.append(th);
   }
-  const rows = READOUT.map(([label, key, unit]) => {
-    const tr = document.createElement("tr");
-    const name = document.createElement("td");
-    name.textContent = label;
-    tr.append(name);
-    for (const p of cols) {
-      const td = document.createElement("td");
-      td.textContent = fmtValue(metrics.values[p.index], key, unit);
-      tr.append(td);
+  // Each view's rows under its own heading; the down-the-line clip is read at the same moments.
+  const sections = [];
+  if (metrics) sections.push(["Face-on", READOUT, metrics, cols.map(p => p.index)]);
+  if (dtlMetrics) {
+    const dp = partner ? partner.pose : pose;
+    sections.push(["Down the line", DTL_READOUT, dtlMetrics, cols.map(p => positionIndex(p.key, dp))]);
+  }
+  const rows = [];
+  for (const [title, readout, m, idx] of sections) {
+    if (sections.length > 1) {
+      const tr = document.createElement("tr");
+      tr.className = "group";
+      tr.innerHTML = `<th colspan="${cols.length + 1}"></th>`;
+      tr.firstChild.textContent = title;
+      rows.push(tr);
     }
-    return tr;
-  });
+    for (const [label, key, unit] of readout) {
+      const tr = document.createElement("tr");
+      const name = document.createElement("td");
+      name.textContent = label;
+      tr.append(name);
+      for (const i of idx) {
+        const td = document.createElement("td");
+        td.textContent = fmtValue(m.values[i], key, unit);
+        tr.append(td);
+      }
+      rows.push(tr);
+    }
+  }
   table.replaceChildren(head, ...rows);
 }
 
@@ -1022,6 +1065,7 @@ function open(name) {
   pose = null;
   positions = [];
   metrics = null;
+  dtlMetrics = null;
   positionsRun++;
   positionsBox.hidden = true;
   document.getElementById("numbers").hidden = true;
@@ -1294,6 +1338,7 @@ function closeViewer() {
   pose = null;
   positions = [];
   metrics = null;
+  dtlMetrics = null;
   positionsRun++;
   video.removeAttribute("src");
   video.load();

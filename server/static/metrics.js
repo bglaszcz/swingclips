@@ -1,5 +1,5 @@
 // Swing measurements from the pose track, for the angle readout and the key-position table.
-// Assumes a face-on camera (the golfer facing it).
+// compute() is for a face-on camera (the golfer facing it); computeDTL() for one down the line.
 //
 // Pelvis and shoulder turn come from how much narrower the hips / shoulders look than at address
 // (a line turned by t looks cos(t) as wide), with the direction from the swing: closed going back,
@@ -167,7 +167,87 @@
     return { values, address: ai, scale, tempo };
   }
 
-  const api = { compute };
+  // ---- Down the line ----
+  //
+  // From behind the hands, looking at the target: the picture shows the golfer side-on, so bend,
+  // hips, head and hands moving toward or away from the ball are seen directly, not estimated.
+  // Signs: + toward the ball, above, steeper; distances in inches (scaled as above).
+
+  const HANDS = [I.L_WRIST, I.R_WRIST, I.L_INDEX, I.R_INDEX];
+  const SHAFT_SEEN = 0.35;
+
+  /** The hands: wrists and index fingers, weighted by how sure MediaPipe is of each. */
+  function handsAt(lm, aspect) {
+    let sw = 0, sx = 0, sy = 0;
+    for (const k of HANDS) {
+      const w = Math.max(lm[k * 3 + 2], 1e-3);
+      sw += w; sx += lm[k * 3] * w; sy += lm[k * 3 + 1] * w;
+    }
+    return { x: sx / sw * aspect, y: sy / sw };
+  }
+
+  /** How steeply a shaft at `deg` (in the picture) runs down toward the ball, in degrees. */
+  function steepness(deg, m) {
+    let dx = Math.cos(deg / DEG), dy = Math.sin(deg / DEG);
+    if (m * dx < 0) { dx = -dx; dy = -dy; }
+    return Math.atan2(dy, m * dx) * DEG;
+  }
+
+  /**
+   * @param frames down-the-line pose frames [{t, lm, w, club}]
+   * @param aspect picture width / height
+   * @param address frame index of address (P1) in these frames
+   * @param ball optional {x, y} where the server found the ball, to tell which way it is
+   * @returns {values: [per-frame values | null], address, scale} | null
+   */
+  function computeDTL(frames, aspect, address, ball) {
+    const f0 = frames[address];
+    if (!f0 || !f0.lm) return null;
+    const px = (lm, i) => ({ x: lm[i * 3] * aspect, y: lm[i * 3 + 1] });
+    const hipsOf = lm => mid(px(lm, I.L_HIP), px(lm, I.R_HIP));
+    // Which way the ball is: +1 when it's to the picture's right (a right-hander filmed from behind).
+    const hip0 = hipsOf(f0.lm);
+    const m = Math.sign((ball ? ball.x * aspect : px(f0.lm, I.NOSE).x) - hip0.x) || 1;
+    const scale = scaleAt(f0, aspect);
+    const inch = scale ? scale * INCHES_PER_METRE : null;
+
+    const raw = frames.map(f => {
+      if (!f.lm) return null;
+      const hips = hipsOf(f.lm), sh = mid(px(f.lm, I.L_SHOULDER), px(f.lm, I.R_SHOULDER));
+      const ears = [I.NOSE, I.L_EAR, I.R_EAR].map(i => px(f.lm, i));
+      return {
+        hips, sh, hands: handsAt(f.lm, aspect),
+        head: { x: ears.reduce((a, p) => a + p.x, 0) / 3, y: ears.reduce((a, p) => a + p.y, 0) / 3 },
+        // Forward bend: the spine's lean from upright toward the ball.
+        bend: Math.atan2(m * (sh.x - hips.x), hips.y - sh.y) * DEG,
+        steep: f.club && f.club[1] >= SHAFT_SEEN ? steepness(f.club[0], m) : null,
+      };
+    });
+    const base = raw[address];
+    // The plane line: the shaft at address, through the hands.
+    const plane = f0.club && f0.club[1] >= SHAFT_SEEN ? { at: base.hands, a: f0.club[0] / DEG } : null;
+
+    const values = raw.map(v => {
+      if (!v) return null;
+      const r = { bend: v.bend, bendChange: v.bend - base.bend };
+      if (v.steep != null && base.steep != null) r.shaftPlane = v.steep - base.steep;
+      if (inch) {
+        r.hipDepth = m * (v.hips.x - base.hips.x) * inch;
+        r.headDepth = m * (v.head.x - base.head.x) * inch;
+        r.handHeight = (v.sh.y - v.hands.y) * inch;
+        r.handDepth = m * (v.sh.x - v.hands.x) * inch;
+        if (plane) {
+          // Straight-line distance from the hands up (+) or down to the plane line.
+          const lineY = plane.at.y + Math.tan(plane.a) * (v.hands.x - plane.at.x);
+          r.handsPlane = (lineY - v.hands.y) * Math.abs(Math.cos(plane.a)) * inch;
+        }
+      }
+      return r;
+    });
+    return { values, address, scale };
+  }
+
+  const api = { compute, computeDTL };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingMetrics = api;
 })(typeof window !== "undefined" ? window : globalThis);
