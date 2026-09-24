@@ -32,14 +32,41 @@ Square Omni's numbers for that shot.
 
 Setup, build, deploy and network details are in **[HOME-SETUP.md](HOME-SETUP.md)**.
 
-## Quick reference
+## Common commands
 
-- **Deploy the server:** on the server, `git -C D:\SwingClips\app pull`, then restart
-  `Start server.cmd` (it creates its Python environment and installs `requirements.txt` on first run).
-- **Build the phone app:** in `capture/`, Gradle `assembleDebug` with JDK 21, then
-  `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
-- **Run the web app locally:** `npm install`, then `npm run dev` and open http://localhost:3000.
-  Camera and microphone need HTTPS or localhost.
+On the **server** (Command Prompt; these work from any folder):
+
+```bat
+:: Start the server (it opens its own window; stop it with Ctrl+C or by closing that window)
+"D:\SwingClips\app\server\Start server.cmd"
+
+:: Deploy the latest version: pull, then stop and start the server again
+git -C D:\SwingClips\app pull
+
+:: Is the server up? (prints the server's clock if it is)
+curl http://localhost:8000/api/time
+
+:: The auto-start task: find its name, then see its last run time and result
+schtasks /query /fo list | findstr /i "swing"
+schtasks /query /tn "<task name>" /v /fo list
+```
+
+If the auto-start task started the server at boot, it has no window. Stop it before starting it
+by hand, or the second copy can't use port 8000: `schtasks /end /tn "<task name>"`. Then start it
+again with `schtasks /run /tn "<task name>"` or with `Start server.cmd`.
+
+To check auto-start after a reboot, don't log in to the server. Open http://192.168.86.250:8000
+on your phone instead. If the page loads, the server started by itself.
+
+On the **sim laptop**: run `Square watcher.cmd` (in the Dropbox `SwingClips` folder) after
+Square Golf's app is open.
+
+On the **dev PC**:
+
+- **Build and install the phone app:** in `capture/`, Gradle `assembleDebug` with JDK 21, then
+  `adb install -r app/build/outputs/apk/debug/app-debug.apk` with the phone plugged in.
+- **Run the original web app locally:** `npm install`, then `npm run dev` and open
+  http://localhost:3000. Camera and microphone need HTTPS or localhost.
 
 ## Credits and license
 
