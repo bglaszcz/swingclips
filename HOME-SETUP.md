@@ -93,7 +93,8 @@ monitor's numbers for that shot.
   `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
   ~14 s, GSPro connector ~1 s); each match records its gap.
-- Deploy on the server: `git -C D:\SwingClips\app pull`, then restart `Start server.cmd`.
+- Deploy on the server: `git -C D:\SwingClips\app pull`, then `Stop server.cmd` and
+  `Start server.cmd` (Stop also finds the background copy the auto-start task runs).
 
 ### `relay/` - launch monitor to server (runs on the sim laptop, nothing to install)
 - **`square-watcher.ps1`** (used): Square Golf's Windows app saves every shot to a plain SQLite

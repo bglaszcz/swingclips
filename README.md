@@ -37,26 +37,29 @@ Setup, build, deploy and network details are in **[HOME-SETUP.md](HOME-SETUP.md)
 On the **server** (Command Prompt; these work from any folder):
 
 ```bat
-:: Start the server (it opens its own window; stop it with Ctrl+C or by closing that window)
+:: Stop the server, wherever it's running (see below)
+"D:\SwingClips\app\server\Stop server.cmd"
+
+:: Start it in a window (Ctrl+C or closing the window stops it)
 "D:\SwingClips\app\server\Start server.cmd"
 
-:: Deploy the latest version: pull, then stop and start the server again
+:: Deploy the latest version: pull, then stop and start
 git -C D:\SwingClips\app pull
 
 :: Is the server up? (prints the server's clock if it is)
 curl http://localhost:8000/api/time
-
-:: The auto-start task: find its name, then see its last run time and result
-schtasks /query /fo list | findstr /i "swing"
-schtasks /query /tn "<task name>" /v /fo list
 ```
 
-If the auto-start task started the server at boot, it has no window. Stop it before starting it
-by hand, or the second copy can't use port 8000: `schtasks /end /tn "<task name>"`. Then start it
-again with `schtasks /run /tn "<task name>"` or with `Start server.cmd`.
+After a reboot, the auto-start task runs the server **in the background**. It has no window and
+nothing on the taskbar, and in Task Manager it only shows as `python.exe` on the Details tab. So:
 
-To check auto-start after a reboot, don't log in to the server. Open http://192.168.86.250:8000
-on your phone instead. If the page loads, the server started by itself.
+- `Stop server.cmd` stops it anyway. It finds the server by the port it listens on (8000), not by
+  a window. Starting a second copy while one is running fails with "only one usage of each socket
+  address".
+- To restart after a deploy, run `Stop server.cmd`, then `Start server.cmd`. The server then runs
+  in that window until the next reboot, when the task takes over again.
+- To check auto-start after a reboot, don't log in to the server. Open http://192.168.86.250:8000
+  on your phone instead. If the page loads, the server started by itself.
 
 On the **sim laptop**: run `Square watcher.cmd` (in the Dropbox `SwingClips` folder) after
 Square Golf's app is open.
