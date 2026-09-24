@@ -17,6 +17,9 @@
   const CLUB_DEFINED = ["p2", "p6", "p8"];
   // A shaft crossing counts as seen (not estimated) with a clear sighting of the shaft this close.
   const SHAFT_CONFIDENT = 0.35, SHAFT_SEEN_SECONDS = 0.02;
+  // Address: the shaft holds within REST_DEGREES for at least REST_SECONDS before the takeaway;
+  // P1 is put ADDRESS_LEAD before the takeaway starts, so the club is clearly still at rest.
+  const REST_SECONDS = 0.3, REST_DEGREES = 2, ADDRESS_LEAD = 0.1;
   const TORSO_MIN_VISIBILITY = 0.25;
   // Down-the-line, the hands spend much of the swing behind the body, so MediaPipe reports low
   // "visibility" while still placing them well. Trust them; the torso gates the frame.
@@ -108,6 +111,32 @@
     return out;
   }
 
+  /**
+   * The last frame before time `before` that ends a stretch of REST_SECONDS with the shaft still:
+   * where the takeaway starts. Index into frames, or -1.
+   */
+  function shaftRestEnd(frames, before) {
+    for (let i = frames.length - 1; i >= 0; i--) {
+      const f = frames[i];
+      if (f.t > before || !f.club) continue;
+      let ok = true, j = i;
+      for (; j >= 0 && f.t - frames[j].t <= REST_SECONDS; j--) {
+        const c = frames[j].club;
+        if (!c || Math.abs(((c[0] - f.club[0] + 540) % 360) - 180) > REST_DEGREES) { ok = false; break; }
+      }
+      if (ok && j >= 0) return i;   // j >= 0: the whole stretch is inside the clip
+    }
+    return -1;
+  }
+
+  function nearestFrame(frames, t) {
+    let best = -1;
+    frames.forEach((f, i) => {
+      if (f.lm && (best < 0 || Math.abs(f.t - t) < Math.abs(frames[best].t - t))) best = i;
+    });
+    return best;
+  }
+
   function nearest(ms, t) {
     let best = 0;
     ms.forEach((m, i) => { if (Math.abs(m.t - t) < Math.abs(ms[best].t - t)) best = i; });
@@ -128,7 +157,8 @@
    * @param leadSide "left" for a right-handed golfer
    * @param impactWindow optional [from, to] clip seconds when the strike was heard
    * @param impactTime optional clip seconds of the first frame without the ball
-   * @returns [{key, tag, label, t, index, estimated}] - index is into `frames`
+   * @returns [{key, tag, label, t, index, estimated}] - index is into `frames` - with a `takeaway`
+   *   property: {t, fromShaft}, when the club starts back
    */
   function detect(frames, aspect, leadSide = "left", impactWindow = null, impactTime = null) {
     const ms = metrics(frames, aspect, leadSide);
@@ -228,7 +258,20 @@
         found.push({ key, tag: key.toUpperCase(), label: LABELS[key], t: frames[c.index].t, index: c.index, estimated: !c.seen });
       }
     }
-    return found.sort((a, b) => a.key.localeCompare(b.key));
+
+    // P1 address: the club at rest behind the ball, not already moving back. With the shaft
+    // tracked, the takeaway is where it stops holding still; otherwise, where the hands' quiet
+    // stretch ends. Either way P1 sits a little before that.
+    const restEnd = shaftRestEnd(frames, shaft.p2 ? frames[shaft.p2.index].t : ms[top].t);
+    const takeaway = restEnd >= 0 ? frames[restEnd].t : ms[address].t;
+    const p1 = found.find(p => p.key === "p1");
+    const a = nearestFrame(frames, takeaway - ADDRESS_LEAD);
+    if (p1 && a >= 0) Object.assign(p1, { t: frames[a].t, index: a });
+
+    found.sort((a, b) => a.key.localeCompare(b.key));
+    // For tempo: when the club starts back, and whether that came from the shaft.
+    found.takeaway = { t: takeaway, fromShaft: restEnd >= 0 };
+    return found;
   }
 
   const api = { detect };

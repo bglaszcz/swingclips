@@ -21,7 +21,7 @@ import club
 # at another .task file to compare.
 MODEL = os.environ.get("SWINGCLIPS_POSE_MODEL", os.path.join(
     os.path.dirname(__file__), "..", "public", "mediapipe", "pose_landmarker_full.task"))
-VERSION = 3
+VERSION = 4
 # MediaPipe works on a 256px input internally, so half size loses nothing and halves the conversion.
 SCALE = 0.5
 ROTATE_CW = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
@@ -75,7 +75,8 @@ def decode_range(container, start_pts, end_pts):
 def run_chunk(args):
     """Pose and shaft scores for frames with start_pts <= pts < end_pts.
 
-    Returns [(t seconds, landmarks | None, shaft scores | None)].
+    Returns [(t seconds, landmarks | None, world landmarks | None, shaft scores | None)]. World
+    landmarks are MediaPipe's 3D estimate: metres, origin between the hips, z away from the camera.
     """
     cv2.setNumThreads(1)
     import mediapipe as mp
@@ -99,12 +100,14 @@ def run_chunk(args):
                 res = lm.detect_for_video(
                     mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb)),
                     int(round(t * 1000)))
-                landmarks = shaft = None
+                landmarks = world = shaft = None
                 if res.pose_landmarks:
                     landmarks = [(p.x, p.y, p.visibility) for p in res.pose_landmarks[0]]
+                    if res.pose_world_landmarks:
+                        world = [(p.x, p.y, p.z) for p in res.pose_world_landmarks[0]]
                     if bg is not None and res.segmentation_masks:
                         shaft = shaft_scores(f, rotation, landmarks, res.segmentation_masks[0].numpy_view(), bg)
-                out.append((t, landmarks, shaft))
+                out.append((t, landmarks, world, shaft))
     finally:
         lm.close()
     return out
@@ -123,11 +126,13 @@ def shaft_scores(frame, rotation, landmarks, person, bg):
     return club.scores(img, landmarks, mask, bg)
 
 
-def smooth(times, landmarks):
+def smooth(times, landmarks, spatial=2):
     """Landmarks with jitter taken out: a running median, then a local quadratic fit in time.
 
     A quadratic follows the hands through impact without cutting the corner, where a plain average
-    would drag them behind. Frames without a person are left out and stay None.
+    would drag them behind. Frames without a person are left out and stay None. The first `spatial`
+    values of each point are positions and get the curve fit; any after that (visibility) just the
+    median.
     """
     have = [i for i, lm in enumerate(landmarks) if lm is not None]
     if len(have) < MEDIAN_FRAMES:
@@ -154,7 +159,7 @@ def smooth(times, landmarks):
         coef, *_ = np.linalg.lstsq(a, flat[lo:hi + 1] * np.sqrt(w)[:, None], rcond=None)
         out[i] = coef[0]
     out = out.reshape(x.shape)
-    out[..., 2] = med[..., 2]                          # visibility: no curve, just the median
+    out[..., spatial:] = med[..., spatial:]
     result = list(landmarks)
     for k, i in enumerate(have):
         result[i] = out[k]
@@ -331,7 +336,8 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
                     key=lambda fr: fr[0])
     ball, impact = find_impact(path, rotation, frames, jobs, pool)
     times = [t for t, *_ in frames]
-    smoothed = smooth(times, [lm for _, lm, _ in frames])
+    smoothed = smooth(times, [lm for _, lm, _, _ in frames])
+    world = smooth(times, [w for _, _, w, _ in frames], spatial=3)
     shaft = club.track(times, [s for *_, s in frames])
     first = next((lm for lm in smoothed if lm is not None), None)
     h, w = (bg.shape[:2] if bg is not None else (1, 1))
@@ -344,8 +350,11 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
         # Shaft length to draw, as a share of the picture height.
         "clubLength": club.length(first, ball, w, h) if first is not None else None,
         # lm: flat [x, y, visibility] * 33 per frame, rounded to keep the JSON small.
+        # w: flat [x, y, z] * 33 in metres (MediaPipe's 3D estimate; origin between the hips, x to the
+        # picture's right, y down, z away from the camera).
         # club: [shaft angle in degrees (0 = right, 90 = down), confidence 0-1] or null.
         "frames": [{"t": round(t, 6), "lm": None if lm is None else [round(float(v), 4) for p in lm for v in p],
+                    "w": None if w is None else [round(float(v), 3) for p in w for v in p],
                     "club": list(c) if c else None}
-                   for t, lm, c in zip(times, smoothed, shaft)],
+                   for t, lm, w, c in zip(times, smoothed, world, shaft)],
     }

@@ -98,6 +98,12 @@
   .pos span { display: block; padding: 4px 6px; font-size: 11px; line-height: 1.25; }
   .pos b { color: var(--accent); }
   .pos i { color: var(--warn); font-style: normal; }
+  #numbers { display: flex; flex-direction: column; gap: 8px; }
+  #tempo { font-variant-numeric: tabular-nums; }
+  #numbers table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  #numbers th, #numbers td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  #numbers th:first-child, #numbers td:first-child { text-align: left; color: var(--muted); }
+  #numbers .note { color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -119,6 +125,9 @@
       <span id="speeds"></span>
       <span class="sep"></span>
       <button id="skeleton" title="Show the pose skeleton (S)">Skeleton</button>
+      <button id="angles" title="Show the angles for the frame on screen (A)">Angles</button>
+      <button id="handpath" title="Show the path of the hands through the swing (H)">Hand path</button>
+      <button id="headbox" title="Show where the head was at address">Head</button>
       <button id="delete-clip" class="danger" title="Move this clip to the trash">Delete</button>
       <span id="frame"></span>
     </div>
@@ -131,11 +140,21 @@
       <div id="pos-note"></div>
       <div id="pos-list"></div>
     </div>
+    <div id="numbers" hidden>
+      <strong>Swing numbers</strong>
+      <div id="tempo"></div>
+      <div style="overflow-x: auto"><table id="num-table"></table></div>
+      <div class="note">Turns are from how much narrower the hips and shoulders look than at address;
+        inches are scaled from the body's estimated size. Both are estimates from one camera: best
+        for comparing your own swings. Turn + = closed (going back), - = open; tilt + = lead side higher /
+        spine away from the target; sway + = toward the target.</div>
+    </div>
     <div id="title"></div>
   </section>
 </main>
 <div id="toast" hidden><span id="toast-text"></span><button id="toast-undo" class="small">Undo</button></div>
 <script src="/static/phases.js"></script>
+<script src="/static/metrics.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
@@ -172,11 +191,17 @@ const skeletonBtn = document.getElementById("skeleton");
 
 let clips = [];
 let current = null;       // name of the open clip
-let pose = null;          // { frames: [{t, lm}], reference } for the open clip
+let pose = null;          // { frames: [{t, lm, w, club}], reference, impact, clubLength } for the open clip
 let fps = 30;
 let speed = 1;
 let showSkeleton = true;
 try { showSkeleton = localStorage.getItem("skeleton") !== "off"; } catch {}
+// Extra overlays, each remembered like the skeleton.
+const overlays = { angles: true, handpath: false, headbox: false };
+for (const k in overlays) {
+  try { const v = localStorage.getItem("overlay-" + k); if (v) overlays[k] = v === "on"; } catch {}
+}
+let metrics = null;       // SwingMetrics.compute for the open clip
 
 // Probe clips are named like cam0_1920x1080_240fps_hs_1789123456.mp4 - the number after the size is fps.
 function fpsFromName(name) {
@@ -323,6 +348,109 @@ function drawPose(ctx, frame, r, withLabel) {
   }
 }
 
+// The numbers, in the order they're listed on the video and in the table: [label, key, unit].
+const READOUT = [
+  ["Pelvis turn", "pelvisTurn", "°"], ["Shoulder turn", "shoulderTurn", "°"], ["X-factor", "separation", "°"],
+  ["Lead arm", "leadArm", "°"], ["Shaft", "club", "°"],
+  ["Spine tilt", "spineTilt", "°"], ["Forward bend", "spineForward", "°"],
+  ["Hip tilt", "pelvisTilt", "°"], ["Shoulder tilt", "shoulderTilt", "°"],
+  ["Head sway", "headSway", "in"], ["Head rise", "headRise", "in"], ["Hip sway", "hipSway", "in"],
+];
+const PATH_BACK_COLOR = "#facc15", PATH_DOWN_COLOR = "#f472b6", HEAD_COLOR = "#a78bfa";
+
+function fmtValue(v, key, unit) {
+  const x = v ? v[key] : null;
+  if (x == null || Number.isNaN(x)) return "--";
+  const n = unit === "in" ? x.toFixed(1) : Math.round(x).toString();
+  const signed = x > 0 && Number(n) !== 0 ? "+" + n : n.replace(/^-0(\.0)?$/, "0");
+  // The shaft angle is filled in where the club couldn't be seen.
+  const guess = key === "club" && v.clubSeen === false ? " ~" : "";
+  return (unit === "in" ? signed + '"' : signed + "°") + guess;
+}
+
+/**
+ * The numbers for the frame on screen: beside the picture if the black bars have room for them
+ * (a portrait clip in a wide player), else over its top left corner.
+ */
+function drawAngles(ctx, v, r) {
+  const dpr = window.devicePixelRatio || 1;
+  const fontSize = Math.max(11 * dpr, Math.min(15 * dpr, ctx.canvas.height / 34));
+  const lh = fontSize * 1.35, pad = fontSize * 0.6;
+  ctx.save();
+  ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
+  const labelW = Math.max(...READOUT.map(([l]) => ctx.measureText(l).width));
+  const valueW = ctx.measureText("+100.0\" ~").width;
+  const w = labelW + valueW + pad * 3, h = READOUT.length * lh + pad * 1.4;
+  const x = r.x >= w + 16 ? r.x - w - 8 : r.x + 8, y = r.y + 8;
+  ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 6);
+  ctx.fill();
+  READOUT.forEach(([label, key, unit], i) => {
+    const ty = y + pad + lh * (i + 0.8);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.textAlign = "left";
+    ctx.fillText(label, x + pad, ty);
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "right";
+    ctx.fillText(fmtValue(v, key, unit), x + w - pad, ty);
+  });
+  ctx.restore();
+}
+
+/** The hands' path from address to the end of the clip: back in yellow, down and through in pink. */
+function drawHandPath(ctx, r, lineWidth) {
+  const f = pose.frames, top = positions.find(p => p.key === "p4");
+  const from = metrics.address, split = top ? top.index : f.length;
+  ctx.save();
+  ctx.lineWidth = lineWidth;
+  ctx.lineJoin = ctx.lineCap = "round";
+  for (const [a, b, color] of [[from, split, PATH_BACK_COLOR], [split, f.length - 1, PATH_DOWN_COLOR]]) {
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    let started = false;
+    for (let i = a; i <= b && i < f.length; i++) {
+      const lm = f[i].lm;
+      if (!lm) continue;
+      const x = r.x + (lm[L_INDEX * 3] + lm[R_INDEX * 3]) / 2 * r.w;
+      const y = r.y + (lm[L_INDEX * 3 + 1] + lm[R_INDEX * 3 + 1]) / 2 * r.h;
+      if (started) ctx.lineTo(x, y); else { ctx.moveTo(x, y); started = true; }
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Where the head was at address (dashed ring) and where it is now. */
+function drawHead(ctx, lm, r, lineWidth) {
+  const head = a => {
+    const pts = [LM.NOSE, 7, 8].map(i => ({ x: a[i * 3], y: a[i * 3 + 1] }));
+    return { x: r.x + pts.reduce((s, p) => s + p.x, 0) / 3 * r.w, y: r.y + pts.reduce((s, p) => s + p.y, 0) / 3 * r.h };
+  };
+  const a0 = pose.frames[metrics.address].lm;
+  if (!a0) return;
+  const was = head(a0), now = head(lm);
+  // About a head's size: the eye-level-to-feet height is ~7 heads.
+  const body = (Math.max(a0[LM.L_ANKLE * 3 + 1], a0[LM.R_ANKLE * 3 + 1]) - a0[LM.NOSE * 3 + 1]) * r.h;
+  ctx.save();
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = HEAD_COLOR;
+  ctx.setLineDash([lineWidth * 3, lineWidth * 2]);
+  ctx.beginPath();
+  ctx.arc(was.x, was.y, body / 13, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(was.x, was.y);
+  ctx.lineTo(now.x, now.y);
+  ctx.stroke();
+  ctx.fillStyle = HEAD_COLOR;
+  ctx.beginPath();
+  ctx.arc(now.x, now.y, lineWidth * 1.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function draw(t) {
   const dpr = window.devicePixelRatio || 1;
   const W = Math.round(canvas.clientWidth * dpr), H = Math.round(canvas.clientHeight * dpr);
@@ -331,9 +459,13 @@ function draw(t) {
   ctx.clearRect(0, 0, W, H);
   showFrameLabel(t);
   markPosition(t);
-  if (!showSkeleton || !pose || !pose.frames.length || !video.videoWidth) return;
-  const frame = pose.frames[frameIndexAt(t)];
-  if (frame.lm) drawPose(ctx, frame, fitRect(W, H), true);
+  if (!pose || !pose.frames.length || !video.videoWidth) return;
+  const i = frameIndexAt(t), frame = pose.frames[i], r = fitRect(W, H);
+  const lineWidth = Math.max(1.5, 3 * r.w / 400);
+  if (metrics && overlays.handpath) drawHandPath(ctx, r, lineWidth);
+  if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !(metrics && overlays.angles));
+  if (metrics && overlays.headbox && frame.lm) drawHead(ctx, frame.lm, r, lineWidth);
+  if (metrics && overlays.angles) drawAngles(ctx, metrics.values[i], r);
 }
 
 function showFrameLabel(t) {
@@ -389,6 +521,13 @@ function setSkeleton(on) {
   draw(video.currentTime);
 }
 
+function setOverlay(key, on) {
+  overlays[key] = on;
+  document.getElementById(key).classList.toggle("on", on);
+  try { localStorage.setItem("overlay-" + key, on ? "on" : "off"); } catch {}
+  draw(video.currentTime);
+}
+
 function updateSkeletonButton() {
   const c = clips.find(c => c.name === current);
   const state = c ? c.pose : "done";
@@ -398,6 +537,7 @@ function updateSkeletonButton() {
 
 async function loadPose(name) {
   pose = null;
+  metrics = null;
   updateSkeletonButton();
   const c = clips.find(c => c.name === name);
   if (!c || c.pose !== "done") return;
@@ -487,6 +627,9 @@ async function buildPositions(name) {
   const strikeWindow = name.startsWith("swing_") ? [1.9, 2.4] : null;
   positions = SwingPhases.detect(pose.frames, video.videoWidth / video.videoHeight, leadSide, strikeWindow,
                                  pose.impact);
+  metrics = SwingMetrics.compute(pose.frames, video.videoWidth / video.videoHeight, leadSide, positions);
+  showNumbers();
+  draw(video.currentTime);
   positionsBox.hidden = false;
   document.getElementById("pos-note").textContent = positions.length
     ? "Tap one to jump there. ~ = estimated (the club couldn't be seen clearly then)."
@@ -513,6 +656,39 @@ async function buildPositions(name) {
     if (run !== positionsRun) return;
     await grabThumb(cards[i].querySelector("canvas"), positions[i], crop);
   }
+}
+
+/** Tempo, and the numbers at address, the top and impact. */
+function showNumbers() {
+  const box = document.getElementById("numbers");
+  const cols = ["p1", "p4", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
+  box.hidden = !metrics || !cols.length;
+  if (box.hidden) return;
+  const tp = metrics.tempo;
+  document.getElementById("tempo").textContent = tp
+    ? `Tempo ${tp.ratio.toFixed(1)} : 1 - backswing ${tp.back.toFixed(2)} s (from takeaway), downswing ${tp.down.toFixed(2)} s`
+    : "";
+  const table = document.getElementById("num-table");
+  const head = document.createElement("tr");
+  head.innerHTML = "<th></th>";
+  for (const p of cols) {
+    const th = document.createElement("th");
+    th.textContent = `${p.tag} ${p.label}`;
+    head.append(th);
+  }
+  const rows = READOUT.map(([label, key, unit]) => {
+    const tr = document.createElement("tr");
+    const name = document.createElement("td");
+    name.textContent = label;
+    tr.append(name);
+    for (const p of cols) {
+      const td = document.createElement("td");
+      td.textContent = fmtValue(metrics.values[p.index], key, unit);
+      tr.append(td);
+    }
+    return tr;
+  });
+  table.replaceChildren(head, ...rows);
 }
 
 function jumpTo(index) {
@@ -543,8 +719,10 @@ function open(name) {
   fps = fpsFromName(name);
   pose = null;
   positions = [];
+  metrics = null;
   positionsRun++;
   positionsBox.hidden = true;
+  document.getElementById("numbers").hidden = true;
   posList.replaceChildren();
   video.src = "/clips/" + encodeURIComponent(name);
   video.playbackRate = speed;
@@ -804,6 +982,7 @@ function closeViewer() {
   current = null;
   pose = null;
   positions = [];
+  metrics = null;
   positionsRun++;
   video.removeAttribute("src");
   video.load();
@@ -854,12 +1033,18 @@ document.getElementById("speeds").replaceChildren(...SPEEDS.map(s => {
 setSpeed(1);
 setSkeleton(showSkeleton);
 skeletonBtn.onclick = () => setSkeleton(!showSkeleton);
+for (const key in overlays) {
+  setOverlay(key, overlays[key]);
+  document.getElementById(key).onclick = () => setOverlay(key, !overlays[key]);
+}
 document.getElementById("prev").onclick = () => step(-1);
 document.getElementById("next").onclick = () => step(1);
 document.addEventListener("keydown", e => {
   if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
   if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
   if (e.key === "s" || e.key === "S") setSkeleton(!showSkeleton);
+  if (e.key === "a" || e.key === "A") setOverlay("angles", !overlays.angles);
+  if (e.key === "h" || e.key === "H") setOverlay("handpath", !overlays.handpath);
 });
 
 // Pick up new clips and finished analyses without a manual reload.

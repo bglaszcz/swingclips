@@ -46,8 +46,14 @@ monitor's numbers for that shot.
   that impact, or on the heard strike ~2 s into capture clips if the ball wasn't found), groups
   clips into sessions, deletes to the trash with Undo, and shows each clip's shot numbers. P2, P6
   and P8 are when the shaft passes horizontal; marked ~ when the shaft wasn't clearly seen then.
-  This assumes a face-on camera.
-- Pose files are named by version (`<clip>.v3.json.gz`); when `pose.py` changes enough to bump
+  P1 (address) is 0.1 s before the shaft starts moving back. This assumes a face-on camera.
+- Swing numbers (`static/metrics.js`), on the video (Angles) and in a table at address / top /
+  impact: pelvis and shoulder turn, X-factor, lead arm, shaft, spine tilt, forward bend, hip and
+  shoulder tilt, head sway / rise, hip sway, and tempo. Turns come from how much narrower the hips
+  and shoulders look than at address; MediaPipe's 3D estimate (saved per frame as `w`) is only used
+  for forward bend and for scale. Overlays: hand path, head position vs address. A kinematic
+  sequence isn't attempted: from face-on alone the turn speeds come out in the wrong order.
+- Pose files are named by version (`<clip>.v4.json.gz`); when `pose.py` changes enough to bump
   `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
   ~14 s, GSPro connector ~1 s); each match records its gap.
