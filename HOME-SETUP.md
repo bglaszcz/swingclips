@@ -1,14 +1,16 @@
 # SwingClips at home
 
 This fork adds a home setup on top of the original phone web app ([danny2p/swingclips](https://github.com/danny2p/swingclips)):
-a phone app records each swing when it hears the strike, a home server analyzes every clip and
+a phone app records each swing when it hears the strike (one phone face-on, optionally a second
+down the line), a home server analyzes every clip and
 serves a review page to any browser on the network, and each clip is tagged with the launch
 monitor's numbers for that shot.
 
 ```
- Phone (capture app)          Home server (http://192.168.86.250:8000)       Sim laptop (Square Omni)
- hears strike -> 2 s + 2 s -> clips, pose, key positions, review page  <---  Square watcher: each new
- clip, uploads over Wi-Fi                                                     shot from Square's app
+ Phones (capture app)         Home server (http://192.168.86.250:8000)       Sim laptop (Square Omni)
+ face-on + down the line:     clips, pose, key positions, review page  <---  Square watcher: each new
+ each hears the strike ->     (pairs the two angles of each swing)           shot from Square's app
+ 2 s + 2 s clip, uploads
 ```
 
 ## A session
@@ -16,7 +18,8 @@ monitor's numbers for that shot.
 1. **Server** - running (see "Server" below for updates).
 2. **Laptop** - open Square Golf's app on the driving range, then run `Square watcher.cmd`
    (in `Dropbox\SwingClips`).
-3. **Phone** - open **SwingClips**, set sensitivity / mode, then **Start recording swings**.
+3. **Phones** - open **SwingClips** on each, check the angle (Face-on / Down the line),
+   sensitivity and mode, then **Start recording** on both.
 4. **Review** - `http://homeserver:8000` on a PC, or `http://192.168.86.250:8000` on a phone.
 
 ## Pieces
@@ -28,9 +31,30 @@ monitor's numbers for that shot.
 - Modes: 1080p/720p at 240, 120 or 30 fps. 240 fps drops ~30% of frames on the S23 Ultra, 120 fps
   ~2-7%.
 - Opens **not recording**; settings are locked while recording. Clips wait in an outbox and upload
-  to `POST /api/upload`, retrying until the server confirms. Named `swing_WxH_FPSfps_<unix>.mp4`,
-  the unix time being the strike.
+  to `POST /api/upload`, retrying until the server confirms. Named
+  `swing_<angle>_WxH_FPSfps_<unix>_<strike>ms.mp4`: angle `face` or `dtl`, the unix time of the
+  strike on the **server's** clock (each phone reads it from `/api/time` at launch and at Start), and
+  how many ms into the clip the strike was heard. Older clips, `swing_WxH_FPSfps_<unix>.mp4`, are
+  face-on.
+- Runs on Android 9+ (minSdk 28), so an old Galaxy S8 works as the second camera. Its modes are
+  whatever its camera offers (the list is built per phone). If an encoder refuses the frame rate as
+  an operating rate, the app retries without it.
 - Build: `JAVA_HOME=~/.jdks/jbr-21.0.11`, Gradle 8.9 `assembleDebug`, then `adb install -r`.
+
+### Two angles
+- Each phone listens for the strike on its own; they don't talk to each other. The server pairs a
+  face-on and a down-the-line clip whose strikes are within 2 s (strikes are at least 3 s apart).
+- The review page lists one row per swing ("2 angles") and plays both side by side. The
+  down-the-line video follows the face-on one: exactly when paused or stepping frames, and nudged
+  back if it drifts while playing. They're lined up on impact: the frame the ball is gone in each
+  clip when the server found the ball in both, else the strike each phone heard.
+- Key-position cards show both angles; P1-P8 and the swing numbers come from the face-on clip (the
+  numbers assume face-on) and are carried across by the sync. Down the line shows the skeleton,
+  shaft, forward bend vs address ("Bend"), hand path, and the **plane line**: the shaft's line at
+  address, across the picture (P). Deleting a swing moves both clips to the trash.
+- A down-the-line clip with no face-on partner shows on its own, without the swing numbers.
+- Placing the down-the-line phone: behind the golfer on the target line (through the hands or the
+  ball), at about hand height, far enough back to fit the club at the top. Portrait, like face-on.
 
 ### `server/` - the home server (Python, FastAPI)
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON), `shots.jsonl` (launch
@@ -46,7 +70,9 @@ monitor's numbers for that shot.
   that impact, or on the heard strike ~2 s into capture clips if the ball wasn't found), groups
   clips into sessions, deletes to the trash with Undo, and shows each clip's shot numbers. P2, P6
   and P8 are when the shaft passes horizontal; marked ~ when the shaft wasn't clearly seen then.
-  P1 (address) is 0.1 s before the shaft starts moving back. This assumes a face-on camera.
+  P1 (address) is 0.1 s before the shaft starts moving back. This assumes a face-on camera (see
+  "Two angles" for the down-the-line one). Newer clips carry the heard strike's exact time, which
+  narrows the impact search to ±0.15 s around it.
 - Swing numbers (`static/metrics.js`), on the video (Angles) and in a table at address / top /
   impact: pelvis and shoulder turn, X-factor, lead arm, shaft, spine tilt, forward bend, hip and
   shoulder tilt, head sway / rise, hip sway, and tempo. Turns come from how much narrower the hips

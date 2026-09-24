@@ -6,6 +6,7 @@ Settings (environment variables): SWINGCLIPS_CLIPS (clips folder), SWINGCLIPS_PO
 default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 8000),
 SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landmarker_full.task).
 """
+import bisect
 import glob
 import gzip
 import json
@@ -40,8 +41,15 @@ POSE_WORKERS = max(1, min(4, (os.cpu_count() or 4) // 3))
 # A clip still being copied in keeps changing; wait until it has been left alone this long.
 SETTLE_SECONDS = 15
 
-# Probe clips end in _<unix seconds>.mp4, e.g. c0_1920x1080_240_hs_1789123456.mp4
-UNIX_TIME_SUFFIX = re.compile(r"_(\d{10})$")
+# Clips end in _<unix seconds>.mp4 (e.g. c0_1920x1080_240_hs_1789123456.mp4), capture app clips in
+# _<unix seconds>_<strike>ms.mp4.
+UNIX_TIME_SUFFIX = re.compile(r"_(\d{10})(?:_\d+ms)?$")
+# Capture app clips: swing_[<angle>_]<W>x<H>_<fps>fps_<unix seconds>[_<ms into the clip of the strike>ms].mp4
+# The angle and strike were added for two cameras; older clips have neither and are face-on.
+SWING_NAME = re.compile(r"^swing_(?:(face|dtl)_)?\d+x\d+_\d+fps_\d{10}(?:_(\d+)ms)?\.")
+# Two phones' clips of one swing are named after the strike each heard, on the server's clock
+# (each phone reads it from /api/time). Strikes are at least 3 s apart (the app's cooldown).
+PAIR_SLACK_S = 2.0
 
 # Name of the clip the worker is on right now, if any.
 pose_busy: str | None = None
@@ -177,19 +185,54 @@ def list_clips():
         if p.name in pending_trash:
             continue
         t = recorded_at(p)
+        m = SWING_NAME.match(p.name)
         clips.append({
             "name": p.name,
             "size": p.stat().st_size,
             "recorded": datetime.fromtimestamp(t).isoformat(timespec="seconds"),
             "pose": pose_state(p.name),
+            # Which way the camera looked, and when in the clip the phone heard the strike (s).
+            "angle": (m.group(1) or "face") if m else "face",
+            "strike": int(m.group(2)) / 1000 if m and m.group(2) else None,
+            "partner": None,
             "_t": t,
         })
     # Only the capture app's clips are named after the strike itself.
-    shots = match_shots({c["name"]: c["_t"] for c in clips if c["name"].startswith("swing_")})
+    swings = [c for c in clips if SWING_NAME.match(c["name"])]
+    pair_angles(swings)
+    # One shot per swing: paired by the face-on clip (or the only one), then shown on both angles.
+    by_name = {c["name"]: c for c in clips}
+    shots = match_shots({c["name"]: c["_t"] for c in swings if not (c["partner"] and c["angle"] != "face")})
+    for name, shot in shots.items():
+        by_name[name]["shot"] = shot
+        if by_name[name]["partner"]:
+            by_name[by_name[name]["partner"]]["shot"] = shot
     for c in clips:
-        c["shot"] = shots.get(c["name"])
+        c.setdefault("shot", None)
     clips.sort(key=lambda c: c.pop("_t"), reverse=True)
     return clips
+
+
+def pair_angles(swings: list[dict]) -> None:
+    """Sets "partner" on each face-on clip and the down-the-line clip of the same swing, if both exist."""
+    face = [c for c in swings if c["angle"] == "face"]
+    dtl = sorted((c for c in swings if c["angle"] == "dtl"), key=lambda c: c["_t"])
+    dtl_times = [c["_t"] for c in dtl]
+    pairs = []
+    for a in face:
+        for b in dtl[bisect.bisect_left(dtl_times, a["_t"] - PAIR_SLACK_S):
+                     bisect.bisect_right(dtl_times, a["_t"] + PAIR_SLACK_S)]:
+            pairs.append((abs(a["_t"] - b["_t"]), a, b))
+    # Closest first, each clip in one pair at most.
+    for _, a, b in sorted(pairs, key=lambda p: p[0]):
+        if a["partner"] is None and b["partner"] is None:
+            a["partner"], b["partner"] = b["name"], a["name"]
+
+
+@app.get("/api/time")
+def server_time():
+    """The server's clock, so each capture phone names its clips on the same clock."""
+    return {"ms": int(time.time() * 1000)}
 
 
 def checked_clip(name: str) -> Path:

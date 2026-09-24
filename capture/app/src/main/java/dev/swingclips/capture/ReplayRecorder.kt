@@ -83,19 +83,26 @@ class ReplayRecorder(
         // HEVC at half the bitrate MediaRecorder picks by default looked the same and is smaller.
         val bitrate = (mode.width.toLong() * mode.height * mode.fps / 20).coerceIn(4_000_000, 60_000_000).toInt()
         var lastError: Exception? = null
-        for (m in listOf(MediaFormat.MIMETYPE_VIDEO_HEVC, MediaFormat.MIMETYPE_VIDEO_AVC)) {
+        // Older encoders (e.g. the Galaxy S8's) may refuse an operating rate they don't advertise;
+        // they still keep up with the camera without being told it.
+        val attempts = listOf(MediaFormat.MIMETYPE_VIDEO_HEVC, MediaFormat.MIMETYPE_VIDEO_AVC)
+            .flatMap { listOf(it to true, it to false) }
+        for ((m, withRate) in attempts) {
             val fmt = MediaFormat.createVideoFormat(m, mode.width, mode.height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
                 setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
                 setInteger(MediaFormat.KEY_FRAME_RATE, mode.fps)
-                setInteger(MediaFormat.KEY_OPERATING_RATE, mode.fps)
-                setInteger(MediaFormat.KEY_PRIORITY, 0) // realtime
+                if (withRate) {
+                    setInteger(MediaFormat.KEY_OPERATING_RATE, mode.fps)
+                    setInteger(MediaFormat.KEY_PRIORITY, 0) // realtime
+                }
                 // Short GOPs: a clip can only start on a keyframe, and the server splits pose
                 // work at keyframes, so more of them means tighter clips and faster analysis.
                 setFloat(MediaFormat.KEY_I_FRAME_INTERVAL, 0.25f)
             }
+            var codec: MediaCodec? = null
             try {
-                val codec = MediaCodec.createEncoderByType(m)
+                codec = MediaCodec.createEncoderByType(m)
                 codec.setCallback(encoderCallback, handler)
                 codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                 encoderSurface = codec.createInputSurface()
@@ -104,7 +111,10 @@ class ReplayRecorder(
                 return codec
             } catch (e: Exception) {
                 lastError = e
-                Log.w(TAG, "encoder $m unavailable", e)
+                Log.w(TAG, "encoder $m${if (withRate) "" else " (no operating rate)"} unavailable", e)
+                runCatching { encoderSurface?.release() }
+                encoderSurface = null
+                runCatching { codec?.release() }
             }
         }
         throw IllegalStateException("No encoder for ${mode.label}", lastError)

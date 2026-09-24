@@ -12,6 +12,7 @@ import android.graphics.Typeface
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -44,6 +45,7 @@ class MainActivity : Activity() {
     private lateinit var sensitivityView: TextView
     private lateinit var modeButton: Button
     private lateinit var serverButton: Button
+    private lateinit var angleButton: Button
     private lateinit var uploadView: TextView
 
     private val main = Handler(Looper.getMainLooper())
@@ -60,6 +62,12 @@ class MainActivity : Activity() {
     private lateinit var uploader: Uploader
     private var saved = 0
     private var resumed = false
+    /**
+     * Server clock minus this phone's clock (ms), measured when the server is checked. Clips are
+     * named on the server's clock, so two phones' clips of one swing get matching times even if the
+     * phones' own clocks disagree.
+     */
+    @Volatile private var clockOffsetMs = 0L
     /** Only saves swings after Start is pressed; the camera and meter run before that for setup. */
     @Volatile private var armed = false
     private lateinit var startButton: Button
@@ -159,7 +167,8 @@ class MainActivity : Activity() {
         val rec = recorder ?: return
         val m = rec.mode
         val momentUs = rec.toVideoUs(nanoTime)
-        val wallMs = System.currentTimeMillis() - (System.nanoTime() - nanoTime) / 1_000_000
+        val wallMs = System.currentTimeMillis() - (System.nanoTime() - nanoTime) / 1_000_000 + clockOffsetMs
+        val angle = angle()
         main.post {
             tones.startTone(ToneGenerator.TONE_PROP_ACK, 150)
             flash.animate().cancel()
@@ -173,11 +182,13 @@ class MainActivity : Activity() {
             val endUs = momentUs + (POST_S * 1e6).toLong()
             val giveUp = System.currentTimeMillis() + ((POST_S + 3) * 1000).toLong()
             while ((rec.newestUs() ?: 0) < endUs && System.currentTimeMillis() < giveUp) Thread.sleep(100)
-            val name = "swing_${m.width}x${m.height}_${m.fps}fps_${wallMs / 1000}.mp4"
-            val tmp = File(outbox, "$name.tmp")
+            val tmp = File(outbox, "swing_$wallMs.tmp")
             val at = runCatching { rec.save(momentUs, (PRE_S * 1e6).toLong(), (POST_S * 1e6).toLong(), tmp) }
                 .onFailure { android.util.Log.e(ReplayRecorder.TAG, "save failed", it) }
                 .getOrNull()
+            // e.g. swing_dtl_1280x720_240fps_1789123456_2137ms.mp4: the angle, the strike's time (server
+            // clock), and how far into the clip it is - which lines up the two angles of one swing.
+            val name = "swing_${angle}_${m.width}x${m.height}_${m.fps}fps_${wallMs / 1000}_${at?.let { Math.round(it * 1000) }}ms.mp4"
             main.post {
                 if (at != null && tmp.renameTo(File(outbox, name))) {
                     saved++
@@ -193,6 +204,8 @@ class MainActivity : Activity() {
 
     private fun setArmed(on: Boolean) {
         armed = on
+        // Freshen the clock offset as a session starts.
+        if (on) checkServer()
         if (::startButton.isInitialized) showState()
     }
 
@@ -201,12 +214,12 @@ class MainActivity : Activity() {
         val count = if (saved > 0) " · $saved saved" else ""
         // Settings are for setting up; while recording they're locked so a stray tap can't
         // change them (or restart the camera mid-session). Stop to change them.
-        for (b in listOf(minusButton, plusButton, modeButton, serverButton)) {
+        for (b in listOf(minusButton, plusButton, modeButton, serverButton, angleButton)) {
             b.isEnabled = !armed
             b.alpha = if (armed) 0.4f else 1f
         }
         if (armed) {
-            setStatus("Recording swings$count", Color.rgb(74, 222, 128))
+            setStatus("Recording ${ANGLES.getValue(angle()).lowercase()}$count", Color.rgb(74, 222, 128))
             startButton.text = "Stop"
             startButton.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(185, 28, 28))
         } else {
@@ -262,6 +275,25 @@ class MainActivity : Activity() {
         modeButton.text = mode?.label ?: "No camera"
     }
 
+    /** Which way this phone looks at the golfer: "face" (face-on) or "dtl" (down the line). */
+    private fun angle() = prefs.getString("angle", "face").takeIf { it in ANGLES } ?: "face"
+
+    private fun chooseAngle() {
+        val keys = ANGLES.keys.toList()
+        AlertDialog.Builder(this)
+            .setTitle("This phone films")
+            .setSingleChoiceItems(ANGLES.values.toTypedArray(), keys.indexOf(angle())) { d, i ->
+                prefs.edit().putString("angle", keys[i]).apply()
+                updateAngleButton()
+                d.dismiss()
+            }
+            .show()
+    }
+
+    private fun updateAngleButton() {
+        angleButton.text = ANGLES.getValue(angle())
+    }
+
     private fun chooseServer() {
         val input = EditText(this).apply {
             setText(serverUrl())
@@ -282,18 +314,34 @@ class MainActivity : Activity() {
             .show()
     }
 
-    /** Quick reachability check so a wrong address shows up right away, not at the first swing. */
+    /**
+     * Quick reachability check so a wrong address shows up right away, not at the first swing. Also
+     * reads the server's clock, so this phone can name clips on it.
+     */
     private fun checkServer() {
         val url = serverUrl()
         serverButton.text = url.removePrefix("http://")
         Thread {
             val msg = try {
-                val conn = URL(url.trimEnd('/') + "/api/clips").openConnection() as HttpURLConnection
+                val sent = System.currentTimeMillis()
+                val conn = URL(url.trimEnd('/') + "/api/time").openConnection() as HttpURLConnection
                 conn.connectTimeout = 4000
                 conn.readTimeout = 4000
                 val code = conn.responseCode
+                val body = if (code == 200) conn.inputStream.bufferedReader().readText() else ""
+                val back = System.currentTimeMillis()
                 conn.disconnect()
-                if (code == 200) "Server connected" else "Server answered $code"
+                // {"ms": <server time>}; assume it was read halfway through the round trip.
+                val serverMs = Regex("\"ms\"\\s*:\\s*(\\d+)").find(body)?.groupValues?.get(1)?.toLongOrNull()
+                if (serverMs != null) {
+                    clockOffsetMs = serverMs - (sent + back) / 2
+                    android.util.Log.i(ReplayRecorder.TAG, "clock offset ${clockOffsetMs} ms (round trip ${back - sent} ms)")
+                }
+                when {
+                    code == 404 -> "Server needs updating (no /api/time)"
+                    code != 200 -> "Server answered $code"
+                    else -> "Server connected"
+                }
             } catch (e: Exception) {
                 "Can't reach the server — check the address (${e.javaClass.simpleName})"
             }
@@ -333,8 +381,14 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.rgb(15, 20, 17))
         }
         root.setOnApplyWindowInsetsListener { v, insets ->
-            val i = insets.getInsets(WindowInsets.Type.systemBars())
-            v.setPadding(i.left, i.top, i.right, i.bottom)
+            if (Build.VERSION.SDK_INT >= 30) {
+                val i = insets.getInsets(WindowInsets.Type.systemBars())
+                v.setPadding(i.left, i.top, i.right, i.bottom)
+            } else {
+                @Suppress("DEPRECATION")
+                v.setPadding(insets.systemWindowInsetLeft, insets.systemWindowInsetTop,
+                    insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
+            }
             insets
         }
         setContentView(root)
@@ -402,8 +456,10 @@ class MainActivity : Activity() {
         ))
 
         modeButton = button("") { chooseMode() }
+        angleButton = button("") { chooseAngle() }
         serverButton = button("") { chooseServer() }.apply { textSize = 13f; maxLines = 1 }
-        panel.addView(row(modeButton, serverButton))
+        panel.addView(row(angleButton, modeButton))
+        panel.addView(row(serverButton))
 
         uploadView = TextView(this).apply { textSize = 14f; setPadding(0, dp(6), 0, 0) }
         panel.addView(uploadView)
@@ -417,6 +473,7 @@ class MainActivity : Activity() {
         })
 
         setSensitivity(prefs.getInt("sensitivity", 100))
+        updateAngleButton()
     }
 
     /** Fit the preview to the box with the recording's shape (portrait, so width and height swap). */
@@ -462,5 +519,8 @@ class MainActivity : Activity() {
         private const val POST_S = 2.0
         // Android can't look up Windows PC names, so the home server's LAN address.
         private const val DEFAULT_SERVER = "http://192.168.86.250:8000"
+        // Camera angles, by the key that goes in clip names. With a phone at each, the server pairs
+        // their clips of the same swing.
+        private val ANGLES = linkedMapOf("face" to "Face-on", "dtl" to "Down the line")
     }
 }

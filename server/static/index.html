@@ -73,10 +73,17 @@
   /* Phones: player above the list. Not sticky: it's taller than a phone screen, so pinning it
      would hide its own bottom and cover the list. */
   @media (max-width: 899px) { #viewer { order: -1; border-bottom: 1px solid var(--line); } }
-  .stage { position: relative; }
+  /* Two angles of one swing sit side by side (the clips are portrait, so they fit). */
+  #stages { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  #stages.two { grid-template-columns: 1fr 1fr; }
+  .stage { position: relative; min-width: 0; }
   video { display: block; width: 100%; height: 60vh; background: #000; border-radius: 6px; }
   @media (max-width: 899px) { video { height: 45vh; } }
-  #overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .angle-tag { position: absolute; top: 8px; right: 8px; z-index: 1; padding: 2px 8px; border-radius: 10px;
+               background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 12px; pointer-events: none; }
+  #stages:not(.two) .angle-tag { display: none; }
+  #video2 { cursor: pointer; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--line);
            background: var(--panel); color: var(--text); cursor: pointer; min-width: 44px; }
@@ -95,6 +102,9 @@
          background: var(--panel); }
   .pos.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .pos canvas { display: block; width: 96px; height: 128px; background: #000; }
+  /* Both angles in one card. */
+  .pos.two { width: 192px; }
+  .pos.two canvas { width: 192px; }
   .pos span { display: block; padding: 4px 6px; font-size: 11px; line-height: 1.25; }
   .pos b { color: var(--accent); }
   .pos i { color: var(--warn); font-style: normal; }
@@ -114,9 +124,18 @@
     <div id="list"></div>
   </aside>
   <section id="viewer" hidden>
-    <div class="stage">
-      <video id="video" controls playsinline muted preload="auto"></video>
-      <canvas id="overlay"></canvas>
+    <div id="stages">
+      <div class="stage">
+        <span class="angle-tag">Face-on</span>
+        <video id="video" controls playsinline muted preload="auto"></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <!-- The down-the-line clip of the same swing, when there is one; it follows the one above. -->
+      <div class="stage" id="stage2" hidden>
+        <span class="angle-tag">Down the line</span>
+        <video id="video2" playsinline muted preload="auto" title="Play / pause both"></video>
+        <canvas id="overlay2"></canvas>
+      </div>
     </div>
     <div class="controls">
       <button id="prev" title="Previous frame (←)">‹ Frame</button>
@@ -128,6 +147,7 @@
       <button id="angles" title="Show the angles for the frame on screen (A)">Angles</button>
       <button id="handpath" title="Show the path of the hands through the swing (H)">Hand path</button>
       <button id="headbox" title="Show where the head was at address">Head</button>
+      <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane</button>
       <button id="delete-clip" class="danger" title="Move this clip to the trash">Delete</button>
       <span id="frame"></span>
     </div>
@@ -182,22 +202,29 @@ const SPINE_COLOR = "#f59e0b", REF_SPINE_COLOR = "rgba(255, 255, 255, 0.6)";
 // The club shaft: solid where it was seen, faint and dashed where it's filled in between sightings.
 const SHAFT_COLOR = "#38bdf8", SHAFT_GUESS_COLOR = "rgba(56, 189, 248, 0.5)", SHAFT_CONFIDENT = 0.35;
 const L_INDEX = 19, R_INDEX = 20;
+// Down the line: the shaft's line at address, extended across the picture.
+const PLANE_COLOR = "rgba(239, 68, 68, 0.9)";
 
 const list = document.getElementById("list");
 const video = document.getElementById("video");
 const canvas = document.getElementById("overlay");
+const video2 = document.getElementById("video2");
+const canvas2 = document.getElementById("overlay2");
 const viewer = document.getElementById("viewer");
 const skeletonBtn = document.getElementById("skeleton");
 
 let clips = [];
-let current = null;       // name of the open clip
-let pose = null;          // { frames: [{t, lm, w, club}], reference, impact, clubLength } for the open clip
+let current = null;       // name of the open clip (the face-on one, when a swing has both angles)
+// { frames: [{t, lm, w, club}], reference, impact, clubLength, video, angle } for the open clip
+let pose = null;
+// The down-the-line clip of the open swing, if there is one: { name, pose } (pose as above, or null).
+let partner = null;
 let fps = 30;
 let speed = 1;
 let showSkeleton = true;
 try { showSkeleton = localStorage.getItem("skeleton") !== "off"; } catch {}
 // Extra overlays, each remembered like the skeleton.
-const overlays = { angles: true, handpath: false, headbox: false };
+const overlays = { angles: true, handpath: false, headbox: false, plane: true };
 for (const k in overlays) {
   try { const v = localStorage.getItem("overlay-" + k); if (v) overlays[k] = v === "on"; } catch {}
 }
@@ -225,21 +252,24 @@ function point(lm, i) {
   return v >= MIN_VISIBILITY ? { x: lm[i * 3], y: lm[i * 3 + 1] } : null;
 }
 
-/** Mid-hip to mid-shoulder, and how far it leans from vertical in the picture (degrees). */
-function spineLine(lm) {
+/**
+ * Mid-hip to mid-shoulder, and how far it leans from vertical in the picture (degrees): side bend
+ * face-on, forward bend down the line.
+ */
+function spineLine(lm, v = video) {
   const ls = point(lm, LM.L_SHOULDER), rs = point(lm, LM.R_SHOULDER);
   const lh = point(lm, LM.L_HIP), rh = point(lm, LM.R_HIP);
   if (!ls || !rs || !lh || !rh) return null;
   const shoulder = { x: (ls.x + rs.x) / 2, y: (ls.y + rs.y) / 2 };
   const hip = { x: (lh.x + rh.x) / 2, y: (lh.y + rh.y) / 2 };
-  const dx = (shoulder.x - hip.x) * video.videoWidth;
-  const dy = (hip.y - shoulder.y) * video.videoHeight;
+  const dx = (shoulder.x - hip.x) * v.videoWidth;
+  const dy = (hip.y - shoulder.y) * v.videoHeight;
   return { hip, shoulder, angle: Math.abs(Math.atan2(dx, dy) * 180 / Math.PI) };
 }
 
 /** Index of the frame on screen at time t: the last one that starts at or before t. */
-function frameIndexAt(t) {
-  const f = pose.frames;
+function frameIndexAt(t, p = pose) {
+  const f = p.frames;
   let lo = 0, hi = f.length - 1;
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
@@ -251,8 +281,8 @@ function frameIndexAt(t) {
 // ---- Drawing ----
 
 /** Where a picture of the video's shape sits inside a W x H box (letterboxed to keep its shape). */
-function fitRect(W, H) {
-  const vw = video.videoWidth, vh = video.videoHeight;
+function fitRect(W, H, v = video) {
+  const vw = v.videoWidth, vh = v.videoHeight;
   const k = Math.min(W / vw, H / vh);
   return { x: (W - vw * k) / 2, y: (H - vh * k) / 2, w: vw * k, h: vh * k };
 }
@@ -287,9 +317,9 @@ function drawLabel(ctx, text, at, fontSize) {
 }
 
 /** The shaft from the hands at the tracked angle (club = [degrees, confidence]). */
-function drawShaft(ctx, lm, club, toPx, r, lineWidth) {
+function drawShaft(ctx, lm, club, toPx, r, lineWidth, p = pose) {
   const grip = toPx({ x: (lm[L_INDEX * 3] + lm[R_INDEX * 3]) / 2, y: (lm[L_INDEX * 3 + 1] + lm[R_INDEX * 3 + 1]) / 2 });
-  const len = (pose.clubLength || 0.25) * r.h, a = club[0] * Math.PI / 180;
+  const len = (p.clubLength || 0.25) * r.h, a = club[0] * Math.PI / 180;
   ctx.save();
   ctx.lineWidth = lineWidth * 1.2;
   if (club[1] >= SHAFT_CONFIDENT) {
@@ -305,8 +335,8 @@ function drawShaft(ctx, lm, club, toPx, r, lineWidth) {
   ctx.restore();
 }
 
-/** Skeleton, spine and club shaft for one frame, into rectangle r of ctx's canvas. */
-function drawPose(ctx, frame, r, withLabel) {
+/** Skeleton, spine and club shaft for one frame of clip p (default: the open one), into rectangle r. */
+function drawPose(ctx, frame, r, withLabel, p = pose) {
   const lm = frame.lm;
   const toPx = p => ({ x: r.x + p.x * r.w, y: r.y + p.y * r.h });
   const k = r.w / 400; // sizes were tuned on a ~400px-wide picture in the phone app
@@ -334,15 +364,17 @@ function drawPose(ctx, frame, r, withLabel) {
     ctx.fill();
   }
 
-  if (frame.club) drawShaft(ctx, lm, frame.club, toPx, r, lineWidth);
-  if (pose.reference) drawSpine(ctx, pose.reference, toPx, lineWidth, true);
-  const spine = spineLine(lm);
+  if (frame.club) drawShaft(ctx, lm, frame.club, toPx, r, lineWidth, p);
+  if (p.reference) drawSpine(ctx, p.reference, toPx, lineWidth, true);
+  const spine = spineLine(lm, p.video);
   if (spine) {
     drawSpine(ctx, spine, toPx, lineWidth, false);
     if (withLabel) {
-      const text = pose.reference
-        ? `Spine ${spine.angle.toFixed(0)}°  (start ${pose.reference.angle.toFixed(0)}°)`
-        : `Spine ${spine.angle.toFixed(0)}°`;
+      // Down the line, the spine's lean in the picture is the forward bend.
+      const word = p.angle === "dtl" ? "Bend" : "Spine";
+      const text = p.reference
+        ? `${word} ${spine.angle.toFixed(0)}°  (start ${p.reference.angle.toFixed(0)}°)`
+        : `${word} ${spine.angle.toFixed(0)}°`;
       drawLabel(ctx, text, toPx(spine.hip), fontSize);
     }
   }
@@ -398,10 +430,18 @@ function drawAngles(ctx, v, r) {
   ctx.restore();
 }
 
+/** Frame index of key position `key` (p1-p8) in clip p: its own, or the open clip's moved across by the sync. */
+function positionIndex(key, p = pose) {
+  const pos = positions.find(q => q.key === key);
+  if (!pos) return null;
+  if (p === pose) return key === "p1" && metrics ? metrics.address : pos.index;
+  return frameIndexAt(toPartnerTime(pos.t), p);
+}
+
 /** The hands' path from address to the end of the clip: back in yellow, down and through in pink. */
-function drawHandPath(ctx, r, lineWidth) {
-  const f = pose.frames, top = positions.find(p => p.key === "p4");
-  const from = metrics.address, split = top ? top.index : f.length;
+function drawHandPath(ctx, r, lineWidth, p = pose) {
+  const f = p.frames, top = positionIndex("p4", p);
+  const from = positionIndex("p1", p) ?? 0, split = top ?? f.length;
   ctx.save();
   ctx.lineWidth = lineWidth;
   ctx.lineJoin = ctx.lineCap = "round";
@@ -451,22 +491,118 @@ function drawHead(ctx, lm, r, lineWidth) {
   ctx.restore();
 }
 
-function draw(t) {
+/**
+ * Down the line: the shaft's line at address, through the hands and across the whole picture. The
+ * classic plane line - the club and hands are judged against it through the swing.
+ */
+function drawPlane(ctx, r, lineWidth, p) {
+  const f = p.frames[positionIndex("p1", p) ?? -1];
+  if (!f || !f.lm || !f.club) return;
+  const lm = f.lm;
+  const gx = r.x + (lm[L_INDEX * 3] + lm[R_INDEX * 3]) / 2 * r.w;
+  const gy = r.y + (lm[L_INDEX * 3 + 1] + lm[R_INDEX * 3 + 1]) / 2 * r.h;
+  const a = f.club[0] * Math.PI / 180, far = r.w + r.h;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(r.x, r.y, r.w, r.h);
+  ctx.clip();
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = PLANE_COLOR;
+  ctx.beginPath();
+  ctx.moveTo(gx - Math.cos(a) * far, gy - Math.sin(a) * far);
+  ctx.lineTo(gx + Math.cos(a) * far, gy + Math.sin(a) * far);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Sizes the overlay canvas to its box and clears it. */
+function freshCanvas(c) {
   const dpr = window.devicePixelRatio || 1;
-  const W = Math.round(canvas.clientWidth * dpr), H = Math.round(canvas.clientHeight * dpr);
-  if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
-  const ctx = canvas.getContext("2d");
+  const W = Math.round(c.clientWidth * dpr), H = Math.round(c.clientHeight * dpr);
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+  const ctx = c.getContext("2d");
   ctx.clearRect(0, 0, W, H);
+  return ctx;
+}
+
+function draw(t) {
+  const ctx = freshCanvas(canvas), W = canvas.width, H = canvas.height;
   showFrameLabel(t);
   markPosition(t);
   if (!pose || !pose.frames.length || !video.videoWidth) return;
   const i = frameIndexAt(t), frame = pose.frames[i], r = fitRect(W, H);
   const lineWidth = Math.max(1.5, 3 * r.w / 400);
-  if (metrics && overlays.handpath) drawHandPath(ctx, r, lineWidth);
+  if (positions.length && overlays.handpath) drawHandPath(ctx, r, lineWidth);
+  if (pose.angle === "dtl" && positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, pose);
   if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !(metrics && overlays.angles));
   if (metrics && overlays.headbox && frame.lm) drawHead(ctx, frame.lm, r, lineWidth);
   if (metrics && overlays.angles) drawAngles(ctx, metrics.values[i], r);
 }
+
+/** The down-the-line view: skeleton, bend, shaft, plane line and hand path, at its own time t. */
+function draw2(t) {
+  const ctx = freshCanvas(canvas2), W = canvas2.width, H = canvas2.height;
+  const p = partner && partner.pose;
+  if (!p || !p.frames.length || !video2.videoWidth) return;
+  const frame = p.frames[frameIndexAt(t, p)], r = fitRect(W, H, video2);
+  const lineWidth = Math.max(1.5, 3 * r.w / 400);
+  if (positions.length && overlays.handpath) drawHandPath(ctx, r, lineWidth, p);
+  if (positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, p);
+  if (showSkeleton && frame.lm) drawPose(ctx, frame, r, true, p);
+}
+
+function redraw() {
+  draw(video.currentTime);
+  if (partner) draw2(video2.currentTime);
+}
+
+// ---- Keeping the second angle in step ----
+
+/** One clip's sync point: where its impact is, by the ball leaving (frame-exact) or the heard strike. */
+function syncPoint(name, p) {
+  const c = clips.find(c => c.name === name);
+  return { impact: p ? p.impact : null, strike: c ? c.strike : null };
+}
+
+/**
+ * Seconds to add to a time in the open clip to get the same moment in the down-the-line one. Both
+ * clips' impacts line up: by the ball when both saw it go, else by the strike each phone heard.
+ */
+function partnerOffset() {
+  const a = syncPoint(current, pose), b = syncPoint(partner.name, partner.pose);
+  if (a.impact != null && b.impact != null) return b.impact - a.impact;
+  if (a.strike != null && b.strike != null) return b.strike - a.strike;
+  // Mixed or missing: the capture app puts the strike about 2 s in.
+  return (b.impact ?? b.strike ?? 2.0) - (a.impact ?? a.strike ?? 2.0);
+}
+
+function toPartnerTime(t) {
+  return t + partnerOffset();
+}
+
+/** Puts the second video where the first one is: exactly when paused, loosely while playing. */
+function syncPartner() {
+  if (!partner || !video2.readyState) return;
+  const dur = video2.duration || 0;
+  const target = toPartnerTime(video.currentTime);
+  const clamped = Math.max(0, Math.min(dur - 0.001, target));
+  if (video.paused || target < 0 || target > dur) {
+    if (!video2.paused) video2.pause();
+    if (Math.abs(video2.currentTime - clamped) > 0.0005) video2.currentTime = clamped;
+    return;
+  }
+  if (video2.playbackRate !== video.playbackRate) video2.playbackRate = video.playbackRate;
+  if (video2.paused) video2.play().catch(() => {});
+  // Nudge it back only once it has drifted: seeking a playing video stutters.
+  if (!video2.seeking && Math.abs(video2.currentTime - target) > Math.max(0.03, 0.2 * video.playbackRate)) {
+    video2.currentTime = target;
+  }
+}
+
+for (const ev of ["play", "pause", "seeked", "ratechange"]) video.addEventListener(ev, syncPartner);
+video2.addEventListener("click", () => { video.paused ? video.play() : video.pause(); });
+video2.addEventListener("loadedmetadata", () => { syncPartner(); draw2(video2.currentTime); });
+video2.addEventListener("seeked", () => draw2(video2.currentTime));
 
 function showFrameLabel(t) {
   const el = document.getElementById("frame");
@@ -480,22 +616,31 @@ function showFrameLabel(t) {
 // Redraw on every frame the browser actually presents, using that frame's own timestamp.
 function onVideoFrame(_now, meta) {
   draw(meta.mediaTime);
+  if (!video.paused) syncPartner();
   video.requestVideoFrameCallback(onVideoFrame);
+}
+function onVideo2Frame(_now, meta) {
+  draw2(meta.mediaTime);
+  video2.requestVideoFrameCallback(onVideo2Frame);
 }
 if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
   video.requestVideoFrameCallback(onVideoFrame);
+  video2.requestVideoFrameCallback(onVideo2Frame);
 } else {
-  video.addEventListener("timeupdate", () => draw(video.currentTime));
+  video.addEventListener("timeupdate", () => { redraw(); syncPartner(); });
+  video2.addEventListener("timeupdate", () => draw2(video2.currentTime));
 }
-video.addEventListener("seeked", () => draw(video.currentTime));
-video.addEventListener("loadedmetadata", () => draw(video.currentTime));
-new ResizeObserver(() => draw(video.currentTime)).observe(canvas);
+video.addEventListener("seeked", () => redraw());
+video.addEventListener("loadedmetadata", () => redraw());
+new ResizeObserver(() => redraw()).observe(canvas);
+new ResizeObserver(() => draw2(video2.currentTime)).observe(canvas2);
 
 // ---- Controls ----
 
 function setSpeed(s) {
   speed = s;
   video.playbackRate = s;
+  video2.playbackRate = s;
   document.querySelectorAll("#speeds button").forEach(b => b.classList.toggle("on", Number(b.dataset.s) === s));
 }
 
@@ -518,14 +663,14 @@ function setSkeleton(on) {
   showSkeleton = on;
   skeletonBtn.classList.toggle("on", on);
   try { localStorage.setItem("skeleton", on ? "on" : "off"); } catch {}
-  draw(video.currentTime);
+  redraw();
 }
 
 function setOverlay(key, on) {
   overlays[key] = on;
   document.getElementById(key).classList.toggle("on", on);
   try { localStorage.setItem("overlay-" + key, on ? "on" : "off"); } catch {}
-  draw(video.currentTime);
+  redraw();
 }
 
 function updateSkeletonButton() {
@@ -535,25 +680,47 @@ function updateSkeletonButton() {
   skeletonBtn.textContent = pose ? "Skeleton" : `Skeleton (${POSE_LABELS[state] || "loading…"})`;
 }
 
+/** A clip's pose, ready to draw over video element v, or null if it isn't analyzed (yet). */
+async function fetchPose(name, v) {
+  const c = clips.find(c => c.name === name);
+  if (!c || c.pose !== "done") return null;
+  const res = await fetch("/api/pose/" + encodeURIComponent(name));
+  if (!res.ok) return null;
+  const data = await res.json();
+  // Angles in the picture need its size.
+  await whenReady(v, "loadedmetadata", () => v.videoWidth > 0);
+  // The address position: the first frame where the spine can be measured.
+  let reference = null;
+  for (const f of data.frames) {
+    if (f.lm && (reference = spineLine(f.lm, v))) break;
+  }
+  return { frames: data.frames, reference, impact: data.impact ?? null, clubLength: data.clubLength ?? null,
+           video: v, angle: c.angle || "face" };
+}
+
 async function loadPose(name) {
   pose = null;
   metrics = null;
   updateSkeletonButton();
-  const c = clips.find(c => c.name === name);
-  if (!c || c.pose !== "done") return;
-  const res = await fetch("/api/pose/" + encodeURIComponent(name));
-  if (!res.ok || current !== name) return;
-  const data = await res.json();
-  if (current !== name) return;
-  // The address position: the first frame where the spine can be measured.
-  let reference = null;
-  for (const f of data.frames) {
-    if (f.lm && (reference = spineLine(f.lm))) break;
-  }
-  pose = { frames: data.frames, reference, impact: data.impact ?? null, clubLength: data.clubLength ?? null };
+  const p = await fetchPose(name, video);
+  if (!p || current !== name) return;
+  pose = p;
   updateSkeletonButton();
-  draw(video.currentTime);
+  syncPartner();
+  redraw();
   buildPositions(name);
+}
+
+async function loadPartnerPose() {
+  const want = partner;
+  if (!want) return;
+  const p = await fetchPose(want.name, video2);
+  if (!p || partner !== want) return;
+  partner.pose = p;
+  // Now in step by the ball, if both saw it; and the cards get this angle too.
+  syncPartner();
+  draw2(video2.currentTime);
+  if (pose) buildPositions(current);
 }
 
 // ---- Key positions ----
@@ -563,6 +730,7 @@ const posList = document.getElementById("pos-list");
 const handBtn = document.getElementById("hand");
 // A second, hidden player to grab the thumbnails, so the visible one isn't disturbed.
 const thumbVideo = Object.assign(document.createElement("video"), { muted: true, playsInline: true, preload: "auto" });
+const thumbVideo2 = Object.assign(document.createElement("video"), { muted: true, playsInline: true, preload: "auto" });
 let positions = [];
 let positionsRun = 0;
 let leadSide = "left";
@@ -576,11 +744,11 @@ function whenReady(v, event, test) {
  * One crop (in video pixels, card-shaped) around the golfer in all the positions, so the
  * thumbnails show the swing rather than the whole room, and line up with each other.
  */
-function cropFor(list, cardAspect) {
-  const vw = video.videoWidth, vh = video.videoHeight;
+function cropFor(indices, cardAspect, p = pose) {
+  const vw = p.video.videoWidth, vh = p.video.videoHeight;
   let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
-  for (const p of list) {
-    const lm = pose.frames[p.index].lm;
+  for (const index of indices) {
+    const lm = p.frames[index].lm;
     if (!lm) continue;
     for (let i = 0; i < 33; i++) {
       if (lm[i * 3 + 2] < MIN_VISIBILITY) continue;
@@ -601,19 +769,24 @@ function cropFor(list, cardAspect) {
   };
 }
 
-async function grabThumb(canvasEl, p, crop) {
-  thumbVideo.currentTime = p.t + 0.001;
-  await new Promise(r => thumbVideo.addEventListener("seeked", r, { once: true }));
+/** Frame `index` of clip p, cropped, with its skeleton, into `box` of the card's canvas (via hidden player tv). */
+async function grabThumb(canvasEl, box, tv, p, index, crop) {
+  tv.currentTime = p.frames[index].t + 0.001;
+  await new Promise(r => tv.addEventListener("seeked", r, { once: true }));
   const ctx = canvasEl.getContext("2d");
-  const W = canvasEl.width, H = canvasEl.height;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(box.x, box.y, box.w, box.h);
+  ctx.clip();
   ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, W, H);
-  ctx.drawImage(thumbVideo, crop.x, crop.y, crop.w, crop.h, 0, 0, W, H);
+  ctx.fillRect(box.x, box.y, box.w, box.h);
+  ctx.drawImage(tv, crop.x, crop.y, crop.w, crop.h, box.x, box.y, box.w, box.h);
   // Where the whole picture would land at this crop, so landmarks map onto the card.
-  const sx = W / crop.w, sy = H / crop.h;
-  const r = { x: -crop.x * sx, y: -crop.y * sy, w: video.videoWidth * sx, h: video.videoHeight * sy };
-  const frame = pose.frames[p.index];
-  if (frame.lm) drawPose(ctx, frame, r, false);
+  const sx = box.w / crop.w, sy = box.h / crop.h;
+  const r = { x: box.x - crop.x * sx, y: box.y - crop.y * sy, w: p.video.videoWidth * sx, h: p.video.videoHeight * sy };
+  const frame = p.frames[index];
+  if (frame.lm) drawPose(ctx, frame, r, false, p);
+  ctx.restore();
 }
 
 async function buildPositions(name) {
@@ -624,22 +797,28 @@ async function buildPositions(name) {
   // Impact is when the ball leaves the mat, if the server saw it go. If not: the capture app cuts
   // each clip 2 s before the strike it heard, starting on a keyframe (every 0.25 s), so the strike
   // is about 2.0-2.25 s in; real impacts have landed 1.97-2.33 s in, so allow a little either side.
-  const strikeWindow = name.startsWith("swing_") ? [1.9, 2.4] : null;
+  // Newer capture clips say exactly where the strike was heard.
+  const strike = clips.find(c => c.name === name)?.strike;
+  const strikeWindow = strike != null ? [strike - 0.15, strike + 0.15] : name.startsWith("swing_") ? [1.9, 2.4] : null;
   positions = SwingPhases.detect(pose.frames, video.videoWidth / video.videoHeight, leadSide, strikeWindow,
                                  pose.impact);
-  metrics = SwingMetrics.compute(pose.frames, video.videoWidth / video.videoHeight, leadSide, positions);
+  // The swing numbers read turns and sway from a face-on picture; they'd be wrong from down the line.
+  metrics = pose.angle === "dtl" ? null
+    : SwingMetrics.compute(pose.frames, video.videoWidth / video.videoHeight, leadSide, positions);
   showNumbers();
-  draw(video.currentTime);
+  redraw();
   positionsBox.hidden = false;
   document.getElementById("pos-note").textContent = positions.length
     ? "Tap one to jump there. ~ = estimated (the club couldn't be seen clearly then)."
     : "No swing found in this clip.";
 
+  // With both angles analyzed, each card shows the position from both.
+  const other = partner && partner.pose;
   const cards = positions.map(p => {
     const b = document.createElement("button");
-    b.className = "pos";
+    b.className = other ? "pos two" : "pos";
     b.title = `${p.tag} ${p.label} - ${p.t.toFixed(3)} s`;
-    b.innerHTML = `<canvas width="192" height="256"></canvas><span><b></b> <i></i><br></span>`;
+    b.innerHTML = `<canvas width="${other ? 384 : 192}" height="256"></canvas><span><b></b> <i></i><br></span>`;
     b.querySelector("b").textContent = p.tag;
     b.querySelector("i").textContent = p.estimated ? "~" : "";
     b.querySelector("span").append(p.label);
@@ -649,12 +828,24 @@ async function buildPositions(name) {
   posList.replaceChildren(...cards);
   markPosition(video.currentTime);
 
-  thumbVideo.src = video.src;
+  if (thumbVideo.src !== video.src) thumbVideo.src = video.src;
   await whenReady(thumbVideo, "loadeddata", () => thumbVideo.readyState >= 2);
-  const crop = cropFor(positions, 192 / 256);
+  const crop = cropFor(positions.map(p => p.index), 192 / 256);
+  // The same moments down the line.
+  const otherIdx = other ? positions.map(p => frameIndexAt(toPartnerTime(p.t), other)) : [];
+  let otherCrop = null;
+  if (other) {
+    if (thumbVideo2.src !== video2.src) thumbVideo2.src = video2.src;
+    await whenReady(thumbVideo2, "loadeddata", () => thumbVideo2.readyState >= 2);
+    otherCrop = cropFor(otherIdx, 192 / 256, other);
+  }
   for (let i = 0; i < cards.length; i++) {
     if (run !== positionsRun) return;
-    await grabThumb(cards[i].querySelector("canvas"), positions[i], crop);
+    const c = cards[i].querySelector("canvas");
+    await grabThumb(c, { x: 0, y: 0, w: 192, h: 256 }, thumbVideo, pose, positions[i].index, crop);
+    if (other && run === positionsRun) {
+      await grabThumb(c, { x: 192, y: 0, w: 192, h: 256 }, thumbVideo2, other, otherIdx[i], otherCrop);
+    }
   }
 }
 
@@ -710,7 +901,39 @@ handBtn.onclick = () => {
   if (pose && current) buildPositions(current);
 };
 
+/** A swing's down-the-line clip is listed and opened through its face-on one. */
+function isSecondary(c) {
+  return !!c.partner && c.angle !== "face";
+}
+
+/** The clips the list shows: one per swing. */
+function shownClips() {
+  return clips.filter(c => !isSecondary(c));
+}
+
+/** Shows (or drops) the down-the-line clip of the open swing. */
+function setPartner(name) {
+  partner = name ? { name, pose: null } : null;
+  document.getElementById("stage2").hidden = !partner;
+  document.getElementById("stages").classList.toggle("two", !!partner);
+  if (partner) {
+    video2.src = "/clips/" + encodeURIComponent(name);
+    video2.playbackRate = speed;
+    loadPartnerPose();
+  } else {
+    video2.removeAttribute("src");
+    video2.load();
+    thumbVideo2.removeAttribute("src");
+    thumbVideo2.load();
+  }
+  const c = clips.find(c => c.name === current);
+  document.getElementById("plane").hidden = !partner && !(c && c.angle === "dtl");
+  document.getElementById("title").textContent = [current, name].filter(Boolean).join("  +  ");
+}
+
 function open(name) {
+  const c0 = clips.find(c => c.name === name);
+  if (c0 && isSecondary(c0)) name = c0.partner;
   current = name;
   document.querySelectorAll("#list li").forEach(li => li.classList.toggle("sel", li.dataset.name === name));
   // Opening a clip in a closed session opens the session.
@@ -726,7 +949,7 @@ function open(name) {
   posList.replaceChildren();
   video.src = "/clips/" + encodeURIComponent(name);
   video.playbackRate = speed;
-  document.getElementById("title").textContent = name;
+  setPartner(clips.find(c => c.name === name)?.partner ?? null);
   viewer.hidden = false;
   history.replaceState(null, "", "#" + encodeURIComponent(name));
   showShot(clips.find(c => c.name === name));
@@ -836,8 +1059,8 @@ function renderListbar() {
     listbar.querySelector("#cancel-sel").onclick = () => { selecting = false; selected.clear(); renderList(); };
   } else {
     listbar.innerHTML = `<span class="grow"></span><button class="small" id="start-sel">Select</button>`;
-    listbar.querySelector(".grow").textContent = clips.length ? "" : "";
-    listbar.querySelector("#start-sel").disabled = !clips.length;
+    listbar.querySelector(".grow").textContent = shownClips().length ? "" : "";
+    listbar.querySelector("#start-sel").disabled = !shownClips().length;
     listbar.querySelector("#start-sel").onclick = () => { selecting = true; renderList(); };
   }
 }
@@ -852,10 +1075,15 @@ function clipRow(c) {
   const shotText = !c.shot ? "" : c.shot.ball?.carry > 0
     ? `${clubName(c.shot.club)} ${num(c.shot.ball.carry, 0)} yd`
     : `${clubName(c.shot.club)} ${num(c.shot.ball?.speed)} mph`;
-  li.querySelector(".meta").textContent = [shotText, modeOf(c.name), fmtSize(c.size)].filter(Boolean).join(" · ");
+  const other = c.partner && clips.find(x => x.name === c.partner);
+  const angles = other ? "2 angles" : c.angle === "dtl" ? "down the line" : "";
+  const size = c.size + (other ? other.size : 0);
+  li.querySelector(".meta").textContent = [shotText, angles, modeOf(c.name), fmtSize(size)].filter(Boolean).join(" · ");
+  // The swing's analysis is as far along as its slower angle.
+  const state = [c, other].filter(Boolean).map(x => x.pose).find(s => s !== "done") ?? "done";
   const p = li.querySelector(".pose");
-  p.textContent = POSE_LABELS[c.pose] || "";
-  p.classList.toggle("failed", c.pose === "failed");
+  p.textContent = POSE_LABELS[state] || "";
+  p.classList.toggle("failed", state === "failed");
   if (selecting) {
     const box = document.createElement("input");
     box.type = "checkbox";
@@ -878,14 +1106,15 @@ function clipRow(c) {
 }
 
 function renderList() {
-  document.getElementById("count").textContent = `${clips.length} clip${clips.length === 1 ? "" : "s"}`;
+  const n = shownClips().length;
+  document.getElementById("count").textContent = `${n} swing${n === 1 ? "" : "s"}`;
   for (const n of [...selected]) if (!clips.some(c => c.name === n)) selected.delete(n);
   renderListbar();
-  if (!clips.length) {
+  if (!shownClips().length) {
     list.innerHTML = `<div class="empty">No clips yet. Swings from the SwingClips phone app show up here.</div>`;
     return;
   }
-  const sessions = sessionsOf(clips);
+  const sessions = sessionsOf(shownClips());
   list.replaceChildren(...sessions.map((s, i) => {
     const el = document.createElement("section");
     el.className = "session";
@@ -896,7 +1125,7 @@ function renderList() {
     head.className = "shead";
     head.innerHTML = `<span class="chev">▾</span><div class="stitle"><div class="sname"></div><div class="ssub"></div></div>`;
     head.querySelector(".sname").textContent = sessionTitle(s);
-    head.querySelector(".ssub").textContent = `${s.clips.length} clip${s.clips.length === 1 ? "" : "s"}`;
+    head.querySelector(".ssub").textContent = `${s.clips.length} swing${s.clips.length === 1 ? "" : "s"}`;
     if (selecting) {
       const all = document.createElement("input");
       all.type = "checkbox";
@@ -951,11 +1180,13 @@ function showToast(text, onUndo) {
   toastTimer = setTimeout(() => { toast.hidden = true; }, 8000);
 }
 
-async function deleteClips(names) {
-  if (!names.length) return;
+async function deleteClips(swingNames) {
+  if (!swingNames.length) return;
+  // A swing goes with both its angles.
+  const names = swingNames.flatMap(n => [n, clips.find(c => c.name === n)?.partner].filter(Boolean));
   // Let go of the video first: Windows can't move a file the server is still streaming.
   if (names.includes(current)) {
-    const order = clips.map(c => c.name);
+    const order = shownClips().map(c => c.name);
     const next = order.slice(order.indexOf(current) + 1).find(n => !names.includes(n))
       ?? order.slice(0, order.indexOf(current)).reverse().find(n => !names.includes(n));
     closeViewer();
@@ -968,9 +1199,10 @@ async function deleteClips(names) {
   const { moved } = await res.json();
   selecting = false;
   selected.clear();
+  const swings = clips.filter(c => moved.includes(c.name) && !isSecondary(c)).length;
   clips = clips.filter(c => !moved.includes(c.name));
   renderList();
-  showToast(`${moved.length} clip${moved.length === 1 ? "" : "s"} moved to the trash`, async () => {
+  showToast(`${swings} swing${swings === 1 ? "" : "s"} moved to the trash`, async () => {
     await fetch("/api/restore", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names: moved }),
     });
@@ -988,6 +1220,7 @@ function closeViewer() {
   video.load();
   thumbVideo.removeAttribute("src");
   thumbVideo.load();
+  setPartner(null);
   viewer.hidden = true;
   showShot(null);
   history.replaceState(null, "", location.pathname);
@@ -1009,15 +1242,22 @@ async function refresh() {
     return;
   }
   const before = clips.find(c => c.name === current);
+  const beforePartner = partner && clips.find(c => c.name === partner.name);
   clips = await res.json();
   renderList();
+  const now = clips.find(c => c.name === current);
   if (current === null && clips.length) {
     const wanted = decodeURIComponent(location.hash.slice(1));
-    open(clips.some(c => c.name === wanted) ? wanted : clips[0].name);
+    open(clips.some(c => c.name === wanted) ? wanted : shownClips()[0].name);
+  } else if (now && isSecondary(now)) {
+    // Its face-on clip just arrived: open the swing through that.
+    open(now.partner);
   } else {
-    // The open clip's pose may have just finished, or its shot just arrived.
-    const now = clips.find(c => c.name === current);
+    // The open clip's pose may have just finished, or its shot or other angle just arrived.
     showShot(now);
+    if (now && (now.partner ?? null) !== (partner ? partner.name : null)) setPartner(now.partner);
+    else if (partner && !partner.pose && clips.find(c => c.name === partner.name)?.pose === "done"
+             && beforePartner?.pose !== "done") loadPartnerPose();
     if (now && now.pose === "done" && (!before || before.pose !== "done")) loadPose(current);
     else updateSkeletonButton();
   }
@@ -1045,6 +1285,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "s" || e.key === "S") setSkeleton(!showSkeleton);
   if (e.key === "a" || e.key === "A") setOverlay("angles", !overlays.angles);
   if (e.key === "h" || e.key === "H") setOverlay("handpath", !overlays.handpath);
+  if (e.key === "p" || e.key === "P") setOverlay("plane", !overlays.plane);
 });
 
 // Pick up new clips and finished analyses without a manual reload.
