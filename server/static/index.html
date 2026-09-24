@@ -71,6 +71,10 @@
   .metric b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
   .metric span { font-size: 11px; color: var(--muted); }
   .metric.club b { color: var(--accent); }
+  /* The club tile is a picker: the club can be corrected when it wasn't changed in Square's app. */
+  .metric.club select { display: block; margin: -2px 0 0 -6px; padding: 0 4px; border: 0; background: transparent;
+                        color: var(--accent); font: 600 16px system-ui, sans-serif; cursor: pointer; }
+  .t-fix { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
   #viewer { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   /* Phones: player above the list. Not sticky: it's taller than a phone screen, so pinning it
      would hide its own bottom and cover the list. */
@@ -234,6 +238,7 @@
       <label>Result <select id="t-y"></select></label>
       <label>against <select id="t-x"></select></label>
       <label id="t-club-wrap">Club <select id="t-club"></select></label>
+      <span class="t-fix" id="t-fix"></span>
     </div>
     <div class="t-card" id="t-chart">
       <svg role="img"></svg>
@@ -1167,15 +1172,45 @@ const signed = v => (v > 0 ? "+" : "") + num(v);
 // Launch monitors report left as negative.
 const side = v => Math.abs(v) < 0.05 ? "0.0°" : `${num(Math.abs(v))}° ${v < 0 ? "L" : "R"}`;
 
+// Square's club codes, for correcting a swing's club.
+const CLUB_CODES = ["DR", "W3", "W5", "W7", "H3", "H4", "H5", "I3", "I4", "I5", "I6", "I7", "I8", "I9",
+                    "PW", "GW", "SW", "LW"];
+
+/** A dropdown of clubs showing `club`; Square's own club is marked when it's been corrected. */
+function clubSelect(club, squareClub) {
+  const sel = document.createElement("select");
+  const codes = [...new Set([...CLUB_CODES, club, squareClub].filter(Boolean))];
+  sel.append(...codes.map(k => Object.assign(document.createElement("option"), {
+    value: k, textContent: clubName(k) + (squareClub && k === squareClub ? " (Square)" : ""),
+  })));
+  sel.value = club || "";
+  return sel;
+}
+
+/** Sets the club of these swings (by their listed clip names); back to Square's if it's the same. */
+async function setClub(names, club, squareClub) {
+  const res = await fetch("/api/club", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ names, club: club === squareClub ? null : club }),
+  });
+  if (!res.ok) { showToast("Couldn't change the club - is the server up to date?"); return false; }
+  await refresh();
+  return true;
+}
+
 function showShot(c) {
   const box = document.getElementById("shotdata");
   const s = c && c.shot;
-  if (!s) { box.hidden = true; box.replaceChildren(); return; }
+  if (!s) { box.hidden = true; box.replaceChildren(); box.dataset.sig = ""; return; }
+  // Rebuilt only when something changed, so the club picker isn't swapped out while it's open.
+  const sig = c.name + JSON.stringify(s);
+  if (box.dataset.sig === sig && !box.hidden) return;
+  box.dataset.sig = sig;
   const b = s.ball || {}, k = s.clubData || {};
   const has = v => v !== null && v !== undefined && !isNaN(v);
   // Only what this shot's source reported: Square's app gives carry, club speed and more; its GSPro
   // connector doesn't.
-  const items = [["club", clubName(s.club), "Club"]];
+  const items = [["club", "", s.squareClub ? "Club (changed)" : "Club"]];
   const add = (ok, value, label) => { if (ok) items.push(["", value, label]); };
   add(b.carry > 0, `${num(b.carry, 0)}`, "Carry yd");
   add(b.total > 0, `${num(b.total, 0)}`, "Total yd");
@@ -1198,6 +1233,13 @@ function showShot(c) {
     el.innerHTML = "<b></b><span></span>";
     el.querySelector("b").textContent = value;
     el.querySelector("span").textContent = label;
+    if (cls === "club") {
+      const sel = clubSelect(s.club, s.squareClub || s.club);
+      sel.title = s.squareClub ? `Square said ${clubName(s.squareClub)}` : "Change it if Square had the wrong club";
+      const name = c.name;
+      sel.onchange = () => setClub([name], sel.value, s.squareClub || s.club);
+      el.querySelector("b").replaceWith(sel);
+    }
     return el;
   }));
   box.hidden = false;
@@ -1531,6 +1573,7 @@ function renderTrends() {
     ...clubs.map(k => Object.assign(document.createElement("option"), { value: k, textContent: `${clubName(k)} (${counts[k]})` })));
   clubSel.value = trendPick.club;
   const rows = trendPick.club ? all.filter(r => r.club === trendPick.club) : all;
+  renderClubFix(rows);
 
   const fx = field(trendPick.x), fy = field(trendPick.y === "order" ? "path" : trendPick.y);
   fillSelect(document.getElementById("t-y"), byGroup(["Launch monitor", "Face-on", "Down the line"]), fy.key);
@@ -1539,6 +1582,35 @@ function renderTrends() {
   drawScatter(rows, fx, fy);
   renderRanking(rows, fx, fy);
   renderTrendTable(rows, fx, fy);
+}
+
+/** "Change club…" for the swings shown: for when the club wasn't changed in Square's app. */
+function renderClubFix(rows) {
+  const box = document.getElementById("t-fix");
+  const withShot = rows.filter(r => r.c.shot);
+  if (!withShot.length) { box.replaceChildren(); return; }
+  if (box.contains(document.activeElement)) return;   // don't swap it out while it's open
+  const n = withShot.length;
+  const sel = clubSelect(null, null);
+  sel.prepend(Object.assign(document.createElement("option"), { value: "", textContent: "Change club…" }));
+  sel.value = "";
+  sel.title = `Set the club for the ${n} swing${n === 1 ? "" : "s"} shown`;
+  sel.onchange = async () => {
+    const club = sel.value;
+    if (!club) return;
+    if (!confirm(`Mark ${n === 1 ? "this swing" : `these ${n} swings`} as ${clubName(club)}?`)) { sel.value = ""; return; }
+    // Each swing goes back to Square's club if that's what it said.
+    const groups = {};
+    for (const r of withShot) {
+      const square = r.c.shot.squareClub || r.c.shot.club;
+      (groups[square] = groups[square] || []).push(r.c.name);
+    }
+    sel.blur();
+    trendPick.club = club;
+    for (const square in groups) await setClub(groups[square], club, square);
+    renderTrends();
+  };
+  box.replaceChildren(sel);
 }
 
 for (const [id, key] of [["t-y", "y"], ["t-x", "x"], ["t-club", "club"]]) {

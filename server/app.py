@@ -203,7 +203,12 @@ def list_clips():
     # One shot per swing: paired by the face-on clip (or the only one), then shown on both angles.
     by_name = {c["name"]: c for c in clips}
     shots = match_shots({c["name"]: c["_t"] for c in swings if not (c["partner"] and c["angle"] != "face")})
+    clubs = load_clubs()
     for name, shot in shots.items():
+        # The club as corrected on the review page, if it was (Square's own is kept alongside).
+        fix = clubs.get(name) or clubs.get(by_name[name]["partner"] or "")
+        if fix and fix != shot.get("club"):
+            shot["squareClub"], shot["club"] = shot.get("club"), fix
         by_name[name]["shot"] = shot
         if by_name[name]["partner"]:
             by_name[by_name[name]["partner"]]["shot"] = shot
@@ -348,6 +353,48 @@ def match_shots(clip_times: dict[str, float]) -> dict[str, dict]:
 
 class ClipNames(BaseModel):
     names: list[str]
+
+
+# ---- Club corrections ----
+# When the club wasn't changed in Square's app, the review page can say which club it really was.
+# Kept per swing (by clip name) in a small JSON file; the shot itself is never rewritten.
+CLUBS_FILE = Path(os.environ.get("SWINGCLIPS_CLUBS", CLIPS_DIR.parent / "clubs.json"))
+# Square's codes: DR, W3 (3 wood), H4 (4 hybrid), I7 (7 iron), PW / GW / SW / LW, PT (putter).
+CLUB_CODE = re.compile(r"^(DR|[WHI][1-9]|PW|GW|SW|LW|PT)$")
+
+
+def load_clubs() -> dict[str, str]:
+    try:
+        return json.loads(CLUBS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+class ClubFix(BaseModel):
+    names: list[str]
+    club: str | None  # None: back to what Square said
+
+
+@app.post("/api/club")
+def set_club(body: ClubFix):
+    """Sets (or clears) the club for these swings."""
+    if body.club is not None and not CLUB_CODE.match(body.club):
+        raise HTTPException(400, "Unknown club")
+    with files_lock:
+        clubs = load_clubs()
+        for name in body.names:
+            if Path(name).name != name:
+                continue
+            if body.club is None:
+                clubs.pop(name, None)
+            else:
+                clubs[name] = body.club
+        CLUBS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CLUBS_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(clubs, indent=1), encoding="utf-8")
+        tmp.replace(CLUBS_FILE)
+    print(f"Club: {len(body.names)} swing(s) -> {body.club or 'as Square said'}", flush=True)
+    return {"ok": True}
 
 
 @app.post("/api/delete")

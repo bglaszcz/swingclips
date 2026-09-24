@@ -63,7 +63,7 @@ monitor's numbers for that shot.
 
 ### `server/` - the home server (Python, FastAPI)
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON), `shots.jsonl` (launch
-  monitor shots), `trash` (deleted clips; emptied by hand, never automatically).
+  monitor shots), `clubs.json` (clubs corrected on the review page), `trash` (deleted clips; emptied by hand, never automatically).
 - A background worker runs MediaPipe pose on every frame of each new clip (4 processes, split at
   keyframes), then smooths it over the whole clip (median, then a local curve fit, so it doesn't lag
   fast hands). It also finds the ball on the mat near the golfer's feet and the first frame it's
@@ -98,6 +98,10 @@ monitor's numbers for that shot.
   what chance gives with that many swings (p < 0.05); fewer than 5 swings, nothing is ranked. The
   page works the numbers out from the pose files and keeps them in the browser (localStorage);
   bump `VERSION` in summary.js when a change should recompute them. It updates as swings arrive.
+- **Wrong club?** When the club wasn't changed in Square's app, pick the right one on the swing's
+  Club tile, or use "Change club…" in Trends for all the swings shown. The correction is kept per
+  swing in `clubs.json` (Square's own club stays in `shots.jsonl` and shows as "(Square)" in the
+  list); picking Square's club again removes it.
 - Pose files are named by version (`<clip>.v5.json.gz`); when `pose.py` changes enough to bump
   `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
