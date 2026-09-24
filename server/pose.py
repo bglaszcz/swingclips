@@ -3,7 +3,8 @@
 Grew out of a timing benchmark (posebench/bench2.py, since removed; see git history). Frames keep
 their real timestamps, because high-fps phone clips have dropped frames and index / fps would drift.
 
-Also finds the ball on the mat and the frame it leaves, which pins impact to the frame.
+Also finds the ball on the mat and the frame it leaves, which pins impact to the frame, and the
+club shaft's angle in each frame (club.py).
 """
 import os
 import time
@@ -13,12 +14,14 @@ import av
 import cv2
 import numpy as np
 
+import club
+
 # MediaPipe's "full" model. "heavy" was tried (2026-09): slower, and at the top of the backswing it
 # put the trail wrist beside the head, where "full" stays on the hands. SWINGCLIPS_POSE_MODEL can point
 # at another .task file to compare.
 MODEL = os.environ.get("SWINGCLIPS_POSE_MODEL", os.path.join(
     os.path.dirname(__file__), "..", "public", "mediapipe", "pose_landmarker_full.task"))
-VERSION = 2
+VERSION = 3
 # MediaPipe works on a 256px input internally, so half size loses nothing and halves the conversion.
 SCALE = 0.5
 ROTATE_CW = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
@@ -70,15 +73,19 @@ def decode_range(container, start_pts, end_pts):
 
 
 def run_chunk(args):
-    """Pose for frames with start_pts <= pts < end_pts. Returns [(t seconds, landmarks | None)]."""
+    """Pose and shaft scores for frames with start_pts <= pts < end_pts.
+
+    Returns [(t seconds, landmarks | None, shaft scores | None)].
+    """
     cv2.setNumThreads(1)
     import mediapipe as mp
     from mediapipe.tasks.python import BaseOptions
     from mediapipe.tasks.python.vision import PoseLandmarker, PoseLandmarkerOptions, RunningMode
 
-    path, start_pts, end_pts, rotation = args
+    path, start_pts, end_pts, rotation, bg = args
     lm = PoseLandmarker.create_from_options(PoseLandmarkerOptions(
-        base_options=BaseOptions(model_asset_path=MODEL), running_mode=RunningMode.VIDEO, num_poses=1))
+        base_options=BaseOptions(model_asset_path=MODEL), running_mode=RunningMode.VIDEO, num_poses=1,
+        output_segmentation_masks=True))
     out = []
     try:
         with av.open(path) as c:
@@ -92,13 +99,28 @@ def run_chunk(args):
                 res = lm.detect_for_video(
                     mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb)),
                     int(round(t * 1000)))
-                landmarks = None
+                landmarks = shaft = None
                 if res.pose_landmarks:
                     landmarks = [(p.x, p.y, p.visibility) for p in res.pose_landmarks[0]]
-                out.append((t, landmarks))
+                    if bg is not None and res.segmentation_masks:
+                        shaft = shaft_scores(f, rotation, landmarks, res.segmentation_masks[0].numpy_view(), bg)
+                out.append((t, landmarks, shaft))
     finally:
         lm.close()
     return out
+
+
+def shaft_scores(frame, rotation, landmarks, person, bg):
+    """club.scores for one frame: full-size upright picture, with the person mask grown a little so
+    the golfer's outline doesn't count either."""
+    img = frame.to_ndarray(format="bgr24")
+    if rotation in ROTATE_CW:
+        img = cv2.rotate(img, ROTATE_CW[rotation])
+    h, w = img.shape[:2]
+    grow = max(3, int(0.03 * club.body_height(landmarks, h)))
+    mask = cv2.resize((person > 0.5).astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST)
+    mask = cv2.dilate(mask, np.ones((grow, grow), np.uint8)) > 0
+    return club.scores(img, landmarks, mask, bg)
 
 
 def smooth(times, landmarks):
@@ -144,7 +166,7 @@ def ball_candidates(path, rotation, frames):
 
     Returns [(cx, cy, r)] in upright full-size pixels, best first.
     """
-    lm = next((lm for _, lm in frames if lm is not None), None)
+    lm = next((lm for _, lm, *_ in frames if lm is not None), None)
     if lm is None:
         return []
     with av.open(path) as c:
@@ -251,7 +273,7 @@ def ball_leaves(times, scores):
 
 def hand_speed(frames):
     """(times, speed of the point between the wrists) for frames with a person, or None."""
-    rows = [(t, (lm[15][0] + lm[16][0]) / 2, (lm[15][1] + lm[16][1]) / 2) for t, lm in frames if lm is not None]
+    rows = [(t, (lm[15][0] + lm[16][0]) / 2, (lm[15][1] + lm[16][1]) / 2) for t, lm, *_ in frames if lm is not None]
     if len(rows) < 10:
         return None
     t, x, y = (np.array(v) for v in zip(*rows))
@@ -293,9 +315,10 @@ def find_impact(path, rotation, frames, jobs, pool):
 
 
 def analyze(path, pool: ProcessPoolExecutor, workers: int):
-    """Pose for every frame of the clip, plus the ball and impact, as a JSON-ready dict."""
+    """Pose for every frame of the clip, plus the ball, impact and club shaft, as a JSON-ready dict."""
     started = time.perf_counter()
     keys, _, rotation = probe(path)
+    bg = club.background(path, rotation, ROTATE_CW)
     if not keys:
         keys = [0]
     groups = np.array_split(np.arange(len(keys)), min(workers, len(keys)))
@@ -304,17 +327,25 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
         start = keys[g[0]]
         end = keys[g[-1] + 1] if g[-1] + 1 < len(keys) else None
         jobs.append((path, start, end, rotation))
-    frames = sorted((fr for chunk in pool.map(run_chunk, jobs) for fr in chunk), key=lambda fr: fr[0])
+    frames = sorted((fr for chunk in pool.map(run_chunk, [j + (bg,) for j in jobs]) for fr in chunk),
+                    key=lambda fr: fr[0])
     ball, impact = find_impact(path, rotation, frames, jobs, pool)
-    times = [t for t, _ in frames]
-    smoothed = smooth(times, [lm for _, lm in frames])
+    times = [t for t, *_ in frames]
+    smoothed = smooth(times, [lm for _, lm, _ in frames])
+    shaft = club.track(times, [s for *_, s in frames])
+    first = next((lm for lm in smoothed if lm is not None), None)
+    h, w = (bg.shape[:2] if bg is not None else (1, 1))
     return {
         "version": VERSION,
         "rotation": rotation,
         "seconds": round(time.perf_counter() - started, 2),
         "ball": ball,
         "impact": impact,
-        # Flat [x, y, visibility] * 33 per frame, rounded to keep the JSON small.
-        "frames": [{"t": round(t, 6), "lm": None if lm is None else [round(float(v), 4) for p in lm for v in p]}
-                   for t, lm in zip(times, smoothed)],
+        # Shaft length to draw, as a share of the picture height.
+        "clubLength": club.length(first, ball, w, h) if first is not None else None,
+        # lm: flat [x, y, visibility] * 33 per frame, rounded to keep the JSON small.
+        # club: [shaft angle in degrees (0 = right, 90 = down), confidence 0-1] or null.
+        "frames": [{"t": round(t, 6), "lm": None if lm is None else [round(float(v), 4) for p in lm for v in p],
+                    "club": list(c) if c else None}
+                   for t, lm, c in zip(times, smoothed, shaft)],
     }

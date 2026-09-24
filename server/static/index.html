@@ -160,6 +160,9 @@ const JOINTS = [...new Set([...SKELETON.flat(), LM.NOSE])];
 const MIN_VISIBILITY = 0.25;
 const BONE_COLOR = "rgba(255, 255, 255, 0.85)", JOINT_COLOR = "#22c55e";
 const SPINE_COLOR = "#f59e0b", REF_SPINE_COLOR = "rgba(255, 255, 255, 0.6)";
+// The club shaft: solid where it was seen, faint and dashed where it's filled in between sightings.
+const SHAFT_COLOR = "#38bdf8", SHAFT_GUESS_COLOR = "rgba(56, 189, 248, 0.5)", SHAFT_CONFIDENT = 0.35;
+const L_INDEX = 19, R_INDEX = 20;
 
 const list = document.getElementById("list");
 const video = document.getElementById("video");
@@ -258,8 +261,28 @@ function drawLabel(ctx, text, at, fontSize) {
   ctx.fillText(text, x + padX, y + h * 0.7);
 }
 
-/** Skeleton and spine for one frame's landmarks, into rectangle r of ctx's canvas. */
-function drawPose(ctx, lm, r, withLabel) {
+/** The shaft from the hands at the tracked angle (club = [degrees, confidence]). */
+function drawShaft(ctx, lm, club, toPx, r, lineWidth) {
+  const grip = toPx({ x: (lm[L_INDEX * 3] + lm[R_INDEX * 3]) / 2, y: (lm[L_INDEX * 3 + 1] + lm[R_INDEX * 3 + 1]) / 2 });
+  const len = (pose.clubLength || 0.25) * r.h, a = club[0] * Math.PI / 180;
+  ctx.save();
+  ctx.lineWidth = lineWidth * 1.2;
+  if (club[1] >= SHAFT_CONFIDENT) {
+    ctx.strokeStyle = SHAFT_COLOR;
+  } else {
+    ctx.strokeStyle = SHAFT_GUESS_COLOR;
+    ctx.setLineDash([lineWidth * 3, lineWidth * 2]);
+  }
+  ctx.beginPath();
+  ctx.moveTo(grip.x, grip.y);
+  ctx.lineTo(grip.x + Math.cos(a) * len, grip.y + Math.sin(a) * len);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Skeleton, spine and club shaft for one frame, into rectangle r of ctx's canvas. */
+function drawPose(ctx, frame, r, withLabel) {
+  const lm = frame.lm;
   const toPx = p => ({ x: r.x + p.x * r.w, y: r.y + p.y * r.h });
   const k = r.w / 400; // sizes were tuned on a ~400px-wide picture in the phone app
   const lineWidth = Math.max(1.5, 3 * k), radius = Math.max(1.5, 4 * k), fontSize = Math.max(12, 14 * k);
@@ -286,6 +309,7 @@ function drawPose(ctx, lm, r, withLabel) {
     ctx.fill();
   }
 
+  if (frame.club) drawShaft(ctx, lm, frame.club, toPx, r, lineWidth);
   if (pose.reference) drawSpine(ctx, pose.reference, toPx, lineWidth, true);
   const spine = spineLine(lm);
   if (spine) {
@@ -308,8 +332,8 @@ function draw(t) {
   showFrameLabel(t);
   markPosition(t);
   if (!showSkeleton || !pose || !pose.frames.length || !video.videoWidth) return;
-  const lm = pose.frames[frameIndexAt(t)].lm;
-  if (lm) drawPose(ctx, lm, fitRect(W, H), true);
+  const frame = pose.frames[frameIndexAt(t)];
+  if (frame.lm) drawPose(ctx, frame, fitRect(W, H), true);
 }
 
 function showFrameLabel(t) {
@@ -386,7 +410,7 @@ async function loadPose(name) {
   for (const f of data.frames) {
     if (f.lm && (reference = spineLine(f.lm))) break;
   }
-  pose = { frames: data.frames, reference, impact: data.impact ?? null };
+  pose = { frames: data.frames, reference, impact: data.impact ?? null, clubLength: data.clubLength ?? null };
   updateSkeletonButton();
   draw(video.currentTime);
   buildPositions(name);
@@ -448,8 +472,8 @@ async function grabThumb(canvasEl, p, crop) {
   // Where the whole picture would land at this crop, so landmarks map onto the card.
   const sx = W / crop.w, sy = H / crop.h;
   const r = { x: -crop.x * sx, y: -crop.y * sy, w: video.videoWidth * sx, h: video.videoHeight * sy };
-  const lm = pose.frames[p.index].lm;
-  if (lm) drawPose(ctx, lm, r, false);
+  const frame = pose.frames[p.index];
+  if (frame.lm) drawPose(ctx, frame, r, false);
 }
 
 async function buildPositions(name) {
@@ -465,7 +489,7 @@ async function buildPositions(name) {
                                  pose.impact);
   positionsBox.hidden = false;
   document.getElementById("pos-note").textContent = positions.length
-    ? "Tap one to jump there. ~ = estimated (depends on the club, which isn't tracked)."
+    ? "Tap one to jump there. ~ = estimated (the club couldn't be seen clearly then)."
     : "No swing found in this clip.";
 
   const cards = positions.map(p => {

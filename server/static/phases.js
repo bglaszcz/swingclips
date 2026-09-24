@@ -4,7 +4,8 @@
 //    (see server/pose.py); otherwise it comes from the hand path;
 //  - 240 fps frames are ~4 ms apart, where raw hand speed is mostly tracking jitter, so positions
 //    are smoothed and speed is measured over ~1/30 s.
-// P2, P6 and P8 are defined by the club shaft, which body tracking can't see: they are estimates.
+// P2, P6 and P8 are defined by the club shaft: when the server tracked it (server/club.py), they are
+// the moments it passes horizontal; otherwise they are estimated from the hands and impact.
 //
 // Works in the browser (window.SwingPhases) and in Node (module.exports) for testing.
 (function (root) {
@@ -14,6 +15,8 @@
     p5: "Lead arm parallel (down)", p6: "Shaft parallel (down)", p7: "Impact", p8: "Shaft parallel (through)",
   };
   const CLUB_DEFINED = ["p2", "p6", "p8"];
+  // A shaft crossing counts as seen (not estimated) with a clear sighting of the shaft this close.
+  const SHAFT_CONFIDENT = 0.35, SHAFT_SEEN_SECONDS = 0.02;
   const TORSO_MIN_VISIBILITY = 0.25;
   // Down-the-line, the hands spend much of the swing behind the body, so MediaPipe reports low
   // "visibility" while still placing them well. Trust them; the torso gates the frame.
@@ -82,6 +85,25 @@
       while (b + 1 < out.length && out[b + 1].t <= m.t + SPEED_SECONDS) b++;
       const dt = out[b].t - out[a].t;
       m.speed = dt > 0 ? Math.hypot(out[b].hand.x - out[a].hand.x, out[b].hand.y - out[a].hand.y) / dt : 0;
+    }
+    return out;
+  }
+
+  /**
+   * Moments the tracked shaft passes horizontal (either way) between clip times from and to:
+   * [{t, index, seen}], index into frames. frames[i].club is [degrees, confidence] or null.
+   */
+  function shaftHorizontal(frames, from, to) {
+    const out = [];
+    for (let i = 0; i + 1 < frames.length; i++) {
+      const a = frames[i], b = frames[i + 1];
+      if (a.t < from || b.t > to || !a.club || !b.club) continue;
+      const sa = Math.sin(a.club[0] * Math.PI / 180), sb = Math.sin(b.club[0] * Math.PI / 180);
+      const turn = Math.abs(((b.club[0] - a.club[0] + 540) % 360) - 180);
+      if (sa === sb || sa * sb > 0 || turn > 40) continue;
+      const t = a.t + (b.t - a.t) * sa / (sa - sb);
+      const seen = frames.some(f => f.club && f.club[1] >= SHAFT_CONFIDENT && Math.abs(f.t - t) <= SHAFT_SEEN_SECONDS);
+      out.push({ t, index: t - a.t <= b.t - t ? i : i + 1, seen });
     }
     return out;
   }
@@ -168,7 +190,7 @@
     const p3 = armParallel(ms, address + 1, top);
     const p5 = armParallel(ms, top + 1, impact);
 
-    // P2 (estimated): shaft parallel in the takeaway is roughly when the hands have travelled
+    // P2, fallback when the shaft wasn't tracked: shaft parallel in the takeaway is roughly when the hands have travelled
     // about 1.2 shoulder widths from address (1.1-1.35 measured on real swings, face-on).
     let p2 = -1;
     for (let i = address + 1; i <= top; i++) {
@@ -176,18 +198,37 @@
       if (moved >= ms[address].shoulderWidth * 1.2) { p2 = i; break; }
     }
 
-    // P6 / P8 (estimated): the shaft passes horizontal roughly this long either side of impact
+    // P6 / P8, fallback when the shaft wasn't tracked: the shaft passes horizontal roughly this long either side of impact
     // (~55-60 ms before and ~70 ms after on real 7-iron swings).
     const p6 = Math.min(impact - 1, nearest(ms, ms[impact].t - 0.055));
     const p8 = Math.max(impact + 1, nearest(ms, ms[impact].t + 0.07));
 
     const picks = [["p1", address], ["p2", p2], ["p3", p3], ["p4", top], ["p5", p5], ["p6", p6], ["p7", impact], ["p8", p8]];
-    return picks
+    const found = picks
       .filter(([, i]) => i >= 0 && i < ms.length)
       .map(([key, i]) => ({
         key, tag: key.toUpperCase(), label: LABELS[key], t: ms[i].t, index: ms[i].index,
         estimated: CLUB_DEFINED.includes(key),
       }));
+
+    // The shaft, where the server tracked it: the first horizontal after address, the last before
+    // impact, the first after.
+    const shaft = {
+      p2: shaftHorizontal(frames, ms[address].t, ms[top].t)[0],
+      p6: shaftHorizontal(frames, ms[top].t, ms[impact].t).pop(),
+      p8: shaftHorizontal(frames, ms[impact].t, ms[impact].t + 0.4)[0],
+    };
+    for (const p of found) {
+      const c = shaft[p.key];
+      if (c) Object.assign(p, { t: frames[c.index].t, index: c.index, estimated: !c.seen });
+    }
+    for (const key of CLUB_DEFINED) {
+      if (shaft[key] && !found.some(p => p.key === key)) {
+        const c = shaft[key];
+        found.push({ key, tag: key.toUpperCase(), label: LABELS[key], t: frames[c.index].t, index: c.index, estimated: !c.seen });
+      }
+    }
+    return found.sort((a, b) => a.key.localeCompare(b.key));
   }
 
   const api = { detect };

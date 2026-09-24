@@ -39,11 +39,15 @@ monitor's numbers for that shot.
   keyframes), then smooths it over the whole clip (median, then a local curve fit, so it doesn't lag
   fast hands). It also finds the ball on the mat near the golfer's feet and the first frame it's
   gone: that's impact, exact to the frame.
-- The page draws the skeleton and spine angle, finds P1-P8 (`static/phases.js`, anchored on that
-  impact, or on the heard strike ~2 s into capture clips if the ball wasn't found), groups clips
-  into sessions, deletes to the trash with Undo, and shows each clip's shot numbers. P2, P6 and P8
-  depend on the club, which isn't tracked, so they're estimated from the hands and impact.
-- Pose files are named by version (`<clip>.v2.json.gz`); when `pose.py` changes enough to bump
+- It tracks the club shaft too (`club.py`): in each frame, the thin line running out from the hands
+  that isn't part of the golfer (MediaPipe's person mask) or the empty scene. Where the shaft blurs
+  out in the downswing, its angle is filled in between clear sightings.
+- The page draws the skeleton, shaft and spine angle, finds P1-P8 (`static/phases.js`, anchored on
+  that impact, or on the heard strike ~2 s into capture clips if the ball wasn't found), groups
+  clips into sessions, deletes to the trash with Undo, and shows each clip's shot numbers. P2, P6
+  and P8 are when the shaft passes horizontal; marked ~ when the shaft wasn't clearly seen then.
+  This assumes a face-on camera.
+- Pose files are named by version (`<clip>.v3.json.gz`); when `pose.py` changes enough to bump
   `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
   ~14 s, GSPro connector ~1 s); each match records its gap.
