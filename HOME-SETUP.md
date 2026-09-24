@@ -116,5 +116,16 @@ The phone's browser can't record above 30 fps, which is why the capture app exis
 
 ## Network notes
 - Android can't resolve Windows PC names, so the phone app uses the server's IP. Reserve
-  192.168.86.250 for the server in the router so it can't change.
+  192.168.86.250 for the server in the router (done).
 - The server needs inbound TCP 8000 allowed on private networks.
+
+## Planned
+1. **Session trends** (next): chart tempo, early extension, P6 plane numbers and the like against
+   Square's club path, face and carry across a session's swings, to see which moves go with a push
+   or a pull.
+2. **Compare two swings**: a reference swing (a good one, or last week's) next to the current one,
+   synced on impact, key-position cards lined up (the two-angle sync code carries over).
+3. **Later, maybe: 3D from both cameras.** With the two phones' positions calibrated once,
+   triangulate real 3D joint positions. That would replace the estimated face-on turns and could
+   make a kinematic sequence possible. A much bigger project; only worth it if the estimated
+   turns stop being good enough.
