@@ -60,6 +60,15 @@ monitor's numbers for that shot.
 - A down-the-line clip with no face-on partner shows on its own, with only the down-the-line numbers.
 - Placing the down-the-line phone: behind the golfer on the target line (through the hands or the
   ball), at about hand height, far enough back to fit the club at the top. Portrait, like face-on.
+- **Camera check**: after each swing the review page says if a camera didn't see you well: partly
+  out of the picture, near an edge, too small, or hands leaving the picture at the top
+  (`cameraCheck` in summary.js). A camera that had you partly out of the picture or lost the hands
+  has its body numbers left out of Trends and Progress for that swing. Without fixed spots for the
+  phones, tape marks on the floor for each tripod foot (and a note of the height) make the setup
+  repeatable; the first swing of a session tells you whether it's right.
+- Sharp video matters as much as framing: plenty of light on the golfer (the phones shoot 1/240 s
+  or faster), and the phone focused on the golfer, not the wall behind (tap on the golfer in the
+  camera preview before starting, if the phone allows it).
 
 ### `server/` - the home server (Python, FastAPI)
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON), `shots.jsonl` (launch

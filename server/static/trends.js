@@ -73,8 +73,18 @@ function swingPending(c) {
 /** A listed swing as a row: its launch monitor numbers and its body numbers (null until worked out). */
 function swingRow(c) {
   const rec = swingRecords[c.name];
-  const body = rec && rec.body ? rec.body : null;
-  return { c, t: new Date(c.recorded).getTime(), club: c.shot ? c.shot.club : null, rec, body,
+  let body = rec && rec.body ? rec.body : null;
+  // A camera that couldn't see the golfer (partly out of the picture, hands gone at the top) gives
+  // numbers that look fine but aren't: leave them out.
+  const bad = cam => ((rec && rec.quality && rec.quality.camera && rec.quality.camera[cam]) || [])
+    .some(code => code === "out" || code === "hands");
+  const unseen = ["face", "dtl"].filter(bad);
+  if (body && unseen.length) {
+    body = { ...body };
+    for (const f of SwingSummary.BODY) if (unseen.includes(f.view)) body[f.key] = null;
+    if (unseen.includes("face")) body.tempo = body.backswing = body.downswing = null;
+  }
+  return { c, t: new Date(c.recorded).getTime(), club: c.shot ? c.shot.club : null, rec, body, unseen,
            ...SwingSummary.shotNumbers(c.shot), ...(body || {}) };
 }
 
@@ -133,6 +143,14 @@ function closeTrendView() {
 document.getElementById("t-close").onclick = closeTrendView;
 document.getElementById("p-close").onclick = closeTrendView;
 document.getElementById("progress-btn").onclick = () => progressOpen ? closeTrendView() : openProgress();
+
+/** "5 swings' down-the-line numbers left out (camera)" for rows whose camera couldn't see the golfer. */
+function unseenNote(rows) {
+  const n = cam => rows.filter(r => r.unseen && r.unseen.includes(cam)).length;
+  const parts = [["dtl", "down-the-line"], ["face", "face-on"]].filter(([cam]) => n(cam))
+    .map(([cam, name]) => `${n(cam)} swing${n(cam) === 1 ? "'s" : "s'"} ${name} numbers left out (you were partly out of the picture)`);
+  return parts.join(" · ");
+}
 
 // ---- Numbers ----
 
@@ -218,6 +236,7 @@ function renderTrends() {
   document.getElementById("t-status").textContent = [
     `${all.length} swing${all.length === 1 ? "" : "s"}`,
     left ? `${left} left out` : "",
+    unseenNote(all),
     pending ? `${pending} still being worked out on the server` : "",
   ].filter(Boolean).join(" · ");
 
@@ -505,6 +524,7 @@ function renderProgress() {
   const pending = allRows.filter(r => !r.body && swingPending(r.c)).length;
   document.getElementById("p-status").textContent = !clubs.length ? "No swings with launch monitor numbers yet."
     : [`${sessions.length} session${sessions.length === 1 ? "" : "s"} with the ${clubName(club).toLowerCase()}`,
+       unseenNote(sessions.flatMap(s => s.rows)),
        pending ? `${pending} swing${pending === 1 ? "" : "s"} still being worked out on the server` : ""].filter(Boolean).join(" · ");
 
   const metricSel = document.getElementById("p-metric");

@@ -172,6 +172,44 @@
     };
   }
 
+  // Camera check: body points that must be in the picture at address, how close to the side the
+  // hips may be (share of the picture's width), and the smallest golfer (nose to ankles, share of
+  // its height) the numbers hold up for.
+  const IN_PICTURE = [0, 11, 12, 23, 24, 25, 26, 27, 28];
+  const EDGE = 0.12, SMALL = 0.28, MARGIN = 0.01;
+
+  /**
+   * What's wrong with how one camera saw the swing, as codes: "out" (part of the golfer is out of
+   * the picture at address), "edge" (near a side), "small" (too small to measure well), "hands"
+   * (the hands leave the picture at the top). Empty when it's fine.
+   */
+  function cameraCheck(input, address, top) {
+    const out = [];
+    const f = address == null ? null : input.frames[address];
+    if (!f || !f.lm) return out;
+    const lm = f.lm, x = i => lm[i * 3], y = i => lm[i * 3 + 1];
+    const outside = i => x(i) < MARGIN || x(i) > 1 - MARGIN || y(i) < MARGIN || y(i) > 1 - MARGIN;
+    if (IN_PICTURE.some(outside)) out.push("out");
+    const hx = (x(23) + x(24)) / 2;
+    if (!out.includes("out") && (hx < EDGE || hx > 1 - EDGE)) out.push("edge");
+    if (Math.max(y(27), y(28)) - y(0) < SMALL) out.push("small");
+    const t = top == null ? null : input.frames[top];
+    if (t && t.lm && [15, 16].every(i => { const u = t.lm[i * 3], v = t.lm[i * 3 + 1]; return u < 0 || u > 1 || v < 0 || v > 1; })) {
+      out.push("hands");
+    }
+    return out;
+  }
+
+  /** cameraCheck for both angles of an analyzed swing: {face, dtl}, each a list of codes or null. */
+  function cameras(a, main) {
+    const p = key => a.positions.find(q => q.key === key);
+    return {
+      face: main.angle === "dtl" || !p("p1") ? null
+        : cameraCheck(main, a.metrics ? a.metrics.address : p("p1").index, p("p4") ? p("p4").index : null),
+      dtl: a.dtl && p("p1") ? cameraCheck(a.dtl, a.dtlIndex("p1"), a.dtlIndex("p4")) : null,
+    };
+  }
+
   /**
    * Everything the trends keep about one swing, from its pose files (the server calls this too):
    * {body: bodyNumbers, quality: what could be measured, setup: framing per camera}.
@@ -190,6 +228,7 @@
         ballFace: main.angle === "dtl" ? null : main.impact != null,
         dtl: !!a.dtl, ballDtl: a.dtl ? a.dtl.impact != null : null,
         p6Estimated: p6 ? !!p6.estimated : null,
+        camera: cameras(a, main),
       },
       setup: {
         face: main.angle === "dtl" || !p1 ? null
@@ -200,7 +239,7 @@
   }
 
   const api = { BODY, SHOT, frameIndexAt, syncOffset, aspectOf, strikeWindow, analyze, bodyNumbers,
-                shotNumbers, correlation, summarize };
+                shotNumbers, correlation, summarize, cameras };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingSummary = api;
 })(typeof window !== "undefined" ? window : globalThis);

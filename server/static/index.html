@@ -80,6 +80,9 @@
      would hide its own bottom and cover the list. */
   @media (max-width: 899px) { #viewer { order: -1; border-bottom: 1px solid var(--line); } }
   /* Two angles of one swing sit side by side (the clips are portrait, so they fit). */
+  #camcheck { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--warn); color: var(--text);
+              font-size: 13px; }
+  #camcheck b { color: var(--warn); }
   #stages { display: grid; grid-template-columns: 1fr; gap: 8px; }
   #stages.two { grid-template-columns: 1fr 1fr; }
   .stage { position: relative; min-width: 0; }
@@ -221,6 +224,7 @@
     <div id="list"></div>
   </aside>
   <section id="viewer" hidden>
+    <div id="camcheck" hidden></div>
     <div id="stages">
       <div class="stage">
         <span class="angle-tag">Face-on</span>
@@ -1058,6 +1062,28 @@ async function grabThumb(canvasEl, box, tv, p, index, crop) {
   ctx.restore();
 }
 
+// What the camera check's codes mean, and what to do about them.
+const CAMERA_ADVICE = {
+  out: "you're partly out of the picture, so its body numbers are left out of the trends. Move the phone so all of you is in frame",
+  edge: "you're near the edge of the picture. Center yourself for the most reliable numbers",
+  small: "you're small in the picture. Move the phone closer (or zoom less) so you fill more of it",
+  hands: "your hands leave the picture at the top. Tilt the phone up or step it back",
+};
+
+/** A note above the videos when a camera didn't see the golfer well, so it's fixed before the next swing. */
+function showCameraCheck(a, main) {
+  const box = document.getElementById("camcheck");
+  const cams = SwingSummary.cameras(a, main);
+  const lines = [["face", "Face-on camera"], ["dtl", "Down-the-line camera"]]
+    .flatMap(([cam, name]) => (cams[cam] || []).map(code => [name, CAMERA_ADVICE[code]]));
+  box.hidden = !lines.length;
+  box.replaceChildren(...lines.map(([name, text]) => {
+    const d = document.createElement("div");
+    d.append(Object.assign(document.createElement("b"), { textContent: name + ": " }), text + ".");
+    return d;
+  }));
+}
+
 /** A loaded clip in the shape SwingSummary.analyze takes. */
 function analysisInput(name, p) {
   const c = clips.find(c => c.name === name);
@@ -1077,6 +1103,7 @@ async function buildPositions(name) {
   positions = a.positions;
   metrics = a.metrics;
   dtlMetrics = a.dtlMetrics;
+  showCameraCheck(a, analysisInput(name, pose));
   showNumbers();
   redraw();
   positionsBox.hidden = false;
@@ -1238,6 +1265,7 @@ function open(name) {
   dtlMetrics = null;
   positionsRun++;
   positionsBox.hidden = true;
+  document.getElementById("camcheck").hidden = true;
   document.getElementById("numbers").hidden = true;
   posList.replaceChildren();
   video.src = "/clips/" + encodeURIComponent(name);
