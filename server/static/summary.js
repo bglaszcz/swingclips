@@ -6,9 +6,6 @@
 (function (root) {
   const Phases = root.SwingPhases || (typeof require !== "undefined" && require("./phases.js"));
   const Metrics = root.SwingMetrics || (typeof require !== "undefined" && require("./metrics.js"));
-  // Bump when a change here or in phases.js / metrics.js changes the numbers: cached summaries
-  // from older versions are worked out again.
-  const VERSION = 1;
 
   /** Index of the frame on screen at time t: the last one that starts at or before t. */
   function frameIndexAt(frames, t) {
@@ -202,7 +199,7 @@
     };
   }
 
-  const api = { VERSION, BODY, SHOT, frameIndexAt, syncOffset, aspectOf, strikeWindow, analyze, bodyNumbers,
+  const api = { BODY, SHOT, frameIndexAt, syncOffset, aspectOf, strikeWindow, analyze, bodyNumbers,
                 shotNumbers, correlation, summarize };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingSummary = api;

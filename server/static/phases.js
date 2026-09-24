@@ -21,6 +21,11 @@
   // the arms), so a "crossing" can land right after the top. The shaft goes from horizontal to
   // vertical in ~45-60 ms, so a P6 crossing only counts this long before impact.
   const P6_BEFORE_IMPACT = [0.03, 0.1];
+  // The top: the end of the last stretch of at least TOP_RISE_SECONDS with the hands still rising,
+  // looked for up to TOP_SEARCH_BACK before the highest point and TOP_BEFORE_IMPACT before impact.
+  // Vertical speed is measured over +-TOP_SPEED_SECONDS.
+  const TOP_RISE_SECONDS = 0.02, TOP_SEARCH_BACK = 0.4, TOP_BEFORE_IMPACT = 0.06, TOP_SPEED_SECONDS = 0.02;
+  const TOP_SMOOTH_SECONDS = 0.025, TOP_HAND_POINTS = [15, 16, 19, 20];   // wrists, index fingers
   // Address: the shaft holds within REST_DEGREES for at least REST_SECONDS before the takeaway;
   // P1 is put ADDRESS_LEAD before the takeaway starts, so the club is clearly still at rest.
   const REST_SECONDS = 0.3, REST_DEGREES = 2, ADDRESS_LEAD = 0.1;
@@ -147,6 +152,45 @@
     return best;
   }
 
+  /**
+   * P4, the top: a time in clip seconds, or null if there's no clear end to the rise. The hands sit
+   * near their highest for 0.1-0.2 s, so the highest point can land anywhere in that stretch (one
+   * session's downswing times came out 0.18-0.36 s, and the tempo with them). Where they stop
+   * rising for good is steadier, and agrees face-on and down the line. The hands here are the wrists
+   * and index fingers weighted by MediaPipe's confidence, smoothed over +-TOP_SMOOTH_SECONDS: the
+   * wrists alone jitter enough at the top to fake a rise.
+   */
+  function topOfBackswing(frames, from, to) {
+    const pts = [];
+    for (const f of frames) {
+      if (!f.lm || f.t < from - TOP_SMOOTH_SECONDS - TOP_SPEED_SECONDS || f.t > to + TOP_SMOOTH_SECONDS + TOP_SPEED_SECONDS) continue;
+      let sw = 0, sy = 0;
+      for (const k of TOP_HAND_POINTS) {
+        const w = Math.max(f.lm[k * 3 + 2], 1e-3);
+        sw += w; sy += f.lm[k * 3 + 1] * w;
+      }
+      pts.push({ t: f.t, y: sy / sw });
+    }
+    const y = pts.map(p => {
+      const near = pts.filter(q => Math.abs(q.t - p.t) <= TOP_SMOOTH_SECONDS);
+      return near.reduce((a, q) => a + q.y, 0) / near.length;
+    });
+    const rising = i => {
+      let a = i, b = i;
+      while (a > 0 && pts[i].t - pts[a - 1].t <= TOP_SPEED_SECONDS) a--;
+      while (b + 1 < pts.length && pts[b + 1].t - pts[i].t <= TOP_SPEED_SECONDS) b++;
+      return b > a && y[b] < y[a];   // y grows downward
+    };
+    let runEnd = -1;
+    for (let i = pts.length - 1; i >= 0 && pts[i].t >= from; i--) {
+      if (pts[i].t > to) continue;
+      if (!rising(i)) { runEnd = -1; continue; }
+      if (runEnd < 0) runEnd = i;
+      if (pts[runEnd].t - pts[i].t >= TOP_RISE_SECONDS) return pts[runEnd].t;
+    }
+    return null;
+  }
+
   function armParallel(ms, from, to) {
     let best = -1;
     for (let i = Math.max(0, from); i < to && i < ms.length; i++) {
@@ -182,7 +226,7 @@
     });
     if (fastest < 0) return [];
 
-    // P4 top: hands highest in the two seconds before that.
+    // Roughly the top for now: hands highest in the two seconds before that (see topOfBackswing).
     let top = -1;
     for (let i = 0; i < fastest; i++) {
       if (ms[fastest].t - ms[i].t > 2) continue;
@@ -215,6 +259,8 @@
       if (gap < best) impact = i;
     }
     if (impact <= top) return [];
+    const topT = topOfBackswing(frames, ms[top].t - TOP_SEARCH_BACK, ms[impact].t - TOP_BEFORE_IMPACT);
+    if (topT != null) top = nearest(ms, topT);
 
     // Not a swing (e.g. someone waving at the camera): the phases don't fit together.
     const backswing = ms[top].t - ms[address].t, downswing = ms[impact].t - ms[top].t;

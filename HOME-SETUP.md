@@ -118,7 +118,7 @@ monitor's numbers for that shot.
   Club tile, or use "Change club…" in Trends for all the swings shown. The correction is kept per
   swing in `clubs.json` (Square's own club stays in `shots.jsonl` and shows as "(Square)" in the
   list); picking Square's club again removes it.
-- Pose files are named by version (`<clip>.v5.json.gz`); when `pose.py` changes enough to bump
+- Pose files are named by version (`<clip>.v6.json.gz`); when `pose.py` changes enough to bump
   `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
   ~14 s, GSPro connector ~1 s); each match records its gap.

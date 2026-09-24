@@ -21,7 +21,7 @@ import club
 # at another .task file to compare.
 MODEL = os.environ.get("SWINGCLIPS_POSE_MODEL", os.path.join(
     os.path.dirname(__file__), "..", "public", "mediapipe", "pose_landmarker_full.task"))
-VERSION = 5
+VERSION = 6
 # MediaPipe works on a 256px input internally, so half size loses nothing and halves the conversion.
 SCALE = 0.5
 ROTATE_CW = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
@@ -123,7 +123,9 @@ def shaft_scores(frame, rotation, landmarks, person, bg):
     if rotation in ROTATE_CW:
         img = cv2.rotate(img, ROTATE_CW[rotation])
     h, w = img.shape[:2]
-    grow = max(3, int(0.03 * club.body_height(landmarks, h)))
+    # Grown by 6% of the golfer's height: at 3% the edge of a leg (dark trousers on a dark mat) still
+    # showed past the mask and passed for the shaft down the line.
+    grow = max(3, int(0.06 * club.body_height(landmarks, h)))
     mask = cv2.resize((person > 0.5).astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST)
     mask = cv2.dilate(mask, np.ones((grow, grow), np.uint8)) > 0
     return club.scores(img, landmarks, mask, bg)

@@ -24,7 +24,10 @@ NEAR, FAR, SAMPLES = 0.1, 0.45, 100
 BANDS = (0.0, 0.01, 0.02, 0.035)
 SIDE_GAP = 0.025
 # Ignore directions within this many degrees of hand -> elbow (the forearm) and hand -> shoulder.
-ARM_EXCLUDE = 40
+# Kept narrow: down the line the shaft often runs close to the forearms' direction (P3, the top, P6),
+# and a wide exclusion threw the real shaft out, leaving a leg edge to win. The arms themselves are
+# already masked out.
+ARM_EXCLUDE = 15
 # At least this share of a ray must be off the golfer to count.
 MIN_VISIBLE = 0.25
 # How fast the shaft can turn (degrees / second); ~2,500 is about the peak at impact.
