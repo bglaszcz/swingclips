@@ -9,6 +9,10 @@ Refreshed from the server with `fixtures_export.py` whenever more swings are lab
   `hidden`), the ball. Left and right are the golfer's own (right-handed golfer).
 - `pose/<clip>.v6.json.gz`: `pose.py` v6 output for each labeled clip and its other angle (MediaPipe
   landmarks per frame, smoothed; the club shaft angle; ball; impact).
+- `pose-rtmpose-m/<clip>.v6.json.gz`: the same clips analyzed with `SWINGCLIPS_POSE_BACKEND=rtmpose-m`
+  (RTMPose-m places the 2D body points; MediaPipe still gives the finger/foot points, world
+  landmarks and the person mask). Made on the dev PC with `eval.py --rerun` (it needs the videos);
+  likely what the server switches to. Score it with `SWINGCLIPS_POSE=tests/fixtures/real/pose-rtmpose-m`.
 - `clips.json`: what the server's clip list says about each: angle, heard strike, partner, the
   camera's shutter/ISO (capture app 0.4+), clip quality, the paired Square launch-monitor shot.
 
