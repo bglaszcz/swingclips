@@ -49,7 +49,7 @@ monitor's numbers for that shot.
   picture. Tested on the S21: "focused and locked" about 0.6 s after the trigger. The review page's
   **Camera setup** shows the latest still from each phone with the skeleton and the verdict.
 - Build: `JAVA_HOME=~/.jdks/jbr-21.0.11`, Gradle 8.9 `assembleDebug`, then `adb install -r`
-  (`%LOCALAPPDATA%\Android\Sdk\platform-toolsdb.exe install -r captureppuild\outputspk\debugpp-debug.apk`,
+  (`%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe install -r capture\app\build\outputs\apk\debug\app-debug.apk`,
   one phone plugged in at a time; `-r` keeps the phone's settings).
 
 ### Two angles
