@@ -163,12 +163,8 @@ class ReplayRecorder(
                         targets.forEach(::addTarget)
                         set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(mode.fps, mode.fps))
                     }
-                    if (mode.highSpeed) {
-                        val hs = s as CameraConstrainedHighSpeedCaptureSession
-                        s.setRepeatingBurst(hs.createHighSpeedRequestList(b.build()), null, handler)
-                    } else {
-                        s.setRepeatingRequest(b.build(), null, handler)
-                    }
+                    request = b
+                    repeat(b)
                 } catch (e: Exception) {
                     fail("start camera", e)
                 }
@@ -177,6 +173,81 @@ class ReplayRecorder(
         }
         if (mode.highSpeed) d.createConstrainedHighSpeedCaptureSession(targets, cb, handler)
         else d.createCaptureSession(targets, cb, handler)
+    }
+
+    /** The camera's standing request, for changing focus later. */
+    private var request: CaptureRequest.Builder? = null
+
+    private fun repeat(b: CaptureRequest.Builder) {
+        val s = session ?: return
+        if (mode.highSpeed) {
+            val hs = s as CameraConstrainedHighSpeedCaptureSession
+            s.setRepeatingBurst(hs.createHighSpeedRequestList(b.build()), afWatch, handler)
+        } else {
+            s.setRepeatingRequest(b.build(), afWatch, handler)
+        }
+    }
+
+    /** Logs the autofocus state when it changes (e.g. to see focusOn lock onto the golfer). */
+    private var afState: Int? = null
+    private val afWatch = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(s: CameraCaptureSession, r: CaptureRequest, result: android.hardware.camera2.TotalCaptureResult) {
+            val state = result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE) ?: return  // high-speed bursts report it on some frames only
+            if (state != afState) {
+                afState = state
+                Log.i(TAG, "autofocus: ${AF_STATES.getOrElse(state) { "state $state" }}")
+            }
+        }
+    }
+
+    /** How far the preview/recording picture is turned to be upright (degrees clockwise). */
+    val rotation: Int get() = orientation
+
+    /**
+     * Focuses (and meters exposure) on [box], a part of the upright picture in shares of its width
+     * and height, then holds that focus: the continuous video autofocus otherwise drifts to the busy
+     * wall behind a small golfer. Needs the camera to be running.
+     */
+    fun focusOn(x: Float, y: Float, w: Float, h: Float) = handler.post {
+        try {
+            val b = request ?: return@post
+            val s = session ?: return@post
+            val ch = ctx.getSystemService(CameraManager::class.java).getCameraCharacteristics(cameraId)
+            if ((ch.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0) < 1) return@post
+            val active = ch.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: return@post
+            // Upright picture -> the sensor's own (landscape) picture, for each corner of the box.
+            fun toSensor(u: Float, v: Float): Pair<Float, Float> = when (orientation) {
+                90 -> v to 1 - u
+                180 -> 1 - u to 1 - v
+                270 -> 1 - v to u
+                else -> u to v
+            }
+            val (ax, ay) = toSensor(x, y)
+            val (bx, by) = toSensor(x + w, y + h)
+            // The recording is 16:9, a band across the middle of the (usually 4:3) sensor.
+            val bandH = minOf(active.height().toFloat(), active.width() * mode.height.toFloat() / mode.width)
+            val bandTop = active.top + (active.height() - bandH) / 2
+            fun px(sx: Float) = (active.left + sx.coerceIn(0f, 1f) * active.width()).toInt()
+            fun py(sy: Float) = (bandTop + sy.coerceIn(0f, 1f) * bandH).toInt()
+            val rect = android.graphics.Rect(px(minOf(ax, bx)), py(minOf(ay, by)), px(maxOf(ax, bx)), py(maxOf(ay, by)))
+            if (rect.width() < 8 || rect.height() < 8) return@post
+            val regions = arrayOf(android.hardware.camera2.params.MeteringRectangle(rect, 1000))
+            b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+            b.set(CaptureRequest.CONTROL_AF_REGIONS, regions)
+            if ((ch.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0) > 0) b.set(CaptureRequest.CONTROL_AE_REGIONS, regions)
+            // One request that starts the focus sweep, then the standing request holds the result.
+            b.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
+            Log.i(TAG, "focus on $rect")
+            if (mode.highSpeed) {
+                s.captureBurst((s as CameraConstrainedHighSpeedCaptureSession).createHighSpeedRequestList(b.build()), null, handler)
+            } else {
+                s.capture(b.build(), null, handler)
+            }
+            b.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+            repeat(b)
+        } catch (e: Exception) {
+            Log.w(TAG, "focus failed", e)
+        }
     }
 
     /**
@@ -253,5 +324,6 @@ class ReplayRecorder(
 
     companion object {
         const val TAG = "SwingClips"
+        private val AF_STATES = listOf("inactive", "scanning (continuous)", "focused (continuous)", "scanning", "focused and locked", "locked, not in focus")
     }
 }

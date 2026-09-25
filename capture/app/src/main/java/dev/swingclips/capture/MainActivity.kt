@@ -47,6 +47,8 @@ class MainActivity : Activity() {
     private lateinit var serverButton: Button
     private lateinit var angleButton: Button
     private lateinit var uploadView: TextView
+    private lateinit var setupView: TextView
+    private lateinit var cameraSetup: CameraSetup
 
     private val main = Handler(Looper.getMainLooper())
     private val saver = HandlerThread("saver").apply { start() }
@@ -87,6 +89,10 @@ class MainActivity : Activity() {
         uploader = Uploader(outbox, ::serverUrl) { pending, message -> main.post { showUpload(pending, message) } }
         uploader.start()
         checkServer()
+        cameraSetup = CameraSetup(this, preview, ::serverUrl, ::angle, { recorder }, { !armed && resumed }) { ok, text ->
+            setupView.text = text
+            setupView.setTextColor(if (ok) Color.rgb(74, 222, 128) else Color.rgb(245, 158, 11))
+        }
     }
 
     override fun onResume() {
@@ -95,18 +101,22 @@ class MainActivity : Activity() {
         val needed = arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
         if (needed.all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) startSession()
         else requestPermissions(needed, 1)
+        cameraSetup.reset()
+        cameraSetup.start()
     }
 
     override fun onPause() {
         resumed = false
         // Leaving the app ends recording; coming back needs another Start.
         setArmed(false)
+        cameraSetup.stop()
         stopSession()
         super.onPause()
     }
 
     override fun onDestroy() {
         uploader.stop()
+        cameraSetup.release()
         saver.quitSafely()
         tones.release()
         super.onDestroy()
@@ -204,6 +214,9 @@ class MainActivity : Activity() {
 
     private fun setArmed(on: Boolean) {
         armed = on
+        // Setup checks (and speech) only run while not recording; start the next setup fresh.
+        if (::cameraSetup.isInitialized && !on) cameraSetup.reset()
+        if (::setupView.isInitialized) setupView.visibility = if (on) View.GONE else View.VISIBLE
         // Freshen the clock offset as a session starts.
         if (on) checkServer()
         if (::startButton.isInitialized) showState()
@@ -420,6 +433,9 @@ class MainActivity : Activity() {
 
         statusView = TextView(this).apply { textSize = 20f; setTypeface(null, Typeface.BOLD) }
         panel.addView(statusView)
+        // What the server's camera check says (it's also spoken, for when this screen faces away).
+        setupView = TextView(this).apply { textSize = 15f; setTextColor(Color.rgb(160, 170, 165)); text = "Camera check: waiting for the server…" }
+        panel.addView(setupView)
 
         startButton = button("") { setArmed(!armed) }.apply {
             textSize = 20f

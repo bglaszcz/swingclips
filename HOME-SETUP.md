@@ -39,7 +39,18 @@ monitor's numbers for that shot.
 - Runs on Android 9+ (minSdk 28), so an old Galaxy S8 works as the second camera. Its modes are
   whatever its camera offers (the list is built per phone). If an encoder refuses the frame rate as
   an operating rate, the app retries without it.
-- Build: `JAVA_HOME=~/.jdks/jbr-21.0.11`, Gradle 8.9 `assembleDebug`, then `adb install -r`.
+- **Camera setup** (`CameraSetup.kt`): while not recording, a still of the preview (PixelCopy,
+  upright, ~960 px) goes to `POST /api/setup/<angle>` about once a second. The server finds the
+  golfer (MediaPipe on the still, ~25 ms) and judges it with `setupAdvice` in summary.js; the phone
+  says the verdict out loud (Android text-to-speech) once it holds for two stills, repeats a problem
+  every 12 s, and shows it under the status line. When the golfer has held still for two stills, the
+  phone focuses and meters on them (AF regions + trigger, mapped from the upright picture to the
+  sensor's 16:9 band) and holds that focus (AF mode AUTO) until they're somewhere else in the
+  picture. Tested on the S21: "focused and locked" about 0.6 s after the trigger. The review page's
+  **Camera setup** shows the latest still from each phone with the skeleton and the verdict.
+- Build: `JAVA_HOME=~/.jdks/jbr-21.0.11`, Gradle 8.9 `assembleDebug`, then `adb install -r`
+  (`%LOCALAPPDATA%\Android\Sdk\platform-toolsdb.exe install -r captureppuild\outputspk\debugpp-debug.apk`,
+  one phone plugged in at a time; `-r` keeps the phone's settings).
 
 ### Two angles
 - Each phone listens for the strike on its own; they don't talk to each other. The server pairs a

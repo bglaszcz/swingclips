@@ -18,7 +18,9 @@ Square Omni's numbers for that shot.
 1. **Server** - running (`server\Start server.cmd`).
 2. **Laptop** - open Square Golf's app on the driving range, then run `Square watcher.cmd`.
 3. **Phones** - open **SwingClips** on each, check the angle (Face-on / Down the line), sensitivity
-   and mode, then **Start recording** on both.
+   and mode. Stand at the ball: each phone says whether it can see all of you ("Down the line:
+   good") and focuses on you; **Camera setup** on the review page shows both live. Then **Start
+   recording** on both.
 4. **Review** - `http://homeserver:8000` on a PC, or `http://192.168.86.250:8000` on a phone.
 
 ## What's in the repo

@@ -11,8 +11,8 @@ android {
         applicationId = "dev.swingclips.capture"
         minSdk = 28 // Android 9: the Galaxy S8's last update
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2"
+        versionCode = 3
+        versionName = "0.3"
     }
 
     compileOptions {
