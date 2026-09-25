@@ -5,16 +5,20 @@ golfer stands still at address (the noise floor). Labels come from the review pa
   .venv\\Scripts\\python.exe eval.py              score the saved pose results against the labels
   .venv\\Scripts\\python.exe eval.py --rerun      analyze the labeled clips again first, with pose.py as it is now
   .venv\\Scripts\\python.exe eval.py --compare D:\\SwingClips\\eval\\<an earlier result>.json
-  .venv\\Scripts\\python.exe eval.py --compare    against the newest earlier MediaPipe result
+  .venv\\Scripts\\python.exe eval.py --compare    against the newest earlier baseline (MediaPipe, ray-cast club)
   .venv\\Scripts\\python.exe eval.py --no-noise   skip the noise floor
+  .venv\\Scripts\\python.exe eval.py --only-val D:\\SwingClips\\club-dataset\\dataset.json
+                                            only the swings the club model didn't train on
 
 With SWINGCLIPS_POSE_BACKEND set (rtmpose-m, rtmpose-l, rtmw; see models.py), --rerun analyzes with
-that body model instead, cached apart from MediaPipe's.
+that body model instead, cached apart from MediaPipe's. With SWINGCLIPS_CLUB_BACKEND=yolo, the club
+model finds the shaft (and the clubhead, scored in its own table) instead of the ray casting.
 
 The key positions and numbers are worked out by the review page's own JavaScript (as the server
 does, see swings.py), so the scorecard scores exactly what the page shows. Prints the tables and
 writes everything to SWINGCLIPS_EVAL (default: an "eval" folder next to the clips folder) as
-<date>_v<pose version>_<JavaScript fingerprint>.json (with _<body model> after it for another backend).
+<date>_v<pose version>_<JavaScript fingerprint>.json (with _<body model> and _<club model> after it
+for the other backends).
 """
 import argparse
 import bisect
@@ -84,7 +88,8 @@ def saved_pose(name: str) -> Path | None:
 
 def pipeline_fingerprint() -> str:
     """Changes whenever pose.py, club.py or the pose model changes, so --rerun caches don't go stale.
-    Another body backend (models.py) changes it too, and so does its model file."""
+    Another body backend (models.py) changes it too, and so does its model file; so does the club
+    model, and every retraining of it (its stamp has the file's hash)."""
     here = Path(__file__).parent
     h = hashlib.sha1()
     for f in ("pose.py", "club.py"):
@@ -96,6 +101,9 @@ def pipeline_fingerprint() -> str:
         body = models.model_path(backend)
         h.update((here / "models.py").read_bytes())
         h.update(f"{backend}:{body.name}:{body.stat().st_size if body.is_file() else 0}".encode())
+    if models.club_backend() != models.CLUB_DEFAULT:
+        h.update((here / "models.py").read_bytes())
+        h.update(f"club:{models.club_stamp()}".encode())
     return h.hexdigest()[:10]
 
 
@@ -103,6 +111,11 @@ def body_model() -> str:
     """Which model places the 2D landmarks: "mediapipe", or the backend's model, e.g. rtmpose-m-256x192."""
     backend = models.backend()
     return backend if backend == models.DEFAULT else models.stamp(backend)
+
+
+def club_model() -> str:
+    """What finds the club: "raycast", or the club model's stamp, e.g. club-yolo-pose@1a2b3c4d."""
+    return models.CLUB_DEFAULT if models.club_backend() == models.CLUB_DEFAULT else models.club_stamp()
 
 
 def rerun_pose(name: str, cache: Path, pool: ProcessPoolExecutor, workers: int) -> Path | None:
@@ -159,14 +172,15 @@ def body_height(frames: list[dict], events: dict) -> float | None:
 
 
 def score_clip(summ: swings.Summarizer, label: dict, inp: dict, predicted: dict | None, dtl_side) -> dict:
-    """Everything compared for one labeled clip: {events, joints, swaps, club, angles, ball, notes}."""
+    """Everything compared for one labeled clip: {events, joints, swaps, club, clubhead, angles, ball,
+    notes}."""
     name, angle = inp["name"], inp["angle"]
     frames = inp["frames"]
     ts = [f["t"] for f in frames]
     aspect = summ.call("aspectOf", name, inp["rotation"])
     events = label.get("events") or {}
-    out = {"clip": name, "angle": angle, "events": [], "joints": [], "swaps": [], "club": [], "angles": [],
-           "ball": None, "notes": []}
+    out = {"clip": name, "angle": angle, "events": [], "joints": [], "swaps": [], "club": [], "clubhead": [],
+           "angles": [], "ball": None, "notes": []}
 
     for key in EVENTS:
         lt = events.get(key)
@@ -222,6 +236,12 @@ def score_clip(summ: swings.Summarizer, label: dict, inp: dict, predicted: dict 
             out["club"].append({"t": t, "phase": phase, "blur": bool(head.get("blur") or grip.get("blur")),
                                 "found": found, "label": want,
                                 "err": None if not club else abs(wrap(club[0] - want)), "conf": club[1] if club else None})
+        # The clubhead itself, where the pose file has it (the club model's) and it's labeled in sight.
+        if h is not None and height is not None and "clubhead" in frames[i]:
+            got = frames[i]["clubhead"]
+            out["clubhead"].append({"t": t, "phase": phase, "blur": bool(head.get("blur")), "found": got is not None,
+                                    "err": None if got is None else
+                                    math.hypot((got[0] - h[0]) * aspect, got[1] - h[1]) / height})
         needed = ANGLE_JOINTS["dtl" if angle == "dtl" else "face"]
         if lm is not None and all(labeled_xy(points.get(j)) for j in needed):
             fixed = list(lm)
@@ -348,6 +368,24 @@ def summarize(clips: list[dict], label_checks: list[dict], noise: list[dict]) ->
 
     rows = []
     for angle in ("face", "dtl"):
+        for phase in PHASES + [UNKNOWN, "all"]:
+            recs = [k for c in clips if c["angle"] == angle for k in c.get("clubhead", [])
+                    if phase == "all" or k["phase"] == phase]
+            if not recs:
+                continue
+            found = [k for k in recs if k["found"]]
+            s = stats([k["err"] for k in found], 100)
+            blurred = stats([k["err"] for k in found if k["blur"]], 100)
+            row = {"angle": angle, "phase": phase, "labeled": len(recs), "blurred": sum(k["blur"] for k in recs),
+                   "found": 100 * len(found) / len(recs), "median": s.get("median"), "p90": s.get("p90"),
+                   "blurMedian": blurred.get("median")}
+            rows.append(row)
+            flat[f"clubhead.{angle}.{phase}.found_pct"] = row["found"]
+            flat[f"clubhead.{angle}.{phase}.median_pct"] = row["median"]
+    tables["clubhead"] = rows
+
+    rows = []
+    for angle in ("face", "dtl"):
         for metric in sorted({a["metric"] for c in clips if c["angle"] == angle for a in c["angles"]}):
             recs = [a for c in clips if c["angle"] == angle for a in c["angles"] if a["metric"] == metric]
             s = stats([a["err"] for a in recs])
@@ -416,7 +454,9 @@ def print_report(result: dict) -> None:
     t = result["tables"]
     print(f"Scorecard {result['stamp']}: pose.py v{result['poseVersion']}, JavaScript {result['jsCode']}, "
           f"model {result['poseModel']}, body {result.get('bodyModel', models.DEFAULT)}, "
+          f"club {result.get('clubModel', models.CLUB_DEFAULT)}, "
           f"{result['labeledClips']} labeled clip(s)"
+          + (" (club dataset's validation swings only)" if result.get("onlyVal") else "")
           + (" (analyzed again with --rerun)" if result["rerun"] else ""))
     table("Key positions: labeled vs found (ms; + = found late)", t["events"],
           [("angle", "angle"), ("event", "event"), ("labeled", "n"), ("missed", "missed"), ("median", "median |err|"),
@@ -430,6 +470,11 @@ def print_report(result: dict) -> None:
     table("Club shaft: found, and angle error where found (degrees)", t["club"],
           [("angle", "angle"), ("phase", "phase"), ("labeled", "n"), ("blurred", "blurred"), ("found", "% found"),
            ("median", "median |err|"), ("p90", "90th pct")])
+    if t.get("clubhead"):
+        table("Clubhead: found, and distance from the label where found (% of nose-to-ankle height)", t["clubhead"],
+              [("angle", "angle"), ("phase", "phase"), ("labeled", "n"), ("blurred", "blurred"), ("found", "% found"),
+               ("median", "median"), ("p90", "90th pct"), ("blurMedian", "median, blurred")],
+              "Labeled frames with the clubhead in sight; 'found' = the club model was sure enough to keep it.")
     table("One-frame angles: from tracked vs labeled joints (degrees; + = tracked higher)", t["angles"],
           [("angle", "angle"), ("metric", "metric"), ("frames", "frames"), ("median", "median |err|"),
            ("p90", "90th pct"), ("bias", "bias")])
@@ -447,7 +492,7 @@ def print_compare(old: dict, new: dict) -> None:
     a, b = old.get("headline", {}), new["headline"]
     keys = [k for k in b if k in a and a[k] is not None and b[k] is not None]
     print(f"\nCompared with {old.get('stamp')} (pose.py v{old.get('poseVersion')}, JavaScript {old.get('jsCode')}, "
-          f"body {old.get('bodyModel', models.DEFAULT)}):")
+          f"body {old.get('bodyModel', models.DEFAULT)}, club {old.get('clubModel', models.CLUB_DEFAULT)}):")
     if not keys:
         print("  nothing in common to compare")
         return
@@ -462,15 +507,24 @@ def print_compare(old: dict, new: dict) -> None:
 LATEST = Path("<latest>")
 
 
-def latest_mediapipe(folder: Path) -> Path | None:
-    """The newest result in the folder whose landmarks came from MediaPipe (results from before
-    other backends existed have no bodyModel and count)."""
+def val_clips(manifest: dict) -> set[str]:
+    """The clips of a club dataset's validation swings (a swing is named after one of its clips)."""
+    val = set(manifest["swings"]["val"])
+    return val | {i["clip"] for i in manifest["images"] if i["swing"] in val}
+
+
+def latest_mediapipe(folder: Path, only_val: str | None = None) -> Path | None:
+    """The newest baseline result in the folder: landmarks from MediaPipe and the club from the ray
+    casting (results from before other backends existed have no bodyModel or clubModel and count),
+    over the same clips (all, or one club dataset's validation swings)."""
     for f in sorted(folder.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True):
         try:
             doc = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if isinstance(doc, dict) and "headline" in doc and doc.get("bodyModel", models.DEFAULT) == models.DEFAULT:
+        if (isinstance(doc, dict) and "headline" in doc and doc.get("bodyModel", models.DEFAULT) == models.DEFAULT
+                and doc.get("clubModel", models.CLUB_DEFAULT) == models.CLUB_DEFAULT
+                and doc.get("onlyVal") == only_val):
             return f
     return None
 
@@ -479,11 +533,22 @@ def main(argv=None) -> int:
     ap.add_argument("--rerun", action="store_true", help="analyze the labeled clips again with pose.py as it is now")
     ap.add_argument("--no-noise", action="store_true", help="skip the noise floor")
     ap.add_argument("--compare", type=Path, nargs="?", const=LATEST,
-                    help="an earlier result .json to show the changes against (on its own: the newest MediaPipe one)")
+                    help="an earlier result .json to show the changes against (on its own: the newest baseline one, "
+                         "MediaPipe and the ray-cast club)")
+    ap.add_argument("--only-val", type=Path, metavar="DATASET_JSON",
+                    help="score only the validation swings of a club dataset (club_dataset.py's dataset.json)")
     ap.add_argument("--out", type=Path, default=EVAL_DIR, help=f"where results go (default {EVAL_DIR})")
     args = ap.parse_args(argv)
 
     first, second = labels(1), labels(2)
+    subset = None
+    if args.only_val:
+        keep = val_clips(json.loads(args.only_val.read_text(encoding="utf-8")))
+        # Names the clips, not the file: a rebuilt dataset with another split isn't the same subset.
+        subset = hashlib.sha1("\n".join(sorted(keep)).encode()).hexdigest()[:10]
+        first = {k: v for k, v in first.items() if k in keep}
+        second = {k: v for k, v in second.items() if k in keep}
+        print(f"Only the club dataset's validation swings: {len(first)} labeled clip(s)")
     if not first:
         print(f"No labels in {app.LABELS_DIR} yet: label some clips in the review page first (press L).")
         return 1
@@ -552,8 +617,9 @@ def main(argv=None) -> int:
         result = {
             "stamp": datetime.now().isoformat(timespec="seconds"),
             "poseVersion": pose.VERSION, "jsCode": summ.code, "poseModel": Path(pose.MODEL).name,
-            "bodyModel": body_model(),
+            "bodyModel": body_model(), "clubModel": club_model(),
             "rerun": args.rerun, "labeledClips": len(clips),
+            "onlyVal": subset,
             **summarize(clips, label_checks, noise),
             "clips": clips, "labeler": label_checks, "noise": noise,
         }
@@ -564,14 +630,17 @@ def main(argv=None) -> int:
 
     print_report(result)
     if args.compare:
-        earlier = latest_mediapipe(args.out) if args.compare == LATEST else args.compare
+        earlier = latest_mediapipe(args.out, result["onlyVal"]) if args.compare == LATEST else args.compare
         if earlier is None:
-            print(f"\nNothing to compare with: no earlier MediaPipe result in {args.out} (run without "
-                  "SWINGCLIPS_POSE_BACKEND first)")
+            print(f"\nNothing to compare with: no earlier baseline result in {args.out} (run without "
+                  "SWINGCLIPS_POSE_BACKEND and SWINGCLIPS_CLUB_BACKEND first"
+                  + (", with the same --only-val)" if args.only_val else ")"))
         else:
             print_compare(json.loads(earlier.read_text(encoding="utf-8")), result)
     args.out.mkdir(parents=True, exist_ok=True)
     body = "" if result["bodyModel"] == models.DEFAULT else f"_{result['bodyModel']}"
+    if result["clubModel"] != models.CLUB_DEFAULT:
+        body += "_" + result["clubModel"].replace("@", "-")
     out = args.out / f"{datetime.now():%Y-%m-%d_%H%M}_v{pose.VERSION}_{summ.code}{body}.json"
     out.write_text(json.dumps(result, indent=1), encoding="utf-8")
     print(f"\nSaved {out}")

@@ -44,7 +44,7 @@ def fake_models() -> dict:
     """Environment for a fake rtmpose-m in its own models folder."""
     MODELS.mkdir(parents=True, exist_ok=True)
     fakes.simcc_model(MODELS / models.SPECS["rtmpose-m"].file, *models.SPECS["rtmpose-m"].size, fakes.CHANNELS)
-    return {"SWINGCLIPS_MODELS": str(MODELS), "SWINGCLIPS_POSE_BACKEND": "rtmpose-m"}
+    return {"SWINGCLIPS_MODELS": str(MODELS), "SWINGCLIPS_POSE_BACKEND": "rtmpose-m", "SWINGCLIPS_CLUB_BACKEND": ""}
 
 
 def analyze(module, path) -> dict:
@@ -216,7 +216,7 @@ class PipelineTest(unittest.TestCase):
         old = reference_pose()
         if old is None:
             self.skipTest(f"needs git and commit {REFERENCE_COMMIT[:7]}")
-        with mock.patch.dict(os.environ, {"SWINGCLIPS_POSE_BACKEND": ""}):
+        with mock.patch.dict(os.environ, {"SWINGCLIPS_POSE_BACKEND": "", "SWINGCLIPS_CLUB_BACKEND": ""}):
             for rotation in (0, 90):
                 new = analyze(pose, self.clips[rotation])
                 self.assertNotIn("model", new)

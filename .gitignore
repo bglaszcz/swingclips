@@ -45,3 +45,8 @@ certificates
 
 # body models for the home server (server/fetch_models.py)
 /public/models/
+
+# club model training runs (train/club_train.py)
+/train/runs/
+/train/.venv/
+/train/__pycache__/
