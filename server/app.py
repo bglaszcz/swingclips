@@ -5,7 +5,8 @@ Run with "Start server.cmd", or:  .venv\\Scripts\\python.exe app.py
 Settings (environment variables): SWINGCLIPS_CLIPS (clips folder), SWINGCLIPS_POSE (pose results,
 default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 8000),
 SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landmarker_full.task),
-SWINGCLIPS_LABELS (hand labels for the scorecard, eval.py; default: a "labels" folder next to the clips folder).
+SWINGCLIPS_LABELS (hand labels for the scorecard, eval.py; default: a "labels" folder next to the clips folder),
+SWINGCLIPS_PRACTICE / SWINGCLIPS_PRACTICE_LOG (practice mode's target and log; default next to the clips folder).
 Once a clip's pose is saved, the same worker measures its light, grain, flicker and sharpness (quality.py).
 """
 import asyncio
@@ -33,6 +34,7 @@ from pydantic import BaseModel
 
 import pose
 import quality
+import practice
 import setup
 import swings
 
@@ -273,6 +275,40 @@ def swing_worker(stop: threading.Event):
         summarizer.close()
 
 
+def practice_worker(stop: threading.Event):
+    """Forever, while practice is on: make each new swing's spoken result once its number is known."""
+    while not stop.is_set():
+        if not practice_state.config["on"]:
+            stop.wait(2)
+            continue
+        try:
+            practice_tick()
+        except Exception:
+            traceback.print_exc()
+        stop.wait(1)
+
+
+def practice_tick() -> list[dict]:
+    """One look at the swings since practice was turned on; returns the results made."""
+    clips = listed_clips(since=practice_state.config["since"] - PAIR_SLACK_S)
+    by_name = {c["name"]: c for c in clips}
+    # The swings as listed (by the face-on clip, or a lone one), with the strike's time.
+    swings_now = [dict(c) for c in clips
+                  if SWING_NAME.match(c["name"]) and not (c["partner"] and c["angle"] != "face")]
+    for s in swings_now:
+        s["t"] = recorded_at(CLIPS_DIR / s["name"])
+        s["partnerPose"] = by_name[s["partner"]]["pose"] if s["partner"] in by_name else None
+    with records_lock:
+        # Only records worked out with today's JavaScript and the swing's current partner.
+        records = {s["name"]: swing_records[s["name"]] for s in swings_now
+                   if s["name"] in swing_records and swing_records[s["name"]].get("code") == swings_code
+                   and swing_records[s["name"]].get("partner") == s["partner"]}
+    made = practice_state.step(swings_now, records)
+    for e in made:
+        print(f"Practice: {e['text']}", flush=True)
+    return made
+
+
 def try_trash(name: str) -> None:
     """Moves a pending clip to the trash if nothing has it open. Call with files_lock held."""
     if name == pose_busy:
@@ -313,6 +349,7 @@ async def lifespan(app: FastAPI):
     threading.Thread(target=pose_worker, args=(stop,), daemon=True).start()
     worker = threading.Thread(target=swing_worker, args=(stop,), daemon=True)
     worker.start()
+    threading.Thread(target=practice_worker, args=(stop,), daemon=True).start()
     yield
     stop.set()
     worker.join(timeout=5)  # lets it close its JavaScript engine, which otherwise holds up the exit
@@ -349,13 +386,16 @@ def list_clips():
     return listed_clips()
 
 
-def listed_clips(with_shots: bool = True) -> list[dict]:
-    """The clips, newest first, with their pose state, angle, strike, partner and (optionally) shot."""
+def listed_clips(with_shots: bool = True, since: float | None = None) -> list[dict]:
+    """The clips, newest first, with their pose state, angle, strike, partner and (optionally) shot;
+    only those recorded since `since` (unix seconds), if given."""
     clips = []
     for p in clip_paths():
         if p.name in pending_trash:
             continue
         t = recorded_at(p)
+        if since is not None and t < since:
+            continue
         m = SWING_NAME.match(p.name)
         clips.append({
             "name": p.name,
@@ -739,6 +779,54 @@ def set_note(body: SessionNote):
     return {"ok": True}
 
 
+# ---- Practice mode: one number and a range, spoken after each swing (see practice.py) ----
+PRACTICE_FILE = Path(os.environ.get("SWINGCLIPS_PRACTICE", CLIPS_DIR.parent / "practice.json"))
+PRACTICE_LOG = Path(os.environ.get("SWINGCLIPS_PRACTICE_LOG", CLIPS_DIR.parent / "practice-log.jsonl"))
+practice_state = practice.Practice(PRACTICE_FILE, PRACTICE_LOG)
+# A phone's long poll waits at most this long for a result (its read timeout must be longer).
+PRACTICE_WAIT_MAX_S = 25
+
+
+@app.get("/api/practice")
+def get_practice():
+    """The target, what can be practiced, the log of spoken results, and which phones are listening."""
+    return practice_state.state()
+
+
+@app.post("/api/practice")
+async def set_practice(request: Request):
+    """Sets the target: {on, metric, min, max, club (for the suggested range), streak}."""
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Expected a practice target")
+    try:
+        c = practice_state.set_config(body)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    m = practice.BY_KEY[c["metric"]]
+    print(f"Practice: {'on' if c['on'] else 'off'}, {m['label']} {practice.fmt_range(m, c['min'], c['max'])}", flush=True)
+    return c
+
+
+@app.post("/api/practice/test")
+def practice_voice_check():
+    """Makes the speaking phone say a test sentence (checks it's listening, and its volume)."""
+    return practice_state.voice_check()
+
+
+@app.get("/api/practice/latest")
+async def practice_latest(since: int | None = None, angle: str | None = Query(None, max_length=8),
+                          wait: float = Query(0, ge=0, le=PRACTICE_WAIT_MAX_S)):
+    """For the phone that speaks: results after id `since` (none without it: just the latest id).
+    With `wait`, holds the request up to that many seconds until there is one (a long poll)."""
+    give_up = time.monotonic() + wait
+    while True:
+        out = practice_state.latest(since, angle)
+        if out["results"] or since is None or time.monotonic() >= give_up:
+            return out
+        await asyncio.sleep(0.25)
+
+
 @app.get("/api/swings")
 def get_swings():
     """Each analyzed swing's numbers, by the clip it's listed by (see swings.py)."""
@@ -863,7 +951,8 @@ class QuietPolling(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         message = record.getMessage()
         # The phones' setup stills come every second; so do the Camera setup page's checks.
-        return not any(path in message for path in ('"GET /api/clips ', '"GET /api/time ', " /api/setup"))
+        return not any(path in message for path in ('"GET /api/clips ', '"GET /api/time ', " /api/setup",
+                                                         " /api/practice/latest"))
 
 
 class QuietShutdown(logging.Filter):

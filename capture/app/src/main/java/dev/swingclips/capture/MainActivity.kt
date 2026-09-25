@@ -51,6 +51,9 @@ class MainActivity : Activity() {
     private lateinit var uploadView: TextView
     private lateinit var setupView: TextView
     private lateinit var cameraSetup: CameraSetup
+    private lateinit var practiceButton: Button
+    private lateinit var practiceView: TextView
+    private lateinit var practiceVoice: PracticeVoice
 
     private val main = Handler(Looper.getMainLooper())
     private val saver = HandlerThread("saver").apply { start() }
@@ -97,6 +100,9 @@ class MainActivity : Activity() {
             setupView.text = text
             setupView.setTextColor(if (ok) Color.rgb(74, 222, 128) else Color.rgb(245, 158, 11))
         }
+        practiceVoice = PracticeVoice(::serverUrl, ::angle, ::practiceVoiceOn, { cameraSetup.say(it) }) { text ->
+            main.post { practiceView.text = text }
+        }
     }
 
     override fun onResume() {
@@ -107,6 +113,7 @@ class MainActivity : Activity() {
         else requestPermissions(needed, 1)
         cameraSetup.reset()
         cameraSetup.start()
+        practiceVoice.start()
     }
 
     override fun onPause() {
@@ -114,6 +121,7 @@ class MainActivity : Activity() {
         // Leaving the app ends recording; coming back needs another Start.
         setArmed(false)
         cameraSetup.stop()
+        practiceVoice.stop()
         stopSession()
         super.onPause()
     }
@@ -397,6 +405,7 @@ class MainActivity : Activity() {
             .setSingleChoiceItems(ANGLES.values.toTypedArray(), keys.indexOf(angle())) { d, i ->
                 prefs.edit().putString("angle", keys[i]).apply()
                 updateAngleButton()
+                updatePracticeButton()   // the default follows the angle
                 d.dismiss()
             }
             .show()
@@ -421,9 +430,42 @@ class MainActivity : Activity() {
                 prefs.edit().putString("server", url).apply()
                 checkServer()
                 uploader.poke()
+                practiceVoice.restart()
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /**
+     * Whether this phone says practice results (the review page's Practice panel turns practice on).
+     * Until set by hand: the face-on phone does, the down-the-line one doesn't.
+     */
+    private fun practiceVoiceOn() =
+        if (prefs.contains("practice_voice")) prefs.getBoolean("practice_voice", true)
+        else PracticeFeed.speaksByDefault(angle())
+
+    private fun togglePracticeVoice() {
+        prefs.edit().putBoolean("practice_voice", !practiceVoiceOn()).apply()
+        updatePracticeButton()
+    }
+
+    private fun updatePracticeButton() {
+        practiceButton.text = if (practiceVoiceOn()) "Practice voice: on" else "Practice voice: off"
+    }
+
+    /** Says a sample result at the media volume (what speech uses), and shows that volume. */
+    private fun voiceCheck() {
+        val audio = getSystemService(AudioManager::class.java)
+        val vol = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val advice = when {
+            vol == 0 -> " — muted: turn the volume up"
+            vol * 2 < max -> " — turn it up to hear it over the strike"
+            else -> ""
+        }
+        practiceView.text = if (cameraSetup.canSpeak) "Media volume $vol of $max$advice"
+            else "Speech isn't ready on this phone (check the text-to-speech settings)"
+        cameraSetup.say("Voice check. Tempo 3.2, in range.")
     }
 
     /**
@@ -576,6 +618,11 @@ class MainActivity : Activity() {
         shutterButton = button("") { chooseShutter() }
         panel.addView(row(angleButton, modeButton))
         panel.addView(row(shutterButton, serverButton))
+        // Practice mode: not a recording setting, so it stays usable while recording.
+        practiceButton = button("") { togglePracticeVoice() }
+        panel.addView(row(practiceButton, button("Voice check") { voiceCheck() }))
+        practiceView = TextView(this).apply { textSize = 12f; setTextColor(Color.rgb(160, 170, 165)) }
+        panel.addView(practiceView)
         exposureView = TextView(this).apply { textSize = 12f; setPadding(0, dp(4), 0, 0) }
         panel.addView(exposureView)
 
@@ -592,6 +639,7 @@ class MainActivity : Activity() {
 
         setSensitivity(prefs.getInt("sensitivity", 100))
         updateAngleButton()
+        updatePracticeButton()
     }
 
     /** Fit the preview to the box with the recording's shape (portrait, so width and height swap). */

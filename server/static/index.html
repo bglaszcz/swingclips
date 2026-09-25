@@ -32,7 +32,7 @@
   @media (min-width: 900px) {
     main { grid-template-columns: 320px 1fr; height: calc(100vh - 49px); }
     #side { overflow-y: auto; border-right: 1px solid var(--line); }
-    #viewer, #trends, #progress, #setup, #shutter, #compare { overflow-y: auto; }
+    #viewer, #trends, #progress, #setup, #shutter, #practice, #compare { overflow-y: auto; }
   }
   #listbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line);
              position: sticky; top: 0; background: var(--bg); z-index: 1; }
@@ -142,7 +142,7 @@
   #numbers tr.group th { text-align: left; padding-top: 10px; color: var(--text); }
   /* Session trends: the launch monitor's numbers against the swing's, one dot per swing. */
   #trends { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  @media (max-width: 899px) { #trends, #progress, #setup, #shutter { order: -1; border-bottom: 1px solid var(--line); } }
+  @media (max-width: 899px) { #trends, #progress, #setup, #shutter, #practice { order: -1; border-bottom: 1px solid var(--line); } }
   #setup { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   #setup .note, .s-note { color: var(--muted); font-size: 12px; }
   .s-note { flex: 1; }
@@ -210,6 +210,28 @@
   #p-sessions tbody tr { cursor: pointer; }
   #p-sessions tbody tr:hover { background: var(--sel); }
   .p-note { white-space: normal !important; min-width: 160px; }
+  /* Practice: one number and a range, spoken by a phone after each swing. */
+  #practice { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  #pr-status { color: var(--muted); font-size: 13px; flex: 1; }
+  #pr-state { font-size: 16px; font-weight: 600; }
+  #pr-state.on { color: var(--accent); }
+  #practice .note, #pr-msg { color: var(--muted); font-size: 12px; }
+  #pr-msg.bad { color: var(--warn); }
+  #pr-min, #pr-max { width: 6em; }
+  #pr-metric { width: min(24em, calc(100vw - 130px)); }
+  #practice .t-filters label { max-width: 100%; }
+  @media (max-width: 480px) { header { flex-wrap: wrap; row-gap: 6px; } }
+  #pr-suggest { font-size: 13px; color: var(--muted); }
+  .pr-session { margin-top: 10px; }
+  .pr-shead { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 13px; }
+  .pr-shead span { color: var(--muted); }
+  .pr-log { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .pr-log td { padding: 3px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .pr-log td.pr-in { color: var(--accent); font-weight: 600; }
+  .pr-log td.pr-out { color: var(--warn); font-weight: 600; }
+  .pr-log td.pr-none, .pr-log td.pr-why { color: var(--muted); }
+  .pr-log tr { cursor: pointer; }
+  .pr-log tr:hover { background: var(--sel); }
   .p-note span { margin-right: 8px; }
   .t-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .t-head strong { font-size: 16px; }
@@ -300,7 +322,8 @@
 <header><h1>SwingClips</h1><span class="count" id="count"></span>
   <button id="setup-btn" class="small" title="Check both cameras before you start: live pictures from the phones">Camera setup</button>
   <button id="progress-btn" class="small" title="How your swing and results are changing across sessions">Progress</button>
-  <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button></header>
+  <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button>
+  <button id="practice-btn" class="small" title="Pick one number and a range; the phone says it after each swing">Practice</button></header>
 <main>
   <aside id="side">
     <div id="listbar"></div>
@@ -437,6 +460,45 @@
       arms at address; <b>P6</b> and <b>P5-P7</b> are the same as a share of address in each clip, so clips in
       different light compare fairly: nearer 1 is sharper through the downswing. Green is the best setting for
       each camera. Clips from before capture app 0.4 are "unknown".</div>
+  </section>
+  <section id="practice" hidden>
+    <div class="t-head">
+      <strong>Practice</strong><span id="pr-status"></span>
+      <button id="pr-close" class="small">Close</button>
+    </div>
+    <div class="t-card">
+      <div id="pr-state"></div>
+      <div class="t-filters">
+        <label>Number <select id="pr-metric"></select></label>
+        <label>Club <select id="pr-club"></select></label>
+      </div>
+      <div class="t-filters">
+        <label>From <input id="pr-min" inputmode="decimal"></label>
+        <label>to <input id="pr-max" inputmode="decimal"></label>
+        <span id="pr-unit"></span>
+        <button id="pr-use" class="small" title="Set the range to the middle half of your recent swings with this club">Use middle half</button>
+      </div>
+      <div id="pr-suggest"></div>
+      <div class="t-filters">
+        <label><input type="checkbox" id="pr-streak"> Say "3 in a row"</label>
+      </div>
+      <div class="t-filters">
+        <button id="pr-toggle">Start practice</button>
+        <button id="pr-save" class="small" hidden>Save range</button>
+        <button id="pr-test" class="small" title="The speaking phone says a test sentence: is it listening, and loud enough?">Voice check</button>
+      </div>
+      <div id="pr-msg"></div>
+      <div class="note">After each swing the speaking phone (Practice voice on, the face-on one by default) says the number
+        and whether it was in range, e.g. "Tempo 3.2, in range" or "Club path minus 4, too far left". Body numbers come
+        once the swing is analyzed (usually well under a minute); Square's about 15 s after the strike, or "no shot" if
+        none came within 25 s. A body number from a camera that couldn't see all of you (the camera check) is "no
+        reading", not a wrong number. Numbers marked "noisy" move a lot from one swing to the next even when the swing
+        doesn't: practice them over several swings, not one.</div>
+    </div>
+    <div class="t-card">
+      <strong>Log</strong>
+      <div id="pr-log"></div>
+    </div>
   </section>
   <section id="progress" hidden>
     <div class="t-head">
@@ -1871,6 +1933,7 @@ setInterval(() => { if (!document.hidden) refresh(); }, 10000);
 <script src="/static/trends.js"></script>
 <script src="/static/setup.js"></script>
 <script src="/static/shutter.js"></script>
+<script src="/static/practice.js"></script>
 <script src="/static/labels.js"></script>
 <script src="/static/compare.js"></script>
 </body>
