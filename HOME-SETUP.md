@@ -132,6 +132,21 @@ monitor's numbers for that shot.
   (`journal.json`). When a phone is moved (the golfer's place in its picture shifts by 0.02
   picture heights or size by 6%; within a session it varies ~0.004 and ~2%), the chart marks
   "camera moved" and the tiles only compare that camera's numbers since then.
+- **Compare** (Compare… or C on a swing; `static/compare.js`): this swing against another one,
+  usually one of your own better ones. The picker lists every other swing with its date, club and
+  Square numbers, filtered to this club and the last 90 days by default, sorted by carry (or ball
+  speed, club speed, smash, straightest, newest). The two then play side by side, one row per
+  camera angle both have. **Key positions** (default) lines them up by P1-P8, stretching the time
+  between each pair in a straight line, so the reference plays faster or slower between them;
+  **Real time** lines them up at impact only, both at real speed, so tempo differences show.
+  Play, scrub, frame steps (← →) and P1-P8 (keys 1-8) move both. **Ghost** (G) draws the
+  reference's skeleton, dashed, over this swing's video, lined up at address by the feet and hips
+  and scaled by body height. Below: tempo, the body numbers at address / top / P6 / impact for both
+  swings and the difference, and Square's numbers side by side; numbers from a camera that couldn't
+  see all of a swing (the camera check) are greyed out. The address bar holds
+  `#compare=<clip>,<clip>`, so a comparison can be bookmarked or sent. Swap puts the reference
+  on the left; Esc closes it. Body numbers from different sessions only compare if the phones
+  stood in the same places.
 - **Leave out**: a swing that isn't yours (a friend hitting while the phones listen) is left out of
   Trends and Progress with the swing's Leave out button (`excluded.json`).
 - **Wrong club?** When the club wasn't changed in Square's app, pick the right one on the swing's
@@ -177,7 +192,8 @@ to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of 
     `pose.py`, `club.py` and the model), to try a change before deploying it.
   - `--compare <an earlier .json>`: every headline number, before and after.
   - `--no-noise`: skip the noise floor.
-- Tests (no clips needed; a made-up swing): `cd server` then `python -m unittest discover tests`.
+- Tests (no clips needed; a made-up swing): `cd server` then `python -m unittest discover tests`;
+  the compare view's time mapping: `node --test tests/compare.test.js`.
 
 #### Trying another body model
 `models.py` can put the 2D joints from RTMPose or RTMW instead of MediaPipe, for the scorecard
