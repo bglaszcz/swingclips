@@ -6,7 +6,9 @@ Settings (environment variables): SWINGCLIPS_CLIPS (clips folder), SWINGCLIPS_PO
 default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 8000),
 SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landmarker_full.task),
 SWINGCLIPS_LABELS (hand labels for the scorecard, eval.py; default: a "labels" folder next to the clips folder),
-SWINGCLIPS_PRACTICE / SWINGCLIPS_PRACTICE_LOG (practice mode's target and log; default next to the clips folder).
+SWINGCLIPS_PRACTICE / SWINGCLIPS_PRACTICE_LOG (practice mode's target and log; default next to the clips folder),
+SWINGCLIPS_3D=on (3D from both phones: calib.py, tri.py; off by default) and SWINGCLIPS_CALIB (its
+calibrations; default: a "calib" folder next to the clips folder).
 Once a clip's pose is saved, the same worker measures its light, grain, flicker and sharpness (quality.py).
 """
 import asyncio
@@ -32,11 +34,14 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import calib
 import pose
 import quality
 import practice
 import setup
+import swing3d
 import swings
+import tri
 
 CLIPS_DIR = Path(os.environ.get("SWINGCLIPS_CLIPS", r"D:\SwingClips\clips"))
 POSE_DIR = Path(os.environ.get("SWINGCLIPS_POSE", CLIPS_DIR.parent / "pose"))
@@ -84,6 +89,11 @@ def pose_file(name: str) -> Path:
     # Stored gzipped (~800 KB of JSON per clip shrinks about 3x) and sent as-is with Content-Encoding.
     # Named by version, so clips analyzed by an older pose.py are simply analyzed again.
     return POSE_DIR / f"{name}.v{pose.VERSION}.json.gz"
+
+
+def file_3d(name: str) -> Path:
+    # A swing's 3D joints (tri.py), by its face-on clip; only with SWINGCLIPS_3D=on.
+    return POSE_DIR / f"{name}.3d.json"
 
 
 def error_file(name: str) -> Path:
@@ -235,7 +245,7 @@ def measure_quality(clip: dict, other: dict | None, pool: ProcessPoolExecutor, s
 def swing_worker(stop: threading.Event):
     """Forever: work out the numbers of each analyzed swing that has none, or old ones."""
     global swing_records, swings_code
-    summarizer = swings.Summarizer(STATIC_DIR)
+    summarizer = swings.Summarizer(STATIC_DIR, swings.JS_3D if calib.enabled() else ())
     swings_code = summarizer.code
     with records_lock:
         swing_records = swings.load(SWINGS_FILE)
@@ -270,9 +280,73 @@ def swing_worker(stop: threading.Event):
                 with records_lock:
                     swings.save(SWINGS_FILE, swing_records)
                 print(f"Swings: worked out the numbers of {done} swing(s)", flush=True)
+            if calib.enabled() and not stop.is_set():
+                try:
+                    made = pass_3d(clips, summarizer, stop)
+                except Exception:
+                    traceback.print_exc()
+                    made = 0
+                if made:
+                    with records_lock:
+                        swings.save(SWINGS_FILE, swing_records)
+                    print(f"3D: triangulated {made} swing(s)", flush=True)
             stop.wait(5)
     finally:
         summarizer.close()
+
+
+def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threading.Event) -> int:
+    """Triangulates the swings filmed from both angles whose 3D is missing or out of date (a new
+    calibration, a camera moved, new JavaScript or pose files). Returns how many were made."""
+    both = {n: c for n, c in clips.items() if c["angle"] == "face" and c["partner"] and c["pose"] == "done"
+            and clips.get(c["partner"], {}).get("pose") == "done"}
+    if not both:
+        return 0
+    all_sessions = calib.sessions()
+    with records_lock:
+        records = dict(swing_records)
+    times = {n: recorded_at(CLIPS_DIR / n) for n in both}
+    moved = lambda a, b: summarizer.call("cameraMoved", a, b)
+    shots = None
+    made = 0
+    for name, c in sorted(both.items(), key=lambda kv: times[kv[0]]):
+        if stop.is_set():
+            break
+        rec = records.get(name)
+        if not rec or rec.get("code") != swings_code or "error" in rec:
+            continue  # its 2D numbers (and framing) first
+        session, why = swing3d.session_for(name, times, records, all_sessions, moved)
+        if session is not None:
+            modes = {session["cameras"][k].get("mode") for k in ("face", "dtl")}
+            if calib.mode_of(name) != session["cameras"]["face"].get("mode") or \
+                    calib.mode_of(c["partner"]) != session["cameras"]["dtl"].get("mode"):
+                session, why = None, f"recorded in another mode than calibrated ({', '.join(sorted(map(str, modes)))})"
+        key = f"{session['id'] if session else why}|tri{tri.VERSION}|pose{pose.VERSION}"
+        if rec.get("key3d") == key:
+            continue
+        rec = dict(rec, key3d=key, body3d=None, why3d=None if session else why)
+        if session is None:
+            file_3d(name).unlink(missing_ok=True)
+        else:
+            if shots is None:
+                shots = {x["name"]: x.get("shot") for x in listed_clips()}
+            shot = shots.get(name) or {}
+            try:
+                other = clips[c["partner"]]
+                doc, numbers = swing3d.build(
+                    swings.pose_input(c, pose_file(name)), swings.pose_input(other, pose_file(other["name"])),
+                    swing3d.read_pose(pose_file(name)), swing3d.read_pose(pose_file(other["name"])),
+                    session, summarizer, shot.get("club"), swings.LEAD_SIDE)
+                swing3d.save(file_3d(name), doc)
+                rec["body3d"] = numbers
+            except FileNotFoundError:
+                continue
+            except Exception:
+                rec["why3d"] = "failed: " + traceback.format_exc(limit=2)
+        with records_lock:
+            swing_records[name] = rec
+        made += 1
+    return made
 
 
 def practice_worker(stop: threading.Event):
@@ -901,7 +975,17 @@ async def set_label(name: str, request: Request, label_pass: int = Query(1, alia
 
 
 # ---- Camera setup ----
-camera_setup = setup.Setup(STATIC_DIR)
+def setup_lens(angle: str) -> dict | None:
+    """The lens calibration for the phone filming `angle`, in the mode of its newest clip."""
+    newest = None
+    for p in clip_paths():
+        m = SWING_NAME.match(p.name)
+        if m and (m.group(1) or "face") == angle and (newest is None or recorded_at(p) > recorded_at(newest)):
+            newest = p
+    return calib.lens_for(angle, calib.mode_of(newest.name) if newest else None)
+
+
+camera_setup = setup.Setup(STATIC_DIR, lens_for=setup_lens)
 
 
 @app.post("/api/setup/{angle}")
@@ -929,6 +1013,38 @@ def setup_picture(angle: str):
     if jpeg is None:
         raise HTTPException(404, "No picture from that camera yet")
     return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/3d/{name}")
+def get_3d(name: str):
+    """A swing's 3D joints (tri.py), by its face-on clip: 404 unless 3D is on and it has them."""
+    checked_clip(name)
+    path = file_3d(name)
+    if not calib.enabled() or not path.is_file():
+        with records_lock:
+            why = (swing_records.get(name) or {}).get("why3d")
+        raise HTTPException(404, why or "No 3D for this swing")
+    return FileResponse(path, media_type="application/json", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/calib")
+def calib_status():
+    """Whether 3D from both phones is on, and what's calibrated: lenses, the latest session."""
+    if not calib.enabled():
+        return {"enabled": False}
+    lenses = []
+    for f in sorted(calib.CALIB_DIR.glob("*-*.json")):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+            lenses.append({"name": f.stem, "rms": d.get("rms"), "good": d.get("good"), "coverage": d.get("coverage")})
+        except (OSError, ValueError):
+            continue
+    s = calib.sessions()
+    latest = s[-1] if s else None
+    return {"enabled": True, "phones": calib.phones(), "lenses": lenses,
+            "session": latest and {"id": latest["id"], "created": latest["created"],
+                                   "cameras": {k: {"position": v["position"], "rms": v.get("rms"), "warnings": v.get("warnings", [])}
+                                               for k, v in latest["cameras"].items()}}}
 
 
 @app.get("/api/pose/{name}")

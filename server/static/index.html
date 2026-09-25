@@ -140,6 +140,23 @@
   #numbers th:first-child, #numbers td:first-child { text-align: left; color: var(--muted); }
   #numbers .note { color: var(--muted); font-size: 12px; }
   #numbers tr.group th { text-align: left; padding-top: 10px; color: var(--text); }
+  #panel3d { display: flex; flex-direction: column; gap: 8px; }
+  #panel3d .note { color: var(--muted); font-size: 12px; }
+  #panel3d .grid3d { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  @media (min-width: 1100px) { #panel3d .grid3d { grid-template-columns: 320px minmax(0, 1fr); } }
+  #panel3d .fig3d { width: 100%; height: 360px; background: var(--panel); border: 1px solid var(--line);
+                    border-radius: 8px; touch-action: none; cursor: grab; }
+  #panel3d .grid3d > div { overflow-x: auto; }
+  #panel3d table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  #panel3d th, #panel3d td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  #panel3d th:first-child, #panel3d td:first-child { text-align: left; color: var(--muted); }
+  #panel3d .v2 { color: var(--muted); font-size: 11px; }
+  #panel3d .seq svg { width: 100%; max-width: 640px; height: auto; }
+  #panel3d .seq .grid { stroke: var(--line); }
+  #panel3d .seq .impact { stroke: var(--muted); stroke-dasharray: 4 3; }
+  #panel3d .seq .axis { fill: var(--muted); font-size: 11px; }
+  #panel3d .seq-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; }
+  #panel3d .seq-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
   /* Session trends: the launch monitor's numbers against the swing's, one dot per swing. */
   #trends { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   @media (max-width: 899px) { #trends, #progress, #setup, #shutter, #practice { order: -1; border-bottom: 1px solid var(--line); } }
@@ -384,6 +401,7 @@
         them (away from the ball). The plane is the shaft's line at address: hands to plane + = above it;
         shaft to plane + = steeper than at address (-- where the shaft was a blur and couldn't be seen).</div>
     </div>
+    <div id="panel3d" hidden></div>
     <div id="title"></div>
   </section>
   <section id="compare" hidden></section>
@@ -554,6 +572,8 @@
 <script src="/static/phases.js"></script>
 <script src="/static/metrics.js"></script>
 <script src="/static/summary.js"></script>
+<script src="/static/metrics3d.js"></script>
+<script src="/static/view3d.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
@@ -1007,6 +1027,7 @@ function draw(t) {
   if (metrics && overlays.angles) drawAngles(ctx, metrics.values[i], r);
   if (dtlHere && overlays.angles) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
   if (window.Labels) Labels.drawOn(ctx, r, "main", i);
+  if (pose.angle !== "dtl") View3D.draw(t);
 }
 
 /** The down-the-line view: skeleton, bend, shaft, plane line and hand path, at its own time t. */
@@ -1341,6 +1362,7 @@ async function buildPositions(name) {
   dtlMetrics = a.dtlMetrics;
   showCameraCheck(a, analysisInput(name, pose));
   showNumbers();
+  show3d(name);
   redraw();
   positionsBox.hidden = false;
   document.getElementById("pos-note").textContent = positions.length
@@ -1382,6 +1404,29 @@ async function buildPositions(name) {
       await grabThumb(c, { x: 192, y: 0, w: 192, h: 256 }, thumbVideo2, other, otherIdx[i], otherCrop);
     }
   }
+}
+
+// ---- 3D from both phones (only when the server has it on and the swing is calibrated) ----
+
+let calibState = null;    // GET /api/calib, once
+
+async function show3d(name) {
+  const box = document.getElementById("panel3d");
+  const want = () => current === name && pose;
+  if (calibState === null) {
+    try { calibState = await (await fetch("/api/calib")).json(); } catch { calibState = { enabled: false }; }
+  }
+  let doc = null;
+  if (calibState.enabled && partner && pose.angle !== "dtl") {
+    try {
+      const res = await fetch("/api/3d/" + encodeURIComponent(name));
+      if (res.ok) doc = await res.json();
+    } catch {}
+  }
+  if (!want()) return;
+  const c = clips.find(c => c.name === name);
+  View3D.show(box, { doc, positions, metrics2d: metrics, leadSide, club: c && c.shot ? c.shot.club : null });
+  View3D.draw(video.currentTime);
 }
 
 /** Tempo, and the numbers at address, the top, P6 and impact: face-on, then down the line. */

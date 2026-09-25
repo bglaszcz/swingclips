@@ -15,6 +15,8 @@ from pathlib import Path
 from py_mini_racer import MiniRacer
 
 JS_FILES = ("phases.js", "metrics.js", "summary.js")
+# With 3D from both phones on (calib.py), the swing worker runs this too.
+JS_3D = ("metrics3d.js",)
 # The trends assume a right-handed golfer (the lead side is the left).
 LEAD_SIDE = "left"
 # V8 sets itself up when the first engine starts; two threads starting one at once crash the process
@@ -25,23 +27,23 @@ START_LOCK = threading.Lock()
 class Summarizer:
     """Runs SwingSummary.summarize. Use from one thread; close() when done, or the process can't exit."""
 
-    def __init__(self, static_dir: Path):
-        self.sources = [(static_dir / f).read_text(encoding="utf-8") for f in JS_FILES]
+    def __init__(self, static_dir: Path, extra: tuple = ()):
+        self.sources = [(static_dir / f).read_text(encoding="utf-8") for f in JS_FILES + tuple(extra)]
         self.code = hashlib.sha1("\n".join(self.sources).encode()).hexdigest()[:12]
         self.ctx: MiniRacer | None = None
 
     def summarize(self, main: dict, other: dict | None) -> dict:
         return self.call("summarize", main, other, LEAD_SIDE)
 
-    def call(self, function: str, *args):
-        """SwingSummary.<function>(*args), with the arguments and result passed as JSON."""
+    def call(self, function: str, *args, ns: str = "SwingSummary"):
+        """<ns>.<function>(*args), SwingSummary's by default, with the arguments and result passed as JSON."""
         if self.ctx is None:
             with START_LOCK:
                 self.ctx = MiniRacer()
             for source in self.sources:
                 self.ctx.eval(source)
         args = json.dumps(list(args), separators=(",", ":"))
-        return json.loads(self.ctx.eval(f"JSON.stringify(SwingSummary.{function}(...{args}))"))
+        return json.loads(self.ctx.eval(f"JSON.stringify({ns}.{function}(...{args}))"))
 
     def close(self) -> None:
         if self.ctx is not None:

@@ -172,6 +172,18 @@
     };
   }
 
+  // A camera counts as moved when the golfer's place (x, y) or size (h) in its picture, as framing()
+  // gives them (medians over several swings), changes this much: numbers from before and after
+  // don't compare, and a 3D calibration from before no longer holds. Within a session the golfer's
+  // place varies ~0.004 picture heights and size ~2%.
+  const MOVED_SIZE = 0.06, MOVED_SHIFT = 0.02;
+
+  /** Whether a camera moved between two framings {x, y, h}. */
+  function cameraMoved(before, now) {
+    return Math.abs(now.h - before.h) / before.h > MOVED_SIZE || Math.abs(now.x - before.x) > MOVED_SHIFT
+      || Math.abs(now.y - before.y) > MOVED_SHIFT;
+  }
+
   // Camera check: body points that must be in the picture at address, how close to the side the
   // hips may be (share of the picture's width), and the smallest golfer (nose to ankles, share of
   // its height) the numbers hold up for.
@@ -345,7 +357,7 @@
   }
 
   const api = { BODY, SHOT, frameIndexAt, syncOffset, aspectOf, strikeWindow, analyze, bodyNumbers,
-                shotNumbers, correlation, summarize, cameras, setupAdvice, positionTimes, frameAngles, noiseFloor };
+                shotNumbers, correlation, summarize, cameras, cameraMoved, setupAdvice, positionTimes, frameAngles, noiseFloor };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingSummary = api;
 })(typeof window !== "undefined" ? window : globalThis);

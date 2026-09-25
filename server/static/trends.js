@@ -487,10 +487,8 @@ function renderTrendTable(rows, fx, fy) {
 // Headline numbers: the latest session against the ones before it.
 const TILES = ["carry", "carrySpread", "offlineSpread", "faceToPathSpread", "strikeSpread", "smash",
                "earlyExt", "bendLoss", "tempo", "handsPlaneP6"];
-// A camera counts as moved when the golfer's place or size in its picture changes this much
-// between sessions (see summary.js framing): body numbers from before and after don't compare.
-// (Within a session the golfer's place varies ~0.004 picture heights and size ~2%.)
-const MOVED_SIZE = 0.06, MOVED_SHIFT = 0.02;
+// A camera counts as moved when the golfer's place or size in its picture changes enough between
+// sessions (summary.js cameraMoved): body numbers from before and after don't compare.
 const dayOf = t => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 /**
@@ -510,8 +508,7 @@ function progressSessions(club) {
       if (frames.length < 2) continue;
       const med = k => quantile(frames.map(f => f[k]).sort((a, b) => a - b), 0.5);
       const now = { h: med("h"), x: med("x"), y: med("y") };
-      if (prev && (Math.abs(now.h - prev.h) / prev.h > MOVED_SIZE || Math.abs(now.x - prev.x) > MOVED_SHIFT
-                   || Math.abs(now.y - prev.y) > MOVED_SHIFT)) s.moved[cam] = true;
+      if (prev && SwingSummary.cameraMoved(prev, now)) s.moved[cam] = true;
       prev = now;
     }
   }
