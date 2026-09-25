@@ -21,6 +21,8 @@ monitor's numbers for that shot.
 3. **Phones** - open **SwingClips** on each, check the angle (Face-on / Down the line),
    sensitivity and mode, then **Start recording** on both.
 4. **Review** - `http://homeserver:8000` on a PC, or `http://192.168.86.250:8000` on a phone.
+5. **Practice** (optional) - on the review page, **Practice**: pick one number and a range, **Start
+   practice**, then **Voice check**. The face-on phone says each swing's number (see "Practice mode").
 
 ## Pieces
 
@@ -117,10 +119,66 @@ exposure instead: **1/500**, **1/1000** or **1/2000**.
   prints it on each upload ("manual 1/1000 s ISO 1600"). By eye: at 1/1000 the clubhead is a
   short smear near impact rather than a long faint streak.
 
+### Practice mode: the phone says the number (capture app 0.5)
+Pick one thing to work on and a range; after each swing the phone says the number and whether it
+was in range: "Tempo 3.2, in range", "Club path minus 4, too far left", "Early extension 2, too far
+toward the ball". The phones face away from you, so voice is the channel.
+
+- **Setting it up** (review page, **Practice** at the top): pick the number, the club, and the
+  range. **Use middle half** sets the range to the middle 50% of your last 30 swings with that club
+  (it fills in by itself when you pick a number; edit it to taste, e.g. narrower to push a change).
+  **Start practice** saves it on the server (`practice.json`); only swings struck after that are
+  spoken. Changing the number or range while on (**Save range**) starts over from the next swing.
+  **Stop practice**: nothing is spoken. **Say "3 in a row"** adds the streak to an in-range swing
+  from the third one on ("Tempo 3.1, in range, 3 in a row"); a "no reading" doesn't break it, an
+  out-of-range swing, a new range or a new session does.
+- **What can be practiced**: body numbers (tempo, backswing and downswing time, head and hip sway,
+  head rise, spine tilt at impact; down the line: early extension, bend vs address, head to ball,
+  hands and shaft to plane, hand height and depth at the top) and Square's (club path, face to path,
+  face, attack angle, carry, offline, smash, club and ball speed, launch). Face-on turns (shoulder,
+  pelvis, X-factor) aren't offered: from one camera they're estimated from how narrow the body
+  looks, not good enough to judge one swing by. Marked **(noisy)** in the list, with why: head rise
+  (close to the tracking noise), hands to plane at P6 and at the top and shaft to plane at P6 (they
+  need the shaft seen at address, and P6 is often estimated). They work, but judge them over
+  several swings, not one.
+- **Only numbers that can be trusted are spoken.** A body number from a camera whose camera check
+  says you were partly out of the picture or your hands left it at the top (`quality.camera`:
+  `out`, `hands`; the same rule the trends use), a P6 number where P6 was only estimated, or a
+  number that couldn't be measured is **"no reading"** instead. Square's numbers don't depend on the
+  cameras.
+- **When it speaks**: body numbers once the swing is analyzed (the upload settles for 15 s, then
+  pose and the numbers: usually 30-60 s after the strike; given up after 4 minutes as "no
+  reading"). A down-the-line number waits up to 90 s for the down-the-line clip if it hasn't come
+  in. Square's numbers once the shot pairs, about 15 s after the strike; with no shot by 25 s it
+  says "Club path, no shot". Each swing is spoken once, even if its face-on clip arrives after the
+  down-the-line one.
+- **Which phone speaks**: a setting on each phone, **Practice voice: on / off**. Until changed by
+  hand, the face-on phone speaks and the down-the-line one doesn't (it follows the angle setting).
+  It stays usable while recording, and changes nothing about recording. **Voice check** on the phone
+  says a sample sentence and shows the media volume (what speech uses), with a warning when it's
+  muted or below half. **Voice check** on the review page makes the speaking phone say "Practice
+  voice check", which tests the whole path: the server, the Wi-Fi, the phone, its volume. The
+  panel's top line says which phone is listening.
+- **How it gets to the phone**: the server makes each sentence (`practice.py`, a worker checking
+  the new swings every second while practice is on) and keeps it in `practice-log.jsonl`. The
+  phone asks `GET /api/practice/latest?since=<id>&angle=face&wait=20`; the server holds the request
+  until there's a result or 20 s pass (a long poll), so results come within about a quarter of a
+  second. The first request (no `since`) only returns the latest id, so a phone that starts
+  listening doesn't read out old swings. Ids are the server's milliseconds, so they survive a
+  server restart. After a Wi-Fi drop the phone retries (1, 2, 4, 8, then every 10 s) and skips
+  results older than 45 s: by then you've hit again.
+- **The log** (bottom of the panel): per session, each spoken swing (time, number, in range / out /
+  no reading, and why) and the share in range for each range used ("Tempo 2.8 to 3.4: 14 of 20 in
+  range (70%), 2 no reading"). No readings don't count toward the share. Tap a row to open the swing.
+- Endpoints: `GET /api/practice` (target, the list of numbers, the log, which phones listened),
+  `POST /api/practice` (`{on, metric, min, max, club, streak}`), `POST /api/practice/test`,
+  `GET /api/practice/latest`.
+
 ### `server/` - the home server (Python, FastAPI)
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON), `shots.jsonl` (launch
   monitor shots), `clubs.json` (clubs corrected on the review page), `swings.json` (each swing's
-  numbers), `journal.json` (handicap and session notes), `excluded.json` (swings left out), `trash` (deleted clips; emptied by hand, never automatically).
+  numbers), `journal.json` (handicap and session notes), `excluded.json` (swings left out),
+  `practice.json` and `practice-log.jsonl` (practice mode's target and what was spoken), `trash` (deleted clips; emptied by hand, never automatically).
 - A background worker runs MediaPipe pose on every frame of each new clip (4 processes, split at
   keyframes), then smooths it over the whole clip (median, then a local curve fit, so it doesn't lag
   fast hands). It also finds the ball on the mat near the golfer's feet and the first frame it's
@@ -231,7 +289,9 @@ to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of 
   - With the club model (see "Training the club model"), a clubhead table too: its distance
     from the labeled clubhead, by phase.
 - Tests (no clips needed; a made-up swing): `cd server` then `python -m unittest discover tests`;
-  the compare view's time mapping: `node --test tests/compare.test.js`.
+  the compare view's time mapping: `node --test tests/compare.test.js`. Practice mode's sentences,
+  camera gating and waits (synthetic swings and shots): `python -m unittest tests.test_practice`;
+  the phone's side of it (JVM, no phone): `gradlew :app:testDebugUnitTest` in `capture`.
 
 #### Trying another body model
 `models.py` can put the 2D joints from RTMPose or RTMW instead of MediaPipe, for the scorecard
@@ -389,7 +449,8 @@ The phone's browser can't record above 30 fps, which is why the capture app exis
 
 ## Planned
 Toward a single-digit handicap (16.4 in Sept 2026): see how the swing changes and which changes
-help. Done so far: swing numbers on the server, Progress, Leave out, handicap log and notes.
+help. Done so far: swing numbers on the server, Progress, Leave out, handicap log and notes,
+practice mode (one number, spoken after each swing).
 
 1. **What helps, what hurts** (next): pool swings across sessions with one club and relate each
    move to each result. Within-session first ("on swings where I extended more than my usual that
