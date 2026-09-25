@@ -95,6 +95,8 @@ function showView(which) {
   progressBox.hidden = which !== "progress";
   document.getElementById("setup").hidden = which !== "setup";
   document.getElementById("setup-btn").classList.toggle("on", which === "setup");
+  document.getElementById("practice").hidden = which !== "practice";
+  document.getElementById("practice-btn").classList.toggle("on", which === "practice");
   viewer.hidden = which !== "swing" || !current;
   tipEl.hidden = pTipEl.hidden = true;
   if (which !== "swing") video.pause();
@@ -105,7 +107,8 @@ function showView(which) {
 
 /** Called when a swing is opened: back to the swing view. */
 function leaveTrendViews() {
-  if (!trendsKey && !progressOpen && document.getElementById("setup").hidden) return;
+  if (!trendsKey && !progressOpen && document.getElementById("setup").hidden
+      && document.getElementById("practice").hidden) return;
   showView("swing");
   renderList();
 }
