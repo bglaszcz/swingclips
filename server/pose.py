@@ -53,6 +53,15 @@ BALL_STEP_SECONDS = 0.15
 # while the hands are slower than this share of their peak isn't the ball. Down the line the hands
 # move mostly away from the camera right at impact and look nearly still, so it's their fastest
 # within HANDS_WINDOW_SECONDS either side.
+# The body model (RTMPose) is the slowest part of a clip (~40 ms a frame against MediaPipe's ~17). At
+# 240 fps it runs on every BODY_STRIDE-th frame, with the frames between filled in from their
+# neighbours (4 ms apart; the smoothing spans +-20 ms anyway), and only up to BODY_AFTER_STRIKE s
+# after the heard strike: no number is measured later in the follow-through. MediaPipe still runs
+# on every frame. SWINGCLIPS_BODY_STRIDE=1 runs it on every frame.
+BODY_STRIDE = max(1, int(os.environ.get("SWINGCLIPS_BODY_STRIDE", "2")))
+BODY_AFTER_STRIKE = 0.9
+# The ball search looks this far either side of the heard strike (the whole clip without one).
+BALL_SEARCH_SECONDS = 0.6
 HANDS_AT_IMPACT = 0.2
 HANDS_WINDOW_SECONDS = 0.1
 # The ball goes a little before the phone hears the strike (sound travels; 8-53 ms on real clips,
@@ -123,8 +132,11 @@ def run_chunk(args):
     from mediapipe.tasks.python import BaseOptions
     from mediapipe.tasks.python.vision import PoseLandmarker, PoseLandmarkerOptions, RunningMode
 
-    path, start_pts, end_pts, rotation, bg, body, clubm = args
+    path, start_pts, end_pts, rotation, bg, body, clubm = args[:7]
+    # When the body model stops (clip seconds, or None for the whole clip) and how often it runs.
+    body_until, stride = args[7] if len(args) > 7 else (None, 1)
     tracker = models.BodyTracker(models.load(*body)) if body else None
+    ran = []                                 # per frame: whether the body model placed its points
     clubber = models.ClubRunner(clubm) if clubm else None
     timing = {"frames": 0, "mediapipe": 0.0, "body": 0.0, "club": 0.0}
     lm = PoseLandmarker.create_from_options(PoseLandmarkerOptions(
@@ -151,12 +163,15 @@ def run_chunk(args):
                 landmarks = world = shaft = head = None
                 if res.pose_landmarks:
                     landmarks = [(p.x, p.y, p.visibility) for p in res.pose_landmarks[0]]
-                    if tracker is not None:
+                    if tracker is not None and (body_until is None or t <= body_until) and len(out) % stride == 0:
                         # The full-size picture: the half size is plenty for MediaPipe's 256px input,
                         # but the crop around the golfer would lose the hands' detail.
                         started = time.perf_counter()
                         landmarks = tracker.frame(full, landmarks)
                         timing["body"] += time.perf_counter() - started
+                        ran.append(True)
+                    else:
+                        ran.append(False)
                     if res.pose_world_landmarks:
                         world = [(p.x, p.y, p.z) for p in res.pose_world_landmarks[0]]
                     if clubber is not None:
@@ -165,14 +180,44 @@ def run_chunk(args):
                         shaft = club.model_scores(found, landmarks, full.shape[1], full.shape[0])
                         head = club.clubhead(found)
                         timing["club"] += time.perf_counter() - started
-                    elif bg is not None and res.segmentation_masks:
+                    elif bg is not None and res.segmentation_masks and (body_until is None or t <= body_until):
+                        # The shaft too only until then: nothing is measured from it later on.
                         shaft = shaft_scores(f, rotation, landmarks, res.segmentation_masks[0].numpy_view(), bg)
-                elif tracker is not None:
-                    tracker.frame(full, None)            # lost: the next crop comes from MediaPipe
+                else:
+                    if tracker is not None:
+                        tracker.frame(full, None)        # lost: the next crop comes from MediaPipe
+                    ran.append(False)
                 out.append((t, landmarks, world, shaft, head))
     finally:
         lm.close()
+    timing["ran"] = ran
     return out, timing
+
+
+def fill_body(frames, ran, layout, until):
+    """The frames the body model skipped (every other one, up to `until` s), with its points taken
+    in a straight line between the nearest frames either side it ran on (within 30 ms); MediaPipe's
+    stay where there are none. Frames after `until` keep MediaPipe's points."""
+    idx = sorted(set(models.TO_MP[layout].values()))
+    have = [i for i, (fr, r) in enumerate(zip(frames, ran)) if r and fr[1] is not None]
+    out = list(frames)
+    for k in range(len(have) - 1):
+        a, b = have[k], have[k + 1]
+        ta, tb = frames[a][0], frames[b][0]
+        if b - a < 2 or tb - ta > 0.03:
+            continue
+        la, lb = frames[a][1], frames[b][1]
+        for i in range(a + 1, b):
+            t, lm, *rest = frames[i]
+            if lm is None or (until is not None and t > until):
+                continue
+            w = (t - ta) / (tb - ta)
+            lm = list(lm)
+            for j in idx:
+                lm[j] = (la[j][0] + w * (lb[j][0] - la[j][0]), la[j][1] + w * (lb[j][1] - la[j][1]),
+                         min(la[j][2], lb[j][2]))
+            out[i] = (t, lm, *rest)
+    return out
 
 
 def shaft_scores(frame, rotation, landmarks, person, bg):
@@ -390,6 +435,8 @@ def find_impact(path, rotation, frames, jobs, pool):
     (when the ball can have gone).
     """
     angle, strike = clip_facts(path)
+    if strike is not None:
+        jobs = window_jobs(path, rotation, jobs, strike - BALL_SEARCH_SECONDS, strike + BALL_SEARCH_SECONDS)
     with av.open(path) as c:
         first = upright_gray(next(c.decode(video=0)), rotation)
     found = find_impact_from(path, rotation, frames, jobs, pool, first, angle, strike)
@@ -397,6 +444,23 @@ def find_impact(path, rotation, frames, jobs, pool):
     if found[1] is None and top is not None:
         found = find_impact_from(path, rotation, frames, jobs, pool, frame_at(path, rotation, top), angle, strike)
     return found
+
+
+def window_jobs(path, rotation, jobs, t0, t1):
+    """`jobs` cut down to the part of the clip from t0 to t1 s (split across as many workers):
+    each starts on a keyframe, so decoding is quick."""
+    keys, tb, _ = probe(path)
+    inside = [k for k in keys if t0 - 0.3 <= k * tb <= t1]
+    if len(inside) < 2:
+        return jobs
+    end = next((k for k in keys if k * tb > t1), None)
+    groups = np.array_split(np.arange(len(inside)), min(len(jobs), len(inside)))
+    out = []
+    for g in groups:
+        start = inside[g[0]]
+        stop = inside[g[-1] + 1] if g[-1] + 1 < len(inside) else end
+        out.append((path, start, stop, rotation))
+    return out
 
 
 def find_impact_from(path, rotation, frames, jobs, pool, first, angle=None, strike=None):
@@ -455,8 +519,14 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
         start = keys[g[0]]
         end = keys[g[-1] + 1] if g[-1] + 1 < len(keys) else None
         jobs.append((path, start, end, rotation))
-    chunks = list(pool.map(run_chunk, [j + (bg, body, clubm) for j in jobs]))
-    frames = sorted((fr for chunk, _ in chunks for fr in chunk), key=lambda fr: fr[0])
+    _, strike = clip_facts(path)
+    body_until = strike + BODY_AFTER_STRIKE if strike is not None else None
+    stride = BODY_STRIDE if body else 1
+    chunks = list(pool.map(run_chunk, [j + (bg, body, clubm, (body_until, stride)) for j in jobs]))
+    rows = sorted(((fr, r) for chunk, timing in chunks for fr, r in zip(chunk, timing["ran"])), key=lambda x: x[0][0])
+    frames = [fr for fr, _ in rows]
+    if body and stride > 1:
+        frames = fill_body(frames, [r for _, r in rows], models.SPECS[backend].layout, body_until)
     ms = per_frame_ms([timing for _, timing in chunks])
     print(f"pose: {os.path.basename(path)}: {len(frames)} frames, MediaPipe {ms['mediapipe']:.1f} ms/frame"
           + (f", {models.stamp(backend)} {ms['body']:.1f} ms/frame" if body else "")
@@ -568,4 +638,8 @@ def per_frame_ms(timings):
     """Milliseconds per frame spent in MediaPipe, the body model and the club model, over every
     worker's frames."""
     n = max(1, sum(t["frames"] for t in timings))
-    return {k: 1000 * sum(t[k] for t in timings) / n for k in ("mediapipe", "body", "club")}
+    out = {k: 1000 * sum(t[k] for t in timings) / n for k in ("mediapipe", "club")}
+    # The body model's cost per frame it ran on.
+    nb = max(1, sum(sum(t.get("ran", [])) for t in timings))
+    out["body"] = 1000 * sum(t["body"] for t in timings) / nb
+    return out

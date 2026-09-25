@@ -34,8 +34,9 @@ Full setup, build, deploy and network details are in **[HOME-SETUP.md](HOME-SETU
 1. **Phones**: open **SwingClips** on both and leave them on their stands. Stand at the ball: one
    phone says how both cameras see you ("Both cameras look good", or what to fix).
 2. **Laptop**: `Start golf.cmd` (if it didn't start with Windows). It opens Square Golf's app and
-   the watcher; pick the driving range.
-3. **Review page**: press **Start both** in the Ready bar at the top. Each phone says "Recording".
+   the watcher, then starts both phones once they're connected (each says "Recording"); pick the
+   driving range. `-NoCameras` leaves the phones to the review page.
+3. **Review page** (or skip it if the laptop started the phones): **Start both** in the Ready bar.
    Hit balls once the bar is green. About a minute after the first swing, a phone says "First
    swing: both cameras saw you, Square paired", or what's wrong. After that it only speaks up about
    problems.
@@ -97,8 +98,9 @@ cd /d D:\SwingClips\app\server
 "%USERPROFILE%\Dropbox\SwingClips\Start golf.cmd" -Startup
 ```
 
-If Square's app isn't found, put the path of its shortcut or .exe in `square-app.txt` next to
-`Start golf.cmd`. `Square watcher.cmd` still runs the watcher on its own.
+It finds Square's app in the Start menu's app list (Microsoft Store apps too); if it can't, put the
+path of its shortcut or .exe, or its app ID, in `square-app.txt` next to `Start golf.cmd`. What it
+did each time is in `start-golf-log.txt` there. `Square watcher.cmd` still runs the watcher alone.
 
 ### Dev PC
 

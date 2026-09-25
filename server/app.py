@@ -60,7 +60,8 @@ PORT = int(os.environ.get("SWINGCLIPS_PORT", "8000"))
 STATIC_DIR = Path(__file__).parent / "static"
 VIDEO_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}
 # Leave a few cores for serving video; pose splits each clip across this many processes.
-POSE_WORKERS = max(1, min(4, (os.cpu_count() or 4) // 3))
+# Half the logical CPUs, up to 6 (6 on the i5-12400): more fight over the cores. SWINGCLIPS_POSE_WORKERS overrides.
+POSE_WORKERS = int(os.environ.get("SWINGCLIPS_POSE_WORKERS", 0)) or max(1, min(6, (os.cpu_count() or 4) // 2))
 # A clip still being copied in keeps changing; wait until it has been left alone this long.
 SETTLE_SECONDS = 15
 
@@ -309,7 +310,9 @@ def pose_worker(stop: threading.Event):
                 if not measured:
                     stop.wait(5)
                 continue
-            pool = analyze_clip(max(todo, key=recorded_at), pool)
+            # Face-on clips first: the phones' spoken checks and practice numbers mostly need them, and
+        # during a session the down-the-line ones catch up between sets.
+        pool = analyze_clip(max(todo, key=lambda p: ("_face_" in p.name, recorded_at(p))), pool)
     except KeyboardInterrupt:
         # Ctrl+C reaches the pool's processes too, and comes back here out of the clip they were on.
         # Nothing half done was saved: that clip is simply analyzed (or measured) again at the next start.

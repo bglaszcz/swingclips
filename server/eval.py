@@ -106,6 +106,8 @@ def pipeline_fingerprint() -> str:
         body = models.model_path(backend)
         h.update((here / "models.py").read_bytes())
         h.update(f"{backend}:{body.name}:{body.stat().st_size if body.is_file() else 0}".encode())
+        # How often it runs (SWINGCLIPS_BODY_STRIDE) changes the result too.
+        h.update(f"stride{pose.BODY_STRIDE}".encode())
     if models.club_backend() != models.CLUB_DEFAULT:
         h.update((here / "models.py").read_bytes())
         h.update(f"club:{models.club_stamp()}".encode())

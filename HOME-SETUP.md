@@ -658,6 +658,17 @@ set SWINGCLIPS_POSE_BACKEND=rtmpose-m
   numbers follow. A clip that fails keeps its old result. Delete the line (or the file) to go back:
   the clips are then analyzed again with MediaPipe the same way.
 
+#### Keeping up during a session
+A clip took ~35 s with RTMPose (a swing, two clips, comes every ~20 s), so a 40-swing session left
+40+ clips waiting. Now: RTMPose runs on every other frame up to 0.9 s after the heard strike, with
+the frames between filled in from their neighbours (4 ms apart; on the labeled swings the key
+positions came out the same or better and joints within 0.3% of height), the club shaft is searched
+over the same stretch, the ball search reads only +-0.6 s round the strike, RTMPose stays loaded
+between clips, and the server uses half the logical CPUs (6 on the i5-12400). About 20 s a clip.
+New **face-on** clips go first, so the spoken checks and practice numbers keep up; the
+down-the-line ones catch up between sets. `SWINGCLIPS_BODY_STRIDE=1` (settings.cmd) runs RTMPose on
+every frame; `SWINGCLIPS_POSE_WORKERS=n` sets the workers.
+
 #### The ball search (pose.py, `BALL_VERSION` 2)
 Impact is the first frame the ball is gone. A spot only counts as the ball if it's a ball's size
 (1-3% of nose-to-feet height), where a ball sits for the camera's angle (face-on below the feet;

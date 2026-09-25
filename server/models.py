@@ -229,11 +229,18 @@ class BodyTracker:
         return to_mediapipe(pts, mp_landmarks, self.runner.spec.layout)
 
 
+_loaded: dict[tuple, Runner] = {}
+
+
 def load(name: str, path: Path | str | None = None) -> Runner:
-    """The model behind a backend name (not "mediapipe"), ready to run."""
+    """The model behind a backend name (not "mediapipe"), ready to run. Kept once loaded: the pose
+    worker processes live across clips, and loading took ~1 s a clip in each."""
     if name not in SPECS:
         raise ValueError(f"no ONNX model for {name!r}: use one of {', '.join(SPECS)}")
-    return Runner(name, path)
+    key = (name, str(path) if path else None)
+    if key not in _loaded:
+        _loaded[key] = Runner(name, path)
+    return _loaded[key]
 
 
 # ---- The club model ----

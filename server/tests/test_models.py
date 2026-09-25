@@ -227,6 +227,24 @@ class PipelineTest(unittest.TestCase):
                 self.assertEqual(json.dumps(new), json.dumps(analyze(old, self.clips[rotation])), rotation)
 
     @needs_ort
+    def test_skipped_frames_filled_in(self):
+        """pose.fill_body: points the body model has, on a frame it skipped, halfway between its
+        neighbours; not across a gap over 30 ms, nor after the end of its stretch."""
+        mp_lm = [(0.9, 0.9, 0.5)] * 33
+        def lm(x):
+            out = list(mp_lm)
+            for i in models.COCO_TO_MP.values():
+                out[i] = (x, x, 0.8)
+            return out
+        frames = [(0.000, lm(0.1)), (0.004, mp_lm), (0.008, lm(0.3)), (0.012, mp_lm), (0.060, lm(0.5)), (0.064, mp_lm)]
+        frames = [(t, l, None, None, None) for t, l in frames]
+        ran = [True, False, True, False, True, False]
+        out = pose.fill_body(frames, ran, "coco17", until=0.05)
+        self.assertAlmostEqual(out[1][1][15][0], 0.2)            # wrist between 0.1 and 0.3
+        self.assertEqual(out[1][1][19], mp_lm[19])               # index finger: MediaPipe's
+        self.assertEqual(out[3][1], mp_lm)                       # 48 ms gap: left as it was
+        self.assertEqual(out[5][1], mp_lm)                       # after the stretch
+
     def test_body_model_output(self):
         """The fake model's points (on the dots) replace MediaPipe's 2D points it has, in every
         rotation; the rest, the 3D estimate and the layout stay MediaPipe's."""
@@ -234,7 +252,8 @@ class PipelineTest(unittest.TestCase):
         for rotation, path in self.clips.items():
             with mock.patch.dict(os.environ, {"SWINGCLIPS_POSE_BACKEND": ""}):
                 base = analyze(pose, path)
-            with mock.patch.dict(os.environ, env):
+            # On every frame: the test clip's frames are too far apart to fill in skipped ones.
+            with mock.patch.dict(os.environ, env), mock.patch.object(pose, "BODY_STRIDE", 1):
                 got = analyze(pose, path)
             self.assertEqual(got["model"], "rtmpose-m-256x192")
             self.assertEqual(set(got["msPerFrame"]), {"mediapipe", "body"})
