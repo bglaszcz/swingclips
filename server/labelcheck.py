@@ -29,6 +29,11 @@ FRAME_DONE = 8
 # at least this many pairs must look crossed: the tracker swaps a single pair now and then itself.
 SWAP_APART = 0.04
 SWAP_PAIRS = 2
+# Face-on hips labeled this much wider apart than the tracker's (share of body height): clicked at
+# the outer edge of the hips rather than the hip joint centre, where the trackers put them.
+HIP_WIDE = 0.07
+# The same key moment on the two angles, lined up by the labeled impacts, this far apart (s).
+ANGLES_APART = 0.02
 # The ball this far from the tracker's (share of body height), impact this far from ball-gone (s).
 BALL_OFF = 0.05
 IMPACT_OFF = 0.0125   # 3 frames at 240 fps
@@ -78,7 +83,8 @@ def check(doc: dict, pose: dict | None) -> dict:
         aspect = aspect_of(name, pose.get("rotation") or 0)
         pf = pose.get("frames") or []
         ts = [f["t"] for f in pf]
-        swapped = []
+        swapped, wide_hips = [], 0
+        face_on = (doc.get("clip") or {}).get("angle", "face") != "dtl"
         for key, pts in frames.items():
             if not ts:
                 break
@@ -104,6 +110,14 @@ def check(doc: dict, pose: dict | None) -> dict:
                     crossed.append(what)
             if len(crossed) >= SWAP_PAIRS:
                 swapped.append((t, crossed))
+            elif face_on and all(pts.get(k) and pts[k].get("x") is not None and not pts[k].get("hidden")
+                                 for k in ("l_hip", "r_hip")):
+                wider = abs(pts["l_hip"]["x"] - pts["r_hip"]["x"]) * aspect - math.dist(tracked("l_hip"), tracked("r_hip"))
+                if wider > HIP_WIDE * height:
+                    wide_hips += 1
+        if wide_hips:
+            issues.append(f"The hips look clicked at the outer edge on {wide_hips} frame(s). Click the hip joint centre: "
+                          "where the thigh bone meets the pelvis, well inside the outline.")
         for t, crossed in sorted(swapped):
             issues.append(f"Left and right look swapped at {t:.3f} s ({', '.join(crossed)}). Left is the golfer's "
                           "own: the lead side, nearer the target.")
@@ -154,6 +168,7 @@ def summary(labels_dir: Path, pose_path) -> list[dict]:
         return out
     files = sorted(labels_dir.glob("*.json"))
     labeled = {_pass_and_clip(f) for f in files}
+    docs: dict[tuple[int, str], dict] = {}
     for f in files:
         label_pass = _pass_and_clip(f)[0]
         try:
@@ -169,10 +184,35 @@ def summary(labels_dir: Path, pose_path) -> list[dict]:
             got = (stamp, check(doc, load_pose(pp)))
             _cache[f.name] = got
         partner = (doc.get("partner") or {}).get("name")
+        docs[(label_pass, clip)] = doc
         row = {"clip": clip, "pass": label_pass, "angle": (doc.get("clip") or {}).get("angle", "face"),
                "partner": partner, "updated": doc.get("updated"), "pose": bool(pp and pp.is_file()), **got[1]}
         row["issues"] = list(row["issues"])
         if partner and (label_pass, partner) not in labeled:
             row["issues"].append("The other camera angle of this swing isn't labeled yet.")
         out.append(row)
+    for row in out:
+        # Once per swing, on the face-on row (the view shows a swing's rows together).
+        if "clip" in row and row["angle"] != "dtl":
+            row["issues"] += angles_disagree(docs.get((row["pass"], row["clip"])), docs.get((row["pass"], row["partner"])))
+    return out
+
+
+def angles_disagree(doc: dict | None, other: dict | None) -> list[str]:
+    """Key moments marked at different points of the swing on the two angles. The clips' clocks differ,
+    so they're lined up by the two labeled impacts."""
+    if not doc or not other:
+        return []
+    ev, ov = doc.get("events") or {}, other.get("events") or {}
+    if not isinstance(ev.get("impact"), (int, float)) or not isinstance(ov.get("impact"), (int, float)):
+        return []
+    out = []
+    for k in EVENTS:
+        if k == "impact" or not isinstance(ev.get(k), (int, float)) or not isinstance(ov.get(k), (int, float)):
+            continue
+        apart = (ev[k] - ev["impact"]) - (ov[k] - ov["impact"])
+        if abs(apart) > ANGLES_APART:
+            name = "Takeaway" if k == "takeaway" else k.upper()
+            out.append(f"{name} differs by {round(abs(apart) * 1000)} ms between the angles (later "
+                       f"{'face-on' if apart > 0 else 'down the line'}, lined up by the impacts). Check both.")
     return out

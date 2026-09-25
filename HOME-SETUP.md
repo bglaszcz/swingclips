@@ -468,6 +468,10 @@ to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of 
   address). **[ ]** step through about a dozen suggested frames, most of them in the downswing.
   **D** switches between the two angles (the arrow keys then step that angle's own frames). Left
   and right are the golfer's own: face-on, their left is on the picture's right.
+- **Where to click**: each joint's centre, not the outline of the body. The hip is where the thigh
+  bone meets the pelvis, well inside the hips' outline; the shoulder is the top of the arm bone.
+  A joint covered by an arm or the club is still clicked where it must be (a normal click); **X**
+  only when it can't be placed at all.
 - **Labels** (button at the top; `static/labelview.js`, checks in `labelcheck.py`): progress toward
   the goals (key moments on both angles of 20 swings, points on 10), which clubs, light, shutter
   settings and days the labeled swings cover, each labeled swing with what's done per angle, and

@@ -73,6 +73,21 @@ class CheckTest(unittest.TestCase):
         r = labelcheck.check(label({"1.000000": pts}), None)
         self.assertTrue(any("blurry on 1 frame" in i for i in r["issues"]))
 
+    def test_hips_at_the_outer_edge(self):
+        wide = dict(RIGHT, l_hip={"x": 0.60, "y": 0.55}, r_hip={"x": 0.40, "y": 0.55})
+        r = labelcheck.check(label({"1.000000": wide}), pose_with(TRACKED))
+        self.assertTrue(any("outer edge on 1 frame" in i for i in r["issues"]), r["issues"])
+        r = labelcheck.check(label({"1.000000": RIGHT}), pose_with(TRACKED))
+        self.assertFalse(any("outer edge" in i for i in r["issues"]))
+
+    def test_angles_disagree(self):
+        face = label(events={"p4": 1.80, "impact": 2.05})
+        dtl = label(events={"p4": 1.83, "impact": 2.05})                  # 30 ms later down the line
+        self.assertEqual(len(labelcheck.angles_disagree(face, dtl)), 1)
+        self.assertIn("P4 differs by 30 ms", labelcheck.angles_disagree(face, dtl)[0])
+        dtl = label(events={"p4": 1.90, "impact": 2.15})                  # another clock, same swing
+        self.assertEqual(labelcheck.angles_disagree(face, dtl), [])
+
     def test_summary_flags_missing_other_angle(self):
         tmp = Path(tempfile.mkdtemp(prefix="swingclips-labelcheck-"))
         doc = label(events={"takeaway": 0.8})
