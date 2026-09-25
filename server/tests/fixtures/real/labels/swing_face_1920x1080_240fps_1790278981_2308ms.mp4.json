@@ -1,0 +1,696 @@
+{
+ "schema": 1,
+ "clip": {
+  "name": "swing_face_1920x1080_240fps_1790278981_2308ms.mp4",
+  "angle": "face",
+  "strike": 2.308
+ },
+ "partner": {
+  "name": "swing_dtl_1920x1080_240fps_1790278981_2221ms.mp4",
+  "angle": "dtl",
+  "strike": 2.221
+ },
+ "events": {
+  "takeaway": 0.995278,
+  "p2": 1.428367,
+  "p3": 1.624089,
+  "p4": 1.9739,
+  "p5": 2.202933,
+  "p6": 2.244578,
+  "impact": 2.294556,
+  "p8": 2.3695
+ },
+ "ball": {
+  "x": 0.53814,
+  "y": 0.90377
+ },
+ "frames": {
+  "0.000000": {
+   "l_shoulder": {
+    "x": 0.63986,
+    "y": 0.47464
+   },
+   "l_elbow": {
+    "x": 0.60981,
+    "y": 0.54876
+   },
+   "l_wrist": {
+    "x": 0.55433,
+    "y": 0.61638
+   },
+   "r_shoulder": {
+    "x": 0.44105,
+    "y": 0.48244
+   },
+   "r_elbow": {
+    "x": 0.46879,
+    "y": 0.54876
+   },
+   "r_wrist": {
+    "x": 0.5104,
+    "y": 0.62809
+   },
+   "l_hip": {
+    "x": 0.60981,
+    "y": 0.60728
+   },
+   "r_hip": {
+    "x": 0.44336,
+    "y": 0.60338
+   },
+   "grip": {
+    "x": 0.53814,
+    "y": 0.6814,
+    "blur": true
+   },
+   "hosel": {
+    "x": 0.53121,
+    "y": 0.87386,
+    "blur": true
+   },
+   "head": {
+    "x": 0.52659,
+    "y": 0.89467,
+    "blur": true
+   }
+  },
+  "0.936978": {
+   "l_shoulder": {
+    "x": 0.64218,
+    "y": 0.47854,
+    "blur": true
+   },
+   "l_elbow": {
+    "x": 0.60519,
+    "y": 0.54486,
+    "blur": true
+   },
+   "l_wrist": {
+    "x": 0.55895,
+    "y": 0.62679,
+    "blur": true
+   },
+   "r_shoulder": {
+    "x": 0.45492,
+    "y": 0.48505,
+    "blur": true
+   },
+   "r_elbow": {
+    "x": 0.47341,
+    "y": 0.55397,
+    "blur": true
+   },
+   "r_wrist": {
+    "x": 0.51271,
+    "y": 0.62679,
+    "blur": true
+   },
+   "l_hip": {
+    "x": 0.61212,
+    "y": 0.60728,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.44336,
+    "y": 0.61118,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.53352,
+    "y": 0.6814,
+    "blur": true
+   },
+   "hosel": {
+    "x": 0.53352,
+    "y": 0.87776,
+    "blur": true
+   },
+   "head": {
+    "x": 0.51734,
+    "y": 0.89727,
+    "blur": true
+   }
+  },
+  "1.449189": {
+   "l_shoulder": {
+    "x": 0.60288,
+    "y": 0.49025,
+    "blur": true
+   },
+   "l_elbow": {
+    "x": 0.51965,
+    "y": 0.54876,
+    "blur": true
+   },
+   "l_wrist": {
+    "x": 0.38788,
+    "y": 0.59168,
+    "blur": true
+   },
+   "r_shoulder": {
+    "x": 0.44567,
+    "y": 0.46554,
+    "blur": true
+   },
+   "r_elbow": {
+    "x": 0.41793,
+    "y": 0.53836,
+    "blur": true
+   },
+   "r_wrist": {
+    "x": 0.35782,
+    "y": 0.57867,
+    "blur": true
+   },
+   "l_hip": {
+    "x": 0.59825,
+    "y": 0.60468,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.44798,
+    "y": 0.60468,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.29309,
+    "y": 0.59818,
+    "blur": true
+   },
+   "hosel": {
+    "hidden": true
+   },
+   "head": {
+    "hidden": true
+   }
+  },
+  "1.707378": {
+   "l_shoulder": {
+    "x": 0.56357,
+    "y": 0.50065,
+    "blur": true
+   },
+   "l_elbow": {
+    "x": 0.43411,
+    "y": 0.50715,
+    "blur": true
+   },
+   "l_wrist": {
+    "x": 0.33008,
+    "y": 0.48635,
+    "blur": true
+   },
+   "r_shoulder": {
+    "hidden": true
+   },
+   "r_elbow": {
+    "hidden": true
+   },
+   "r_wrist": {
+    "hidden": true
+   },
+   "l_hip": {
+    "x": 0.57745,
+    "y": 0.60338,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.42718,
+    "y": 0.60338,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.33933,
+    "y": 0.44213,
+    "blur": true
+   },
+   "hosel": {
+    "x": 0.3925,
+    "y": 0.3459,
+    "blur": true
+   },
+   "head": {
+    "x": 0.41331,
+    "y": 0.3368,
+    "blur": true
+   }
+  },
+  "2.111322": {
+   "l_shoulder": {
+    "x": 0.57513,
+    "y": 0.50585,
+    "blur": true
+   },
+   "l_elbow": {
+    "x": 0.42024,
+    "y": 0.47984,
+    "blur": true
+   },
+   "l_wrist": {
+    "x": 0.41562,
+    "y": 0.43043,
+    "blur": true
+   },
+   "r_shoulder": {
+    "hidden": true
+   },
+   "r_elbow": {
+    "hidden": true
+   },
+   "r_wrist": {
+    "hidden": true
+   },
+   "l_hip": {
+    "x": 0.60288,
+    "y": 0.60078,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.44798,
+    "y": 0.60728,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.4896,
+    "y": 0.40702,
+    "blur": true
+   },
+   "hosel": {
+    "hidden": true
+   },
+   "head": {
+    "hidden": true
+   }
+  },
+  "2.182111": {
+   "l_shoulder": {
+    "x": 0.61906,
+    "y": 0.50325,
+    "blur": true
+   },
+   "l_elbow": {
+    "x": 0.49191,
+    "y": 0.51756,
+    "blur": true
+   },
+   "l_wrist": {
+    "x": 0.35089,
+    "y": 0.49935,
+    "blur": true
+   },
+   "r_shoulder": {
+    "x": 0.48729,
+    "y": 0.46034,
+    "blur": true
+   },
+   "r_elbow": {
+    "hidden": true
+   },
+   "r_wrist": {
+    "hidden": true
+   },
+   "l_hip": {
+    "x": 0.62599,
+    "y": 0.60598,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.46879,
+    "y": 0.61118,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.35089,
+    "y": 0.44863,
+    "blur": true
+   },
+   "hosel": {
+    "x": 0.4318,
+    "y": 0.3394,
+    "blur": true
+   },
+   "head": {
+    "x": 0.46186,
+    "y": 0.3277,
+    "blur": true
+   }
+  },
+  "2.211267": {
+   "l_shoulder": {
+    "x": 0.63755,
+    "y": 0.50975,
+    "blur": true
+   },
+   "l_elbow": {
+    "x": 0.52427,
+    "y": 0.53056,
+    "blur": true
+   },
+   "l_wrist": {
+    "x": 0.36476,
+    "y": 0.53706,
+    "blur": true
+   },
+   "r_shoulder": {
+    "x": 0.47341,
+    "y": 0.47204,
+    "blur": true
+   },
+   "r_elbow": {
+    "hidden": true
+   },
+   "r_wrist": {
+    "hidden": true
+   },
+   "l_hip": {
+    "x": 0.63293,
+    "y": 0.60468,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.47573,
+    "y": 0.60338,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.30234,
+    "y": 0.50715,
+    "blur": true
+   },
+   "hosel": {
+    "hidden": true
+   },
+   "head": {
+    "hidden": true
+   }
+  },
+  "2.240411": {
+   "l_shoulder": {
+    "x": 0.63755,
+    "y": 0.49415,
+    "blur": true
+   },
+   "l_elbow": {
+    "x": 0.55433,
+    "y": 0.53966,
+    "blur": true
+   },
+   "l_wrist": {
+    "x": 0.40637,
+    "y": 0.58257,
+    "blur": true
+   },
+   "r_shoulder": {
+    "x": 0.46417,
+    "y": 0.47464,
+    "blur": true
+   },
+   "r_elbow": {
+    "x": 0.46879,
+    "y": 0.53966,
+    "blur": true
+   },
+   "r_wrist": {
+    "hidden": true
+   },
+   "l_hip": {
+    "x": 0.6468,
+    "y": 0.59428,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.49884,
+    "y": 0.61638,
+    "blur": true
+   },
+   "grip": {
+    "hidden": true
+   },
+   "hosel": {
+    "hidden": true
+   },
+   "head": {
+    "hidden": true
+   }
+  },
+  "2.261233": {
+   "l_shoulder": {
+    "x": 0.65142,
+    "y": 0.49155,
+    "blur": true
+   },
+   "l_elbow": {
+    "x": 0.57745,
+    "y": 0.53576,
+    "blur": true
+   },
+   "l_wrist": {
+    "x": 0.46879,
+    "y": 0.59428,
+    "blur": true
+   },
+   "r_shoulder": {
+    "x": 0.47341,
+    "y": 0.47464,
+    "blur": true
+   },
+   "r_elbow": {
+    "x": 0.46879,
+    "y": 0.54226,
+    "blur": true
+   },
+   "r_wrist": {
+    "x": 0.42487,
+    "y": 0.59428,
+    "blur": true
+   },
+   "l_hip": {
+    "x": 0.6468,
+    "y": 0.59948,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.49653,
+    "y": 0.61118,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.37169,
+    "y": 0.62939,
+    "blur": true
+   },
+   "hosel": {
+    "hidden": true
+   },
+   "head": {
+    "hidden": true
+   }
+  },
+  "2.298711": {
+   "l_shoulder": {
+    "x": 0.65374,
+    "y": 0.47074,
+    "blur": true
+   },
+   "l_elbow": {
+    "x": 0.61675,
+    "y": 0.53706,
+    "blur": true
+   },
+   "l_wrist": {
+    "x": 0.57282,
+    "y": 0.61899,
+    "blur": true
+   },
+   "r_shoulder": {
+    "x": 0.46648,
+    "y": 0.48244,
+    "blur": true
+   },
+   "r_elbow": {
+    "x": 0.48035,
+    "y": 0.54746,
+    "blur": true
+   },
+   "r_wrist": {
+    "x": 0.51965,
+    "y": 0.62029,
+    "blur": true
+   },
+   "l_hip": {
+    "x": 0.65605,
+    "y": 0.59948,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.49191,
+    "y": 0.62289,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.57282,
+    "y": 0.6736,
+    "blur": true
+   },
+   "hosel": {
+    "x": 0.6075,
+    "y": 0.86996,
+    "blur": true
+   },
+   "head": {
+    "x": 0.62137,
+    "y": 0.89337,
+    "blur": true
+   }
+  },
+  "2.311211": {
+   "l_shoulder": {
+    "x": 0.65142,
+    "y": 0.45644,
+    "blur": true
+   },
+   "l_elbow": {
+    "x": 0.62599,
+    "y": 0.54486,
+    "blur": true
+   },
+   "l_wrist": {
+    "x": 0.6075,
+    "y": 0.60728,
+    "blur": true
+   },
+   "r_shoulder": {
+    "x": 0.46417,
+    "y": 0.48375,
+    "blur": true
+   },
+   "r_elbow": {
+    "x": 0.49191,
+    "y": 0.54486,
+    "blur": true
+   },
+   "r_wrist": {
+    "x": 0.55202,
+    "y": 0.61118,
+    "blur": true
+   },
+   "l_hip": {
+    "x": 0.65374,
+    "y": 0.59168,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.50116,
+    "y": 0.60988,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.61906,
+    "y": 0.671,
+    "blur": true
+   },
+   "hosel": {
+    "hidden": true
+   },
+   "head": {
+    "hidden": true
+   }
+  },
+  "2.436133": {
+   "l_shoulder": {
+    "hidden": true
+   },
+   "l_elbow": {
+    "hidden": true
+   },
+   "l_wrist": {
+    "hidden": true
+   },
+   "r_shoulder": {
+    "x": 0.55895,
+    "y": 0.47854,
+    "blur": true
+   },
+   "r_elbow": {
+    "x": 0.69766,
+    "y": 0.47854,
+    "blur": true
+   },
+   "r_wrist": {
+    "x": 0.7439,
+    "y": 0.44993,
+    "blur": true
+   },
+   "l_hip": {
+    "x": 0.66298,
+    "y": 0.57867,
+    "blur": true
+   },
+   "r_hip": {
+    "x": 0.55433,
+    "y": 0.58908,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.79244,
+    "y": 0.42003,
+    "blur": true
+   },
+   "hosel": {
+    "hidden": true
+   },
+   "head": {
+    "hidden": true
+   }
+  },
+  "2.586056": {
+   "l_shoulder": {
+    "x": 0.49653,
+    "y": 0.43173,
+    "blur": true
+   },
+   "l_elbow": {
+    "hidden": true
+   },
+   "l_wrist": {
+    "hidden": true
+   },
+   "r_shoulder": {
+    "x": 0.63293,
+    "y": 0.45124,
+    "blur": true
+   },
+   "r_elbow": {
+    "hidden": true
+   },
+   "r_wrist": {
+    "hidden": true
+   },
+   "l_hip": {
+    "hidden": true
+   },
+   "r_hip": {
+    "x": 0.63062,
+    "y": 0.58388,
+    "blur": true
+   },
+   "grip": {
+    "x": 0.52427,
+    "y": 0.35111,
+    "blur": true
+   },
+   "hosel": {
+    "x": 0.24455,
+    "y": 0.3329,
+    "blur": true
+   },
+   "head": {
+    "x": 0.20293,
+    "y": 0.3342,
+    "blur": true
+   }
+  }
+ },
+ "pass": 1,
+ "updated": "2026-09-25T10:04:08"
+}

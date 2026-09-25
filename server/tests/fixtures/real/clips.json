@@ -1,0 +1,1326 @@
+[
+ {
+  "name": "swing_1920x1080_240fps_1790206444.mp4",
+  "angle": "face",
+  "strike": null,
+  "partner": null,
+  "recorded": "2026-09-23T18:34:04",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-23T18:34:17.6114598-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2384,
+   "session": "bglaszcz_23Sep2026_06",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 113.32,
+    "vla": 21.43,
+    "hla": 0.1,
+    "totalSpin": 6847,
+    "backSpin": 6831,
+    "sideSpin": 477,
+    "spinAxis": 3.99,
+    "carry": 154.7,
+    "total": 156.1,
+    "side": 6.2,
+    "apexFt": 104,
+    "landingAngle": 50
+   },
+   "clubData": {
+    "speed": 85.74,
+    "smash": 1.32,
+    "angleOfAttack": -2.94,
+    "faceToTarget": 0.64,
+    "path": -2.05,
+    "loft": 29.44,
+    "faceImpactH": 5.38,
+    "faceImpactV": -17.76
+   },
+   "gap": 13.6
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_dtl_1920x1080_240fps_1790271665_2105ms.mp4",
+  "angle": "dtl",
+  "strike": 2.105,
+  "partner": "swing_face_1920x1080_240fps_1790271665_2103ms.mp4",
+  "recorded": "2026-09-24T12:41:05",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-24T12:41:19.6362575-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2390,
+   "session": "bglaszcz_24Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 105.99,
+    "vla": 19.9,
+    "hla": -0.96,
+    "totalSpin": 5934,
+    "backSpin": 5930,
+    "sideSpin": 210,
+    "spinAxis": 2.03,
+    "carry": 147.4,
+    "total": 150.7,
+    "side": 0.1,
+    "apexFt": 83,
+    "landingAngle": 45.8
+   },
+   "clubData": {
+    "speed": 82.65,
+    "smash": 1.28,
+    "angleOfAttack": -2.13,
+    "faceToTarget": -0.55,
+    "path": -2.63,
+    "loft": 27.14,
+    "faceImpactH": -15.93,
+    "faceImpactV": -18.64
+   },
+   "serverReceived": "2026-09-24T12:41:18.372-05:00",
+   "gap": 14.6,
+   "squareClub": "DR"
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_dtl_1920x1080_240fps_1790271726_2084ms.mp4",
+  "angle": "dtl",
+  "strike": 2.084,
+  "partner": "swing_face_1920x1080_240fps_1790271726_2025ms.mp4",
+  "recorded": "2026-09-24T12:42:06",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-24T12:42:19.5998610-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2393,
+   "session": "bglaszcz_24Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 116.12,
+    "vla": 21.16,
+    "hla": 0.32,
+    "totalSpin": 6495,
+    "backSpin": 6476,
+    "sideSpin": 499,
+    "spinAxis": 4.4,
+    "carry": 160.9,
+    "total": 162.4,
+    "side": 7.8,
+    "apexFt": 109,
+    "landingAngle": 50.4
+   },
+   "clubData": {
+    "speed": 93.68,
+    "smash": 1.24,
+    "angleOfAttack": -1.31,
+    "faceToTarget": 0.73,
+    "path": 0.69,
+    "loft": 28.69,
+    "faceImpactH": 19.9,
+    "faceImpactV": -10.51
+   },
+   "serverReceived": "2026-09-24T12:42:17.958-05:00",
+   "gap": 13.6,
+   "squareClub": "DR"
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_dtl_1920x1080_240fps_1790271783_2228ms.mp4",
+  "angle": "dtl",
+  "strike": 2.228,
+  "partner": "swing_face_1920x1080_240fps_1790271783_2209ms.mp4",
+  "recorded": "2026-09-24T12:43:03",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-24T12:43:18.4589069-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2396,
+   "session": "bglaszcz_24Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 106.99,
+    "vla": 19.12,
+    "hla": -2.09,
+    "totalSpin": 4603,
+    "backSpin": 4500,
+    "sideSpin": -970,
+    "spinAxis": -12.17,
+    "carry": 154.2,
+    "total": 160.9,
+    "side": -20.2,
+    "apexFt": 78,
+    "landingAngle": 41.9
+   },
+   "clubData": {
+    "speed": 82.72,
+    "smash": 1.29,
+    "angleOfAttack": -0.22,
+    "faceToTarget": -2.53,
+    "path": 0.44,
+    "loft": 25.62,
+    "faceImpactH": -7.38,
+    "faceImpactV": -3.85
+   },
+   "serverReceived": "2026-09-24T12:43:16.811-05:00",
+   "gap": 15.5,
+   "squareClub": "DR"
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_dtl_1920x1080_240fps_1790271802_2236ms.mp4",
+  "angle": "dtl",
+  "strike": 2.236,
+  "partner": "swing_face_1920x1080_240fps_1790271802_2307ms.mp4",
+  "recorded": "2026-09-24T12:43:22",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-24T12:43:36.5013938-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2397,
+   "session": "bglaszcz_24Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 89.88,
+    "vla": 18.06,
+    "hla": -1.9,
+    "totalSpin": 4028,
+    "backSpin": 4007,
+    "sideSpin": 410,
+    "spinAxis": 5.84,
+    "carry": 118.3,
+    "total": 130.4,
+    "side": 0.1,
+    "apexFt": 46,
+    "landingAngle": 33.6
+   },
+   "clubData": {
+    "speed": 83.86,
+    "smash": 1.07,
+    "angleOfAttack": -1.15,
+    "faceToTarget": -1.73,
+    "path": -2.03,
+    "loft": 24.31,
+    "faceImpactH": 1.07,
+    "faceImpactV": 5.28
+   },
+   "serverReceived": "2026-09-24T12:43:34.890-05:00",
+   "gap": 14.5,
+   "squareClub": "DR"
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_dtl_1920x1080_240fps_1790278981_2221ms.mp4",
+  "angle": "dtl",
+  "strike": 2.221,
+  "partner": "swing_face_1920x1080_240fps_1790278981_2308ms.mp4",
+  "recorded": "2026-09-24T14:43:01",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-24T14:43:14.9769807-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2398,
+   "session": "bglaszcz_24Sep2026_01",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 109.68,
+    "vla": 15.02,
+    "hla": -0.27,
+    "totalSpin": 5997,
+    "backSpin": 5970,
+    "sideSpin": 561,
+    "spinAxis": 5.37,
+    "carry": 152.9,
+    "total": 158.7,
+    "side": 6,
+    "apexFt": 68,
+    "landingAngle": 40
+   },
+   "clubData": {
+    "speed": 87.71,
+    "smash": 1.25,
+    "angleOfAttack": -2.86,
+    "faceToTarget": 0.57,
+    "path": 0.36,
+    "loft": 20.97,
+    "faceImpactH": 3.07,
+    "faceImpactV": -30.34
+   },
+   "serverReceived": "2026-09-24T14:43:13.639-05:00",
+   "gap": 14.0
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_dtl_1920x1080_240fps_1790279635_2082ms.mp4",
+  "angle": "dtl",
+  "strike": 2.082,
+  "partner": "swing_face_1920x1080_240fps_1790279635_2049ms.mp4",
+  "recorded": "2026-09-24T14:53:55",
+  "camera": null,
+  "quality": {
+   "version": 1,
+   "frames": 982,
+   "fps": 240.0,
+   "brightness": 75.5,
+   "background": 73.1,
+   "noise": 3.32,
+   "flicker": {
+    "amplitude": 0.0448,
+    "share": 0.832,
+    "hz": 120.0,
+    "mains": 120
+   },
+   "banding": 0.0259,
+   "sharpness": {
+    "p1": 50.3,
+    "p5": 0.247,
+    "p6": 0.464,
+    "p7": 0.677,
+    "downswing": 0.464
+   },
+   "warnings": [
+    "flicker",
+    "grainy"
+   ],
+   "poseVersion": 6,
+   "positions": {
+    "p1": 0.6866,
+    "p5": 1.9432,
+    "p6": 1.9931,
+    "p7": 2.0472
+   }
+  },
+  "shot": {
+   "received": "2026-09-24T14:54:09.2641694-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2427,
+   "session": "bglaszcz_24Sep2026_01",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 119.72,
+    "vla": 20.54,
+    "hla": -1.11,
+    "totalSpin": 6238,
+    "backSpin": 6235,
+    "sideSpin": 192,
+    "spinAxis": 1.76,
+    "carry": 168.3,
+    "total": 170,
+    "side": -0.3,
+    "apexFt": 114,
+    "landingAngle": 50.7
+   },
+   "clubData": {
+    "speed": 95.52,
+    "smash": 1.25,
+    "angleOfAttack": -2.91,
+    "faceToTarget": -0.83,
+    "path": -2.24,
+    "loft": 28.34,
+    "faceImpactH": 21.56,
+    "faceImpactV": -0.74
+   },
+   "serverReceived": "2026-09-24T14:54:07.742-05:00",
+   "gap": 14.3
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_dtl_1920x1080_240fps_1790353476_2219ms.mp4",
+  "angle": "dtl",
+  "strike": 2.219,
+  "partner": "swing_face_1920x1080_240fps_1790353476_2197ms.mp4",
+  "recorded": "2026-09-25T11:24:36",
+  "camera": {
+   "shutter": "Auto",
+   "exposure": "auto",
+   "exposureNs": 4001007,
+   "iso": 3046,
+   "frameNs": 4166666,
+   "shutterSpeed": 250
+  },
+  "quality": {
+   "version": 1,
+   "frames": 1015,
+   "fps": 240.0,
+   "brightness": 101.7,
+   "background": 70.1,
+   "noise": 2.44,
+   "flicker": {
+    "amplitude": 0.0367,
+    "share": 0.712,
+    "hz": 120.0,
+    "mains": 120
+   },
+   "banding": 0.0148,
+   "sharpness": {
+    "p1": 45.9,
+    "p5": 1.199,
+    "p6": 0.931,
+    "p7": 0.58,
+    "downswing": 0.931
+   },
+   "warnings": [
+    "flicker"
+   ],
+   "poseVersion": 6,
+   "positions": {
+    "p1": 0.957,
+    "p5": 2.1304,
+    "p6": 2.1762,
+    "p7": 2.2344
+   }
+  },
+  "shot": {
+   "received": "2026-09-25T11:24:48.3436879-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2433,
+   "session": "bglaszcz_25Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "PW",
+   "ball": {
+    "speed": 87.13,
+    "vla": 24.85,
+    "hla": 8.33,
+    "totalSpin": 6410,
+    "backSpin": 6109,
+    "sideSpin": 1939,
+    "spinAxis": 17.6,
+    "carry": 110.2,
+    "total": 113.2,
+    "side": 29.2,
+    "apexFt": 65,
+    "landingAngle": 44.8
+   },
+   "clubData": {
+    "speed": 83.64,
+    "smash": 1.04,
+    "angleOfAttack": -0.81,
+    "faceToTarget": 9.86,
+    "path": -0.26,
+    "loft": 33,
+    "faceImpactH": -33.55,
+    "faceImpactV": -24.73
+   },
+   "serverReceived": "2026-09-25T11:24:48.200-05:00",
+   "gap": 12.3
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_dtl_1920x1080_240fps_1790353497_2055ms.mp4",
+  "angle": "dtl",
+  "strike": 2.055,
+  "partner": "swing_face_1920x1080_240fps_1790353497_2195ms.mp4",
+  "recorded": "2026-09-25T11:24:57",
+  "camera": {
+   "shutter": "Auto",
+   "exposure": "auto",
+   "exposureNs": 4001007,
+   "iso": 2764,
+   "frameNs": 4166666,
+   "shutterSpeed": 250
+  },
+  "quality": {
+   "version": 1,
+   "frames": 975,
+   "fps": 240.0,
+   "brightness": 108.9,
+   "background": 82.5,
+   "noise": 3.63,
+   "flicker": {
+    "amplitude": 0.0291,
+    "share": 0.882,
+    "hz": 120.0,
+    "mains": 120
+   },
+   "banding": 0.0149,
+   "sharpness": {
+    "p1": 33.9,
+    "p5": 1.201,
+    "p6": 1.279,
+    "p7": 0.983,
+    "downswing": 1.201
+   },
+   "warnings": [
+    "flicker",
+    "grainy"
+   ],
+   "poseVersion": 6,
+   "positions": {
+    "p1": 0.7323,
+    "p5": 1.9224,
+    "p6": 1.9764,
+    "p7": 2.0347
+   }
+  },
+  "shot": {
+   "received": "2026-09-25T11:25:08.5150318-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2434,
+   "session": "bglaszcz_25Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "PW",
+   "ball": {
+    "speed": 94.69,
+    "vla": 27.4,
+    "hla": -1.05,
+    "totalSpin": 8800,
+    "backSpin": 8781,
+    "sideSpin": -584,
+    "spinAxis": -3.81,
+    "carry": 120.1,
+    "total": 120.3,
+    "side": -6.4,
+    "apexFt": 92,
+    "landingAngle": 50.7
+   },
+   "clubData": {
+    "speed": 84.36,
+    "smash": 1.12,
+    "angleOfAttack": -2.91,
+    "faceToTarget": -1.37,
+    "path": 0.56,
+    "loft": 36.97,
+    "faceImpactH": -5.22,
+    "faceImpactV": -14.67
+   },
+   "serverReceived": "2026-09-25T11:25:08.368-05:00",
+   "gap": 11.5
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_dtl_1920x1080_240fps_1790353992_2023ms.mp4",
+  "angle": "dtl",
+  "strike": 2.023,
+  "partner": "swing_face_1920x1080_240fps_1790353993_2007ms.mp4",
+  "recorded": "2026-09-25T11:33:12",
+  "camera": {
+   "shutter": "Auto",
+   "exposure": "auto",
+   "exposureNs": 4001007,
+   "iso": 1907,
+   "frameNs": 4166666,
+   "shutterSpeed": 250
+  },
+  "quality": {
+   "version": 1,
+   "frames": 967,
+   "fps": 240.0,
+   "brightness": 73.8,
+   "background": 76.8,
+   "noise": 2.78,
+   "flicker": {
+    "amplitude": 0.0269,
+    "share": 0.779,
+    "hz": 120.0,
+    "mains": 120
+   },
+   "banding": 0.0169,
+   "sharpness": {
+    "p1": 29.5,
+    "p5": 1.128,
+    "p6": 1.119,
+    "p7": 1.062,
+    "downswing": 1.119
+   },
+   "warnings": [
+    "flicker",
+    "grainy"
+   ],
+   "poseVersion": 6,
+   "positions": {
+    "p1": 0.5909,
+    "p5": 1.8766,
+    "p6": 1.939,
+    "p7": 2.0014
+   }
+  },
+  "shot": {
+   "received": "2026-09-25T11:33:27.1821603-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2451,
+   "session": "bglaszcz_25Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "DR",
+   "ball": {
+    "speed": 143.5,
+    "vla": 9.24,
+    "hla": -1.82,
+    "totalSpin": 2626,
+    "backSpin": 2502,
+    "sideSpin": -798,
+    "spinAxis": -17.68,
+    "carry": 222,
+    "total": 241.5,
+    "side": -34.6,
+    "apexFt": 60,
+    "landingAngle": 30.3
+   },
+   "clubData": {
+    "speed": null,
+    "smash": null,
+    "angleOfAttack": null,
+    "faceToTarget": null,
+    "path": null,
+    "loft": null,
+    "faceImpactH": null,
+    "faceImpactV": null
+   },
+   "serverReceived": "2026-09-25T11:33:27.033-05:00",
+   "gap": 14.2
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_dtl_1920x1080_240fps_1790354067_2172ms.mp4",
+  "angle": "dtl",
+  "strike": 2.172,
+  "partner": "swing_face_1920x1080_240fps_1790354067_2072ms.mp4",
+  "recorded": "2026-09-25T11:34:27",
+  "camera": {
+   "shutter": "Auto",
+   "exposure": "auto",
+   "exposureNs": 4001007,
+   "iso": 1881,
+   "frameNs": 4166666,
+   "shutterSpeed": 250
+  },
+  "quality": {
+   "version": 1,
+   "frames": 1003,
+   "fps": 240.0,
+   "brightness": 76.7,
+   "background": 76.5,
+   "noise": 1.65,
+   "flicker": {
+    "amplitude": 0.0316,
+    "share": 0.905,
+    "hz": 120.0,
+    "mains": 120
+   },
+   "banding": 0.0173,
+   "sharpness": {
+    "p1": 30.6,
+    "p5": 1.715,
+    "p6": 1.164,
+    "p7": 1.167,
+    "downswing": 1.167
+   },
+   "warnings": [
+    "flicker"
+   ],
+   "poseVersion": 6,
+   "positions": {
+    "p1": 0.7157,
+    "p5": 2.0389,
+    "p6": 2.0971,
+    "p7": 2.1512
+   }
+  },
+  "shot": {
+   "received": "2026-09-25T11:34:42.4244647-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2454,
+   "session": "bglaszcz_25Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "DR",
+   "ball": {
+    "speed": 145.45,
+    "vla": 11.82,
+    "hla": 0.43,
+    "totalSpin": 2820,
+    "backSpin": 2807,
+    "sideSpin": -267,
+    "spinAxis": -5.43,
+    "carry": 236.7,
+    "total": 249.3,
+    "side": -8.7,
+    "apexFt": 89,
+    "landingAngle": 38.1
+   },
+   "clubData": {
+    "speed": null,
+    "smash": null,
+    "angleOfAttack": null,
+    "faceToTarget": null,
+    "path": null,
+    "loft": null,
+    "faceImpactH": null,
+    "faceImpactV": null
+   },
+   "serverReceived": "2026-09-25T11:34:42.268-05:00",
+   "gap": 15.4
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_face_1920x1080_240fps_1790271665_2103ms.mp4",
+  "angle": "face",
+  "strike": 2.103,
+  "partner": "swing_dtl_1920x1080_240fps_1790271665_2105ms.mp4",
+  "recorded": "2026-09-24T12:41:05",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-24T12:41:19.6362575-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2390,
+   "session": "bglaszcz_24Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 105.99,
+    "vla": 19.9,
+    "hla": -0.96,
+    "totalSpin": 5934,
+    "backSpin": 5930,
+    "sideSpin": 210,
+    "spinAxis": 2.03,
+    "carry": 147.4,
+    "total": 150.7,
+    "side": 0.1,
+    "apexFt": 83,
+    "landingAngle": 45.8
+   },
+   "clubData": {
+    "speed": 82.65,
+    "smash": 1.28,
+    "angleOfAttack": -2.13,
+    "faceToTarget": -0.55,
+    "path": -2.63,
+    "loft": 27.14,
+    "faceImpactH": -15.93,
+    "faceImpactV": -18.64
+   },
+   "serverReceived": "2026-09-24T12:41:18.372-05:00",
+   "gap": 14.6,
+   "squareClub": "DR"
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_face_1920x1080_240fps_1790271726_2025ms.mp4",
+  "angle": "face",
+  "strike": 2.025,
+  "partner": "swing_dtl_1920x1080_240fps_1790271726_2084ms.mp4",
+  "recorded": "2026-09-24T12:42:06",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-24T12:42:19.5998610-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2393,
+   "session": "bglaszcz_24Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 116.12,
+    "vla": 21.16,
+    "hla": 0.32,
+    "totalSpin": 6495,
+    "backSpin": 6476,
+    "sideSpin": 499,
+    "spinAxis": 4.4,
+    "carry": 160.9,
+    "total": 162.4,
+    "side": 7.8,
+    "apexFt": 109,
+    "landingAngle": 50.4
+   },
+   "clubData": {
+    "speed": 93.68,
+    "smash": 1.24,
+    "angleOfAttack": -1.31,
+    "faceToTarget": 0.73,
+    "path": 0.69,
+    "loft": 28.69,
+    "faceImpactH": 19.9,
+    "faceImpactV": -10.51
+   },
+   "serverReceived": "2026-09-24T12:42:17.958-05:00",
+   "gap": 13.6,
+   "squareClub": "DR"
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_face_1920x1080_240fps_1790271783_2209ms.mp4",
+  "angle": "face",
+  "strike": 2.209,
+  "partner": "swing_dtl_1920x1080_240fps_1790271783_2228ms.mp4",
+  "recorded": "2026-09-24T12:43:03",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-24T12:43:18.4589069-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2396,
+   "session": "bglaszcz_24Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 106.99,
+    "vla": 19.12,
+    "hla": -2.09,
+    "totalSpin": 4603,
+    "backSpin": 4500,
+    "sideSpin": -970,
+    "spinAxis": -12.17,
+    "carry": 154.2,
+    "total": 160.9,
+    "side": -20.2,
+    "apexFt": 78,
+    "landingAngle": 41.9
+   },
+   "clubData": {
+    "speed": 82.72,
+    "smash": 1.29,
+    "angleOfAttack": -0.22,
+    "faceToTarget": -2.53,
+    "path": 0.44,
+    "loft": 25.62,
+    "faceImpactH": -7.38,
+    "faceImpactV": -3.85
+   },
+   "serverReceived": "2026-09-24T12:43:16.811-05:00",
+   "gap": 15.5,
+   "squareClub": "DR"
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_face_1920x1080_240fps_1790271802_2307ms.mp4",
+  "angle": "face",
+  "strike": 2.307,
+  "partner": "swing_dtl_1920x1080_240fps_1790271802_2236ms.mp4",
+  "recorded": "2026-09-24T12:43:22",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-24T12:43:36.5013938-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2397,
+   "session": "bglaszcz_24Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 89.88,
+    "vla": 18.06,
+    "hla": -1.9,
+    "totalSpin": 4028,
+    "backSpin": 4007,
+    "sideSpin": 410,
+    "spinAxis": 5.84,
+    "carry": 118.3,
+    "total": 130.4,
+    "side": 0.1,
+    "apexFt": 46,
+    "landingAngle": 33.6
+   },
+   "clubData": {
+    "speed": 83.86,
+    "smash": 1.07,
+    "angleOfAttack": -1.15,
+    "faceToTarget": -1.73,
+    "path": -2.03,
+    "loft": 24.31,
+    "faceImpactH": 1.07,
+    "faceImpactV": 5.28
+   },
+   "serverReceived": "2026-09-24T12:43:34.890-05:00",
+   "gap": 14.5,
+   "squareClub": "DR"
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_face_1920x1080_240fps_1790278981_2308ms.mp4",
+  "angle": "face",
+  "strike": 2.308,
+  "partner": "swing_dtl_1920x1080_240fps_1790278981_2221ms.mp4",
+  "recorded": "2026-09-24T14:43:01",
+  "camera": null,
+  "quality": null,
+  "shot": {
+   "received": "2026-09-24T14:43:14.9769807-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2398,
+   "session": "bglaszcz_24Sep2026_01",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 109.68,
+    "vla": 15.02,
+    "hla": -0.27,
+    "totalSpin": 5997,
+    "backSpin": 5970,
+    "sideSpin": 561,
+    "spinAxis": 5.37,
+    "carry": 152.9,
+    "total": 158.7,
+    "side": 6,
+    "apexFt": 68,
+    "landingAngle": 40
+   },
+   "clubData": {
+    "speed": 87.71,
+    "smash": 1.25,
+    "angleOfAttack": -2.86,
+    "faceToTarget": 0.57,
+    "path": 0.36,
+    "loft": 20.97,
+    "faceImpactH": 3.07,
+    "faceImpactV": -30.34
+   },
+   "serverReceived": "2026-09-24T14:43:13.639-05:00",
+   "gap": 14.0
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_face_1920x1080_240fps_1790279635_2049ms.mp4",
+  "angle": "face",
+  "strike": 2.049,
+  "partner": "swing_dtl_1920x1080_240fps_1790279635_2082ms.mp4",
+  "recorded": "2026-09-24T14:53:55",
+  "camera": null,
+  "quality": {
+   "version": 1,
+   "frames": 708,
+   "fps": 240.0,
+   "brightness": 35.2,
+   "background": 31.9,
+   "noise": 1.12,
+   "flicker": {
+    "amplitude": 0.0446,
+    "share": 0.076,
+    "hz": 19.5,
+    "mains": null
+   },
+   "banding": 0.0423,
+   "sharpness": {
+    "p1": 0.3,
+    "p5": 1.265,
+    "p6": 0.873,
+    "p7": 0.675,
+    "downswing": 0.873
+   },
+   "warnings": [
+    "dark",
+    "flicker"
+   ],
+   "poseVersion": 6,
+   "positions": {
+    "p1": 0.6788,
+    "p5": 1.9322,
+    "p6": 1.9822,
+    "p7": 2.0364
+   }
+  },
+  "shot": {
+   "received": "2026-09-24T14:54:09.2641694-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2427,
+   "session": "bglaszcz_24Sep2026_01",
+   "mode": "DrivingRange",
+   "club": "I7",
+   "ball": {
+    "speed": 119.72,
+    "vla": 20.54,
+    "hla": -1.11,
+    "totalSpin": 6238,
+    "backSpin": 6235,
+    "sideSpin": 192,
+    "spinAxis": 1.76,
+    "carry": 168.3,
+    "total": 170,
+    "side": -0.3,
+    "apexFt": 114,
+    "landingAngle": 50.7
+   },
+   "clubData": {
+    "speed": 95.52,
+    "smash": 1.25,
+    "angleOfAttack": -2.91,
+    "faceToTarget": -0.83,
+    "path": -2.24,
+    "loft": 28.34,
+    "faceImpactH": 21.56,
+    "faceImpactV": -0.74
+   },
+   "serverReceived": "2026-09-24T14:54:07.742-05:00",
+   "gap": 14.3
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_face_1920x1080_240fps_1790353476_2197ms.mp4",
+  "angle": "face",
+  "strike": 2.197,
+  "partner": "swing_dtl_1920x1080_240fps_1790353476_2219ms.mp4",
+  "recorded": "2026-09-25T11:24:36",
+  "camera": {
+   "shutter": "Auto",
+   "exposure": "auto",
+   "exposureNs": 4001007,
+   "iso": 10821,
+   "frameNs": 4166666,
+   "shutterSpeed": 250
+  },
+  "quality": {
+   "version": 1,
+   "frames": 1008,
+   "fps": 240.0,
+   "brightness": 65.4,
+   "background": 42.8,
+   "noise": 0.85,
+   "flicker": {
+    "amplitude": 0.1068,
+    "share": 0.846,
+    "hz": 30.0,
+    "mains": null
+   },
+   "banding": 0.0316,
+   "sharpness": {
+    "p1": 12.6,
+    "p5": 0.583,
+    "p6": 1.18,
+    "p7": 0.277,
+    "downswing": 0.583
+   },
+   "warnings": [
+    "dark",
+    "flicker"
+   ],
+   "poseVersion": 6,
+   "positions": {
+    "p1": 0.912,
+    "p5": 2.0822,
+    "p6": 2.128,
+    "p7": 2.1863
+   }
+  },
+  "shot": {
+   "received": "2026-09-25T11:24:48.3436879-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2433,
+   "session": "bglaszcz_25Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "PW",
+   "ball": {
+    "speed": 87.13,
+    "vla": 24.85,
+    "hla": 8.33,
+    "totalSpin": 6410,
+    "backSpin": 6109,
+    "sideSpin": 1939,
+    "spinAxis": 17.6,
+    "carry": 110.2,
+    "total": 113.2,
+    "side": 29.2,
+    "apexFt": 65,
+    "landingAngle": 44.8
+   },
+   "clubData": {
+    "speed": 83.64,
+    "smash": 1.04,
+    "angleOfAttack": -0.81,
+    "faceToTarget": 9.86,
+    "path": -0.26,
+    "loft": 33,
+    "faceImpactH": -33.55,
+    "faceImpactV": -24.73
+   },
+   "serverReceived": "2026-09-25T11:24:48.200-05:00",
+   "gap": 12.3
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_face_1920x1080_240fps_1790353497_2195ms.mp4",
+  "angle": "face",
+  "strike": 2.195,
+  "partner": "swing_dtl_1920x1080_240fps_1790353497_2055ms.mp4",
+  "recorded": "2026-09-25T11:24:57",
+  "camera": {
+   "shutter": "Auto",
+   "exposure": "auto",
+   "exposureNs": 4001007,
+   "iso": 10821,
+   "frameNs": 4166666,
+   "shutterSpeed": 250
+  },
+  "quality": {
+   "version": 1,
+   "frames": 1008,
+   "fps": 240.0,
+   "brightness": 66.7,
+   "background": 42.4,
+   "noise": 0.94,
+   "flicker": {
+    "amplitude": 0.108,
+    "share": 0.821,
+    "hz": 30.0,
+    "mains": null
+   },
+   "banding": 0.0337,
+   "sharpness": {
+    "p1": 13.7,
+    "p5": 0.591,
+    "p6": 1.028,
+    "p7": 0.296,
+    "downswing": 0.591
+   },
+   "warnings": [
+    "dark",
+    "flicker"
+   ],
+   "poseVersion": 6,
+   "positions": {
+    "p1": 0.887,
+    "p5": 2.0738,
+    "p6": 2.128,
+    "p7": 2.1863
+   }
+  },
+  "shot": {
+   "received": "2026-09-25T11:25:08.5150318-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2434,
+   "session": "bglaszcz_25Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "PW",
+   "ball": {
+    "speed": 94.69,
+    "vla": 27.4,
+    "hla": -1.05,
+    "totalSpin": 8800,
+    "backSpin": 8781,
+    "sideSpin": -584,
+    "spinAxis": -3.81,
+    "carry": 120.1,
+    "total": 120.3,
+    "side": -6.4,
+    "apexFt": 92,
+    "landingAngle": 50.7
+   },
+   "clubData": {
+    "speed": 84.36,
+    "smash": 1.12,
+    "angleOfAttack": -2.91,
+    "faceToTarget": -1.37,
+    "path": 0.56,
+    "loft": 36.97,
+    "faceImpactH": -5.22,
+    "faceImpactV": -14.67
+   },
+   "serverReceived": "2026-09-25T11:25:08.368-05:00",
+   "gap": 11.5
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_face_1920x1080_240fps_1790353993_2007ms.mp4",
+  "angle": "face",
+  "strike": 2.007,
+  "partner": "swing_dtl_1920x1080_240fps_1790353992_2023ms.mp4",
+  "recorded": "2026-09-25T11:33:13",
+  "camera": {
+   "shutter": "Auto",
+   "exposure": "auto",
+   "exposureNs": 4001007,
+   "iso": 10821,
+   "frameNs": 4166666,
+   "shutterSpeed": 250
+  },
+  "quality": {
+   "version": 1,
+   "frames": 695,
+   "fps": 240.0,
+   "brightness": 74.8,
+   "background": 38.7,
+   "noise": 0.83,
+   "flicker": {
+    "amplitude": 0.0484,
+    "share": 0.144,
+    "hz": 20.0,
+    "mains": null
+   },
+   "banding": 0.0303,
+   "sharpness": {
+    "p1": 16.5,
+    "p5": 0.715,
+    "p6": 0.633,
+    "p7": 0.455,
+    "downswing": 0.633
+   },
+   "warnings": [
+    "flicker"
+   ],
+   "poseVersion": 6,
+   "positions": {
+    "p1": 0.5663,
+    "p5": 1.849,
+    "p6": 1.9114,
+    "p7": 1.9739
+   }
+  },
+  "shot": {
+   "received": "2026-09-25T11:33:27.1821603-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2451,
+   "session": "bglaszcz_25Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "DR",
+   "ball": {
+    "speed": 143.5,
+    "vla": 9.24,
+    "hla": -1.82,
+    "totalSpin": 2626,
+    "backSpin": 2502,
+    "sideSpin": -798,
+    "spinAxis": -17.68,
+    "carry": 222,
+    "total": 241.5,
+    "side": -34.6,
+    "apexFt": 60,
+    "landingAngle": 30.3
+   },
+   "clubData": {
+    "speed": null,
+    "smash": null,
+    "angleOfAttack": null,
+    "faceToTarget": null,
+    "path": null,
+    "loft": null,
+    "faceImpactH": null,
+    "faceImpactV": null
+   },
+   "serverReceived": "2026-09-25T11:33:27.033-05:00",
+   "gap": 14.2
+  },
+  "excluded": false
+ },
+ {
+  "name": "swing_face_1920x1080_240fps_1790354067_2072ms.mp4",
+  "angle": "face",
+  "strike": 2.072,
+  "partner": "swing_dtl_1920x1080_240fps_1790354067_2172ms.mp4",
+  "recorded": "2026-09-25T11:34:27",
+  "camera": {
+   "shutter": "Auto",
+   "exposure": "auto",
+   "exposureNs": 4001007,
+   "iso": 10821,
+   "frameNs": 4166666,
+   "shutterSpeed": 250
+  },
+  "quality": {
+   "version": 1,
+   "frames": 686,
+   "fps": 240.0,
+   "brightness": 76.0,
+   "background": 38.7,
+   "noise": 0.98,
+   "flicker": {
+    "amplitude": 0.0789,
+    "share": 0.377,
+    "hz": 20.25,
+    "mains": null
+   },
+   "banding": 0.0448,
+   "sharpness": {
+    "p1": 19.2,
+    "p5": 0.732,
+    "p6": 0.552,
+    "p7": 0.546,
+    "downswing": 0.552
+   },
+   "warnings": [
+    "flicker"
+   ],
+   "poseVersion": 6,
+   "positions": {
+    "p1": 0.6288,
+    "p5": 1.9489,
+    "p6": 2.0072,
+    "p7": 2.0614
+   }
+  },
+  "shot": {
+   "received": "2026-09-25T11:34:42.4244647-05:00",
+   "source": "square-app",
+   "device": "Square Golf app",
+   "shotNumber": 2454,
+   "session": "bglaszcz_25Sep2026_00",
+   "mode": "DrivingRange",
+   "club": "DR",
+   "ball": {
+    "speed": 145.45,
+    "vla": 11.82,
+    "hla": 0.43,
+    "totalSpin": 2820,
+    "backSpin": 2807,
+    "sideSpin": -267,
+    "spinAxis": -5.43,
+    "carry": 236.7,
+    "total": 249.3,
+    "side": -8.7,
+    "apexFt": 89,
+    "landingAngle": 38.1
+   },
+   "clubData": {
+    "speed": null,
+    "smash": null,
+    "angleOfAttack": null,
+    "faceToTarget": null,
+    "path": null,
+    "loft": null,
+    "faceImpactH": null,
+    "faceImpactV": null
+   },
+   "serverReceived": "2026-09-25T11:34:42.268-05:00",
+   "gap": 15.4
+  },
+  "excluded": false
+ }
+]
