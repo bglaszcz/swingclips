@@ -1,6 +1,7 @@
 package dev.swingclips.capture
 
 import android.util.Log
+import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -48,6 +49,7 @@ class Uploader(
                 try {
                     send(f)
                     f.delete()
+                    info(f).delete()
                     val left = pending().size
                     onStatus(left, if (left == 0) "All clips on the server" else "Uploading $left…")
                     waitMs = 0
@@ -66,9 +68,20 @@ class Uploader(
         }
     }
 
+    /** What the camera used for a clip ([MainActivity] writes it), sent along as extra fields. */
+    private fun info(f: File) = File(f.parentFile, f.name + ".json")
+
     private fun send(f: File) {
         val base = serverUrl().trimEnd('/')
-        val url = URL("$base/api/upload?name=" + URLEncoder.encode(f.name, "UTF-8"))
+        val extra = StringBuilder()
+        runCatching {
+            val info = info(f)
+            if (info.isFile) {
+                val json = JSONObject(info.readText())
+                for (k in json.keys()) extra.append("&$k=").append(URLEncoder.encode(json.get(k).toString(), "UTF-8"))
+            }
+        }.onFailure { Log.w(ReplayRecorder.TAG, "clip info unreadable for ${f.name}", it) }
+        val url = URL("$base/api/upload?name=" + URLEncoder.encode(f.name, "UTF-8") + extra)
         val conn = url.openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"

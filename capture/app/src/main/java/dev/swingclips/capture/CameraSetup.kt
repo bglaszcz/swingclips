@@ -63,6 +63,11 @@ class CameraSetup(
         thread.quitSafely()
     }
 
+    /** Say something outside the setup checks (e.g. what shutter the camera is really using). */
+    fun say(text: String) {
+        if (speechReady) tts.speak(text, TextToSpeech.QUEUE_ADD, null, "note")
+    }
+
     /** Forget what was said and focused, e.g. after recording: the next setup starts fresh. */
     fun reset() {
         heard = null; heardCount = 0; said = null; focusCenter = null; seenCenter = null

@@ -77,9 +77,45 @@ monitor's numbers for that shot.
   has its body numbers left out of Trends and Progress for that swing. Without fixed spots for the
   phones, tape marks on the floor for each tripod foot (and a note of the height) make the setup
   repeatable; the first swing of a session tells you whether it's right.
-- Sharp video matters as much as framing: plenty of light on the golfer (the phones shoot 1/240 s
-  or faster), and the phone focused on the golfer, not the wall behind (tap on the golfer in the
+- Sharp video matters as much as framing: plenty of light on the golfer (on Auto the phones shoot
+  about 1/240 s at 240 fps; see "Shutter" below for faster), and the phone focused on the golfer, not the wall behind (tap on the golfer in the
   camera preview before starting, if the phone allows it).
+
+### Shutter: a sharper club and hands (capture app 0.4)
+On **Auto** (the default, same as before 0.4) the phone picks its own exposure, which at 240 fps
+is about 1/240 s: the club is a faint streak through the downswing. The **Shutter** button (next
+to the server address; locked while recording, like the other settings) sets a fixed short
+exposure instead: **1/500**, **1/1000** or **1/2000**.
+- **What it does**: the camera meters in auto for about half a second, then locks the shutter and
+  raises the ISO by as much as the shutter got shorter (auto at 1/240 s ISO 400 -> 1/1000 s ISO
+  ~1670), capped at the sensor's maximum. The frame rate stays the same. It meters again when you
+  press Start, so the ISO fits the light at that moment. To re-meter during setup (after turning
+  the lights on), pick the same shutter again.
+- **It needs light**: 1/1000 s lets in a quarter of the light of 1/240 s. With the room lights
+  only, the ISO hits its maximum and the picture gets dark and grainy; the phone says so ("ISO is
+  at its maximum, so the picture will be darker"). Two LED floods on the golfer (from the front
+  and side, out of the camera's view) are what makes 1/1000 work. Start with 1/1000; try 1/2000
+  only if the picture stays clean at that.
+- **What the phone says**: once the shutter is locked it says what the camera **reports** it is
+  using, not what was asked for: "Shutter one thousandth, ISO 1600", and shows it under the
+  buttons (green). Some Samsung phones ignore a manual shutter in 240/120 fps (high-speed)
+  sessions. Then it tries auto exposure turned all the way down and locked; if that gives a
+  shorter shutter, it says "This phone won't allow a fixed shutter at 240 fps. Locked darker
+  instead: shutter one five hundredth, ISO 800" (amber). If that doesn't either, it goes back to
+  auto and says "This phone won't allow a fixed shutter at 240 fps". Where the phone can run a
+  normal (not high-speed) session at 120 fps with a manual shutter, the mode list then offers
+  "720p · 120 fps (fixed shutter)" (only while a shutter is set), and the phone suggests it.
+- **On startup**, the line under the buttons also shows what the camera allows: manual exposure
+  yes/no, the shutter range, ISO range and exposure compensation range. The same goes to the log
+  (`adb logcat -s SwingClips`, lines starting "camera" and "shutter:").
+- **Checking a clip's shutter**: each clip is uploaded with what the camera used at the strike.
+  The server keeps it next to the clip (`<clip>.camera.json`) and lists it in `/api/clips` as
+  `camera`: `{"shutter": "1/1000", "exposure": "manual", "exposureNs": 1000000, "iso": 1600,
+  "frameNs": 4166666, "shutterSpeed": 1000}`. `shutter` is the setting, `exposure` what the
+  camera did with it (`auto`, `manual`, `compensation`, `refused`), `shutterSpeed` the real
+  shutter as 1/n s. Clips from older app versions have `camera: null`. The server's window also
+  prints it on each upload ("manual 1/1000 s ISO 1600"). By eye: at 1/1000 the clubhead is a
+  short smear near impact rather than a long faint streak.
 
 ### `server/` - the home server (Python, FastAPI)
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON), `shots.jsonl` (launch

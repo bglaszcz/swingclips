@@ -9,6 +9,8 @@ import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
@@ -35,6 +37,10 @@ class ReplayRecorder(
     private val preview: Surface,
     private val keepSeconds: Double,
     private val onError: (String) -> Unit,
+    /** Shutter setting as 1/[shutter] s, or 0 for the camera's own auto exposure. */
+    shutter: Int = 0,
+    /** What the camera really did with the shutter setting, once it's known (camera thread). */
+    private val onExposure: (ExposureReport) -> Unit = {},
 ) {
     private class Packet(val data: ByteArray, val ptsUs: Long, val key: Boolean)
 
@@ -67,6 +73,7 @@ class ReplayRecorder(
         orientation = ch.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
         realtimeClock = ch.get(CameraCharacteristics.SENSOR_INFO_TIMESTAMP_SOURCE) ==
             CameraMetadata.SENSOR_INFO_TIMESTAMP_SOURCE_REALTIME
+        limits = Exposure.limits(ch)
 
         encoder = createEncoder()
         cm.openCamera(cameraId, object : CameraDevice.StateCallback() {
@@ -161,10 +168,13 @@ class ReplayRecorder(
                 try {
                     val b = d.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                         targets.forEach(::addTarget)
-                        set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(mode.fps, mode.fps))
+                        // A manual-only mode's rate isn't one auto exposure can hold; its frame
+                        // duration is set with the shutter instead.
+                        if (!mode.manualOnly) set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(mode.fps, mode.fps))
                     }
                     request = b
                     repeat(b)
+                    startMetering()
                 } catch (e: Exception) {
                     fail("start camera", e)
                 }
@@ -188,16 +198,169 @@ class ReplayRecorder(
         }
     }
 
-    /** Logs the autofocus state when it changes (e.g. to see focusOn lock onto the golfer). */
+    /** Logs the autofocus state when it changes (e.g. to see focusOn lock onto the golfer), and
+     * keeps the exposure each frame really had. */
     private var afState: Int? = null
     private val afWatch = object : CameraCaptureSession.CaptureCallback() {
-        override fun onCaptureCompleted(s: CameraCaptureSession, r: CaptureRequest, result: android.hardware.camera2.TotalCaptureResult) {
-            val state = result.get(android.hardware.camera2.CaptureResult.CONTROL_AF_STATE) ?: return  // high-speed bursts report it on some frames only
+        override fun onCaptureCompleted(s: CameraCaptureSession, r: CaptureRequest, result: TotalCaptureResult) {
+            // High-speed bursts report some of these on some frames only; keep the last seen.
+            result.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.let { exposureNs = it }
+            result.get(CaptureResult.SENSOR_SENSITIVITY)?.let { iso = it }
+            result.get(CaptureResult.SENSOR_FRAME_DURATION)?.let { frameNs = it }
+            if (phase != Phase.OFF) stepShutter(r, result)
+            val state = result.get(CaptureResult.CONTROL_AF_STATE) ?: return
             if (state != afState) {
                 afState = state
                 Log.i(TAG, "autofocus: ${AF_STATES.getOrElse(state) { "state $state" }}")
             }
         }
+    }
+
+    // ---- Shutter ----
+    // Auto exposure at 240 fps leaves the shutter open ~1/240 s and the club is a streak. With a
+    // shutter setting, the camera first meters in auto, then the recorder asks for that shutter with
+    // the ISO scaled up to match and checks what the camera reports it really used. If it ignores
+    // the manual setting (some phones do in high-speed sessions), it tries auto exposure turned all
+    // the way down and locked, and if that doesn't shorten the shutter either, goes back to auto.
+
+    private enum class Phase { OFF, METERING, CHECK_MANUAL, CHECK_COMPENSATION }
+
+    private val shutterNs = if (shutter > 0) 1_000_000_000L / shutter else 0L
+    private var limits: Exposure.Limits? = null
+    private var phase = Phase.OFF
+    private var phaseFrames = 0
+    private var autoNs = 0L
+    private var targetNs = 0L
+    private var targetIso = 0
+    private var isoCapped = false
+
+    /** The exposure of the newest frame, as the camera reported it. */
+    @Volatile private var exposureNs: Long? = null
+    @Volatile private var iso: Int? = null
+    @Volatile private var frameNs: Long? = null
+    @Volatile private var exposureKind = "auto"
+
+    /** What the camera is using now (for a clip's record). */
+    fun exposureNow() = ExposureReport(exposureKind, shutterNs, exposureNs, iso, frameNs = frameNs)
+
+    /** Meter in auto and lock the shutter again, e.g. just before recording starts. */
+    fun relockExposure() = handler.post { startMetering() }
+
+    private fun startMetering() {
+        val b = request ?: return
+        if (shutterNs == 0L || session == null) return
+        try {
+            backToAuto(b)
+            phase = Phase.METERING
+            phaseFrames = 0
+        } catch (e: Exception) {
+            Log.w(TAG, "metering failed", e)
+        }
+    }
+
+    private fun backToAuto(b: CaptureRequest.Builder) {
+        b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+        b.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, 0)
+        b.set(CaptureRequest.CONTROL_AE_LOCK, false)
+        exposureKind = "auto"
+        repeat(b)
+    }
+
+    private fun stepShutter(r: CaptureRequest, result: TotalCaptureResult) {
+        val b = request ?: return
+        val settleFrames = maxOf(10, mode.fps / 2)   // ~0.5 s
+        when (phase) {
+            Phase.OFF -> {}
+            Phase.METERING -> {
+                if (r.get(CaptureRequest.CONTROL_AE_MODE) != CaptureRequest.CONTROL_AE_MODE_ON) return
+                phaseFrames++
+                val ae = result.get(CaptureResult.CONTROL_AE_STATE)
+                val converged = ae == CaptureResult.CONTROL_AE_STATE_CONVERGED ||
+                    ae == CaptureResult.CONTROL_AE_STATE_FLASH_REQUIRED
+                if (!(phaseFrames >= settleFrames && converged) && phaseFrames < mode.fps * 2) return
+                val t = exposureNs
+                val s = iso
+                if (t == null || s == null) return finish(ExposureReport("refused", shutterNs, null, null))
+                autoNs = t
+                val lim = limits
+                if (lim?.manualSensor != true) return tryCompensation(b)
+                targetNs = lim.exposureNs?.let { shutterNs.coerceIn(it.lower, it.upper) } ?: shutterNs
+                val wanted = Exposure.isoFor(t, s, targetNs, null)
+                targetIso = Exposure.isoFor(t, s, targetNs, lim.iso)
+                isoCapped = wanted > targetIso
+                Log.i(TAG, "shutter: auto was ${Exposure.shown(t)} ISO $s; asking ${Exposure.shown(targetNs)} ISO $targetIso")
+                try {
+                    b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    b.set(CaptureRequest.SENSOR_EXPOSURE_TIME, targetNs)
+                    b.set(CaptureRequest.SENSOR_SENSITIVITY, targetIso)
+                    b.set(CaptureRequest.SENSOR_FRAME_DURATION, 1_000_000_000L / mode.fps)
+                    repeat(b)
+                    phase = Phase.CHECK_MANUAL
+                    phaseFrames = 0
+                } catch (e: Exception) {
+                    Log.w(TAG, "manual exposure refused", e)
+                    tryCompensation(b)
+                }
+            }
+            Phase.CHECK_MANUAL -> {
+                if (r.get(CaptureRequest.CONTROL_AE_MODE) != CaptureRequest.CONTROL_AE_MODE_OFF) return
+                // Give the new setting a moment to reach the sensor, then judge by what it reports.
+                if (++phaseFrames < settleFrames / 2) return
+                val t = result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: exposureNs ?: return
+                if (abs(t - targetNs) <= targetNs * 0.15) {
+                    exposureKind = "manual"
+                    finish(ExposureReport("manual", shutterNs, t, result.get(CaptureResult.SENSOR_SENSITIVITY) ?: iso, isoCapped))
+                } else {
+                    Log.w(TAG, "shutter: asked ${Exposure.shown(targetNs)}, camera reports ${Exposure.shown(t)}")
+                    tryCompensation(b)
+                }
+            }
+            Phase.CHECK_COMPENSATION -> {
+                val low = limits?.compensation?.lower ?: return
+                if (r.get(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION) != low) return
+                phaseFrames++
+                val converged = result.get(CaptureResult.CONTROL_AE_STATE) == CaptureResult.CONTROL_AE_STATE_CONVERGED
+                if (!(phaseFrames >= settleFrames && converged) && phaseFrames < mode.fps * 2) return
+                val t = exposureNs
+                if (t != null && t <= autoNs * 0.8) {
+                    b.set(CaptureRequest.CONTROL_AE_LOCK, true)
+                    repeat(b)
+                    exposureKind = "compensation"
+                    finish(ExposureReport("compensation", shutterNs, t, iso))
+                } else {
+                    backToAuto(b)
+                    finish(ExposureReport("refused", shutterNs, t, iso))
+                }
+            }
+        }
+    }
+
+    /** Manual exposure didn't take: auto exposure turned all the way down, then locked. */
+    private fun tryCompensation(b: CaptureRequest.Builder) {
+        val low = limits?.compensation?.lower
+        // A manual-only mode's frame rate needs manual exposure; auto can't hold it.
+        if (low == null || mode.manualOnly) {
+            backToAuto(b)
+            return finish(ExposureReport("refused", shutterNs, exposureNs, iso))
+        }
+        try {
+            b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+            b.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, low)
+            b.set(CaptureRequest.CONTROL_AE_LOCK, false)
+            repeat(b)
+            phase = Phase.CHECK_COMPENSATION
+            phaseFrames = 0
+        } catch (e: Exception) {
+            Log.w(TAG, "exposure compensation refused", e)
+            runCatching { backToAuto(b) }
+            finish(ExposureReport("refused", shutterNs, exposureNs, iso))
+        }
+    }
+
+    private fun finish(report: ExposureReport) {
+        phase = Phase.OFF
+        Log.i(TAG, "shutter: $report")
+        if (!closed) onExposure(report)
     }
 
     /** How far the preview/recording picture is turned to be upright (degrees clockwise). */

@@ -46,6 +46,8 @@ class MainActivity : Activity() {
     private lateinit var modeButton: Button
     private lateinit var serverButton: Button
     private lateinit var angleButton: Button
+    private lateinit var shutterButton: Button
+    private lateinit var exposureView: TextView
     private lateinit var uploadView: TextView
     private lateinit var setupView: TextView
     private lateinit var cameraSetup: CameraSetup
@@ -84,8 +86,10 @@ class MainActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         buildUi()
         camera = runCatching { Modes.find(getSystemService(CameraManager::class.java)) }.getOrNull()
-        mode = camera?.modes?.let { list -> list.firstOrNull { it.key == prefs.getString("mode", null) } ?: list.first() }
+        mode = offeredModes().let { list -> list.firstOrNull { it.key == prefs.getString("mode", null) } ?: list.firstOrNull() }
         updateModeButton()
+        updateShutterButton()
+        showLimits()
         uploader = Uploader(outbox, ::serverUrl) { pending, message -> main.post { showUpload(pending, message) } }
         uploader.start()
         checkServer()
@@ -144,9 +148,12 @@ class MainActivity : Activity() {
             setStatus("Starting camera…", Color.WHITE)
             return
         }
-        recorder = ReplayRecorder(this, cam.cameraId, m, preview.holder.surface, PRE_S + POST_S + 2.0) { msg ->
-            main.post { setStatus("Camera problem: $msg", Color.rgb(245, 158, 11)) }
-        }.also { it.start() }
+        recorder = ReplayRecorder(this, cam.cameraId, m, preview.holder.surface, PRE_S + POST_S + 2.0,
+            onError = { msg -> main.post { setStatus("Camera problem: $msg", Color.rgb(245, 158, 11)) } },
+            shutter = shutter(),
+            onExposure = { report -> main.post { showExposure(report, m) } },
+        ).also { it.start() }
+        showLimits()
         listener = ImpactListener(this,
             onLevel = { level -> main.post { meter.level = level } },
             onImpact = { at ->
@@ -178,6 +185,7 @@ class MainActivity : Activity() {
         val m = rec.mode
         val momentUs = rec.toVideoUs(nanoTime)
         val wallMs = System.currentTimeMillis() - (System.nanoTime() - nanoTime) / 1_000_000 + clockOffsetMs
+        val exposure = rec.exposureNow()
         val angle = angle()
         main.post {
             tones.startTone(ToneGenerator.TONE_PROP_ACK, 150)
@@ -199,6 +207,17 @@ class MainActivity : Activity() {
             // e.g. swing_dtl_1280x720_240fps_1789123456_2137ms.mp4: the angle, the strike's time (server
             // clock), and how far into the clip it is - which lines up the two angles of one swing.
             val name = "swing_${angle}_${m.width}x${m.height}_${m.fps}fps_${wallMs / 1000}_${at?.let { Math.round(it * 1000) }}ms.mp4"
+            // What the camera really used, uploaded with the clip (the name stays as older servers expect).
+            val info = File(outbox, "$name.json")
+            runCatching {
+                info.writeText(org.json.JSONObject().apply {
+                    put("shutter", Exposure.label(shutter()))
+                    put("exposure", exposure.kind)
+                    exposure.exposureNs?.let { put("exposure_ns", it) }
+                    exposure.iso?.let { put("iso", it) }
+                    exposure.frameNs?.let { put("frame_ns", it) }
+                }.toString())
+            }
             main.post {
                 if (at != null && tmp.renameTo(File(outbox, name))) {
                     saved++
@@ -206,6 +225,7 @@ class MainActivity : Activity() {
                     uploader.poke()
                 } else {
                     tmp.delete()
+                    info.delete()
                     setStatus("Couldn't save that one (camera still starting?)", Color.rgb(245, 158, 11))
                 }
             }
@@ -217,8 +237,11 @@ class MainActivity : Activity() {
         // Setup checks (and speech) only run while not recording; start the next setup fresh.
         if (::cameraSetup.isInitialized && !on) cameraSetup.reset()
         if (::setupView.isInitialized) setupView.visibility = if (on) View.GONE else View.VISIBLE
-        // Freshen the clock offset as a session starts.
-        if (on) checkServer()
+        // Freshen the clock offset as a session starts, and meter again for a fixed shutter.
+        if (on) {
+            checkServer()
+            if (shutter() != 0) recorder?.relockExposure()
+        }
         if (::startButton.isInitialized) showState()
     }
 
@@ -227,7 +250,7 @@ class MainActivity : Activity() {
         val count = if (saved > 0) " · $saved saved" else ""
         // Settings are for setting up; while recording they're locked so a stray tap can't
         // change them (or restart the camera mid-session). Stop to change them.
-        for (b in listOf(minusButton, plusButton, modeButton, serverButton, angleButton)) {
+        for (b in listOf(minusButton, plusButton, modeButton, serverButton, angleButton, shutterButton)) {
             b.isEnabled = !armed
             b.alpha = if (armed) 0.4f else 1f
         }
@@ -263,8 +286,11 @@ class MainActivity : Activity() {
         meter.threshold = ImpactListener.thresholdFor(s)
     }
 
+    /** Modes to choose from: the manual-only ones only with a fixed shutter. */
+    private fun offeredModes(): List<Mode> = camera?.let { if (shutter() == 0) it.autoModes else it.modes }.orEmpty()
+
     private fun chooseMode() {
-        val modes = camera?.modes ?: return
+        val modes = offeredModes().ifEmpty { return }
         val labels = modes.map { m ->
             m.label + when {
                 m.fps >= 240 -> "  (slow-mo, darker)"
@@ -286,6 +312,79 @@ class MainActivity : Activity() {
 
     private fun updateModeButton() {
         modeButton.text = mode?.label ?: "No camera"
+    }
+
+    /** Shutter as 1/n s, or 0 for Auto (the camera's own exposure, the default). */
+    private fun shutter() = prefs.getInt("shutter", 0).takeIf { it in Exposure.CHOICES } ?: 0
+
+    private fun chooseShutter() {
+        val choices = Exposure.CHOICES
+        val labels = choices.map { d ->
+            when (d) {
+                0 -> "Auto (about 1/frame rate: the club blurs)"
+                else -> "1/$d s (needs bright light)"
+            }
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Shutter")
+            .setSingleChoiceItems(labels, choices.indexOf(shutter())) { d, i ->
+                prefs.edit().putInt("shutter", choices[i]).apply()
+                // Back on Auto, a manual-only mode can't run: go to the fastest one that can.
+                if (mode?.manualOnly == true && choices[i] == 0) {
+                    mode = offeredModes().firstOrNull()
+                    mode?.let { prefs.edit().putString("mode", it.key).apply() }
+                    updateModeButton()
+                }
+                updateShutterButton()
+                d.dismiss()
+                // Restarting meters and locks again with the new setting.
+                restartSession()
+            }
+            .show()
+    }
+
+    private fun updateShutterButton() {
+        shutterButton.text = "Shutter " + Exposure.label(shutter())
+    }
+
+    /** What this camera allows, before (and as well as) what it did with the setting. */
+    private fun showLimits() {
+        val cam = camera ?: return
+        val lim = runCatching { Exposure.limits(getSystemService(CameraManager::class.java).getCameraCharacteristics(cam.cameraId)) }.getOrNull()
+        val m = mode
+        val session = if (m?.highSpeed == true) "high-speed session" else "normal session"
+        val setting = if (shutter() == 0) "Shutter: Auto" else "Shutter ${Exposure.label(shutter())}: checking the $session…"
+        exposureView.text = setting + (lim?.let { "\nThis camera: ${it.describe()}" } ?: "")
+        exposureView.setTextColor(Color.rgb(160, 170, 165))
+        android.util.Log.i(ReplayRecorder.TAG, "camera ${cam.cameraId} ${m?.label}: ${lim?.describe()}")
+    }
+
+    /** Shows and says what exposure the camera really took, not just what was asked. */
+    private fun showExposure(r: ExposureReport, m: Mode) {
+        if (recorder?.mode != m) return   // from a session that has since been replaced
+        val t = r.exposureNs
+        val iso = r.iso
+        val used = if (t != null && iso != null) "${Exposure.shown(t)}, ISO $iso" else "not reported"
+        val refused = "This phone won't allow a fixed shutter at ${m.fps} fps"
+        val offer = camera?.modes?.firstOrNull { it.manualOnly && it.fps >= 120 }
+            ?.takeIf { m.highSpeed }?.let { " Try ${it.label} in the mode list." } ?: ""
+        val (shown, said, ok) = when (r.kind) {
+            "manual" -> Triple(
+                "Shutter $used${if (r.isoCapped) " (ISO at its maximum: darker picture)" else ""}",
+                "Shutter ${Exposure.spoken(t!!)}, ISO $iso${if (r.isoCapped) ". ISO is at its maximum, so the picture will be darker" else ""}",
+                true)
+            "compensation" -> Triple(
+                "No fixed shutter at ${m.fps} fps. Auto exposure turned down and locked instead: $used (darker picture).$offer",
+                "$refused. Locked darker instead: shutter ${Exposure.spoken(t!!)}, ISO $iso.$offer",
+                false)
+            else -> Triple(
+                "$refused. Still on auto: $used.$offer",
+                "$refused.$offer",
+                false)
+        }
+        exposureView.text = shown
+        exposureView.setTextColor(if (ok) Color.rgb(74, 222, 128) else Color.rgb(245, 158, 11))
+        cameraSetup.say(said)
     }
 
     /** Which way this phone looks at the golfer: "face" (face-on) or "dtl" (down the line). */
@@ -474,8 +573,11 @@ class MainActivity : Activity() {
         modeButton = button("") { chooseMode() }
         angleButton = button("") { chooseAngle() }
         serverButton = button("") { chooseServer() }.apply { textSize = 13f; maxLines = 1 }
+        shutterButton = button("") { chooseShutter() }
         panel.addView(row(angleButton, modeButton))
-        panel.addView(row(serverButton))
+        panel.addView(row(shutterButton, serverButton))
+        exposureView = TextView(this).apply { textSize = 12f; setPadding(0, dp(4), 0, 0) }
+        panel.addView(exposureView)
 
         uploadView = TextView(this).apply { textSize = 14f; setPadding(0, dp(6), 0, 0) }
         panel.addView(uploadView)

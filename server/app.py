@@ -203,6 +203,8 @@ def move_clip(name: str, to_trash: bool) -> bool:
     dst_clips.mkdir(parents=True, exist_ok=True)
     dst_pose.mkdir(parents=True, exist_ok=True)
     (src_clips / name).replace(dst_clips / name)
+    if (src_clips / (name + CAMERA_SUFFIX)).is_file():
+        (src_clips / (name + CAMERA_SUFFIX)).replace(dst_clips / (name + CAMERA_SUFFIX))
     # Every pose file for the clip, older versions included.
     for f in src_pose.glob(glob.escape(name) + ".*"):
         f.replace(dst_pose / f.name)
@@ -268,6 +270,8 @@ def listed_clips(with_shots: bool = True) -> list[dict]:
             "angle": (m.group(1) or "face") if m else "face",
             "strike": int(m.group(2)) / 1000 if m and m.group(2) else None,
             "partner": None,
+            # What the phone's camera really used (shutter, ISO), if it said.
+            "camera": load_camera(p.name),
             "_t": t,
         })
     # Only the capture app's clips are named after the strike itself.
@@ -338,15 +342,47 @@ def get_clip(name: str):
 UPLOAD_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,120}\.(mp4|mov|webm)$")
 
 
+# What the camera used for a clip, kept next to it as <clip>.camera.json (capture app 0.4 and later).
+CAMERA_SUFFIX = ".camera.json"
+
+
+def load_camera(name: str) -> dict | None:
+    try:
+        return json.loads((CLIPS_DIR / (name + CAMERA_SUFFIX)).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def save_camera(name: str, shutter: str | None, exposure: str | None, exposure_ns: int | None,
+                iso: int | None, frame_ns: int | None) -> None:
+    """Keeps what the phone reported: the setting ("Auto", "1/1000"), what the camera did with it
+    ("auto", "manual", "compensation", "refused"), and the exposure (ns) and ISO it really used."""
+    if shutter is None and exposure is None and exposure_ns is None and iso is None:
+        return  # an older capture app: nothing to keep
+    info = {"shutter": shutter, "exposure": exposure, "exposureNs": exposure_ns, "iso": iso, "frameNs": frame_ns,
+            # The same exposure as 1/<n> s, for reading and grouping clips by shutter speed.
+            "shutterSpeed": round(1e9 / exposure_ns) if exposure_ns else None}
+    path = CLIPS_DIR / (name + CAMERA_SUFFIX)
+    tmp = path.with_name(path.name + ".part")
+    tmp.write_text(json.dumps(info))
+    tmp.replace(path)
+
+
 @app.post("/api/upload")
-async def upload(name: str, request: Request):
-    """The capture app sends each clip as the raw request body: POST /api/upload?name=<file name>."""
+async def upload(name: str, request: Request, shutter: str | None = Query(None, max_length=20),
+                 exposure: str | None = Query(None, max_length=20),
+                 exposure_ns: int | None = Query(None, ge=1), iso: int | None = Query(None, ge=1),
+                 frame_ns: int | None = Query(None, ge=1)):
+    """The capture app sends each clip as the raw request body: POST /api/upload?name=<file name>,
+    and from version 0.4 what its camera used: &shutter=1/1000&exposure=manual&exposure_ns=...&iso=...&frame_ns=..."""
     if not UPLOAD_NAME.match(name) or name.startswith("."):
         raise HTTPException(400, "Bad clip name")
     CLIPS_DIR.mkdir(parents=True, exist_ok=True)
     final = CLIPS_DIR / name
     # A retry after a lost response: already have it, so say so rather than keep a second copy.
     if final.exists():
+        if not (CLIPS_DIR / (name + CAMERA_SUFFIX)).exists():
+            save_camera(name, shutter, exposure, exposure_ns, iso, frame_ns)
         return {"ok": True, "size": final.stat().st_size, "duplicate": True}
     # Written under a name the clip list and pose worker ignore, then renamed once complete.
     part = CLIPS_DIR / (name + ".part")
@@ -359,10 +395,13 @@ async def upload(name: str, request: Request):
         expected = request.headers.get("x-clip-size")
         if expected is not None and int(expected) != size:
             raise HTTPException(400, f"Upload cut short: got {size} of {expected} bytes")
+        # The camera info first, so the clip never shows up without it.
+        save_camera(name, shutter, exposure, exposure_ns, iso, frame_ns)
         part.replace(final)
     finally:
         part.unlink(missing_ok=True)
-    print(f"Upload: {name} ({size / 1e6:.1f} MB)", flush=True)
+    shot = f", {exposure} 1/{round(1e9 / exposure_ns)} s ISO {iso}" if exposure_ns else ""
+    print(f"Upload: {name} ({size / 1e6:.1f} MB{shot})", flush=True)
     return {"ok": True, "size": size}
 
 
