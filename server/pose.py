@@ -105,10 +105,12 @@ def run_chunk(args):
         with av.open(path) as c:
             tb = float(c.streams.video[0].time_base)
             for f in decode_range(c, start_pts, end_pts):
-                rgb = cv2.cvtColor(f.to_ndarray(format="yuv420p"), cv2.COLOR_YUV2RGB_I420)
-                rgb = cv2.resize(rgb, None, fx=SCALE, fy=SCALE, interpolation=cv2.INTER_AREA)
+                full = cv2.cvtColor(f.to_ndarray(format="yuv420p"), cv2.COLOR_YUV2RGB_I420)
+                rgb = cv2.resize(full, None, fx=SCALE, fy=SCALE, interpolation=cv2.INTER_AREA)
                 if rotation in ROTATE_CW:
                     rgb = cv2.rotate(rgb, ROTATE_CW[rotation])
+                    if tracker is not None:
+                        full = cv2.rotate(full, ROTATE_CW[rotation])
                 t = f.pts * tb
                 started = time.perf_counter()
                 res = lm.detect_for_video(
@@ -120,15 +122,17 @@ def run_chunk(args):
                 if res.pose_landmarks:
                     landmarks = [(p.x, p.y, p.visibility) for p in res.pose_landmarks[0]]
                     if tracker is not None:
+                        # The full-size picture: the half size is plenty for MediaPipe's 256px input,
+                        # but the crop around the golfer would lose the hands' detail.
                         started = time.perf_counter()
-                        landmarks = tracker.frame(rgb, landmarks)
+                        landmarks = tracker.frame(full, landmarks)
                         timing["body"] += time.perf_counter() - started
                     if res.pose_world_landmarks:
                         world = [(p.x, p.y, p.z) for p in res.pose_world_landmarks[0]]
                     if bg is not None and res.segmentation_masks:
                         shaft = shaft_scores(f, rotation, landmarks, res.segmentation_masks[0].numpy_view(), bg)
                 elif tracker is not None:
-                    tracker.frame(rgb, None)            # lost: the next crop comes from MediaPipe
+                    tracker.frame(full, None)            # lost: the next crop comes from MediaPipe
                 out.append((t, landmarks, world, shaft))
     finally:
         lm.close()
