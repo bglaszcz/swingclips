@@ -50,3 +50,6 @@ certificates
 /train/runs/
 /train/.venv/
 /train/__pycache__/
+
+# Local server settings (Start server.cmd calls it)
+/server/settings.cmd

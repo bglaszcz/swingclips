@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import models
 import pose
 import quality
 import practice
@@ -138,6 +139,75 @@ def pose_state(name: str) -> str:
     return "processing" if name == pose_busy else "queued"
 
 
+def body_model() -> str:
+    """Which model places the 2D landmarks in new pose files: "mediapipe", or e.g. "rtmpose-m-256x192"
+    (SWINGCLIPS_POSE_BACKEND, see models.py)."""
+    b = models.backend()
+    return b if b == models.DEFAULT else models.stamp(b)
+
+
+# Which model made each pose file, by clip name: (file's mtime, model). The worker checks every clip.
+_pose_models: dict[str, tuple[int, str]] = {}
+# Clips that failed to be analyzed again with the current model (kept as they were until a restart).
+_again_failed: set[str] = set()
+
+
+def pose_model(name: str) -> str | None:
+    """Which body model made a clip's pose file ("mediapipe" when it doesn't say), or None without one."""
+    f = pose_file(name)
+    try:
+        mtime = f.stat().st_mtime_ns
+    except OSError:
+        return None
+    got = _pose_models.get(name)
+    if got is None or got[0] != mtime:
+        # pose.py writes "model" right after "version" (only for another backend), so the start will do.
+        try:
+            with gzip.open(f, "rb") as g:
+                head = g.read(200).decode("utf-8", "replace")
+        except (OSError, EOFError):
+            return None
+        m = re.search(r'"model":"([^"]+)"', head)
+        got = (mtime, m.group(1) if m else models.DEFAULT)
+        _pose_models[name] = got
+    return got[1]
+
+
+def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False) -> ProcessPoolExecutor:
+    """Runs pose on one clip and saves the result; returns the pool (a fresh one if a worker died)."""
+    global pose_busy
+    with files_lock:
+        if not clip.exists() or clip.name in pending_trash:
+            return pool
+        pose_busy = clip.name
+    print(f"Pose: {clip.name} ...{' again, with ' + body_model() if again else ''}", flush=True)
+    try:
+        result = pose.analyze(str(clip), pool, POSE_WORKERS)
+        tmp = pose_file(clip.name).with_suffix(".tmp")
+        tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
+        tmp.replace(pose_file(clip.name))
+        found = sum(f["lm"] is not None for f in result["frames"])
+        impact = f"impact at {result['impact']} s" if result["impact"] is not None else "ball not found"
+        print(f"Pose: {clip.name} done in {result['seconds']} s, "
+              f"{found}/{len(result['frames'])} frames with a person, {impact}", flush=True)
+    except Exception as e:
+        if again:  # a clip that was analyzed before keeps its old result
+            _again_failed.add(clip.name)
+        else:
+            error_file(clip.name).write_text(traceback.format_exc())
+        print(f"Pose: {clip.name} FAILED{' (keeps its old result)' if again else ' - see ' + str(error_file(clip.name))}",
+              flush=True)
+        if again:
+            traceback.print_exc()
+        if isinstance(e, BrokenProcessPool):
+            # A worker process died (e.g. a bad video crashed the decoder); start fresh ones.
+            pool = ProcessPoolExecutor(POSE_WORKERS)
+    finally:
+        with files_lock:
+            pose_busy = None
+    return pool
+
+
 def pose_worker(stop: threading.Event):
     """Forever: find clips without pose results, newest first, and analyze them one at a time."""
     global pose_busy
@@ -150,7 +220,15 @@ def pose_worker(stop: threading.Event):
         todo = [p for p in clip_paths()
                 if pose_state(p.name) == "queued" and time.time() - p.stat().st_mtime > SETTLE_SECONDS]
         if not todo:
-            # Nothing to pose: measure a clip's quality instead (new ones first, then older clips).
+            # Nothing new: analyze again, newest first, a clip whose pose came from another body model
+            # (after SWINGCLIPS_POSE_BACKEND changed), so every swing is measured the same way.
+            model = body_model()
+            again = [p for p in clip_paths() if p.name not in _again_failed and pose_state(p.name) == "done"
+                     and pose_model(p.name) not in (None, model)]
+            if again:
+                pool = analyze_clip(max(again, key=recorded_at), pool, again=True)
+                continue
+            # Then measure a clip's quality (new ones first, then older clips).
             try:
                 if summarizer is None:
                     summarizer = swings.Summarizer(STATIC_DIR)
@@ -160,30 +238,7 @@ def pose_worker(stop: threading.Event):
             if not measured:
                 stop.wait(5)
             continue
-        clip = max(todo, key=recorded_at)
-        with files_lock:
-            if not clip.exists() or clip.name in pending_trash:
-                continue
-            pose_busy = clip.name
-        print(f"Pose: {clip.name} ...", flush=True)
-        try:
-            result = pose.analyze(str(clip), pool, POSE_WORKERS)
-            tmp = pose_file(clip.name).with_suffix(".tmp")
-            tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
-            tmp.replace(pose_file(clip.name))
-            found = sum(f["lm"] is not None for f in result["frames"])
-            impact = f"impact at {result['impact']} s" if result["impact"] is not None else "ball not found"
-            print(f"Pose: {clip.name} done in {result['seconds']} s, "
-                  f"{found}/{len(result['frames'])} frames with a person, {impact}", flush=True)
-        except Exception as e:
-            error_file(clip.name).write_text(traceback.format_exc())
-            print(f"Pose: {clip.name} FAILED - see {error_file(clip.name)}", flush=True)
-            if isinstance(e, BrokenProcessPool):
-                # A worker process died (e.g. a bad video crashed the decoder); start fresh ones.
-                pool = ProcessPoolExecutor(POSE_WORKERS)
-        finally:
-            with files_lock:
-                pose_busy = None
+        pool = analyze_clip(max(todo, key=recorded_at), pool)
     pool.shutdown(cancel_futures=True)
     if summarizer is not None:
         summarizer.close()
@@ -195,7 +250,8 @@ def quality_step(pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> bo
     clips = {c["name"]: c for c in listed_clips(with_shots=False)}
     # Measured against an older pose file (its key positions may have moved): measured again.
     todo = [c for c in clips.values() if c["pose"] == "done" and not quality_error_file(c["name"]).exists()
-            and (c["quality"] is None or c["quality"].get("poseVersion") != pose.VERSION)]
+            and (c["quality"] is None or c["quality"].get("poseVersion") != pose.VERSION
+                 or c["quality"].get("poseModel", models.DEFAULT) != pose_model(c["name"]))]
     for c in sorted(todo, key=lambda c: c["recorded"], reverse=True):
         other = clips.get(c["partner"] or "")
         if c["angle"] == "dtl" and other and other["pose"] not in ("done", "failed"):
@@ -241,6 +297,7 @@ def measure_quality(clip: dict, other: dict | None, pool: ProcessPoolExecutor, s
     record = pool.submit(quality.measure, str(CLIPS_DIR / clip["name"]), frames, positions, timing,
                          clip.get("camera")).result()
     record["poseVersion"] = pose.VERSION
+    record["poseModel"] = pose_model(clip["name"])
     record["positions"] = {k: round(v, 4) for k, v in positions.items() if k in quality.SHARP_KEYS}
     tmp = quality_file(clip["name"]).with_suffix(".tmp")
     tmp.write_text(json.dumps(record, separators=(",", ":")))
@@ -271,7 +328,10 @@ def swing_worker(stop: threading.Event):
                     continue  # wait for the other angle
                 other = other if other and other["pose"] == "done" else None
                 old = swing_records.get(c["name"])
-                if old and old.get("code") == swings_code and old.get("partner") == (other and other["name"]):
+                # Worked out again when the JavaScript, the partner or either clip's body model changed.
+                made_by = [pose_model(c["name"]), other and pose_model(other["name"])]
+                if (old and old.get("code") == swings_code and old.get("partner") == (other and other["name"])
+                        and old.get("poseModel", [models.DEFAULT, other and models.DEFAULT]) == made_by):
                     continue
                 try:
                     record = summarizer.summarize(swings.pose_input(c, pose_file(c["name"])),
@@ -280,7 +340,7 @@ def swing_worker(stop: threading.Event):
                     continue  # just deleted
                 except Exception:
                     record = {"error": traceback.format_exc(limit=2)}
-                record.update(code=swings_code, partner=other and other["name"])
+                record.update(code=swings_code, partner=other and other["name"], poseModel=made_by)
                 with records_lock:
                     swing_records[c["name"]] = record
                 done += 1
@@ -1023,6 +1083,17 @@ class QuietShutdown(logging.Filter):
 
 if __name__ == "__main__":
     print(f"Serving clips from {CLIPS_DIR}, pose results in {POSE_DIR}")
+    # Another body model (settings.cmd: set SWINGCLIPS_POSE_BACKEND=rtmpose-m): fetched once if missing.
+    # Without it every new clip would fail, so MediaPipe carries on until it can be downloaded.
+    backend = models.backend()
+    if backend != models.DEFAULT and not models.model_path(backend).is_file():
+        try:
+            import fetch_models
+            fetch_models.fetch(backend)
+        except Exception as e:
+            print(f"Body model {backend}: couldn't download it ({e}); using MediaPipe until the next start")
+            os.environ["SWINGCLIPS_POSE_BACKEND"] = models.DEFAULT
+    print(f"Body model: {body_model()} (clips analyzed with another are analyzed again when the server is idle)")
     print(f"Open http://localhost:{PORT} here, or http://<this PC's name>:{PORT} from other devices")
     logging.getLogger("uvicorn.access").addFilter(QuietPolling())
     logging.getLogger("uvicorn.error").addFilter(QuietShutdown())

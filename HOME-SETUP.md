@@ -388,6 +388,24 @@ to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of 
   camera gating and waits (synthetic swings and shots): `python -m unittest tests.test_practice`;
   the phone's side of it (JVM, no phone): `gradlew :app:testDebugUnitTest` in `capture`.
 
+#### The server's body model: RTMPose-m (from 2026-09-25)
+Scored on 18 hand-labeled clips, RTMPose-m beat MediaPipe on nearly everything: face-on downswing
+wrists 4.7% -> 1.7% of height, P4 (top) 87 -> 33 ms face-on and 75 -> 19 ms down the line, shoulder
+tilt 6.3 -> 2.6 degrees. It costs ~45 ms per frame per worker on top of MediaPipe (~10-15 s more a clip).
+
+The server's own settings live in `server\settings.cmd` (not in git), which `Start server.cmd` calls:
+
+```
+set SWINGCLIPS_POSE_BACKEND=rtmpose-m
+```
+
+- On start the server downloads the model if it's missing (~50 MB into `public\models`); if it can't,
+  it says so and uses MediaPipe until the next start.
+- Every pose file records which model made it. When nothing new is waiting, the server analyzes
+  again, newest first, each clip made by another model (~30 s a clip), and its quality and swing
+  numbers follow. A clip that fails keeps its old result. Delete the line (or the file) to go back:
+  the clips are then analyzed again with MediaPipe the same way.
+
 #### Trying another body model
 `models.py` can put the 2D joints from RTMPose or RTMW instead of MediaPipe, for the scorecard
 only: the server itself keeps using MediaPipe unless the setting below is made in *its* window, and
