@@ -298,6 +298,24 @@
   /* A swing with a shaky number on either axis (trust.js). */
   .t-dot.hollow { fill: var(--panel); stroke: var(--dot); stroke-width: 2; }
   .p-tile b.shaky { color: var(--muted); }
+  /* Personal ranges from good shots (goodshots.js): a faint band on a number in or outside its range. */
+  td.gs-in { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  td.gs-out { background: color-mix(in srgb, var(--warn) 12%, transparent); }
+  td.gs-text, th.gs-text { text-align: left !important; color: var(--muted); font-size: 12px; white-space: normal !important; min-width: 180px; }
+  #good-tempo { color: var(--muted); font-size: 12px; }
+  .p-good-table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .p-good-table th, .p-good-table td, #p-good-ranges th, #p-good-ranges td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+  #p-good-ranges { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .p-good-table em { font-style: normal; font-weight: 600; }
+  .p-good-table em.better { color: var(--accent); }
+  .p-good-table em.muted { color: var(--muted); font-weight: 400; }
+  .p-ci { width: 100px; height: 12px; vertical-align: middle; }
+  .p-ci-line { stroke: var(--dot); stroke-width: 2; }
+  #p-good-form { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .p-good-field { font-size: 13px; }
+  .p-good-field input[inputmode] { width: 4.5em; }
+  .c-good td.in { color: var(--accent); }
+  .c-good td.out { color: var(--warn); }
   .t-ring { fill: none; stroke: var(--text); stroke-width: 2; pointer-events: none; }
   .t-hit { fill: transparent; cursor: pointer; outline: none; }
   #t-tip, .tip { position: absolute; z-index: 2; pointer-events: none; background: var(--text); color: var(--bg);
@@ -424,8 +442,10 @@
     <div id="numbers" hidden>
       <strong>Swing numbers</strong>
       <div id="tempo"></div>
+      <div id="good-tempo"></div>
       <div style="overflow-x: auto"><table id="num-table"></table></div>
       <div class="note" id="trust-note"></div>
+      <div class="note" id="good-note"></div>
       <div class="note" id="face-note">Face-on: turns are from how much narrower the hips and shoulders look than at address;
         inches are scaled from the body's estimated size. Both are estimates from one camera: best
         for comparing your own swings. Turn + = closed (going back), - = open; tilt + = lead side higher /
@@ -555,6 +575,7 @@
         <label>to <input id="pr-max" inputmode="decimal"></label>
         <span id="pr-unit"></span>
         <button id="pr-use" class="small" title="Set the range to the middle half of your recent swings with this club">Use middle half</button>
+        <button id="pr-good" class="small" title="Set the range to the middle 50% of your good shots, and the club to one that has enough of them">Use my good-shot range</button>
       </div>
       <div id="pr-suggest"></div>
       <div class="t-filters">
@@ -596,6 +617,29 @@
       <div id="p-tiles"></div>
       <div class="note" id="p-tiles-note"></div>
     </div>
+    <div class="t-card" id="p-good">
+      <strong>What sets my good shots apart</strong>
+      <div id="p-good-status" class="note"></div>
+      <div style="overflow-x: auto" id="p-good-sep"></div>
+      <div class="note">The body numbers that differ most between this club's good shots and the rest: the difference in
+        means, and the effect size (Hedges' g, in standard deviations) with its 95% confidence interval. "Clear" = the
+        interval leaves out 0. This describes your shots; it doesn't say a number causes good shots (it may be the other
+        way round, or both may follow from something else), and with 18 numbers about one in twenty looks clear by chance.
+        Numbers with no reading are left out; greyed ~ = mostly shaky.</div>
+      <details>
+        <summary id="p-good-ranges-title">Ranges on good shots</summary>
+        <div style="overflow-x: auto"><table id="p-good-ranges"></table></div>
+        <div class="note">Middle 50% and 80% of the good shots' numbers (the swing page and Compare show them too).
+          "Not reliable": most of those numbers are shaky (tracking noise or the conditions could account for them).</div>
+      </details>
+      <details>
+        <summary>What counts as a good shot</summary>
+        <form id="p-good-form"></form>
+        <div class="note">From Square's numbers, per club: "your median" is over the club's latest 200 shots, good or
+          not, once there are 5. A rule Square gives no number for (the driver's smash or strike, sometimes) is
+          skipped. Swings left out of the trends don't count.</div>
+      </details>
+    </div>
     <div class="t-card" id="p-chart">
       <div class="p-chart-head"><strong>Over time</strong><select id="p-metric" aria-label="Number to chart"></select></div>
       <svg role="img"></svg>
@@ -634,6 +678,7 @@
 <script src="/static/metrics.js"></script>
 <script src="/static/summary.js"></script>
 <script src="/static/trust.js"></script>
+<script src="/static/goodshots.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script>
@@ -1567,6 +1612,51 @@ async function show3d(name) {
   View3D.draw(video.currentTime);
 }
 
+/**
+ * The open swing's club and the personal ranges on its good shots (trends.js goodRange, goodshots.js),
+ * and the tempo line against them. The ranges need the trends' data: loaded once, then drawn again.
+ * @returns {club, any (some number has enough good shots), ranges: {key: range}}
+ */
+let goodLoading = false;
+function openGoodRanges(tp, facts) {
+  const line = document.getElementById("good-tempo"), note = document.getElementById("good-note");
+  line.textContent = note.textContent = "";
+  const c = clips.find(x => x.name === current), club = c && c.shot ? c.shot.club : null;
+  const out = { club, any: false, ranges: {} };
+  // Loaded once, and again when it's over a minute old (new swings since); drawn again if it changed.
+  if (!goodLoading && (!trendDataLoaded || Date.now() - trendDataAt > 60000)) {
+    goodLoading = true;
+    const name = current, first = !trendDataLoaded;
+    loadTrendData().then(changed => { if (current === name && trendDataLoaded && (first || changed)) showNumbers(); })
+      .finally(() => { goodLoading = false; });
+  }
+  if (!trendDataLoaded) return out;
+  if (!club) { note.textContent = "No club for this swing (no Square shot): no good-shot ranges."; return out; }
+  if (!SwingGoodShots.groupOf(club)) return out;
+  for (const b of SwingSummary.BODY) out.ranges[b.key] = goodRange(club, b.key);
+  const enough = Object.values(out.ranges).filter(r => r && r.enough);
+  out.any = enough.length > 0;
+  const name = clubName(club).toLowerCase();
+  if (!out.any) {
+    const n = Math.max(0, ...Object.values(out.ranges).map(r => (r ? r.n : 0)));
+    note.textContent = `Not enough good shots with the ${name} for personal ranges yet (${n} of ${SwingGoodShots.withDefaults(goodSettings && goodSettings.settings).minCount}): Progress has the rules.`;
+    return out;
+  }
+  if (tp) {
+    const said = [["tempo", tp.ratio], ["backswing", tp.back], ["downswing", tp.down]].map(([key, v]) => {
+      const b = SwingSummary.BODY.find(f => f.key === key), r = out.ranges[key];
+      const j = facts && SwingTrust.judge(SwingTrust.numberOf(key), facts, v, noiseTable);
+      if (j && j.level === "none") return null;
+      return `${b.label.toLowerCase()} ${SwingGoodShots.place(v, r, b.unit).text}` + (r && r.enough ? ` (${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)})` : "");
+    }).filter(Boolean);
+    if (said.length) line.textContent = `vs my good shots with the ${name}: ${said.join("; ")}`;
+  }
+  note.textContent = `Green band = inside the middle 50% of your good shots with the ${name}; amber = outside it. `
+    + "Good shots, and how many a range needs, are set in Progress. A range is from numbers that could be read on those shots; "
+    + "\"not reliable\" = most of them were shaky.";
+  return out;
+}
+
 /** Tempo, and the numbers at address, the top, P6 and impact: face-on, then down the line. */
 function showNumbers() {
   const box = document.getElementById("numbers");
@@ -1585,6 +1675,7 @@ function showNumbers() {
     tempoBox.append("Tempo ", part("tempo", `${tp.ratio.toFixed(1)} : 1`), " - backswing ", part("backswing", `${tp.back.toFixed(2)} s`),
                     " (from takeaway), downswing ", part("downswing", `${tp.down.toFixed(2)} s`));
   }
+  const good = openGoodRanges(tp, facts);
   const table = document.getElementById("num-table");
   const head = document.createElement("tr");
   head.innerHTML = "<th></th>";
@@ -1593,6 +1684,7 @@ function showNumbers() {
     th.textContent = `${p.tag} ${p.label}${p.estimated ? " ~" : ""}`;
     head.append(th);
   }
+  if (good.any) head.append(Object.assign(document.createElement("th"), { className: "gs-text", textContent: `vs my good shots (${clubName(good.club)})` }));
   // Each view's rows under its own heading; the down-the-line clip is read at the same moments.
   const sections = [];
   if (metrics) sections.push(["Face-on", READOUT, metrics, cols.map(p => p.index), "face"]);
@@ -1606,7 +1698,7 @@ function showNumbers() {
     if (sections.length > 1) {
       const tr = document.createElement("tr");
       tr.className = "group";
-      tr.innerHTML = `<th colspan="${cols.length + 1}"></th>`;
+      tr.innerHTML = `<th colspan="${cols.length + 1 + (good.any ? 1 : 0)}"></th>`;
       tr.firstChild.textContent = title;
       rows.push(tr);
     }
@@ -1615,13 +1707,26 @@ function showNumbers() {
       const name = document.createElement("td");
       name.textContent = label;
       tr.append(name);
+      const said = [];
       idx.forEach((i, c) => {
         const v = m.values[i];
         const j = facts && SwingTrust.judge({ view, value: key, pos: cols[c].key }, facts, v ? v[key] : null, noiseTable, unit);
         if (j && j.level === "shaky") shaky++;
         if (j && j.level === "none" && v && v[key] != null) none++;
-        tr.append(trustCell(document.createElement("td"), fmtValue(v, key, unit), j));
+        const td = trustCell(document.createElement("td"), fmtValue(v, key, unit), j);
+        // The body number read here (summary.js BODY), against its range on my good shots.
+        const b = good.any && SwingSummary.BODY.find(f => f.view === view && f.value === key && f.pos === cols[c].key);
+        if (b && (!j || j.level !== "none")) {
+          const r = good.ranges[b.key], at = SwingGoodShots.place(v ? v[key] : null, r, b.unit);
+          if (at.status === "in" || at.status === "above" || at.status === "below") {
+            td.classList.add(at.status === "in" ? "gs-in" : "gs-out");
+            td.title = (td.title ? td.title + "\n" : "") + `My good shots: ${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)} (middle 50% of ${r.n})`;
+          }
+          said.push(`${cols[c].tag}: ${at.text}` + (r && r.enough ? ` (${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)})` : ""));
+        }
+        tr.append(td);
       });
+      if (good.any) tr.append(Object.assign(document.createElement("td"), { className: "gs-text", textContent: said.join("; ") }));
       rows.push(tr);
     }
   }

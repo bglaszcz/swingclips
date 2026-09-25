@@ -4,6 +4,8 @@
 // Uses the page's globals: clips, sessionsOf, shownClips, sessionTitle, clubName, open, viewer, video,
 // lightOf, trustCell, noiseTable. Each body number's trust is trust.js's (SwingTrust): numbers with
 // no reading are left out everywhere; shaky ones are hollow / greyed, or left out with "Leave out shaky".
+// Personal ranges from good shots (goodshots.js, SwingGoodShots) are worked out here too, for Progress,
+// the swing page, Compare and practice mode (goodShotData, goodRange).
 
 const trendsBox = document.getElementById("trends");
 const progressBox = document.getElementById("progress");
@@ -13,7 +15,9 @@ let trendsKey = null;     // the session shown in Trends, by its key (see sessio
 let progressOpen = false;
 let swingRecords = {};    // /api/swings: listed clip name -> {body, quality, setup} (or {error})
 let journal = { handicap: [], notes: {} };
+let goodSettings = null;  // /api/goodshots: {settings, defaults}: which shots count as good (goodshots.js)
 let dataSig = "";         // what the open view was last drawn from
+let trendDataLoaded = false, trendDataAt = 0;
 
 const trendPick = { x: "earlyExt", y: "path", club: null };
 try { Object.assign(trendPick, JSON.parse(localStorage.getItem("trends") || "{}"), { club: null }); } catch {}
@@ -58,15 +62,18 @@ function fmtField(f, v) {
 /** Fetches the server's swing numbers (and the journal); true if anything changed. */
 async function loadTrendData() {
   try {
-    const [s, j] = await Promise.all([fetch("/api/swings"), fetch("/api/journal")]);
+    const [s, j, g] = await Promise.all([fetch("/api/swings"), fetch("/api/journal"), fetch("/api/goodshots")]);
     if (s.ok) {
       const got = await s.json();
       swingRecords = got.swings;
       if (got.noise) noiseTable = got.noise;
     }
     if (j.ok) journal = await j.json();
+    if (g.ok) goodSettings = await g.json();
   } catch { return false; }
-  const sig = JSON.stringify([swingRecords, journal, clips, noiseTable, leaveOutShaky]);
+  trendDataLoaded = true;
+  trendDataAt = Date.now();
+  const sig = JSON.stringify([swingRecords, journal, clips, noiseTable, leaveOutShaky, goodSettings]);
   if (sig === dataSig) return false;
   dataSig = sig;
   return true;
@@ -106,6 +113,25 @@ function swingRow(c) {
 
 /** Whether row r's number for field f is shaky (a body number, trust.js). */
 const isShaky = (r, f) => !!(r.trust && r.trust[f.key] && r.trust[f.key].level === "shaky");
+
+// ---- Good shots: personal ranges (goodshots.js) ----
+
+let goodCache = { sig: null, value: null };
+/** Good shots and the body numbers' ranges on them, per club (SwingGoodShots.build), worked out once per data change. */
+function goodShotData() {
+  const sig = dataSig + "|" + clips.length;
+  if (goodCache.sig === sig) return goodCache.value;
+  const swings = shownClips().map(c => ({ name: c.name, t: new Date(c.recorded).getTime() / 1000, club: c.shot ? c.shot.club : null,
+    excluded: c.excluded, shot: c.shot, record: swingRecords[c.name] || null, light: lightOf(c.name) }));
+  goodCache = { sig, value: SwingGoodShots.build(swings, goodSettings && goodSettings.settings, noiseTable) };
+  return goodCache.value;
+}
+
+/** A body number's range with a club, or null. */
+function goodRange(club, key) {
+  const c = club && goodShotData().clubs[club];
+  return c ? c.ranges[key] : null;
+}
 
 /** The page shows one view at a time: a swing, one session's trends, progress, camera setup, or the shutter test. */
 function showView(which) {
@@ -582,6 +608,7 @@ function renderProgress() {
   drawPattern(sessions);
   renderHandicap();
   renderSessionTable(sessions);
+  renderGoodShots(club);
 }
 
 for (const [id, key] of [["p-club", "club"], ["p-period", "period"], ["p-metric", "metric"]]) {
@@ -870,6 +897,171 @@ function renderSessionTable(sessions) {
   thead.append(head);
   tbody.append(...rows);
   document.getElementById("p-sessions").replaceChildren(thead, tbody);
+}
+
+// ---- Progress: my good shots with the club ----
+
+// Separating numbers listed (largest first), and the settings form's fields: [part, key, label, unit].
+const GOOD_TOP = 6;
+const GOOD_FIELDS = [
+  ["irons", "offlinePct", "Irons and wedges: offline within", "% of carry"],
+  ["irons", "carryBelowPct", "carry no shorter than your median by", "%"],
+  ["irons", "carryAbovePct", "no longer by", "%"],
+  ["irons", "smashBelow", "smash no lower than your median by", ""],
+  ["woods", "offlinePct", "Woods, hybrids, driver: offline within", "% of carry"],
+  ["woods", "carryBelowPct", "carry no shorter than your median by", "%"],
+  ["woods", "carryAbovePct", "no longer by", "%"],
+  ["woods", "smashBelow", "smash no lower than your median by", ""],
+  ["strike", "heelToeMm", "Strike within", "mm heel/toe of your usual spot"],
+  ["strike", "highLowMm", "and within", "mm high/low"],
+  ["", "minCount", "Smallest number of good shots for a range", "shots"],
+];
+
+/** The card: how many good shots, the numbers that most separate them from the rest, their ranges, and the rules. */
+function renderGoodShots(club) {
+  const data = goodShotData(), c = club ? data.clubs[club] : null, st = data.settings;
+  const status = document.getElementById("p-good-status");
+  const name = club ? clubName(club).toLowerCase() : "";
+  if (!c) {
+    status.textContent = club ? `No shots with the ${name} that could be judged (the putter isn't).` : "";
+  } else {
+    // Why the others weren't, by rule.
+    const why = {};
+    for (const v of Object.values(c.verdicts)) {
+      for (const f of v.fails) { const k = f.split(/[ :]/)[0]; why[k] = (why[k] || 0) + 1; }
+    }
+    const top = Object.keys(why).sort((a, b) => why[b] - why[a]).map(k => `${k} ${why[k]}`);
+    const base = c.baseline;
+    status.textContent = `${c.good} good of ${c.shots} shots with the ${name}`
+      + (base && base.carry != null ? ` · your median carry ${base.carry.toFixed(0)} yd${base.smash != null ? `, smash ${base.smash.toFixed(2)}` : ""}` : "")
+      + (top.length ? ` · not good for: ${top.join(", ")}` : "");
+  }
+  renderSeparation(c, st.minCount, name);
+  renderGoodRanges(c, name);
+  renderGoodForm();
+}
+
+function renderSeparation(c, minCount, name) {
+  const box = document.getElementById("p-good-sep");
+  const items = c ? SwingGoodShots.separation(c, minCount) : [];
+  const shown = items.filter(x => x.enough).slice(0, GOOD_TOP);
+  if (!shown.length) {
+    const best = items.reduce((m, x) => Math.max(m, Math.min(x.nGood, x.nRest)), 0);
+    const x = items.find(i => Math.min(i.nGood, i.nRest) === best) || { nGood: 0, nRest: 0 };
+    box.replaceChildren(Object.assign(document.createElement("div"), { className: "muted",
+      textContent: `Not enough swings yet: ${x.nGood} good and ${x.nRest} other shots with the ${name || "club"} have body numbers; `
+        + `it takes ${minCount} of each to compare them.` }));
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "p-good-table";
+  const head = document.createElement("tr");
+  for (const t of ["Number", "Good shots vs the rest", "Effect size (95% CI)", ""]) head.append(Object.assign(document.createElement("th"), { textContent: t }));
+  table.append(head);
+  for (const x of shown) {
+    const f = field(x.key);
+    const tr = document.createElement("tr");
+    const nameTd = Object.assign(document.createElement("td"), { textContent: f.label });
+    if (x.shaky) { nameTd.classList.add("shaky"); nameTd.title = "Shaky: most of these numbers are (trust.js)"; }
+    const way = x.diff > 0 ? "higher" : "lower";
+    const desc = `${SwingGoodShots.amount(x.diff, f.unit)} ${way} (mean ${fmtField(f, x.meanGood)} vs ${fmtField(f, x.meanRest)}; ${x.nGood} vs ${x.nRest} swings)`;
+    const gTd = Object.assign(document.createElement("td"), {
+      textContent: `${fmtR(x.g)} (${fmtR(x.lo)} to ${fmtR(x.hi)})`,
+      title: "Hedges' g: the difference in means in standard deviations. Around 0.2 is small, 0.5 medium, 0.8 large." });
+    const bar = document.createElement("td");
+    bar.append(ciBar(x.lo, x.g, x.hi));
+    const verdict = Object.assign(document.createElement("em"), { textContent: x.clear ? "clear" : "could be chance" });
+    verdict.className = x.clear ? "better" : "muted";
+    bar.append(" ", verdict);
+    tr.append(nameTd, Object.assign(document.createElement("td"), { textContent: desc }), gTd, bar);
+    table.append(tr);
+  }
+  box.replaceChildren(table);
+}
+
+/** A confidence interval on a -2..2 scale, with 0 marked. */
+function ciBar(lo, g, hi) {
+  const svg = svgEl("svg", { viewBox: "0 0 100 12", class: "p-ci", "aria-hidden": "true" });
+  const x = v => 50 + Math.max(-2, Math.min(2, v)) * 24;
+  svgEl("line", { x1: 50, x2: 50, y1: 0, y2: 12, class: "t-zero" }, svg);
+  svgEl("line", { x1: x(lo), x2: x(hi), y1: 6, y2: 6, class: "p-ci-line" }, svg);
+  svgEl("circle", { cx: x(g), cy: 6, r: 3, class: "t-dot" }, svg);
+  return svg;
+}
+
+function renderGoodRanges(c, name) {
+  const table = document.getElementById("p-good-ranges");
+  const head = document.createElement("tr");
+  for (const t of ["Number", "Middle 50%", "Middle 80%", "Shots", ""]) head.append(Object.assign(document.createElement("th"), { textContent: t }));
+  const rows = SwingSummary.BODY.map(b => {
+    const r = c ? c.ranges[b.key] : null, tr = document.createElement("tr");
+    tr.append(Object.assign(document.createElement("td"), { textContent: b.label }));
+    if (!r || !r.enough) {
+      tr.append(Object.assign(document.createElement("td"), { colSpan: 2, className: "muted", textContent: "not enough good shots yet" }),
+                Object.assign(document.createElement("td"), { textContent: `${r ? r.n : 0} of ${r ? r.need : 8}` }), document.createElement("td"));
+      return tr;
+    }
+    const a = Object.assign(document.createElement("td"), { textContent: SwingGoodShots.rangeText(r.q25, r.q75, b.unit) });
+    const w = Object.assign(document.createElement("td"), { textContent: SwingGoodShots.rangeText(r.q10, r.q90, b.unit) });
+    const note = Object.assign(document.createElement("td"), { textContent: r.reliable ? "" : "range not reliable", title: r.why });
+    if (!r.reliable) { a.classList.add("shaky"); w.classList.add("shaky"); note.className = "muted"; }
+    tr.append(a, w, Object.assign(document.createElement("td"), { textContent: r.n }), note);
+    return tr;
+  });
+  table.replaceChildren(head, ...rows);
+  document.getElementById("p-good-ranges-title").textContent = `Ranges on good shots${name ? " with the " + name : ""}`;
+}
+
+/** The rules form: filled from the server's settings, unless it's being edited. */
+function renderGoodForm() {
+  const form = document.getElementById("p-good-form");
+  if (form.contains(document.activeElement)) return;
+  const st = SwingGoodShots.withDefaults(goodSettings && goodSettings.settings);
+  if (!form.dataset.built) {
+    form.dataset.built = "1";
+    const strike = Object.assign(document.createElement("label"), { className: "p-good-field" });
+    strike.append(Object.assign(document.createElement("input"), { type: "checkbox", id: "pg-strike-on" }),
+                  " Strike filter (where on the face, when Square reports it)");
+    const fields = GOOD_FIELDS.map(([part, key, label, unit]) => {
+      const l = Object.assign(document.createElement("label"), { className: "p-good-field" });
+      l.append(label + " ", Object.assign(document.createElement("input"), { id: `pg-${part}-${key}`, inputmode: "decimal", size: 5 }), " " + unit);
+      return l;
+    });
+    const buttons = Object.assign(document.createElement("div"), { className: "t-filters" });
+    const save = Object.assign(document.createElement("button"), { className: "small", type: "submit", textContent: "Save rules" });
+    const reset = Object.assign(document.createElement("button"), { className: "small", type: "button", textContent: "Back to the defaults" });
+    reset.onclick = () => saveGoodSettings(goodSettings ? goodSettings.defaults : SwingGoodShots.DEFAULTS);
+    buttons.append(save, reset, Object.assign(document.createElement("span"), { id: "pg-msg" }));
+    form.append(...fields.slice(0, 8), strike, ...fields.slice(8), buttons);
+    form.onsubmit = e => { e.preventDefault(); saveGoodSettings(readGoodForm()); };
+  }
+  for (const [part, key] of GOOD_FIELDS) document.getElementById(`pg-${part}-${key}`).value = part ? st[part][key] : st[key];
+  document.getElementById("pg-strike-on").checked = st.strike.on;
+}
+
+function readGoodForm() {
+  const s = { irons: {}, woods: {}, strike: { on: document.getElementById("pg-strike-on").checked } };
+  for (const [part, key] of GOOD_FIELDS) {
+    const v = Number(document.getElementById(`pg-${part}-${key}`).value.replace(",", "."));
+    if (part) s[part][key] = v; else s[key] = v;
+  }
+  return s;
+}
+
+async function saveGoodSettings(s) {
+  const msg = document.getElementById("pg-msg");
+  try {
+    const res = await fetch("/api/goodshots", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(s) });
+    if (!res.ok) throw new Error((await res.json()).detail || res.status);
+    goodSettings = await res.json();
+    msg.textContent = "Saved.";
+  } catch (e) {
+    msg.textContent = `Couldn't save: ${e.message}`;
+    return;
+  }
+  document.activeElement.blur();
+  await loadTrendData();
+  renderTrendView();
 }
 
 // Charts are drawn to their width.

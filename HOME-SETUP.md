@@ -314,6 +314,59 @@ server runs the same file), so they all agree:
 - **Practice mode** speaks a number unless it has no reading, or was read at an estimated P6 (as
   before); the other shaky ones are still spoken.
 
+### Personal ranges from my good shots
+Instead of tour averages, each body number is shown against where it falls on **your own good
+shots with that club** (`static/goodshots.js`; the rules are kept on the server).
+
+- **What counts as a good shot**, per club, from Square's numbers (edit them in Progress, **What
+  counts as a good shot**; saved in `goodshots.json` next to the clips folder, `GET` / `POST
+  /api/goodshots`, **Back to the defaults** undoes your changes):
+  - irons and wedges: offline within **5%** of carry; smash at or above **your median** with the
+    club (a tolerance can be set, 0 by default); carry within your usual band, **10% short** to
+    **12% long** of your median carry (no chunks, no thins or flyers);
+  - woods, hybrids and driver: the same, offline within **6%** of carry;
+  - strike (on by default): within **20 mm** heel/toe and **20 mm** high/low of your usual spot on
+    the face (the median of Square's face-impact numbers with the club). Square reports where on the
+    face, not a strike-quality score, and its high/low numbers aren't centered on 0 (your 7-iron
+    median is about -10 mm), so it's measured from your own usual spot.
+  "Your median" is over the club's latest 200 shots, good or not, and only once there are 5 of them;
+  before that no shot with the club counts as good. A rule Square gives no number for (the driver
+  often has no smash or strike) is skipped for that shot rather than held against it. Swings left
+  out of the trends (`excluded.json`) don't count anywhere; nor does the putter.
+- **The ranges**: for each body number and club, the middle 50% and 80% of the good shots, and
+  how many shots they're from. A number with **no reading** under the trust rules (a camera that
+  couldn't see all of you, or no number) is left out of its range. Below **8** good shots with a
+  reading (settable) there is no range, only "not enough good shots yet (5 of 8)". When most of the
+  numbers behind a range are **shaky** (trust rules: head rise and the plane numbers always are),
+  it's marked **range not reliable**, with why.
+- **Swing page**: a column **vs my good shots (club)** in the numbers table, and a faint band on the
+  number itself: green inside the middle 50%, amber outside ("outside: 4° more than usual", and
+  "inside the 80% range" when it's between the two). The tempo line gets the same under it. Numbers
+  with no reading get no band. The ranges come from the trends' data (`/api/swings`), loaded when the
+  first swing is opened and again when it's over a minute old.
+- **Compare**: a **My good shots** table with each number's middle 50% and 80% for the open swing's
+  club, and where this swing and the reference sit against them.
+- **Progress**, **What sets my good shots apart** (for the club picked there): how many shots were
+  good, and the most common reasons the others weren't; the body numbers that differ most between
+  good shots and the rest, as the difference in means and the effect size (Hedges' g, bias-corrected,
+  in standard deviations) with its 95% confidence interval, largest first ("clear" when the interval
+  leaves out 0, "could be chance" otherwise). It needs 8 swings on each side (the same minimum as a
+  range) and says "Not enough swings yet" until then. It describes your shots and says nothing about
+  causes: a number can go with good shots because of something else, and with 18 numbers about one
+  in twenty looks clear by chance. Below it, the ranges table, and the rules.
+- **Practice mode**: **Use my good-shot range** (next to **Use middle half**) sets the range to the
+  middle 50% of your good shots for the number, and the club to the one they're from (the club
+  picked, if it has enough of them, else your most-hit club that does). Body numbers only: Square's
+  numbers are what decide which shots are good.
+- Tests: `node --test tests/goodshots.test.js` (synthetic swings: the rules, the ranges, the minimum
+  count, the trust gating, the effect sizes) and `python -m unittest tests.test_goodshots` (the
+  settings and endpoint, and the rules on your real shots in `tests/fixtures/real/clips.json` with
+  their body numbers worked out from the pose files: 4 of the 7 seven-iron shots are good, too few
+  for a range). Not tested on your live data: the real clips aren't reachable from the tests, so how
+  many good shots each club gets, and whether the default rules are too strict or too loose, only
+  shows on the server. The swing page, Compare and practice button were checked in a browser with
+  synthetic swings, not real videos.
+
 ### Practice mode: the phone says the number (capture app 0.5)
 Pick one thing to work on and a range; after each swing the phone says the number and whether it
 was in range: "Tempo 3.2, in range", "Club path minus 4, too far left", "Early extension 2, too far
@@ -322,6 +375,8 @@ toward the ball". The phones face away from you, so voice is the channel.
 - **Setting it up** (review page, **Practice** at the top): pick the number, the club, and the
   range. **Use middle half** sets the range to the middle 50% of your last 30 swings with that club
   (it fills in by itself when you pick a number; edit it to taste, e.g. narrower to push a change).
+  **Use my good-shot range** sets it to the middle 50% of your good shots instead, and the club with
+  it (see Personal ranges above).
   **Start practice** saves it on the server (`practice.json`); only swings struck after that are
   spoken. Changing the number or range while on (**Save range**) starts over from the next swing.
   **Stop practice**: nothing is spoken. **Say "3 in a row"** adds the streak to an in-range swing
@@ -373,7 +428,8 @@ toward the ball". The phones face away from you, so voice is the channel.
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON, and its quality record), `shots.jsonl` (launch
   monitor shots), `clubs.json` (clubs corrected on the review page), `swings.json` (each swing's
   numbers), `noise.json` (the noise floor per number, for the trust rules), `journal.json` (handicap and session notes), `excluded.json` (swings left out),
-  `practice.json` and `practice-log.jsonl` (practice mode's target and what was spoken), `trash` (deleted clips; emptied by hand, never automatically).
+  `practice.json` and `practice-log.jsonl` (practice mode's target and what was spoken), `goodshots.json`
+  (which shots count as good, for your personal ranges), `trash` (deleted clips; emptied by hand, never automatically).
 - A background worker runs MediaPipe pose on every frame of each new clip (4 processes, split at
   keyframes), then smooths it over the whole clip (median, then a local curve fit, so it doesn't lag
   fast hands). It also finds the ball on the mat near the golfer's feet and the first frame it's

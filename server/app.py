@@ -8,6 +8,8 @@ SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landm
 SWINGCLIPS_LABELS (hand labels for the scorecard, eval.py; default: a "labels" folder next to the clips folder),
 SWINGCLIPS_PRACTICE / SWINGCLIPS_PRACTICE_LOG (practice mode's target and log; default next to the clips folder),
 SWINGCLIPS_NOISE (the noise floor per number; default noise.json next to the clips folder),
+SWINGCLIPS_GOODSHOTS (the rules for which shots count as good, for your personal ranges; default
+goodshots.json next to the clips folder),
 SWINGCLIPS_3D=on (3D from both phones: calib.py, tri.py; off by default) and SWINGCLIPS_CALIB (its
 calibrations; default: a "calib" folder next to the clips folder).
 Once a clip's pose is saved, the same worker measures its light, grain, flicker and sharpness (quality.py).
@@ -38,6 +40,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import calib
+import goodshots
 import labelcheck
 import models
 import pose
@@ -1026,6 +1029,28 @@ SERVER_ONLY = ("at", "noise")
 def get_noise():
     """The noise floor per number over recent swings (trust.js noiseTable)."""
     return noise_table
+
+
+# ---- Good shots: the rules for which shots count as good, per club (goodshots.py) ----
+# The page works out the personal ranges from them (static/goodshots.js).
+GOODSHOTS_FILE = Path(os.environ.get("SWINGCLIPS_GOODSHOTS", CLIPS_DIR.parent / "goodshots.json"))
+
+
+@app.get("/api/goodshots")
+def get_goodshots():
+    return {"settings": goodshots.load(GOODSHOTS_FILE), "defaults": goodshots.DEFAULTS}
+
+
+@app.post("/api/goodshots")
+async def set_goodshots(request: Request):
+    """Saves the rules (missing parts from the defaults); 400 when they don't make sense."""
+    body = await request.json()
+    try:
+        with files_lock:
+            s = goodshots.save(GOODSHOTS_FILE, body)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"settings": s, "defaults": goodshots.DEFAULTS}
 
 
 # ---- Hand labels, for the scorecard (eval.py) ----

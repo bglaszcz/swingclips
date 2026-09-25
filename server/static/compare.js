@@ -12,7 +12,8 @@
 // fetchPose, analysisInput, syncPoint, followVideo, frameIndexAt, fitRect, freshCanvas, drawPose,
 // point, fmtValue, fmtWhen, clubName, side, READOUT, DTL_READOUT, SPEEDS, SKELETON, JOINTS, LM,
 // L_INDEX, R_INDEX, SHAFT_CONFIDENT, MIN_VISIBILITY, showToast, lightOf, trustCell, noiseTable; and
-// trends.js's field and fmtField. Each number's trust is trust.js's (SwingTrust), as on the swing page.
+// trends.js's field, fmtField, goodRange, goodSettings and trendDataLoaded (the reference ranges from
+// my good shots, goodshots.js). Each number's trust is trust.js's (SwingTrust), as on the swing page.
 (function (root) {
   const KEYS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
 
@@ -268,7 +269,8 @@
     const token = run;
     box.replaceChildren(el("div", { className: "c-head" }, el("strong", { textContent: "Compare" }),
       el("span", { className: "c-status", textContent: "Loading both swings…" }), closeButton()));
-    const [SA, SB] = await Promise.all([loadSwing(A), loadSwing(B)]);
+    // The trends' data too, for the reference ranges from my good shots.
+    const [SA, SB] = await Promise.all([loadSwing(A), loadSwing(B), trendDataLoaded ? null : loadTrendData()]);
     if (token !== run || !isOpen) {
       for (const S of [SA, SB]) for (const v of Object.values(S.vids)) { v.removeAttribute("src"); v.load(); }
       return;
@@ -689,6 +691,9 @@
       wrap.append(el("div", { className: "c-scroll" }, table));
     }
 
+    const goodTable = renderGoodRanges(A, B);
+    if (goodTable) wrap.append(goodTable);
+
     const notes = [];
     for (const [S, who] of [[A, "this swing"], [B, "the reference"]]) {
       for (const [g, name] of ANGLES) {
@@ -701,6 +706,44 @@
       "Body numbers from different sessions only compare if the phones stood in the same places.");
     wrap.append(el("div", { className: "note", textContent: notes.join(" ") }));
     return wrap;
+  }
+
+  /**
+   * The reference ranges: each body number's middle 50% and 80% on my good shots with this swing's
+   * club (goodshots.js, trends.js goodRange), and where this swing and the reference sit against them.
+   */
+  function renderGoodRanges(A, B) {
+    const club = A.c.shot ? A.c.shot.club : null;
+    if (!club || !SwingGoodShots.groupOf(club) || typeof goodRange !== "function" || !trendDataLoaded) return null;
+    const bA = A.a ? SwingSummary.bodyNumbers(A.a) : {}, bB = B.a ? SwingSummary.bodyNumbers(B.a) : {};
+    const at = (S, body, f, r) => {
+      const v = body[f.key];
+      const j = S.facts ? SwingTrust.judge(SwingTrust.numberOf(f.key), S.facts, v, noiseTable, f.unit) : null;
+      if (!S.a || (j && j.level === "none") || !finite(v)) return el("td", { textContent: "--" });
+      const p = SwingGoodShots.place(v, r, f.unit);
+      return el("td", { className: p.status === "in" ? "in" : "out",
+                        textContent: p.status === "in" ? "in" : `${p.status === "above" ? "+" : "−"}${SwingGoodShots.amount(p.status === "above" ? v - r.q75 : r.q25 - v, f.unit)}`,
+                        title: p.text });
+    };
+    const table = el("table", { className: "c-table c-good" },
+      el("tr", {}, el("th", { textContent: `My good shots (${clubName(club)})` }), el("th", { textContent: "Middle 50%" }),
+         el("th", { textContent: "Middle 80%" }), el("th", { textContent: "Shots" }), el("th", { textContent: "This" }), el("th", { textContent: "Ref" })));
+    let rows = 0, most = 0;
+    for (const f of SwingSummary.BODY) {
+      const r = goodRange(club, f.key);
+      if (r) most = Math.max(most, r.n);
+      if (!r || !r.enough) continue;
+      rows++;
+      const shaky = r.reliable ? "" : "shaky";
+      table.append(el("tr", {}, el("td", { textContent: f.label + (r.reliable ? "" : " (range not reliable)"), title: r.why }),
+        el("td", { className: shaky, textContent: SwingGoodShots.rangeText(r.q25, r.q75, f.unit) }),
+        el("td", { className: shaky, textContent: SwingGoodShots.rangeText(r.q10, r.q90, f.unit) }),
+        el("td", { textContent: String(r.n) }), at(A, bA, f, r), at(B, bB, f, r)));
+    }
+    const note = rows
+      ? "Where each swing sits against the middle 50% of your good shots with this swing's club: in it, or how far past its nearer end (hover for more). Good shots are set in Progress."
+      : `Not enough good shots with the ${clubName(club).toLowerCase()} for reference ranges yet (${most} of ${SwingGoodShots.withDefaults(goodSettings && goodSettings.settings).minCount}).`;
+    return el("div", {}, rows ? el("div", { className: "c-scroll" }, table) : null, el("div", { className: "note", textContent: note }));
   }
 
   // ---- The picker ----

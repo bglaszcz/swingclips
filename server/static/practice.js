@@ -1,9 +1,10 @@
 // Practice (button at the top): pick one number and a range; after each swing the speaking phone says
 // the number and whether it was in range (server/practice.py makes the sentence). The range can
-// start from the middle half of your recent swings with a club. Below it, the log of what was said,
-// per session, with the share in range.
-// Uses the page's globals: showView, closeTrendView, loadTrendData, swingRow, quantile (trends.js),
-// clips, shownClips, clubName, open, renderList, SESSION_GAP_MS.
+// start from the middle half of your recent swings with a club, or from the middle 50% of your good
+// shots with it (goodshots.js), which sets the club too. Below it, the log of what was said, per
+// session, with the share in range.
+// Uses the page's globals: showView, closeTrendView, loadTrendData, swingRow, quantile, goodShotData,
+// trendDataLoaded (trends.js), clips, shownClips, clubName, open, renderList, SESSION_GAP_MS.
 
 const practiceBox = document.getElementById("practice");
 const prEl = id => document.getElementById(id);
@@ -68,6 +69,19 @@ function practiceSuggestion(m, club) {
            med: quantile(values, 0.5) };
 }
 
+/**
+ * The middle 50% of my good shots for a body number: with the form's club if it has enough of them,
+ * else with the most-hit club that does. {club, r (goodshots.js rangeOf)} or null.
+ */
+function practiceGoodRange(m) {
+  if (!m || m.kind !== "body" || !trendDataLoaded) return null;
+  const clubs = goodShotData().clubs;
+  const has = club => clubs[club] && clubs[club].ranges[m.key] && clubs[club].ranges[m.key].enough;
+  const club = has(prForm.club) ? prForm.club
+    : Object.keys(clubs).sort((a, b) => clubs[b].shots - clubs[a].shots).find(has);
+  return club ? { club, r: clubs[club].ranges[m.key] } : null;
+}
+
 function renderPracticeForm() {
   if (!prState || !prForm) return;
   const c = prState.config;
@@ -110,6 +124,14 @@ function renderPracticeForm() {
     ? `Not enough swings ${withClub} with this number yet for a suggested range (${s.n} of ${PR_SUGGEST_MIN}).`
     : `Middle half of your last ${s.n} swings ${withClub}: ${prFmt(m, s.lo)} to ${prFmt(m, s.hi)} (median ${prFmt(m, s.med)}).`;
   prEl("pr-use").disabled = s.lo == null;
+  const g = practiceGoodRange(m), goodBtn = prEl("pr-good");
+  goodBtn.disabled = !g;
+  goodBtn.title = m.kind !== "body" ? "Only for body numbers: Square's numbers decide which shots are good"
+    : g ? `Middle 50% of your good shots with the ${clubName(g.club).toLowerCase()}` : "Not enough good shots with any club for this number yet";
+  if (g) {
+    prEl("pr-suggest").textContent += ` Your good shots with the ${clubName(g.club).toLowerCase()} (${g.r.n}): `
+      + `${prFmt(m, g.r.q25)} to ${prFmt(m, g.r.q75)}${g.r.reliable ? "" : " (range not reliable: most of those numbers were shaky)"}.`;
+  }
   if (m.noisy) prEl("pr-suggest").textContent += ` Noisy: ${m.noisy}.`;
 
   const changed = prForm.metric !== c.metric || prForm.min !== c.min || prForm.max !== c.max
@@ -172,6 +194,17 @@ prEl("pr-club").onchange = e => {
 prEl("pr-min").oninput = prEl("pr-max").oninput = () => { readRange(); renderPracticeForm(); };
 prEl("pr-streak").onchange = e => { prForm.streak = e.target.checked; renderPracticeForm(); };
 prEl("pr-use").onclick = () => usePracticeSuggestion(false);
+prEl("pr-good").onclick = () => {
+  const m = prMetric(prForm.metric), g = practiceGoodRange(m);
+  if (!g) return;
+  const round = v => Number(v.toFixed(m.dec));
+  prForm.club = g.club;
+  prForm.min = round(g.r.q25);
+  prForm.max = round(g.r.q75);
+  prEl("pr-min").value = prForm.min;
+  prEl("pr-max").value = prForm.max;
+  renderPracticeForm();
+};
 prEl("pr-toggle").onclick = () => savePractice(!prState.config.on);
 prEl("pr-save").onclick = () => savePractice(true);
 prEl("pr-test").onclick = async () => {
