@@ -145,6 +145,40 @@ monitor's numbers for that shot.
 - Deploy on the server: `git -C D:\SwingClips\app pull`, then `Stop server.cmd` and
   `Start server.cmd` (Stop also finds the background copy the auto-start task runs).
 
+### The scorecard: how accurate is the tracking?
+Hand labels on a set of clips, and a script that measures the pipeline against them, so a change
+to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of judged by eye.
+
+- **Labeling** (`static/labels.js`): open a swing, press **L** (or Label). The tracker's skeleton
+  and numbers are hidden meanwhile so they don't sway you. On the frame on screen: **T** takeaway
+  (the first frame the club moves), **2-6** and **8** for P2-P6 and P8, **7** or **I** impact (the
+  first frame the ball is gone); again on the same frame to clear. Then click the points in the
+  order shown (shoulders, elbows, wrists, hips, then the club's grip end, hosel and clubhead):
+  **Shift+click** when it's a blur (put the clubhead in the middle of the streak), **X** when it
+  can't be seen, **Tab** to skip, **Backspace** to undo. **B** then a click places the ball (at
+  address). **[ ]** step through about a dozen suggested frames, most of them in the downswing.
+  **D** switches between the two angles (the arrow keys then step that angle's own frames). Left
+  and right are the golfer's own: face-on, their left is on the picture's right.
+- Saved as you go, one file per clip, in `D:\SwingClips\labels` (`<clip>.json`). **Pass 2** is a
+  second labeling, done days later without looking at the first (`<clip>.pass2.json`): the
+  difference is how consistent the labels themselves are, the finest any tracker can be scored.
+  Labels stay when a clip goes to the trash (the scorecard looks for it there too).
+- What to label: about 20 swings with both angles (driver, 7 iron, wedge; some misses; day and
+  night light). Moments on all of them (~2 minutes a clip); points on about half (~15 minutes a clip).
+- **Scorecard** (`eval.py`), on the server or any PC with the clips and pose files:
+  `.venv\Scripts\python.exe eval.py`. It runs the page's own JavaScript (as `swings.py` does)
+  and prints: key-position error in ms and frames (and pose.py's own ball-gone impact); joint
+  error as a share of nose-to-ankle height by swing phase; left/right swaps; shaft found and its
+  angle error; the one-frame angles (tilts, lead arm, forward bend) from tracked vs labeled joints;
+  the ball; your own consistency; and the **noise floor**, how much each number moves while you
+  stand still at address, over every analyzed clip (no labels needed). Results go to
+  `D:\SwingClips\eval\<date>_v<pose version>_<JavaScript fingerprint>.json`.
+  - `--rerun`: analyze the labeled clips again with `pose.py` as it is now (cached per version of
+    `pose.py`, `club.py` and the model), to try a change before deploying it.
+  - `--compare <an earlier .json>`: every headline number, before and after.
+  - `--no-noise`: skip the noise floor.
+- Tests (no clips needed; a made-up swing): `cd server` then `python -m unittest discover tests`.
+
 ### `relay/` - launch monitor to server (runs on the sim laptop, nothing to install)
 - **`square-watcher.ps1`** (used): Square Golf's Windows app saves every shot to a plain SQLite
   file, `%USERPROFILE%\AppData\LocalLow\Invant\Square Golf\SQGDB.bytes` (`IVShotLog`: ball data,

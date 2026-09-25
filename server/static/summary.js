@@ -276,8 +276,76 @@
     };
   }
 
+  // ---- For the scorecard (server/eval.py), which compares all this with hand labels ----
+
+  /**
+   * When each key position is, in each clip's own seconds, as the review page shows it: the down-the-line
+   * clip's are the main clip's moved by the sync offset. Inputs as for summarize().
+   * @returns {main: {times: {key: t}, estimated: {key: bool}}, dtl: same | null, dtlSide: +1 | -1 | null}
+   *   with "takeaway" among the times
+   */
+  function positionTimes(main, other, leadSide) {
+    for (const c of [main, other]) if (c && c.aspect == null) c.aspect = aspectOf(c.name, c.rotation);
+    const a = analyze(main, other, leadSide);
+    const out = { main: { times: {}, estimated: {} }, dtl: null, dtlSide: a.dtlMetrics ? a.dtlMetrics.side : null };
+    const second = a.dtl && a.dtl !== main ? { times: {}, estimated: {} } : null;
+    for (const p of a.positions) {
+      out.main.times[p.key] = p.t;
+      out.main.estimated[p.key] = !!p.estimated;
+      const i = second ? a.dtlIndex(p.key) : null;
+      if (i != null) { second.times[p.key] = a.dtl.frames[i].t; second.estimated[p.key] = !!p.estimated; }
+    }
+    if (a.positions.takeaway) {
+      out.main.times.takeaway = a.positions.takeaway.t;
+      if (second) second.times.takeaway = a.dtl.frames[frameIndexAt(a.dtl.frames, a.positions.takeaway.t + syncOffset(main, other))].t;
+    }
+    out.dtl = second;
+    return out;
+  }
+
+  /**
+   * The one-frame angles for each of `lms` (flat [x, y, v] * 33 each, or null): face-on the tilts and
+   * lead arm (metrics.js frameAngles), down the line the forward bend, with the ball to side `side`.
+   */
+  function frameAngles(lms, aspect, leadSide, angle, side) {
+    return lms.map(lm => !lm ? null
+      : angle === "dtl" ? (side ? { bend: Metrics.bendOf(lm, aspect, side) } : null)
+      : Metrics.frameAngles(lm, aspect, leadSide));
+  }
+
+  /**
+   * The noise floor: how much each number moves while the golfer stands still at address, the
+   * `window` seconds before the takeaway. One clip on its own (its own key positions).
+   * @returns {frames, from, to, sd: {key: standard deviation}} | null when no swing was found
+   */
+  function noiseFloor(input, leadSide, window = [0.35, 0.05]) {
+    if (input.aspect == null) input.aspect = aspectOf(input.name, input.rotation);
+    const a = analyze(input, null, leadSide);
+    const takeaway = a.positions.takeaway;
+    const m = input.angle === "dtl" ? a.dtlMetrics : a.metrics;
+    if (!takeaway || !m) return null;
+    const from = takeaway.t - window[0], to = takeaway.t - window[1];
+    const series = {};
+    input.frames.forEach((f, i) => {
+      const v = m.values[i];
+      if (!v || f.t < from || f.t > to) return;
+      for (const [k, x] of Object.entries(v)) {
+        if (typeof x === "number" && Number.isFinite(x)) (series[k] = series[k] || []).push(x);
+      }
+    });
+    const sd = {};
+    let frames = 0;
+    for (const [k, xs] of Object.entries(series)) {
+      frames = Math.max(frames, xs.length);
+      if (xs.length < 5) continue;
+      const mean = xs.reduce((s, x) => s + x, 0) / xs.length;
+      sd[k] = Math.sqrt(xs.reduce((s, x) => s + (x - mean) ** 2, 0) / (xs.length - 1));
+    }
+    return { frames, from, to, sd };
+  }
+
   const api = { BODY, SHOT, frameIndexAt, syncOffset, aspectOf, strikeWindow, analyze, bodyNumbers,
-                shotNumbers, correlation, summarize, cameras, setupAdvice };
+                shotNumbers, correlation, summarize, cameras, setupAdvice, positionTimes, frameAngles, noiseFloor };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingSummary = api;
 })(typeof window !== "undefined" ? window : globalThis);

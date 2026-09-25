@@ -64,6 +64,14 @@ nothing on the taskbar, and in Task Manager it only shows as `python.exe` on the
 - To check auto-start after a reboot, don't log in to the server. Open http://192.168.86.250:8000
   on your phone instead. If the page loads, the server started by itself.
 
+How accurate the tracking is (after labeling some swings with **L** on the review page; see
+"The scorecard" in HOME-SETUP.md):
+
+```bat
+cd /d D:\SwingClips\app\server
+.venv\Scripts\python.exe eval.py
+```
+
 On the **sim laptop**: run `Square watcher.cmd` (in the Dropbox `SwingClips` folder) after
 Square Golf's app is open.
 

@@ -167,6 +167,15 @@
     return { values, address: ai, scale, tempo };
   }
 
+  /**
+   * The angles that come from one frame alone (face-on), for the scorecard (server/eval.py) to
+   * compare tracked joints with hand-labeled ones: {leadArm, spineTilt, pelvisTilt, shoulderTilt}.
+   */
+  function frameAngles(lm, aspect, leadSide) {
+    const v = frameValues({ lm }, aspect, sides(leadSide));
+    return v && { leadArm: v.leadArm, spineTilt: v.spineTilt, pelvisTilt: v.pelvisTilt, shoulderTilt: v.shoulderTilt };
+  }
+
   // ---- Down the line ----
   //
   // From behind the hands, looking at the target: the picture shows the golfer side-on, so bend,
@@ -186,6 +195,13 @@
     return { x: sx / sw * aspect, y: sy / sw };
   }
 
+  /** Forward bend: the spine's lean from upright toward the ball (m = +1 when it's to the picture's right). */
+  function bendOf(lm, aspect, m) {
+    const px = i => ({ x: lm[i * 3] * aspect, y: lm[i * 3 + 1] });
+    const hips = mid(px(I.L_HIP), px(I.R_HIP)), sh = mid(px(I.L_SHOULDER), px(I.R_SHOULDER));
+    return Math.atan2(m * (sh.x - hips.x), hips.y - sh.y) * DEG;
+  }
+
   /** How steeply a shaft at `deg` (in the picture) runs down toward the ball, in degrees. */
   function steepness(deg, m) {
     let dx = Math.cos(deg / DEG), dy = Math.sin(deg / DEG);
@@ -198,7 +214,8 @@
    * @param aspect picture width / height
    * @param address frame index of address (P1) in these frames
    * @param ball optional {x, y} where the server found the ball, to tell which way it is
-   * @returns {values: [per-frame values | null], address, scale} | null
+   * @returns {values: [per-frame values | null], address, scale, side: +1 when the ball is to the
+   *   picture's right} | null
    */
   function computeDTL(frames, aspect, address, ball) {
     const f0 = frames[address];
@@ -218,8 +235,7 @@
       return {
         hips, sh, hands: handsAt(f.lm, aspect),
         head: { x: ears.reduce((a, p) => a + p.x, 0) / 3, y: ears.reduce((a, p) => a + p.y, 0) / 3 },
-        // Forward bend: the spine's lean from upright toward the ball.
-        bend: Math.atan2(m * (sh.x - hips.x), hips.y - sh.y) * DEG,
+        bend: bendOf(f.lm, aspect, m),
         steep: f.club && f.club[1] >= SHAFT_SEEN ? steepness(f.club[0], m) : null,
       };
     });
@@ -244,10 +260,10 @@
       }
       return r;
     });
-    return { values, address, scale };
+    return { values, address, scale, side: m };
   }
 
-  const api = { compute, computeDTL };
+  const api = { compute, computeDTL, frameAngles, bendOf };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingMetrics = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -4,7 +4,8 @@ A background worker runs pose on each new clip and saves it to POSE_DIR for the 
 Run with "Start server.cmd", or:  .venv\\Scripts\\python.exe app.py
 Settings (environment variables): SWINGCLIPS_CLIPS (clips folder), SWINGCLIPS_POSE (pose results,
 default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 8000),
-SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landmarker_full.task).
+SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landmarker_full.task),
+SWINGCLIPS_LABELS (hand labels for the scorecard, eval.py; default: a "labels" folder next to the clips folder).
 """
 import asyncio
 import bisect
@@ -24,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -609,6 +610,69 @@ def get_swings():
     with records_lock:
         records = {k: v for k, v in swing_records.items() if k in listed}
     return {"code": swings_code, "swings": records}
+
+
+# ---- Hand labels, for the scorecard (eval.py) ----
+# One file per clip and labeling pass (a second pass, done later without looking, measures how
+# consistent the labels themselves are). Made by the review page's labeling mode (static/labels.js).
+# Kept when a clip goes to the trash: eval.py looks for the clip there too.
+LABELS_DIR = Path(os.environ.get("SWINGCLIPS_LABELS", CLIPS_DIR.parent / "labels"))
+LABEL_PASSES = (1, 2)
+
+
+def label_file(name: str, label_pass: int) -> Path:
+    return LABELS_DIR / (f"{name}.json" if label_pass == 1 else f"{name}.pass{label_pass}.json")
+
+
+def checked_label(name: str, label_pass: int) -> Path:
+    if Path(name).name != name or Path(name).suffix.lower() not in VIDEO_TYPES:
+        raise HTTPException(404, "No such clip")
+    if label_pass not in LABEL_PASSES:
+        raise HTTPException(400, "Pass is 1 or 2")
+    return label_file(name, label_pass)
+
+
+@app.get("/api/labels")
+def list_labels():
+    """Which clips have labels: {pass: [clip names]}."""
+    out = {str(n): [] for n in LABEL_PASSES}
+    if LABELS_DIR.is_dir():
+        for f in sorted(LABELS_DIR.glob("*.json")):
+            n = 2 if f.name.endswith(".pass2.json") else 1
+            out[str(n)].append(f.name[:-len(".pass2.json")] if n == 2 else f.name[:-len(".json")])
+    return out
+
+
+@app.get("/api/labels/{name}")
+def get_label(name: str, label_pass: int = Query(1, alias="pass")):
+    path = checked_label(name, label_pass)
+    if not path.is_file():
+        raise HTTPException(404, "Not labeled yet")
+    return FileResponse(path, media_type="application/json", headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/labels/{name}")
+async def set_label(name: str, request: Request, label_pass: int = Query(1, alias="pass")):
+    """Saves a clip's labels (the whole file each time)."""
+    path = checked_label(name, label_pass)
+    checked_clip(name)
+    body = await request.body()
+    if len(body) > 2_000_000:
+        raise HTTPException(400, "Too big")
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        raise HTTPException(400, "Expected JSON")
+    if not isinstance(doc, dict) or doc.get("schema") != 1 or (doc.get("clip") or {}).get("name") != name:
+        raise HTTPException(400, "Not a label file for this clip")
+    doc["pass"] = label_pass
+    doc["updated"] = datetime.now().isoformat(timespec="seconds")
+    with files_lock:
+        LABELS_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+        tmp.replace(path)
+    return {"ok": True, "updated": doc["updated"]}
 
 
 # ---- Camera setup ----
