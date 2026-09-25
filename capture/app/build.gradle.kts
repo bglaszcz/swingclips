@@ -11,8 +11,8 @@ android {
         applicationId = "dev.swingclips.capture"
         minSdk = 28 // Android 9: the Galaxy S8's last update
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4"
+        versionCode = 5
+        versionName = "0.5"
     }
 
     compileOptions {
@@ -22,4 +22,9 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+dependencies {
+    // JVM unit tests (app/src/test): the practice feed's logic, no phone needed.
+    testImplementation("junit:junit:4.13.2")
 }

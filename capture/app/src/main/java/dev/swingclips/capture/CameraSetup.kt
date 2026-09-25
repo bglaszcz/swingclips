@@ -63,6 +63,9 @@ class CameraSetup(
         thread.quitSafely()
     }
 
+    /** Whether the text-to-speech engine started (say() is silent until then). */
+    val canSpeak get() = speechReady
+
     /** Say something outside the setup checks (e.g. what shutter the camera is really using). */
     fun say(text: String) {
         if (speechReady) tts.speak(text, TextToSpeech.QUEUE_ADD, null, "note")
