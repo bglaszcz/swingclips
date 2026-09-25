@@ -41,6 +41,22 @@
   @media (max-width: 899px) { #listbar { position: static; } }
   button.danger { color: var(--warn); }
   button.small { padding: 4px 10px; font-size: 13px; }
+  /* Menus (menus.js): a button that opens a small list; "stay" menus remain open for several toggles. */
+  .menu { position: relative; display: inline-block; }
+  .menu-pop { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 190px; padding: 6px;
+              background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+              box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); display: flex; flex-direction: column; gap: 4px; }
+  .menu-pop[hidden] { display: none; }
+  .menu-pop.right { left: auto; right: 0; }
+  .menu-pop button { width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 12px; }
+  .menu-pop kbd { font: inherit; font-size: 11px; color: var(--muted); }
+  .menu-btn.open { border-color: var(--accent); }
+  /* Phones: tighter controls, so the toolbar and header take fewer rows. */
+  @media (max-width: 600px) {
+    .controls button, header button.small { padding: 5px 8px; min-width: 34px; font-size: 13px; }
+    .controls #frame, header .count { display: none; }
+    .controls .sep { display: none; }
+  }
   .session { border-bottom: 1px solid var(--line); }
   .shead { display: flex; align-items: center; gap: 8px; padding: 10px 16px; cursor: pointer; user-select: none;
            background: var(--panel); }
@@ -83,6 +99,11 @@
   #camcheck { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--warn); color: var(--text);
               font-size: 13px; }
   #camcheck b { color: var(--warn); }
+  #camcheck .cc-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #camcheck .cc-head span { flex: 1; min-width: 0; }
+  #camcheck .cc-more { padding: 2px 8px; font-size: 12px; min-width: 0; }
+  #camcheck .cc-detail { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+  #camcheck .cc-detail[hidden] { display: none; }
   #camcheck.info { border-color: var(--line); }
   #camcheck .cc-info, #camcheck .cc-info b { color: var(--muted); }
   #stages { display: grid; grid-template-columns: 1fr; gap: 8px; }
@@ -389,9 +410,14 @@
 <header><h1>SwingClips</h1><span class="count" id="count"></span>
   <button id="setup-btn" class="small" title="Check both cameras before you start: live pictures from the phones">Camera setup</button>
   <button id="progress-btn" class="small" title="How your swing and results are changing across sessions">Progress</button>
-  <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button>
-  <button id="labels-btn" class="small" title="Hand labels for the scorecard: what's done, what to check, what to label next">Labels</button>
-  <button id="practice-btn" class="small" title="Pick one number and a range; the phone says it after each swing">Practice</button></header>
+  <button id="practice-btn" class="small" title="Pick one number and a range; the phone says it after each swing">Practice</button>
+  <span class="menu">
+    <button class="small menu-btn" id="tools-btn" title="Tools for testing the setup and the tracking">Tools ▾</button>
+    <span class="menu-pop right" hidden>
+      <button id="labels-btn" class="small" title="Hand labels for the scorecard: what's done, what to check, what to label next">Labels</button>
+      <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button>
+    </span>
+  </span></header>
 <main>
   <aside id="side">
     <div id="listbar"></div>
@@ -418,15 +444,26 @@
       <span class="sep"></span>
       <span id="speeds"></span>
       <span class="sep"></span>
-      <button id="skeleton" title="Show the pose skeleton (S)">Skeleton</button>
-      <button id="angles" title="Show the angles for the frame on screen (A)">Angles</button>
-      <button id="handpath" title="Show the path of the hands through the swing (H)">Hand path</button>
-      <button id="headbox" title="Show where the head was at address">Head</button>
-      <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane</button>
-      <button id="label-btn" title="Label this swing by hand, for the scorecard (L)">Label</button>
+      <span class="menu">
+        <button class="menu-btn" id="show-btn" title="What to draw over the videos">Show ▾</button>
+        <span class="menu-pop stay" id="show-pop" hidden>
+          <button id="skeleton" title="Show the pose skeleton (S)">Skeleton <kbd>S</kbd></button>
+          <button id="angles" title="Show the angles for the frame on screen (A)">Angles <kbd>A</kbd></button>
+          <button id="handpath" title="Show the path of the hands through the swing (H)">Hand path <kbd>H</kbd></button>
+          <button id="headbox" title="Show where the head was at address">Head</button>
+          <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane <kbd>P</kbd></button>
+        </span>
+      </span>
       <button id="compare-btn" title="Compare this swing with another one, side by side (C)">Compare…</button>
-      <button id="exclude" title="Leave this swing out of the trends and progress (someone else's swing, a practice waggle…)">Leave out</button>
-      <button id="delete-clip" class="danger" title="Move this clip to the trash">Delete</button>
+      <button id="label-btn" title="Label this swing by hand, for the scorecard (L)">Label</button>
+      <span class="menu">
+        <button class="menu-btn" id="more-btn" title="More for this swing">⋯</button>
+        <span class="menu-pop" hidden>
+          <button id="hand" title="Which hand you swing with - sets the lead arm"></button>
+          <button id="exclude" title="Leave this swing out of the trends and progress (someone else's swing, a practice waggle…)">Leave out</button>
+          <button id="delete-clip" class="danger" title="Move this clip to the trash">Delete swing</button>
+        </span>
+      </span>
       <span id="frame"></span>
     </div>
     <div id="labelpanel" hidden></div>
@@ -434,7 +471,6 @@
     <div id="positions" hidden>
       <div class="pos-head">
         <strong>Key positions</strong>
-        <button id="hand" title="Which hand you swing with - sets the lead arm"></button>
       </div>
       <div id="pos-note"></div>
       <div id="pos-list"></div>
@@ -1289,6 +1325,7 @@ function updateSkeletonButton() {
   const state = c ? c.pose : "done";
   skeletonBtn.disabled = !pose;
   skeletonBtn.textContent = pose ? "Skeleton" : `Skeleton (${POSE_LABELS[state] || "loading…"})`;
+  skeletonBtn.append(Object.assign(document.createElement("kbd"), { textContent: "S" }));
 }
 
 /** A clip's pose, ready to draw over video element v, or null if it isn't analyzed (yet). */
@@ -1496,30 +1533,72 @@ function trustCell(td, text, j) {
   return td;
 }
 
-/** A note above the videos when a camera didn't see the golfer well or had a light problem, so it's
- * fixed before the next swing; plus the shutter and ISO each camera used, when it said. */
+// Short names for the camera check's one-line summary.
+const CHECK_SHORT = { out: "partly out of the picture", edge: "near the edge", small: "small in the picture",
+  hands: "hands leave the picture", noball: "ball not seen", impact: "impact doubtful", dark: "dark",
+  flicker: "flicker", grainy: "grainy" };
+// Only worth a note, not a warning: they don't change the numbers.
+const CHECK_MINOR = new Set(["edge", "small"]);
+
+/** Above the videos, one line: what each camera had trouble with (a warning), or quiet notes; the
+ * full advice and each camera's shutter and ISO under Details. */
 function showCameraCheck(a, main) {
   lastCameraCheck = [a, main];   // a new array: openFacts works the facts out again
   const box = document.getElementById("camcheck");
   const cams = SwingSummary.cameras(a, main);
   const byCam = camerasOf(main.name);
-  const lines = [], infos = [];
-  for (const [cam, name] of [["face", "Face-on camera"], ["dtl", "Down-the-line camera"]]) {
-    for (const code of cams[cam] || []) lines.push([name, CAMERA_ADVICE[code]]);
+  const items = [], infos = [];
+  for (const [cam, name] of [["face", "Face-on"], ["dtl", "Down the line"]]) {
+    for (const code of cams[cam] || []) {
+      items.push({ name, text: CAMERA_ADVICE[code], short: CHECK_SHORT[code] || code, minor: CHECK_MINOR.has(code) });
+    }
     const c = byCam[cam], q = c && c.quality;
-    for (const code of (q && q.warnings) || []) if (LIGHT_ADVICE[code]) lines.push([name, LIGHT_ADVICE[code](q)]);
+    for (const code of (q && q.warnings) || []) {
+      if (!LIGHT_ADVICE[code]) continue;
+      const mild = code === "flicker" && q.flickerLevel === "mild";
+      items.push({ name, text: LIGHT_ADVICE[code](q), short: mild ? "mild flicker" : CHECK_SHORT[code] || code, minor: mild });
+    }
     const shot = c && shutterText(c.camera);
-    if (shot) infos.push([name, shot]);
+    if (shot) infos.push({ name, text: shot });
   }
-  box.hidden = !lines.length && !infos.length;
-  box.classList.toggle("info", !lines.length);
-  const row = ([name, text], cls) => {
+  box.hidden = !items.length && !infos.length;
+  const warn = items.filter(i => !i.minor);
+  box.classList.toggle("info", !warn.length);
+  // "Face-on: dark, flicker · Down the line: ball not seen"
+  const byName = new Map();
+  for (const i of (warn.length ? warn : items)) byName.set(i.name, [...(byName.get(i.name) || []), i.short]);
+  const summary = [...byName].map(([n, list]) => `${n}: ${list.join(", ")}`).join(" · ");
+  const head = document.createElement("div");
+  head.className = "cc-head";
+  const label = document.createElement("span");
+  if (warn.length) label.append(Object.assign(document.createElement("b"), { textContent: "Camera check: " }), summary);
+  else label.append(Object.assign(document.createElement("span"), { className: "cc-info",
+    textContent: items.length ? `Camera notes: ${summary}` : "Camera: " + infos.map(i => `${i.name} ${i.text}`).join(" · ") }));
+  head.append(label);
+  const detail = document.createElement("div");
+  detail.className = "cc-detail";
+  let open = false;
+  try { open = localStorage.getItem("camcheckOpen") === "1"; } catch {}
+  detail.hidden = !open;
+  const row = (i, cls) => {
     const d = document.createElement("div");
     if (cls) d.className = cls;
-    d.append(Object.assign(document.createElement("b"), { textContent: name + ": " }), text + ".");
+    d.append(Object.assign(document.createElement("b"), { textContent: i.name + ": " }), i.text + ".");
     return d;
   };
-  box.replaceChildren(...lines.map(l => row(l)), ...infos.map(l => row(l, "cc-info")));
+  detail.append(...items.map(i => row(i, i.minor ? "cc-info" : null)), ...infos.map(i => row(i, "cc-info")));
+  if (items.length) {
+    const more = Object.assign(document.createElement("button"), { className: "cc-more", textContent: open ? "Hide" : "Details" });
+    more.onclick = () => {
+      detail.hidden = !detail.hidden;
+      more.textContent = detail.hidden ? "Details" : "Hide";
+      try { localStorage.setItem("camcheckOpen", detail.hidden ? "0" : "1"); } catch {}
+    };
+    head.append(more);
+    box.replaceChildren(head, detail);
+  } else {
+    box.replaceChildren(head);
+  }
 }
 
 /** A loaded clip in the shape SwingSummary.analyze takes. */
@@ -2045,7 +2124,7 @@ function renderList() {
       head.append(tr);
       const del = document.createElement("button");
       del.className = "small danger";
-      del.textContent = "Delete";
+      del.textContent = "🗑";
       del.title = "Move this whole session to the trash";
       del.onclick = e => {
         e.stopPropagation();
@@ -2137,7 +2216,9 @@ function closeViewer() {
 function updateExcludeButton() {
   const c = clips.find(c => c.name === current), b = document.getElementById("exclude");
   b.classList.toggle("on", !!(c && c.excluded));
-  b.textContent = c && c.excluded ? "Left out of trends" : "Leave out";
+  b.textContent = c && c.excluded ? "Left out of trends (put back)" : "Leave out";
+  // It's in the ⋯ menu, so say it on the menu's button too.
+  document.getElementById("more-btn").textContent = c && c.excluded ? "Left out ⋯" : "⋯";
 }
 
 document.getElementById("exclude").onclick = async () => {
@@ -2236,6 +2317,7 @@ refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, 10000);
 setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 </script>
+<script src="/static/menus.js"></script>
 <script src="/static/trends.js"></script>
 <script src="/static/setup.js"></script>
 <script src="/static/shutter.js"></script>
