@@ -326,7 +326,11 @@ def quality_rows(recs: list[dict]) -> list[dict]:
             "iso": med([c["iso"] for c in cams if c.get("iso")]),
             "brightness": med([q["brightness"] for q in qs if q.get("brightness") is not None]),
             "noise": med([q["noise"] for q in qs if q.get("noise") is not None]),
-            "flicker": sum("flicker" in q.get("warnings", []) for q in qs),
+            # Flicker that matters (a fixed shutter) and mild flicker (Auto), quality.py flickerLevel.
+            "flicker": sum("flicker" in q.get("warnings", []) and q.get("flickerLevel") != "mild" for q in qs),
+            "mildFlicker": sum("flicker" in q.get("warnings", []) and q.get("flickerLevel") == "mild" for q in qs),
+            # Sharpness is only measured where impact could be believed.
+            "sharpFrom": sum(bool(q.get("sharpness")) for q in qs),
             "flickerPct": med([100 * q["flicker"]["amplitude"] for q in qs if q.get("flicker")]),
             "bandingPct": med([100 * q["banding"] for q in qs if q.get("banding") is not None]),
             "address": sharp("p1"), "p6": sharp("p6"), "downswing": sharp("downswing"),
@@ -526,10 +530,13 @@ def print_report(result: dict) -> None:
         table("Clip quality by shutter (no labels needed; quality.py)", t["quality"],
               [("angle", "angle"), ("shutter", "shutter"), ("clips", "clips"), ("unmeasured", "not yet"),
                ("speed", "real 1/s"), ("iso", "ISO"), ("brightness", "golfer"), ("noise", "noise"),
-               ("flicker", "flicker clips"), ("flickerPct", "flicker %"), ("bandingPct", "banding %"),
+               ("flicker", "flicker clips"), ("mildFlicker", "mild"), ("flickerPct", "flicker %"),
+               ("bandingPct", "banding %"), ("sharpFrom", "sharp from"),
                ("address", "sharp P1"), ("p6", "P6 / P1"), ("downswing", "P5-P7 / P1")],
-              "Medians. golfer = brightness 0-255 at address; noise = grain in luma levels; sharp = variance of the "
-              "Laplacian round the hands, P6 and P5-P7 as a share of the same clip's address.")
+              "Medians. golfer = brightness 0-255 at address; noise = grain in luma levels; flicker clips = at a "
+              "fixed shutter, mild = on Auto; sharp from = clips whose impact could be believed (the rest aren't "
+              "measured); sharp = detail along the forearms and hands against their own contrast, P6 and P5-P7 as "
+              "a share of the same clip's address.")
 
 
 def print_compare(old: dict, new: dict) -> None:

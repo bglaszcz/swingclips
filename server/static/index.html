@@ -140,6 +140,11 @@
   #numbers th:first-child, #numbers td:first-child { text-align: left; color: var(--muted); }
   #numbers .note { color: var(--muted); font-size: 12px; }
   #numbers tr.group th { text-align: left; padding-top: 10px; color: var(--text); }
+  /* Trust per number (trust.js): shaky greyed with a small ~, no reading as --; the reasons on hover. */
+  .shaky { color: var(--muted); }
+  .shaky::after { content: "~"; font-size: 0.8em; margin-left: 1px; }
+  .noread { color: var(--muted); }
+  .shaky[title], .noread[title] { cursor: help; }
   /* Session trends: the launch monitor's numbers against the swing's, one dot per swing. */
   #trends { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   @media (max-width: 899px) { #trends, #progress, #setup, #shutter, #practice { order: -1; border-bottom: 1px solid var(--line); } }
@@ -188,6 +193,7 @@
   #p-chart svg, #p-pattern { display: block; width: 100%; height: 300px; overflow: visible; }
   #p-hcp { display: block; width: 100%; height: 180px; }
   .p-swing { fill: var(--muted); fill-opacity: 0.35; }
+  .p-swing.hollow { fill: none; stroke: var(--muted); stroke-opacity: 0.6; stroke-width: 1; }
   .p-iqr { stroke: var(--dot); stroke-width: 4; stroke-linecap: round; stroke-opacity: 0.35; }
   .p-line { fill: none; stroke: var(--dot); stroke-width: 2; stroke-linejoin: round; }
   .p-break { stroke: var(--warn); stroke-width: 1; }
@@ -249,6 +255,9 @@
   .t-zero { stroke: var(--muted); stroke-width: 1; stroke-opacity: 0.6; }
   .t-fit { stroke: var(--muted); stroke-width: 1.5; stroke-opacity: 0.8; }
   .t-dot { fill: var(--dot); stroke: var(--panel); stroke-width: 2; pointer-events: none; }
+  /* A swing with a shaky number on either axis (trust.js). */
+  .t-dot.hollow { fill: var(--panel); stroke: var(--dot); stroke-width: 2; }
+  .p-tile b.shaky { color: var(--muted); }
   .t-ring { fill: none; stroke: var(--text); stroke-width: 2; pointer-events: none; }
   .t-hit { fill: transparent; cursor: pointer; outline: none; }
   #t-tip, .tip { position: absolute; z-index: 2; pointer-events: none; background: var(--text); color: var(--bg);
@@ -308,7 +317,7 @@
   .c-table th:first-child, .c-table td:first-child { text-align: left; color: var(--muted); }
   .c-table th.c-poshead { text-align: center; color: var(--text); border-left: 1px solid var(--line); }
   .c-table td.diff { font-weight: 600; }
-  .c-table td.dim { opacity: 0.35; }
+  .c-table td.shaky, .c-table td.noread { font-weight: 400; }
   .c-table tr.group th { text-align: left; padding-top: 10px; color: var(--text); }
   .c-picktable tbody tr, .c-picktable tr:not(:first-child) { cursor: pointer; }
   .c-picktable tr:not(:first-child):hover { background: var(--sel); }
@@ -375,6 +384,7 @@
       <strong>Swing numbers</strong>
       <div id="tempo"></div>
       <div style="overflow-x: auto"><table id="num-table"></table></div>
+      <div class="note" id="trust-note"></div>
       <div class="note" id="face-note">Face-on: turns are from how much narrower the hips and shoulders look than at address;
         inches are scaled from the body's estimated size. Both are estimates from one camera: best
         for comparing your own swings. Turn + = closed (going back), - = open; tilt + = lead side higher /
@@ -396,13 +406,15 @@
       <label>Result <select id="t-y"></select></label>
       <label>against <select id="t-x"></select></label>
       <label id="t-club-wrap">Club <select id="t-club"></select></label>
+      <label title="Shaky numbers: tracking noise or the conditions could account for them (hollow dots). Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
       <span class="t-fix" id="t-fix"></span>
     </div>
     <div class="t-card" id="t-chart">
       <svg role="img"></svg>
       <div id="t-tip" hidden></div>
       <div id="t-r"></div>
-      <div class="note">One dot per swing; tap one to open it. The line is the straight-line fit. Launch
+      <div class="note">One dot per swing; tap one to open it; hollow = a shaky number on either axis (tracking
+        noise or the conditions could account for it; hover for why). The line is the straight-line fit. Launch
         monitor: left is -, right is + (path + = in-to-out, face + = open, for a right-hander).</div>
     </div>
     <div class="t-card">
@@ -455,11 +467,15 @@
       <div style="overflow-x: auto"><table class="q-table" id="q-sessions"></table></div>
     </div>
     <div class="note">Medians per group, measured by the server from each clip (no labels). <b>Golfer</b>: brightness at
-      address, 0-255. <b>Noise</b>: grain in a still part of the background, in the same units (from about 2.5 it
-      shows). <b>Flicker</b>: clips where the lights pulsed or banded. <b>Sharp</b>: detail round the hands and lower
-      arms at address; <b>P6</b> and <b>P5-P7</b> are the same as a share of address in each clip, so clips in
-      different light compare fairly: nearer 1 is sharper through the downswing. Green is the best setting for
-      each camera. Clips from before capture app 0.4 are "unknown".</div>
+      address, 0-255 (under 70 is dark). <b>Noise</b>: grain in a still part of the background, in the same units
+      (grainy from 5% of the golfer's brightness: about 5 at 100). <b>Flicker</b>: clips where the lights pulsed or
+      banded at a fixed shutter, where it matters; "mild" is the same on Auto, where the longer exposure evens most
+      of it out. <b>Sharpness from</b>: clips whose impact could be believed (the ball seen leaving 60 ms before to
+      10 ms after the heard strike); on the rest the key positions may be off, so their sharpness isn't measured.
+      <b>Sharp</b>: detail along the forearms and hands at address, against their own contrast; <b>P6</b> and
+      <b>P5-P7</b> are the same as a share of address in each clip, so clips in different light compare fairly:
+      nearer 1 is sharper through the downswing. Green is the best setting for each camera. Clips from before
+      capture app 0.4 are "unknown".</div>
   </section>
   <section id="practice" hidden>
     <div class="t-head">
@@ -491,8 +507,8 @@
       <div class="note">After each swing the speaking phone (Practice voice on, the face-on one by default) says the number
         and whether it was in range, e.g. "Tempo 3.2, in range" or "Club path minus 4, too far left". Body numbers come
         once the swing is analyzed (usually well under a minute); Square's about 15 s after the strike, or "no shot" if
-        none came within 25 s. A body number from a camera that couldn't see all of you (the camera check) is "no
-        reading", not a wrong number. Numbers marked "noisy" move a lot from one swing to the next even when the swing
+        none came within 25 s. A body number with no reading (a camera that couldn't see all of you, the same rule
+        as the swing numbers and the trends) or read at an estimated P6 is "no reading", not a wrong number. Numbers marked "noisy" move a lot from one swing to the next even when the swing
         doesn't: practice them over several swings, not one.</div>
     </div>
     <div class="t-card">
@@ -511,6 +527,7 @@
         <option value="30">Last 30 days</option><option value="90">Last 90 days</option>
         <option value="365">Last year</option><option value="0">All</option>
       </select></label>
+      <label title="Shaky numbers: tracking noise or the conditions could account for them. Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
     </div>
     <div class="t-card">
       <strong>Latest session</strong>
@@ -554,6 +571,7 @@
 <script src="/static/phases.js"></script>
 <script src="/static/metrics.js"></script>
 <script src="/static/summary.js"></script>
+<script src="/static/trust.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
@@ -805,14 +823,21 @@ function drawAngles(ctx, v, r, readout = READOUT) {
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, 6);
   ctx.fill();
+  // The frame on screen isn't a key position: only the camera's and the light's rules, and the
+  // numbers noisy by definition, apply (trust.js).
+  const facts = openFacts(), view = readout === DTL_READOUT ? "dtl" : "face";
   readout.forEach(([label, key, unit], i) => {
     const ty = y + pad + lh * (i + 0.8);
     ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
     ctx.textAlign = "left";
     ctx.fillText(label, x + pad, ty);
-    ctx.fillStyle = "#fff";
+    const j = facts && SwingTrust.judge({ view, value: key }, facts, v ? v[key] : null, null, unit);
+    let text = fmtValue(v, key, unit);
+    if (j && j.level === "none") text = "--";
+    else if (j && j.level === "shaky" && !text.endsWith("~")) text += " ~";
+    ctx.fillStyle = j && j.level !== "ok" ? "rgba(255, 255, 255, 0.5)" : "#fff";
     ctx.textAlign = "right";
-    ctx.fillText(fmtValue(v, key, unit), x + w - pad, ty);
+    ctx.fillText(text, x + w - pad, ty);
   });
   ctx.restore();
 }
@@ -1272,12 +1297,17 @@ const CAMERA_ADVICE = {
   edge: "you're near the edge of the picture. Center yourself for the most reliable numbers",
   small: "you're small in the picture. Move the phone closer (or zoom less) so you fill more of it",
   hands: "your hands leave the picture at the top. Tilt the phone up or step it back",
+  noball: "the ball wasn't seen leaving, so impact is from the hands' motion: the numbers from the top on (P5-P7, tempo) are less certain (greyed ~). Keep the ball in the picture, lit, against a plain mat",
+  impact: "the ball was seen leaving too far from the strike the phone heard (found at the wrong spot, or late), so the key positions from the top on may be off (greyed ~). More light on the ball helps",
 };
 
 // The light check's codes (server/quality.py, measured from each clip), and what to do about them.
 const LIGHT_ADVICE = {
   dark: q => `you're dark in the picture (brightness ${Math.round(q.brightness)} of 255). Add light on yourself, or use a longer shutter`,
-  flicker: q => `the lights flicker${q.flicker && q.flicker.mains ? ` (${q.flicker.mains} Hz)` : ""}, and this shutter catches it as the picture pulsing or banding. Use flicker-free lights, or turn off the ones that flicker`,
+  // On Auto the exposure spans much of each pulse, so it's mild; at a fixed short shutter it matters.
+  flicker: q => q.flickerLevel === "mild"
+    ? `the lights flicker a little${q.flicker && q.flicker.mains ? ` (${q.flicker.mains} Hz)` : ""}. On Auto that's mild and the numbers aren't affected; it would matter at a fixed shutter`
+    : `the lights flicker${q.flicker && q.flicker.mains ? ` (${q.flicker.mains} Hz)` : ""}, and at this shutter the picture pulses or bands with it (numbers greyed ~). Use flicker-free lights, turn off the ones that flicker, or go back to Auto`,
   grainy: q => `the picture is grainy (noise ${q.noise.toFixed(1)}): the ISO is high for this light. Add light, or use a longer shutter`,
 };
 let lastCameraCheck = null;   // [analysis, input] of the open swing, to redo the check when the quality arrives
@@ -1292,15 +1322,77 @@ function shutterText(cam) {
   return `shutter set to ${cam.shutter || "Auto"}${used ? ", camera used " + used : ""}${how}`;
 }
 
+// The listed clips by name, made again when the list is (Trends and Progress look up every swing).
+let clipIndex = null, clipIndexOf = null;
+function clipOf(name) {
+  if (clipIndexOf !== clips) { clipIndex = new Map(clips.map(c => [c.name, c])); clipIndexOf = clips; }
+  return name ? clipIndex.get(name) || null : null;
+}
+
+/** The listed clip of each camera of the swing opened through clip `mainName` (face-on or a lone down-the-line one). */
+function camerasOf(mainName) {
+  const main = clipOf(mainName);
+  if (!main) return { face: null, dtl: null };
+  return main.angle === "dtl" ? { face: null, dtl: main } : { face: main, dtl: clipOf(main.partner) };
+}
+
+/** Each camera's light check (quality.py) for that swing: {face, dtl}, each a record or null. */
+function lightOf(mainName) {
+  const cams = camerasOf(mainName);
+  return { face: cams.face && cams.face.quality, dtl: cams.dtl && cams.dtl.quality };
+}
+
+// ---- Trust per number (trust.js) ----
+let noiseTable = null;   // /api/noise: the noise floor per number over recent swings (the server's)
+
+async function loadNoise() {
+  try {
+    const res = await fetch("/api/noise");
+    if (res.ok) noiseTable = await res.json();
+  } catch {}
+}
+
+/** What's known for judging the open swing's numbers (trust.js), or null before it's analyzed. */
+let factsFor = null, openFactsCache = null;
+function openFacts() {
+  if (!lastCameraCheck) return null;
+  // Worked out again when the swing's analysis or its light check changes (showCameraCheck).
+  if (factsFor !== lastCameraCheck) {
+    const [a, main] = lastCameraCheck;
+    openFactsCache = SwingTrust.factsOfAnalysis(a, main, lightOf(main.name));
+    factsFor = lastCameraCheck;
+  }
+  return openFactsCache;
+}
+
+/**
+ * Puts a number in a table cell with its trust: "--" with no reading, greyed with a small ~ when
+ * shaky, and why as the tooltip. j: a trust.js judgement, or null to show it as it is.
+ */
+function trustCell(td, text, j) {
+  td.classList.remove("shaky", "noread");
+  td.removeAttribute("title");
+  td.textContent = text;
+  if (!j || j.level === "ok") return td;
+  if (j.level === "none") {
+    td.textContent = "--";
+    td.classList.add("noread");
+    td.title = "No reading: " + j.text;
+  } else {
+    td.textContent = text.replace(/ ~$/, "");
+    td.classList.add("shaky");
+    td.title = "Shaky: " + j.text;
+  }
+  return td;
+}
+
 /** A note above the videos when a camera didn't see the golfer well or had a light problem, so it's
  * fixed before the next swing; plus the shutter and ISO each camera used, when it said. */
 function showCameraCheck(a, main) {
-  lastCameraCheck = [a, main];
+  lastCameraCheck = [a, main];   // a new array: openFacts works the facts out again
   const box = document.getElementById("camcheck");
   const cams = SwingSummary.cameras(a, main);
-  const clipOf = name => name ? clips.find(c => c.name === name) : null;
-  const dtlName = main.angle === "dtl" ? main.name : partner ? partner.name : null;
-  const byCam = { face: main.angle === "dtl" ? null : clipOf(main.name), dtl: clipOf(dtlName) };
+  const byCam = camerasOf(main.name);
   const lines = [], infos = [];
   for (const [cam, name] of [["face", "Face-on camera"], ["dtl", "Down-the-line camera"]]) {
     for (const code of cams[cam] || []) lines.push([name, CAMERA_ADVICE[code]]);
@@ -1340,6 +1432,8 @@ async function buildPositions(name) {
   metrics = a.metrics;
   dtlMetrics = a.dtlMetrics;
   showCameraCheck(a, analysisInput(name, pose));
+  if (!noiseTable) await loadNoise();
+  if (run !== positionsRun || current !== name) return;
   showNumbers();
   redraw();
   positionsBox.hidden = false;
@@ -1392,10 +1486,16 @@ function showNumbers() {
   if (box.hidden) return;
   document.getElementById("face-note").hidden = !metrics;
   document.getElementById("dtl-note").hidden = !dtlMetrics;
+  const facts = openFacts();
   const tp = metrics && metrics.tempo;
-  document.getElementById("tempo").textContent = tp
-    ? `Tempo ${tp.ratio.toFixed(1)} : 1 - backswing ${tp.back.toFixed(2)} s (from takeaway), downswing ${tp.down.toFixed(2)} s`
-    : "";
+  const tempoBox = document.getElementById("tempo");
+  tempoBox.replaceChildren();
+  if (tp) {
+    const part = (key, text) => trustCell(document.createElement("span"), text,
+      facts && SwingTrust.judge(SwingTrust.numberOf(key), facts, { tempo: tp.ratio, backswing: tp.back, downswing: tp.down }[key], noiseTable));
+    tempoBox.append("Tempo ", part("tempo", `${tp.ratio.toFixed(1)} : 1`), " - backswing ", part("backswing", `${tp.back.toFixed(2)} s`),
+                    " (from takeaway), downswing ", part("downswing", `${tp.down.toFixed(2)} s`));
+  }
   const table = document.getElementById("num-table");
   const head = document.createElement("tr");
   head.innerHTML = "<th></th>";
@@ -1406,13 +1506,14 @@ function showNumbers() {
   }
   // Each view's rows under its own heading; the down-the-line clip is read at the same moments.
   const sections = [];
-  if (metrics) sections.push(["Face-on", READOUT, metrics, cols.map(p => p.index)]);
+  if (metrics) sections.push(["Face-on", READOUT, metrics, cols.map(p => p.index), "face"]);
   if (dtlMetrics) {
     const dp = partner ? partner.pose : pose;
-    sections.push(["Down the line", DTL_READOUT, dtlMetrics, cols.map(p => positionIndex(p.key, dp))]);
+    sections.push(["Down the line", DTL_READOUT, dtlMetrics, cols.map(p => positionIndex(p.key, dp)), "dtl"]);
   }
   const rows = [];
-  for (const [title, readout, m, idx] of sections) {
+  let shaky = 0, none = 0;
+  for (const [title, readout, m, idx, view] of sections) {
     if (sections.length > 1) {
       const tr = document.createElement("tr");
       tr.className = "group";
@@ -1425,15 +1526,20 @@ function showNumbers() {
       const name = document.createElement("td");
       name.textContent = label;
       tr.append(name);
-      for (const i of idx) {
-        const td = document.createElement("td");
-        td.textContent = fmtValue(m.values[i], key, unit);
-        tr.append(td);
-      }
+      idx.forEach((i, c) => {
+        const v = m.values[i];
+        const j = facts && SwingTrust.judge({ view, value: key, pos: cols[c].key }, facts, v ? v[key] : null, noiseTable, unit);
+        if (j && j.level === "shaky") shaky++;
+        if (j && j.level === "none" && v && v[key] != null) none++;
+        tr.append(trustCell(document.createElement("td"), fmtValue(v, key, unit), j));
+      });
       rows.push(tr);
     }
   }
   table.replaceChildren(head, ...rows);
+  document.getElementById("trust-note").textContent = shaky || none
+    ? "Greyed ~ = shaky: tracking noise or the conditions could account for it. -- = no reading: that camera couldn't see all of you, or it couldn't be measured. Hover for why."
+    : "";
 }
 
 function jumpTo(index) {
@@ -1897,7 +2003,11 @@ async function refresh() {
     // The light check arrives a little after the pose (the server measures it next).
     const q = c => JSON.stringify(c ? [c.quality, c.camera] : null);
     const partnerNow = partner && clips.find(c => c.name === partner.name);
-    if (lastCameraCheck && (q(before) !== q(now) || q(beforePartner) !== q(partnerNow))) showCameraCheck(...lastCameraCheck);
+    if (lastCameraCheck && (q(before) !== q(now) || q(beforePartner) !== q(partnerNow))) {
+      showCameraCheck(...lastCameraCheck);
+      showNumbers();
+      redraw();
+    }
   }
 }
 
@@ -1926,9 +2036,10 @@ document.addEventListener("keydown", e => {
   if (e.key === "p" || e.key === "P") setOverlay("plane", !overlays.plane);
 });
 
-// Pick up new clips and finished analyses without a manual reload.
+// Pick up new clips and finished analyses without a manual reload; the noise floor now and then.
 refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, 10000);
+setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 </script>
 <script src="/static/trends.js"></script>
 <script src="/static/setup.js"></script>

@@ -56,9 +56,8 @@ function practiceSuggestion(m, club) {
   for (const c of shownClips()) {
     if (c.excluded || (club && (!c.shot || c.shot.club !== club))) continue;
     const r = swingRow(c);
-    // swingRow leaves out a camera the camera check flags; an estimated P6 is left out here too.
-    if (m.pos === "p6" && r.rec && r.rec.quality && r.rec.quality.p6Estimated) continue;
-    const v = r[m.key];
+    // Body numbers as practice mode would speak them (trust.js, the rule the server uses).
+    const v = m.kind === "body" ? (r.rec ? SwingTrust.speakable(m.key, r.rec).value : null) : r[m.key];
     if (v != null && Number.isFinite(v)) values.push(v);
     if (values.length >= PR_SUGGEST_N) break;
   }

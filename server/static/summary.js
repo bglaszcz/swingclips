@@ -46,6 +46,23 @@
     return strike != null ? [strike - 0.15, strike + 0.15] : name.startsWith("swing_") ? [1.9, 2.4] : null;
   }
 
+  // Where the ball's leaving (impact) may be against the strike the phone heard, s: sound reaches
+  // the phone a little after the ball goes, so on good clips impact is 20-35 ms before the strike.
+  // Clips without the strike in their name were cut 2.0-2.25 s before it. quality.py has the same.
+  const IMPACT_WINDOW = [-0.06, 0.01], STRIKE_FALLBACK = [2.0, 2.25];
+
+  /**
+   * Whether a clip's impact can be believed: null if so, "noball" when the server didn't see the
+   * ball go (impact is then from the hands, inside the strike window), "impact" when it did but
+   * too far from the heard strike (the ball was found at the wrong spot, or late).
+   * @param input {impact, strike} as for analyze()
+   */
+  function impactCheck(input) {
+    if (!input || input.impact == null) return "noball";
+    const [a, b] = input.strike != null ? [input.strike, input.strike] : STRIKE_FALLBACK;
+    return input.impact < a + IMPACT_WINDOW[0] - 1e-6 || input.impact > b + IMPACT_WINDOW[1] + 1e-6 ? "impact" : null;
+  }
+
   /**
    * @param main the clip the swing is opened through (face-on, or a lone down-the-line one):
    *   {name, strike, angle, aspect, frames, impact, ball}
@@ -67,7 +84,7 @@
     };
     const address = positions.length ? dtlIndex("p1") : null;
     const dtlMetrics = address == null ? null : Metrics.computeDTL(dtl.frames, dtl.aspect, address, dtl.ball);
-    return { positions, metrics, dtl, dtlMetrics, dtlIndex };
+    return { positions, metrics, dtl, dtlMetrics, dtlIndex, offset };
   }
 
   // The body numbers compared across a session: [key, label, unit, view, position, value key].
@@ -238,13 +255,88 @@
     return { ok, codes, text, say: ok ? `${cam}: good.` : `${cam}: ${tips.join(", and ")}.`, focus };
   }
 
-  /** cameraCheck for both angles of an analyzed swing: {face, dtl}, each a list of codes or null. */
+  /**
+   * cameraCheck for both angles of an analyzed swing: {face, dtl}, each a list of codes or null.
+   * Each also says when the key positions from the top on hang on an impact that can't be believed
+   * (impactCheck): "noball" or "impact". The face-on clip's impact places them for both cameras; a
+   * down-the-line clip's own impact counts too when it was used to line the two clips up.
+   */
   function cameras(a, main) {
     const p = key => a.positions.find(q => q.key === key);
+    const own = impactCheck(main);
+    let dtlImpact = own;
+    if (a.dtl && a.dtl !== main && !own && a.dtl.impact != null) dtlImpact = impactCheck(a.dtl);
+    const withImpact = (codes, code) => code ? [...codes, code] : codes;
     return {
       face: main.angle === "dtl" || !p("p1") ? null
-        : cameraCheck(main, a.metrics ? a.metrics.address : p("p1").index, p("p4") ? p("p4").index : null),
-      dtl: a.dtl && p("p1") ? cameraCheck(a.dtl, a.dtlIndex("p1"), a.dtlIndex("p4")) : null,
+        : withImpact(cameraCheck(main, a.metrics ? a.metrics.address : p("p1").index, p("p4") ? p("p4").index : null), own),
+      dtl: a.dtl && p("p1") ? withImpact(cameraCheck(a.dtl, a.dtlIndex("p1"), a.dtlIndex("p4")), dtlImpact) : null,
+    };
+  }
+
+  // Key positions whose numbers the review page shows (the swing numbers table, Compare).
+  const NUMBER_POSITIONS = ["p1", "p4", "p6", "p7"];
+  const round3 = x => Math.round(x * 1000) / 1000;
+
+  /** {face: {p1: {key: number}}, dtl: {...}} of an analyzed swing: its per-frame numbers at NUMBER_POSITIONS. */
+  function valuesAtPositions(a) {
+    const out = { face: null, dtl: null };
+    const pick = v => {
+      if (!v) return null;
+      const r = {};
+      for (const [k, x] of Object.entries(v)) if (typeof x === "number" && Number.isFinite(x)) r[k] = round3(x);
+      return r;
+    };
+    for (const key of NUMBER_POSITIONS) {
+      const p = a.positions.find(q => q.key === key);
+      if (!p) continue;
+      if (a.metrics) (out.face = out.face || {})[key] = pick(a.metrics.values[p.index]);
+      const i = a.dtlMetrics ? a.dtlIndex(key) : null;
+      if (i != null) (out.dtl = out.dtl || {})[key] = pick(a.dtlMetrics.values[i]);
+    }
+    return out;
+  }
+
+  /**
+   * How much each per-frame number moves in frames[from..to] (s): {frames, sd: {key: standard deviation}}.
+   * Keys with fewer than 5 frames are left out.
+   */
+  function stillSpread(frames, m, from, to) {
+    const series = {};
+    frames.forEach((f, i) => {
+      const v = m.values[i];
+      if (!v || f.t < from || f.t > to) return;
+      for (const [k, x] of Object.entries(v)) {
+        if (typeof x === "number" && Number.isFinite(x)) (series[k] = series[k] || []).push(x);
+      }
+    });
+    const sd = {};
+    let n = 0;
+    for (const [k, xs] of Object.entries(series)) {
+      n = Math.max(n, xs.length);
+      if (xs.length < 5) continue;
+      const mean = xs.reduce((s, x) => s + x, 0) / xs.length;
+      sd[k] = Math.sqrt(xs.reduce((s, x) => s + (x - mean) ** 2, 0) / (xs.length - 1));
+    }
+    return { frames: n, sd };
+  }
+
+  // The window before the takeaway measured as address for the noise floor (s before it).
+  const STILL_WINDOW = [0.35, 0.05];
+
+  /** The noise floor of an analyzed swing, per camera: {face: {key: sd} | null, dtl: ... | null}. */
+  function addressNoise(a, main) {
+    const tk = a.positions.takeaway;
+    if (!tk) return { face: null, dtl: null };
+    const sds = (frames, m, shift) => {
+      const s = stillSpread(frames, m, tk.t + shift - STILL_WINDOW[0], tk.t + shift - STILL_WINDOW[1]).sd;
+      const r = {};
+      for (const k in s) r[k] = round3(s[k]);
+      return Object.keys(r).length ? r : null;
+    };
+    return {
+      face: a.metrics ? sds(main.frames, a.metrics, 0) : null,
+      dtl: a.dtlMetrics ? sds(a.dtl.frames, a.dtlMetrics, a.dtl === main ? 0 : a.offset) : null,
     };
   }
 
@@ -260,6 +352,10 @@
     const p1 = pos("p1"), p6 = pos("p6");
     return {
       body: bodyNumbers(a),
+      // For the noise floor (trust.js): every per-frame number at the key positions the page shows,
+      // and how much each moved while standing still at address, per camera.
+      at: valuesAtPositions(a),
+      noise: addressNoise(a, main),
       quality: {
         swingFound: a.positions.length > 0,
         // Impact from the ball leaving the mat (frame-exact) rather than the heard strike.
@@ -318,33 +414,18 @@
    * `window` seconds before the takeaway. One clip on its own (its own key positions).
    * @returns {frames, from, to, sd: {key: standard deviation}} | null when no swing was found
    */
-  function noiseFloor(input, leadSide, window = [0.35, 0.05]) {
+  function noiseFloor(input, leadSide, window = STILL_WINDOW) {
     if (input.aspect == null) input.aspect = aspectOf(input.name, input.rotation);
     const a = analyze(input, null, leadSide);
     const takeaway = a.positions.takeaway;
     const m = input.angle === "dtl" ? a.dtlMetrics : a.metrics;
     if (!takeaway || !m) return null;
     const from = takeaway.t - window[0], to = takeaway.t - window[1];
-    const series = {};
-    input.frames.forEach((f, i) => {
-      const v = m.values[i];
-      if (!v || f.t < from || f.t > to) return;
-      for (const [k, x] of Object.entries(v)) {
-        if (typeof x === "number" && Number.isFinite(x)) (series[k] = series[k] || []).push(x);
-      }
-    });
-    const sd = {};
-    let frames = 0;
-    for (const [k, xs] of Object.entries(series)) {
-      frames = Math.max(frames, xs.length);
-      if (xs.length < 5) continue;
-      const mean = xs.reduce((s, x) => s + x, 0) / xs.length;
-      sd[k] = Math.sqrt(xs.reduce((s, x) => s + (x - mean) ** 2, 0) / (xs.length - 1));
-    }
-    return { frames, from, to, sd };
+    return { from, to, ...stillSpread(input.frames, m, from, to) };
   }
 
-  const api = { BODY, SHOT, frameIndexAt, syncOffset, aspectOf, strikeWindow, analyze, bodyNumbers,
+  const api = { BODY, SHOT, NUMBER_POSITIONS, IMPACT_WINDOW, STRIKE_FALLBACK, frameIndexAt, syncOffset, aspectOf,
+                strikeWindow, impactCheck, analyze, bodyNumbers,
                 shotNumbers, correlation, summarize, cameras, setupAdvice, positionTimes, frameAngles, noiseFloor };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingSummary = api;

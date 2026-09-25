@@ -16,11 +16,19 @@ and saved beside it as <clip>.quality.v<VERSION>.json:
   120 Hz flicker lands exactly on the frame rate and can't be seen from frame to frame at all).
   Rolling-shutter banding (brightness changing across the sensor's lines within one frame) is
   measured apart, from line-mean profiles taken along the sensor's lines, not the upright picture's.
-- sharpness: variance of the Laplacian (after a light blur, so grain doesn't count as detail) in a
-  crop around the hands and lower arms, at address (P1) and at P5, P6 and P7, the later ones as a
-  share of address in the same clip, so clips in different light compare fairly.
+- sharpness: detail of the forearms and hands at address (P1) and at P5, P6 and P7, the later ones as
+  a share of address in the same clip, so clips in different light compare fairly. Detail is the
+  variance of the Laplacian (after a light blur, so grain doesn't count) inside a band along each
+  forearm and hand (elbow, wrist, index finger), over the variance of the brightness in the same
+  band: what's behind the arms counts little, and a dark shirt against a bright wall scores like a
+  light one against a dark wall. Only worked out when the key positions can be believed: the ball
+  was seen leaving (pose.py's impact) no more than IMPACT_WINDOW from the strike the phone heard
+  (from the clip's name); otherwise `sharpnessSkipped` says why. A wrong impact moves P5-P7 off the
+  downswing, and the ratio then says nothing about the shutter.
 
-Nothing here has been tried on real clips yet: the thresholds are first guesses (see HOME-SETUP.md).
+v2 retuned the warnings on real clips (Galaxy S21, 1080p 240 fps, a barn under LED bulbs; see
+HOME-SETUP.md): grain is judged against the golfer's brightness, flicker is "mild" on Auto and
+"matters" at a fixed shutter, and sharpness is only measured when impact is believable.
 """
 import av
 import cv2
@@ -28,16 +36,25 @@ import numpy as np
 
 import pose
 
-VERSION = 1
+VERSION = 2
 
 # Warnings. Brightness in luma levels (0-255), noise in luma levels (standard deviation), flicker
 # and banding as a share of the mean brightness.
 DARK = 70
-GRAINY = 2.5
+# Grainy: noise from this share of the golfer's brightness (and at least GRAINY_MIN); GRAINY without
+# a brightness. Real clips on Auto (brightness 102-109) read 2.7-3.75 and look normal by eye; at a
+# fixed 1/1000 s (brightness 63-65) 2.1-2.35: the phone's denoising keeps grain near a fixed share.
+GRAINY_SHARE = 0.05
+GRAINY_MIN = 2.5
+GRAINY = 5.0
 FLICKER = 0.02
 # The sine must also explain this share of the frame-to-frame swing, so noise alone never counts.
 FLICKER_SHARE = 0.3
 BANDING = 0.01
+# Flicker is "mild" on Auto (a ~1/250 s exposure spans half a pulse: real clips read 2.9-3.8% and
+# banding 1.4-1.5%, and look normal), unless it's this strong; at a fixed shutter it "matters".
+FLICKER_STRONG = 0.08
+BANDING_STRONG = 0.04
 # Frequencies searched for flicker (Hz), and the mains light frequencies it's matched against.
 FLICKER_HZ = (5.0, 130.0, 0.25)
 MAINS = (100, 120)
@@ -54,7 +71,19 @@ ADDRESS_WINDOW = (0.35, 0.05)
 # Hands and lower arms: elbows, wrists and the hand points.
 HANDS = (13, 14, 15, 16, 17, 18, 19, 20, 21, 22)
 HAND_PAD = 0.06          # round the hand points, in body heights
+# The band measured for sharpness: along each forearm and hand (elbow, wrist, index finger), this
+# wide in body heights (a forearm is ~0.045 of a golfer's height, plus a little room).
+ARMS = ((13, 15, 19), (14, 16, 20))
+ARM_WIDTH = 0.06
+# Brightness variance (luma levels squared) added under the division, so a flat band (grain only)
+# doesn't pass for detail.
+CONTRAST_FLOOR = 25.0
 SHARP_KEYS = ("p1", "p5", "p6", "p7")
+# Impact (the ball leaving) against the strike the phone heard, s: from 60 ms before to 10 ms after
+# (on good clips it's 20-35 ms before). Clips without the strike in their name were cut 2.0-2.25 s
+# before it. summary.js impactCheck has the same.
+IMPACT_WINDOW = (-0.06, 0.01)
+STRIKE_FALLBACK = (2.0, 2.25)
 SHARP_NEIGHBOURS = 1     # frames either side of each key position, for a steadier median
 BODY = range(33)
 
@@ -172,15 +201,51 @@ def grain(prev, cur, mask, line_axis):
     return float(1.4826 * np.median(np.abs(d)) / np.sqrt(2))
 
 
+def arm_band(lm, box, w, h, width):
+    """Where the forearms and hands are in the crop `box`: a band `width` pixels wide along each."""
+    x0, y0, x1, y1 = box
+    band = np.zeros((y1 - y0, x1 - x0), np.uint8)
+    for chain in ARMS:
+        pts = np.array([[lm[i * 3] * w - x0, lm[i * 3 + 1] * h - y0] for i in chain])
+        cv2.polylines(band, [np.round(pts * 16).astype(np.int32)], False, 1,
+                      thickness=max(2, int(round(width))), lineType=cv2.LINE_8, shift=4)
+    return band > 0
+
+
 def detail(gray, lm, w, h):
-    """Variance of the Laplacian round the hands and lower arms, or None."""
+    """Detail of the forearms and hands (see the top), x100, or None."""
     bh = (body_height(lm) or 0.5) * h
     pad = HAND_PAD * bh
     b = box_of(lm, HANDS, w, h, (pad, pad, pad))
     if b is None or b[2] - b[0] < 8 or b[3] - b[1] < 8:
         return None
+    band = arm_band(lm, b, w, h, ARM_WIDTH * bh)
+    if band.sum() < 30:
+        return None
     crop = cv2.GaussianBlur(gray[b[1]:b[3], b[0]:b[2]].astype(np.float32), (0, 0), 1.0)
-    return float(cv2.Laplacian(crop, cv2.CV_32F).var())
+    lap = cv2.Laplacian(crop, cv2.CV_32F)[band]
+    return float(100 * lap.var() / (crop[band].var() + CONTRAST_FLOOR))
+
+
+def impact_check(timing) -> dict:
+    """Whether the key positions' impact can be believed. timing: [{angle, impact, strike}] for each
+    clip it hangs on (see measure). {"ok", "why": None or what's wrong, "clips": [{angle, ball, lead}]}
+    with lead = impact minus the heard strike, ms."""
+    out = {"ok": True, "why": None, "clips": []}
+    for c in timing or []:
+        name = "down the line" if c.get("angle") == "dtl" else "face-on"
+        impact, strike = c.get("impact"), c.get("strike")
+        lo, hi = (strike, strike) if strike is not None else STRIKE_FALLBACK
+        lead = None if impact is None else round(1000 * (impact - (strike if strike is not None else lo)))
+        out["clips"].append({"angle": c.get("angle"), "ball": impact is not None, "lead": lead})
+        if not out["ok"]:
+            continue
+        if impact is None:
+            out.update(ok=False, why=f"ball not found ({name})")
+        elif not lo + IMPACT_WINDOW[0] - 1e-6 <= impact <= hi + IMPACT_WINDOW[1] + 1e-6:
+            heard = "the heard strike" if strike is not None else "where the strike should be"
+            out.update(ok=False, why=f"impact doubtful ({name}): {abs(lead)} ms {'after' if lead > 0 else 'before'} {heard}")
+    return out
 
 
 def address_window(times, positions):
@@ -201,12 +266,17 @@ def nearest(times, t):
     return i
 
 
-def measure(path: str, frames: list, positions: dict) -> dict:
+def measure(path: str, frames: list, positions: dict, timing: list | None = None, camera: dict | None = None) -> dict:
     """The quality record for one clip.
 
     frames: [(t, flat [x, y, visibility] * 33 | None)] from its pose file, one per decoded frame.
     positions: {"p1": t, "p5": t, ..., "takeaway": t} in the clip's seconds (any may be missing).
+    timing: [{"angle", "impact": s | None, "strike": s | None}] for the clips the key positions hang
+      on (this clip, and for a down-the-line clip carried from the face-on one, that one's too), in
+      each clip's own seconds; None: not checked (sharpness is measured).
+    camera: the clip's camera.json (what shutter it was shot at), or None.
     """
+    check = impact_check(timing) if timing is not None else {"ok": True, "why": None, "clips": []}
     cv2.setNumThreads(1)
     with av.open(path) as c:
         first = next(c.decode(video=0))
@@ -272,7 +342,7 @@ def measure(path: str, frames: list, positions: dict) -> dict:
     band = banding(profiles)
     med = lambda v: float(np.median(v)) if v else None
     sharpness = None
-    address = med(sharp["p1"])
+    address = med(sharp["p1"]) if check["ok"] else None
     if address:
         sharpness = {"p1": round(address, 1)}
         for key in SHARP_KEYS[1:]:
@@ -291,9 +361,19 @@ def measure(path: str, frames: list, positions: dict) -> dict:
             "amplitude": round(fl["amplitude"], 4), "share": round(fl["share"], 3), "hz": fl["hz"], "mains": fl["mains"]},
         "banding": None if band is None else round(band, 4),
         "sharpness": sharpness,
+        "sharpnessSkipped": None if sharpness else check["why"] or (
+            "no key positions" if not positions.get("p1") else "arms not found at address"),
+        "impact": check,
+        "shutter": shutter_group(camera),
     }
     out["warnings"] = warnings(out)
+    out["flickerLevel"] = flicker_level(out) if "flicker" in out["warnings"] else None
     return out
+
+
+def grainy_from(brightness) -> float:
+    """The noise that counts as grainy for a golfer this bright."""
+    return GRAINY if brightness is None else max(GRAINY_MIN, GRAINY_SHARE * brightness)
 
 
 def warnings(q: dict) -> list[str]:
@@ -304,9 +384,18 @@ def warnings(q: dict) -> list[str]:
     fl = q.get("flicker")
     if (fl and fl["amplitude"] >= FLICKER and fl["share"] >= FLICKER_SHARE) or (q.get("banding") or 0) >= BANDING:
         out.append("flicker")
-    if q.get("noise") is not None and q["noise"] >= GRAINY:
+    if q.get("noise") is not None and q["noise"] >= grainy_from(q.get("brightness")):
         out.append("grainy")
     return out
+
+
+def flicker_level(q: dict) -> str:
+    """How much a clip's flicker matters: "matters" at a fixed shutter (or when it's strong), "mild"
+    on Auto (or an unknown shutter, from before capture app 0.4)."""
+    fl = q.get("flicker") or {}
+    strong = fl.get("amplitude", 0) >= FLICKER_STRONG or (q.get("banding") or 0) >= BANDING_STRONG
+    fixed = q.get("shutter") not in (None, "Auto", "unknown")
+    return "matters" if fixed or strong else "mild"
 
 
 def shutter_group(camera: dict | None) -> str:

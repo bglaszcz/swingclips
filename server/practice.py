@@ -6,8 +6,10 @@ second with the recent swings; once a swing's number is known (its body numbers 
 Square shot paired, ~14 s after the strike) the sentence is made here, kept in practice-log.jsonl, and
 handed to the phone that speaks it (GET /api/practice/latest, long-polled).
 
-Only numbers that can be trusted are spoken: a number from a camera the camera check flags ("out",
-"hands"), a P6 number where P6 was only estimated, or a missing number is "no reading" instead.
+Only numbers that can be trusted are spoken: which ones is the review page's rule set (static/trust.js,
+SwingTrust.speakable, run here in V8 as swings.py runs summary.js). A number with no reading there
+(the camera check says "out" or "hands", or it's missing), or read at a key position that was only
+estimated (P6), is "no reading" instead.
 """
 import json
 import math
@@ -15,6 +17,8 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+
+from swings import Summarizer
 
 # Square numbers: a swing with no shot this long after the strike is spoken without one. Square's
 # app reports ~14 s after the strike, and a shot pairs within 5 s of that (app.py SHOT_SLACK_S).
@@ -35,8 +39,8 @@ PAIR_SLACK_S = 2.0
 # Swings in one session (as the review page groups them): a longer gap ends a streak.
 SESSION_GAP_S = 45 * 60
 STREAK_FROM = 3
-# Camera check codes that make that camera's body numbers unreliable (as the trends leave them out).
-BAD_CAMERA = ("out", "hands")
+# The review page's scripts, run for trust.js.
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 def _m(key, label, say, unit, kind, view, dec, low, high, noisy=None, pos=None):
@@ -112,17 +116,30 @@ def reading(metric: dict, record: dict | None, shot: dict | None) -> tuple[float
         except (KeyError, TypeError):
             v = None
         return (v, None) if v is not None else (None, "not in the shot")
-    if not record or record.get("error") or not record.get("body"):
-        return None, "not measured"
-    quality = record.get("quality") or {}
-    codes = (quality.get("camera") or {}).get(metric["view"]) or []
-    bad = [c for c in codes if c in BAD_CAMERA]
-    if bad:
-        return None, "camera check: " + ", ".join(bad)
-    if metric["pos"] == "p6" and quality.get("p6Estimated"):
-        return None, "P6 estimated"
-    v = _finite(record["body"].get(metric["key"]))
-    return (v, None) if v is not None else (None, "not measured")
+    got = rules_call("SwingTrust.speakable", metric["key"], record)
+    return _finite(got["value"]), got["why"]
+
+
+# trust.js in a V8 of its own, made on first use and shared by threads, one call at a time.
+_rules: Summarizer | None = None
+_rules_lock = threading.Lock()
+
+
+def rules_call(function: str, *args):
+    global _rules
+    with _rules_lock:
+        if _rules is None:
+            _rules = Summarizer(STATIC_DIR)
+        return _rules.call(function, *args)
+
+
+def close_rules() -> None:
+    """Closes that V8 (the server does on the way out)."""
+    global _rules
+    with _rules_lock:
+        if _rules is not None:
+            _rules.close()
+            _rules = None
 
 
 def rounded(metric: dict, value: float) -> float:
