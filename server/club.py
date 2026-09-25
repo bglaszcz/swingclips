@@ -10,6 +10,9 @@ In the fastest part of the downswing the shaft blurs into a faint fan and can't 
 frames are tied together afterwards: a path through the confident detections that the shaft could
 actually swing along, with the angle interpolated in between.
 
+With SWINGCLIPS_CLUB_BACKEND=yolo (models.py), a trained model finds the grip end and the clubhead
+instead of the rays (model_scores), blurred clubhead included; the same tracking joins its frames up.
+
 Angles are in degrees in the upright picture, 0 = pointing right, 90 = down (y grows downward).
 """
 import av
@@ -34,6 +37,17 @@ MIN_VISIBLE = 0.25
 MAX_TURN = 3600
 # A frame's best ray counts as a sighting at this share of a clear sighting's score or more.
 CONFIDENT = 0.35
+
+# The club model: the grip -> clubhead direction scores a bump this wide (sd, degrees) at the
+# model's confidence. Where it's surer of the hands than of the grip end (under the hands, often),
+# the hands stand in for it, worth HANDS_WEIGHT as much. Grip and head closer than MIN_SPAN of the
+# golfer's height give no direction.
+MODEL_SPREAD = 4
+HANDS_WEIGHT = 0.8
+MIN_SPAN = 0.05
+# The clubhead is kept for a frame when the model is at least this sure of the club (Ultralytics'
+# own default) and of the clubhead (where its plots stop drawing a point).
+CLUB_SCORE, HEAD_VISIBLE = 0.25, 0.5
 
 L_SHOULDER, R_SHOULDER, L_ELBOW, R_ELBOW, L_WRIST, R_WRIST, L_INDEX, R_INDEX = 11, 12, 13, 14, 15, 16, 19, 20
 NOSE, FEET = 0, (27, 28, 29, 30, 31, 32)
@@ -103,6 +117,44 @@ def scores(img, lm, mask, bg):
         off = np.abs((ANGLES - away + np.pi) % (2 * np.pi) - np.pi)
         best[off < np.deg2rad(ARM_EXCLUDE)] = 0
     return np.clip(best, 0, None)
+
+
+def model_scores(found, lm, w, h):
+    """scores() from the club model's points: (score, [(x, y, visibility)] for grip, hosel, head in
+    picture units) from models.ClubRunner.find, on a picture w x h pixels. None if the frame can't
+    be scored; all zeros if the model gives no direction."""
+    if found is None or lm is None:
+        return None
+    height = body_height(lm, h)
+    if height <= 0:
+        return None
+    score, (grip_end, _, head) = found
+    hands = grip(lm, w, h)
+    best = None
+    for (x, y, v), weight in (((grip_end[0] * w, grip_end[1] * h, grip_end[2]), 1.0),
+                              ((hands[0], hands[1], 1.0), HANDS_WEIGHT)):
+        dx, dy = head[0] * w - x, head[1] * h - y
+        if np.hypot(dx, dy) < MIN_SPAN * height:
+            continue
+        conf = score * min(v, head[2]) * weight
+        if best is None or conf > best[0]:
+            best = (conf, np.arctan2(dy, dx))
+    out = np.zeros(len(ANGLES), np.float32)
+    if best is not None:
+        off = np.abs((ANGLES - best[1] + np.pi) % (2 * np.pi) - np.pi)
+        out[:] = best[0] * np.exp(-0.5 * (off / np.deg2rad(MODEL_SPREAD)) ** 2)
+    return out
+
+
+def clubhead(found):
+    """The clubhead for the pose file, [x, y, confidence] (picture units, rounded), or None when the
+    model isn't sure of it."""
+    if found is None:
+        return None
+    score, (_, _, (x, y, v)) = found
+    if score < CLUB_SCORE or v < HEAD_VISIBLE:
+        return None
+    return [round(x, 4), round(y, 4), round(score * v, 2)]
 
 
 def track(times, frame_scores):

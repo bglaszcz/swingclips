@@ -192,6 +192,8 @@ to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of 
     `pose.py`, `club.py` and the model), to try a change before deploying it.
   - `--compare <an earlier .json>`: every headline number, before and after.
   - `--no-noise`: skip the noise floor.
+  - With the club model (see "Training the club model"), a clubhead table too: its distance
+    from the labeled clubhead, by phase.
 - Tests (no clips needed; a made-up swing): `cd server` then `python -m unittest discover tests`;
   the compare view's time mapping: `node --test tests/compare.test.js`.
 
@@ -228,6 +230,102 @@ set SWINGCLIPS_POSE_BACKEND=rtmpose-m
   (`msPerFrame`). Each worker runs the model on one thread; `set SWINGCLIPS_ORT_THREADS=2` to try two.
 - Confidence isn't on the same scale as MediaPipe's visibility (the model's peak score, 0-1), and
   the page weighs the hands by it. Worth keeping in mind if hand numbers shift.
+
+#### Training the club model
+The shaft tracker (`club.py`) casts rays from the hands and looks for a thin line that isn't the
+golfer or the empty scene. It loses the club in the fast part of the downswing, where the shaft is a
+faint blur. The plan is a learned model instead: YOLO11 pose with three keypoints, **grip end,
+hosel, clubhead**, trained on your own club labels (blurred clubhead included), with `club.py`'s
+tracking kept on top as the filter. Like the other body models, it's for the scorecard until it
+scores better: `SWINGCLIPS_CLUB_BACKEND=raycast` (default, output unchanged) or `yolo`.
+
+**1. Labels.** Start with the frames already labeled (the club points in labeling mode, above).
+Aim for **500 to 1,500 frames with the club labeled**, about half of them in the downswing and
+follow-through: that's ~40-100 swings at ~12 frames each (the suggested frames lean that way
+already). Mix both angles, clubs (driver, irons, wedge), day and night light. Put a blurred
+clubhead in the middle of the streak with **Shift+click**; press **X** for a point you can't see.
+Below ~300 frames the model will mostly learn these particular swings; past ~1,500 the gains are small.
+
+**2. The dataset**, on a PC with the clips and labels: the server (its own `.venv` has everything),
+or another PC with `SWINGCLIPS_CLIPS` (and `SWINGCLIPS_LABELS`, if not next to it) pointing at them:
+
+```
+cd /d D:\SwingClips\app\server
+.venv\Scripts\python.exe club_dataset.py --out D:\SwingClips\club-dataset
+```
+
+- Each labeled frame becomes an upright picture in `images\train` or `images\val` and a line in
+  `labels\...` (YOLO pose: the club's box, then x, y, visibility for grip, hosel, head).
+  Can't-see (X) or skipped points get visibility 0; blurred ones stay visible. A frame with all
+  three marked can't-see is kept with no club in it.
+- Train and validation are split **by swing** (both angles of a swing go together), ~20% for
+  validation (`--val 0.3` for more), picked the same way on every run. Frames of one swing never
+  land on both sides, so the validation numbers aren't flattered by near-duplicate frames.
+- It prints how many frames, blurred clubheads and swings went each way; `dataset.json` lists them.
+  Running it again rebuilds the folder. Copy the whole folder to the gaming PC (`data.yaml` points
+  to its own folder, so it works from anywhere).
+
+**3. Training**, on the gaming PC (RTX 5070 Ti). A Blackwell card (sm_120) needs PyTorch built
+for **CUDA 12.8 or newer**: the plain `pip install torch` on Windows is CPU-only, and builds for
+CUDA 12.6 and older can't run on it. Needs a current NVIDIA driver (570 or newer) and 64-bit
+Python 3.12 from python.org. In a Command Prompt, with the repository cloned to `C:\swingclips`:
+
+```
+cd /d C:\swingclips\train
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip
+.venv\Scripts\python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -c "import torch; print(torch.__version__, torch.cuda.get_device_name(0), torch.cuda.get_arch_list())"
+.venv\Scripts\python.exe club_train.py --data D:\club-dataset\data.yaml
+```
+
+- The check line should name the RTX 5070 Ti and list `sm_120`. `club_train.py` checks this too
+  and stops with a hint if the build can't use the card.
+- Defaults: `yolo11s-pose` from Ultralytics' COCO weights (downloaded the first time), 150 epochs
+  at 640 px, batch 16, stopping early when validation hasn't improved in 40. For ~1,000 frames
+  that should be well under an hour on a 5070 Ti (not yet timed). `--model yolo11n-pose.pt` is the small one, about 3x cheaper on the
+  server's CPU; try it if `s` turns out slow (the scorecard prints the club model's ms per frame).
+- Augmentation: left-right flips (the three points have no side, so each keeps its place:
+  `flip_idx: [0, 1, 2]`), brightness (`hsv_v`, brightness/contrast, gamma), motion blur (up to
+  21 px, any direction) and JPEG artefacts, on top of Ultralytics' mosaic, scaling and shifts.
+- The run goes to `train\runs\club` (`results.png`, validation pictures, `weights\best.pt`),
+  and the ONNX model to `public\models\club-yolo-pose.onnx`. Copy that file to the server's
+  `D:\SwingClips\app\public\models` (not in git).
+- Optional first pass on the public Roboflow **golf_club_pose** set (export it as "YOLOv8 Pose",
+  unzip): `club_train.py --data ... --pretrain D:\golf_club_pose\data.yaml`. Its keypoints may not be
+  grip, hosel, head in that order: run it once without `--pretrain-points` and it prints the set's
+  classes and keypoints, then give their order, e.g. `--pretrain-points 0,-1,1` (-1 for one it
+  doesn't have). If its keypoints aren't these points at all (say, only the shaft's ends), skip it.
+  Compare the scorecard with and without it; the pretraining only helps if it helps there.
+
+**4. Scoring it**, on the server (or any PC with the clips, labels and the model file):
+
+```
+cd /d D:\SwingClips\app\server
+.venv\Scripts\python.exe eval.py --rerun --only-val D:\SwingClips\club-dataset\dataset.json
+set SWINGCLIPS_CLUB_BACKEND=yolo
+.venv\Scripts\python.exe eval.py --rerun --compare --only-val D:\SwingClips\club-dataset\dataset.json
+```
+
+- `--only-val` scores only the dataset's validation swings, which the model never trained on.
+  Without it, most of the labeled frames were in the training set and the numbers look better
+  than they'll be on new swings. (Drop it to see everything, on both runs.) Even better, now and
+  then: label a few new swings after training and score them.
+- The first run, without the setting, is the ray-casting baseline (skip it if you have one from
+  this `pose.py` over the same validation swings: `--compare` on its own picks the newest
+  baseline over the same clips). `--compare` then shows every headline number before and after: the club table's
+  **% found** and **angle error by phase** (downswing is the one to watch), and P2 / P6 / P8 timing,
+  which hangs on the shaft.
+- A new table, **Clubhead**, only with the model: the clubhead's distance from your label as a %
+  of nose-to-ankle height by phase, with blurred frames on their own. The page doesn't use the
+  clubhead yet; it's saved per frame in the pose file (`clubhead`: x, y, confidence).
+- The pose files and results carry the model's name and a hash of the file
+  (`club-yolo-pose@1a2b3c4d`), so every retraining gets its own `--rerun` cache and result file.
+  `SWINGCLIPS_CLUB_MODEL` points at another file to compare two models. `set SWINGCLIPS_CLUB_BACKEND=`
+  goes back to the ray casting in that window.
+- Using it on the server for real: set `SWINGCLIPS_CLUB_BACKEND=yolo` for the server itself, and
+  bump `VERSION` in `pose.py` so every clip is analyzed again. Only once the scorecard says it's better.
 
 ### `relay/` - launch monitor to server (runs on the sim laptop, nothing to install)
 - **`square-watcher.ps1`** (used): Square Golf's Windows app saves every shot to a plain SQLite

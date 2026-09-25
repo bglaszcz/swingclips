@@ -1,8 +1,9 @@
 """Stand-ins for real model weights and real clips, for testing models.py and pose.py's plumbing.
 
 simcc_model() writes a tiny ONNX model shaped like RTMPose (input 1x3xHxW, SimCC outputs 1xKx2W and
-1xKx2H) that puts each keypoint on the brightest pixel of one colour of its input. It's written as
-raw protobuf, so the tests need only onnxruntime, not the onnx package.
+1xKx2H) that puts each keypoint on the brightest pixel of one colour of its input; club_model() one
+shaped like the club model's YOLO pose export. They're written as raw protobuf, so the tests need
+only onnxruntime, not the onnx package.
 
 clip() writes a short video of a drawn figure with a red dot moving across the chest and a blue one
 between the feet, for the fake model to find: the ankles on the blue one, the rest on the red. mediapipe() stands in for MediaPipe's pose landmarker: it finds the figure by its colour and
@@ -87,6 +88,47 @@ def simcc_model(path, width: int = 192, height: int = 256, channels=(0,) * 17) -
              + _bytes(11, _value_info("input", (1, 3, height, width)))
              + _bytes(12, _value_info("simcc_x", (1, keypoints, 2 * width)))
              + _bytes(12, _value_info("simcc_y", (1, keypoints, 2 * height))))
+    model = _int(1, 8) + _bytes(2, "swingclips-tests") + _bytes(7, graph) + _bytes(8, _bytes(1, "") + _int(2, 13))
+    with open(path, "wb") as f:
+        f.write(model)
+
+
+def club_model(path, size: int = 320, score: float = 0.9) -> None:
+    """A YOLO11 pose export's shape for the club (input 1x3xSxS, output 1 x 14 x anchors): two
+    anchors, the first with a box score of `score` and its grip end on the brightest red pixel, the
+    hosel on the brightest green, the clubhead on the brightest blue; each point's visibility is
+    how bright that is past 0.7 of full. The second anchor is a weak (0.1) decoy with its points
+    in a corner, which the runner must pass over."""
+    nodes = [
+        _node("Gather", ["images", "channels"], ["planes"], axis=1),
+        _node("ReduceMax", ["planes"], ["cols"], axes=[2], keepdims=0),
+        _node("ArgMax", ["cols"], ["xi"], axis=2, keepdims=0),
+        _node("Cast", ["xi"], ["x"], to=FLOAT),
+        _node("ReduceMax", ["planes"], ["rows"], axes=[3], keepdims=0),
+        _node("ArgMax", ["rows"], ["yi"], axis=2, keepdims=0),
+        _node("Cast", ["yi"], ["y"], to=FLOAT),
+        _node("ReduceMax", ["planes"], ["peak"], axes=[2, 3], keepdims=0),
+        _node("Sub", ["peak", "floor"], ["over"]),
+        _node("Mul", ["over", "gain"], ["overg"]),
+        _node("Relu", ["overg"], ["v"]),
+        _node("Unsqueeze", ["x", "last"], ["x3"]),
+        _node("Unsqueeze", ["y", "last"], ["y3"]),
+        _node("Unsqueeze", ["v", "last"], ["v3"]),
+        _node("Concat", ["x3", "y3", "v3"], ["xyv"], axis=2),
+        _node("Reshape", ["xyv", "kp_shape"], ["kp"]),
+        _node("Concat", ["box", "kp"], ["row"], axis=1),
+        _node("Reshape", ["row", "col_shape"], ["col"]),
+        _node("Concat", ["col", "decoy"], ["output0"], axis=2),
+    ]
+    decoy = np.array([size / 2, size / 2, 10, 10, 0.1] + [2, 2, 1] * 3, np.float32).reshape(1, 14, 1)
+    consts = {"channels": np.array([0, 1, 2], np.int64), "floor": np.array([0.7], np.float32),
+              "gain": np.array([1 / 0.3], np.float32), "last": np.array([2], np.int64),
+              "kp_shape": np.array([1, 9], np.int64), "col_shape": np.array([1, 14, 1], np.int64),
+              "box": np.array([[size / 2, size / 2, size / 4, size / 4, score]], np.float32), "decoy": decoy}
+    graph = (b"".join(_bytes(1, n) for n in nodes) + _bytes(2, "fake-club-yolo")
+             + b"".join(_bytes(5, _tensor(k, v)) for k, v in consts.items())
+             + _bytes(11, _value_info("images", (1, 3, size, size)))
+             + _bytes(12, _value_info("output0", (1, 14, 2))))
     model = _int(1, 8) + _bytes(2, "swingclips-tests") + _bytes(7, graph) + _bytes(8, _bytes(1, "") + _int(2, 13))
     with open(path, "wb") as f:
         f.write(model)

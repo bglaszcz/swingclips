@@ -9,6 +9,10 @@ club shaft's angle in each frame (club.py).
 SWINGCLIPS_POSE_BACKEND picks another body model to place the 2D landmarks (models.py), for scoring
 with eval.py --rerun; MediaPipe still runs alongside for everything else. The default, mediapipe,
 leaves the output exactly as it was.
+
+SWINGCLIPS_CLUB_BACKEND=yolo has a trained club model (models.py) find the shaft instead of the ray
+casting in club.py, and saves its clubhead per frame too; raycast, the default, leaves the output
+exactly as it was.
 """
 import os
 import time
@@ -83,20 +87,23 @@ def decode_range(container, start_pts, end_pts):
 def run_chunk(args):
     """Pose and shaft scores for frames with start_pts <= pts < end_pts.
 
-    Returns ([(t seconds, landmarks | None, world landmarks | None, shaft scores | None)], timing).
+    Returns ([(t seconds, landmarks | None, world landmarks | None, shaft scores | None,
+    clubhead | None)], timing).
     World landmarks are MediaPipe's 3D estimate: metres, origin between the hips, z away from the
     camera. With a body model (`body` = (backend name, .onnx path)), its points replace MediaPipe's
-    2D landmarks where it has them, the shaft scores included. timing: {frames, mediapipe, body} in
-    seconds spent.
+    2D landmarks where it has them, the shaft scores included. With a club model (`clubm`, its .onnx
+    path) the shaft scores come from it, and the clubhead with them. timing: {frames, mediapipe, body,
+    club} in seconds spent.
     """
     cv2.setNumThreads(1)
     import mediapipe as mp
     from mediapipe.tasks.python import BaseOptions
     from mediapipe.tasks.python.vision import PoseLandmarker, PoseLandmarkerOptions, RunningMode
 
-    path, start_pts, end_pts, rotation, bg, body = args
+    path, start_pts, end_pts, rotation, bg, body, clubm = args
     tracker = models.BodyTracker(models.load(*body)) if body else None
-    timing = {"frames": 0, "mediapipe": 0.0, "body": 0.0}
+    clubber = models.ClubRunner(clubm) if clubm else None
+    timing = {"frames": 0, "mediapipe": 0.0, "body": 0.0, "club": 0.0}
     lm = PoseLandmarker.create_from_options(PoseLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=MODEL), running_mode=RunningMode.VIDEO, num_poses=1,
         output_segmentation_masks=True))
@@ -109,7 +116,7 @@ def run_chunk(args):
                 rgb = cv2.resize(full, None, fx=SCALE, fy=SCALE, interpolation=cv2.INTER_AREA)
                 if rotation in ROTATE_CW:
                     rgb = cv2.rotate(rgb, ROTATE_CW[rotation])
-                    if tracker is not None:
+                    if tracker is not None or clubber is not None:
                         full = cv2.rotate(full, ROTATE_CW[rotation])
                 t = f.pts * tb
                 started = time.perf_counter()
@@ -118,7 +125,7 @@ def run_chunk(args):
                     int(round(t * 1000)))
                 timing["frames"] += 1
                 timing["mediapipe"] += time.perf_counter() - started
-                landmarks = world = shaft = None
+                landmarks = world = shaft = head = None
                 if res.pose_landmarks:
                     landmarks = [(p.x, p.y, p.visibility) for p in res.pose_landmarks[0]]
                     if tracker is not None:
@@ -129,11 +136,17 @@ def run_chunk(args):
                         timing["body"] += time.perf_counter() - started
                     if res.pose_world_landmarks:
                         world = [(p.x, p.y, p.z) for p in res.pose_world_landmarks[0]]
-                    if bg is not None and res.segmentation_masks:
+                    if clubber is not None:
+                        started = time.perf_counter()
+                        found = clubber.find(full, landmarks)
+                        shaft = club.model_scores(found, landmarks, full.shape[1], full.shape[0])
+                        head = club.clubhead(found)
+                        timing["club"] += time.perf_counter() - started
+                    elif bg is not None and res.segmentation_masks:
                         shaft = shaft_scores(f, rotation, landmarks, res.segmentation_masks[0].numpy_view(), bg)
                 elif tracker is not None:
                     tracker.frame(full, None)            # lost: the next crop comes from MediaPipe
-                out.append((t, landmarks, world, shaft))
+                out.append((t, landmarks, world, shaft, head))
     finally:
         lm.close()
     return out, timing
@@ -391,6 +404,12 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
         body = (backend, str(models.model_path(backend)))
         if not os.path.isfile(body[1]):
             raise FileNotFoundError(f"{body[1]} is missing: run fetch_models.py first")
+    clubm = None
+    if models.club_backend() != models.CLUB_DEFAULT:
+        clubm = str(models.club_model_path())
+        if not os.path.isfile(clubm):
+            raise FileNotFoundError(f"{clubm} is missing: train it (HOME-SETUP.md, \"Training the club model\") "
+                                    "or point SWINGCLIPS_CLUB_MODEL at it")
     keys, _, rotation = probe(path)
     bg = club.background(path, rotation, ROTATE_CW)
     if not keys:
@@ -401,17 +420,18 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
         start = keys[g[0]]
         end = keys[g[-1] + 1] if g[-1] + 1 < len(keys) else None
         jobs.append((path, start, end, rotation))
-    chunks = list(pool.map(run_chunk, [j + (bg, body) for j in jobs]))
+    chunks = list(pool.map(run_chunk, [j + (bg, body, clubm) for j in jobs]))
     frames = sorted((fr for chunk, _ in chunks for fr in chunk), key=lambda fr: fr[0])
     ms = per_frame_ms([timing for _, timing in chunks])
     print(f"pose: {os.path.basename(path)}: {len(frames)} frames, MediaPipe {ms['mediapipe']:.1f} ms/frame"
           + (f", {models.stamp(backend)} {ms['body']:.1f} ms/frame" if body else "")
+          + (f", club model {ms['club']:.1f} ms/frame" if clubm else "")
           + f" (in each of {len(jobs)} worker(s))", flush=True)
     ball, impact = find_impact(path, rotation, frames, jobs, pool)
     times = [t for t, *_ in frames]
-    smoothed = smooth(times, [lm for _, lm, _, _ in frames])
-    world = smooth(times, [w for _, _, w, _ in frames], spatial=3)
-    shaft = club.track(times, [s for *_, s in frames])
+    smoothed = smooth(times, [lm for _, lm, *_ in frames])
+    world = smooth(times, [w for _, _, w, *_ in frames], spatial=3)
+    shaft = club.track(times, [s for _, _, _, s, _ in frames])
     first = next((lm for lm in smoothed if lm is not None), None)
     h, w = (bg.shape[:2] if bg is not None else (1, 1))
     out = {
@@ -431,14 +451,28 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
                     "club": list(c) if c else None}
                    for t, lm, w, c in zip(times, smoothed, world, shaft)],
     }
-    if body:
-        # Which model placed the 2D landmarks, and its cost; MediaPipe's output has neither.
-        out = {"version": VERSION, "model": models.stamp(backend),
-               "msPerFrame": {"mediapipe": round(ms["mediapipe"], 1), "body": round(ms["body"], 1)}, **out}
+    if clubm:
+        # clubhead: [x, y, confidence 0-1] in picture units where the club model is sure of it, else
+        # null. Straight from the model, per frame: not smoothed or tracked (the shaft angle is).
+        for fr, (*_, head) in zip(out["frames"], frames):
+            fr["clubhead"] = head
+    if body or clubm:
+        # Which models placed the 2D landmarks and the club, and their cost; the defaults' output
+        # has none of it.
+        stamps = {"model": models.stamp(backend)} if body else {}
+        if clubm:
+            stamps["clubModel"] = models.club_stamp(clubm)
+        cost = {"mediapipe": round(ms["mediapipe"], 1)}
+        if body:
+            cost["body"] = round(ms["body"], 1)
+        if clubm:
+            cost["club"] = round(ms["club"], 1)
+        out = {"version": VERSION, **stamps, "msPerFrame": cost, **out}
     return out
 
 
 def per_frame_ms(timings):
-    """Milliseconds per frame spent in MediaPipe and in the body model, over every worker's frames."""
+    """Milliseconds per frame spent in MediaPipe, the body model and the club model, over every
+    worker's frames."""
     n = max(1, sum(t["frames"] for t in timings))
-    return {k: 1000 * sum(t[k] for t in timings) / n for k in ("mediapipe", "body")}
+    return {k: 1000 * sum(t[k] for t in timings) / n for k in ("mediapipe", "body", "club")}
