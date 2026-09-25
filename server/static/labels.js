@@ -472,6 +472,8 @@
 
   window.Labels = {
     drawOn,
+    /** Labeling mode on, for the swing on screen (the Labels view opens swings this way). */
+    start() { if (!on) setOn(true); },
     /** Another swing was opened: labels follow its clips, starting on the face-on angle. */
     opened() { active = "main"; lastFrameKey = null; ballArmed = false; message = ""; render(); },
   };

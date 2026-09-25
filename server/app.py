@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import labelcheck
 import models
 import pose
 import quality
@@ -980,6 +981,17 @@ def list_labels():
             n = 2 if f.name.endswith(".pass2.json") else 1
             out[str(n)].append(f.name[:-len(".pass2.json")] if n == 2 else f.name[:-len(".json")])
     return out
+
+
+@app.get("/api/labels/summary")
+def labels_summary():
+    """Every label file checked (labelcheck.py): moments, point frames, the ball, possible slips."""
+    def saved(name: str) -> Path | None:
+        for path in (pose_file(name), TRASH_DIR / "pose" / pose_file(name).name):
+            if path.is_file():
+                return path
+        return None
+    return {"clips": labelcheck.summary(LABELS_DIR, saved), "frameDone": labelcheck.FRAME_DONE}
 
 
 @app.get("/api/labels/{name}")

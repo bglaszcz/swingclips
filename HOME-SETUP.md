@@ -359,6 +359,13 @@ to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of 
   address). **[ ]** step through about a dozen suggested frames, most of them in the downswing.
   **D** switches between the two angles (the arrow keys then step that angle's own frames). Left
   and right are the golfer's own: face-on, their left is on the picture's right.
+- **Labels** (button at the top; `static/labelview.js`, checks in `labelcheck.py`): progress toward
+  the goals (key moments on both angles of 20 swings, points on 10), which clubs, light, shutter
+  settings and days the labeled swings cover, each labeled swing with what's done per angle, and
+  what to check: moments out of order, left/right that look swapped against the tracker, the ball
+  far from the tracker's, impact away from the ball-gone frame, joints all marked blurry, the other
+  angle not labeled. "Label next" suggests unlabeled swings from what's least covered. Tap a swing
+  to open it in labeling mode.
 - Saved as you go, one file per clip, in `D:\SwingClips\labels` (`<clip>.json`). **Pass 2** is a
   second labeling, done days later without looking at the first (`<clip>.pass2.json`): the
   difference is how consistent the labels themselves are, the finest any tracker can be scored.

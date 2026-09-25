@@ -117,6 +117,8 @@ function showView(which) {
   document.getElementById("shutter").hidden = which !== "shutter";
   document.getElementById("shutter-btn").classList.toggle("on", which === "shutter");
   document.getElementById("practice").hidden = which !== "practice";
+  document.getElementById("labelview").hidden = which !== "labelview";
+  document.getElementById("labels-btn").classList.toggle("on", which === "labelview");
   document.getElementById("practice-btn").classList.toggle("on", which === "practice");
   viewer.hidden = which !== "swing" || !current;
   tipEl.hidden = pTipEl.hidden = true;
@@ -129,7 +131,7 @@ function showView(which) {
 /** Called when a swing is opened: back to the swing view. */
 function leaveTrendViews() {
   if (!trendsKey && !progressOpen && document.getElementById("setup").hidden && document.getElementById("shutter").hidden
-      && document.getElementById("practice").hidden) return;
+      && document.getElementById("practice").hidden && document.getElementById("labelview").hidden) return;
   showView("swing");
   renderList();
 }
