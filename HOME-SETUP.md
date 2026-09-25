@@ -16,12 +16,20 @@ monitor's numbers for that shot.
 ## A session
 
 1. **Server** - running (see "Server" below for updates).
-2. **Laptop** - open Square Golf's app on the driving range, then run `Square watcher.cmd`
-   (in `Dropbox\SwingClips`).
-3. **Phones** - open **SwingClips** on each, check the angle (Face-on / Down the line),
-   sensitivity and mode, then **Start recording** on both.
-4. **Review** - `http://homeserver:8000` on a PC, or `http://192.168.86.250:8000` on a phone.
-5. **Practice** (optional) - on the review page, **Practice**: pick one number and a range, **Start
+2. **Phones** - open **SwingClips** on each (capture app 0.6); nothing to press, they stay on their
+   stands. Stand at the ball: **one** phone (the one with Practice voice on, face-on by default)
+   says how both cameras see you, only when it changes: "Both cameras look good", or "Face-on good.
+   Down the line: tilt the phone up".
+3. **Laptop** - the launcher starts the Square watcher and Square Golf's app (or open Square's app
+   on the driving range and run `Square watcher.cmd`, in `Dropbox\SwingClips`).
+4. **Start** - on the review page (`http://homeserver:8000` on a PC, `http://192.168.86.250:8000` on
+   a phone), the **Ready** bar at the top: **Start both**. Each phone says "Recording". (Or turn
+   on **Auto-start** on the phones: each starts once its own camera check is good.)
+5. **Hit balls** once Ready is green. After the first analyzed swing (about a minute) the speaking
+   phone says "First swing: both cameras saw you, Square paired", or what's wrong ("Down the line:
+   ball not found", "No Square shot"). After that it only speaks up about problems.
+6. **Done** - **Stop both** (each phone says "Stopped"), or just close the apps.
+7. **Practice** (optional) - on the review page, **Practice**: pick one number and a range, **Start
    practice**, then **Voice check**. The face-on phone says each swing's number (see "Practice mode").
 
 ## Pieces
@@ -44,8 +52,11 @@ monitor's numbers for that shot.
 - **Camera setup** (`CameraSetup.kt`): while not recording, a still of the preview (PixelCopy,
   upright, ~960 px) goes to `POST /api/setup/<angle>` about once a second. The server finds the
   golfer (MediaPipe on the still, ~25 ms) and judges it with `setupAdvice` in summary.js; the phone
-  says the verdict out loud (Android text-to-speech) once it holds for two stills, repeats a problem
-  every 12 s, and shows it under the status line. When the golfer has held still for two stills, the
+  shows it under the status line. Who says it (0.6): by default the server combines both phones'
+  verdicts and one phone says them (see "Ready panel" below); with **Setup voice: this phone** the
+  phone says its own verdict out loud (Android text-to-speech) once it holds for two stills and
+  repeats a problem every 12 s, as before 0.6. A phone set to "combined" that can't reach a 0.6
+  server speaks for itself too. When the golfer has held still for two stills, the
   phone focuses and meters on them (AF regions + trigger, mapped from the upright picture to the
   sensor's 16:9 band) and holds that focus (AF mode AUTO) until they're somewhere else in the
   picture. Tested on the S21: "focused and locked" about 0.6 s after the trigger. The review page's
@@ -424,6 +435,64 @@ toward the ball". The phones face away from you, so voice is the channel.
   `POST /api/practice` (`{on, metric, min, max, club, streak}`), `POST /api/practice/test`,
   `GET /api/practice/latest`.
 
+### Ready panel: both phones from the review page (capture app 0.6)
+One place to see "ready", and fewer walks to the phones. The phones face away from you, so the
+review page starts them and one of them does the talking.
+
+- **The Ready bar** (top of the review page, `static/status.js`): a dot and a line (green "Ready",
+  or the first problem), a dot per part, and **Start both** / **Stop both**. Tap the line for a row
+  each (it remembers open or closed):
+  - **each phone**: connected, recording, mode, shutter setting and what the camera really used,
+    battery (amber under 20% when not charging), clips waiting to upload (amber from 3), free
+    storage, which phone speaks, and its **Start** / **Stop** with how the last command went
+    ("Starting...", "Started", "Couldn't start: the camera isn't running yet", "no answer from the
+    phone"). A phone seen in the last 12 hours is expected: Ready needs it recording.
+  - **Square**: the laptop's heartbeat (the watcher), whether Square's app is running, the last shot.
+    No heartbeat yet is amber (an older watcher), a stopped watcher or a closed Square app is red.
+  - **Framing**: the latest camera setup verdict per phone. Only a live one (while the phone is in
+    setup) can turn it red: the last still before recording is often you walking away from the ball.
+  - **First swing**: the session's first swing check (below), once there is one.
+  - **Server**: clips waiting for pose (amber from 3).
+- **Start / Stop from the page**: the phone does exactly what its own Start/Stop button does, with
+  its saved settings, and says "Recording" or "Stopped". It refuses to start while one of its
+  settings dialogs is open or its camera is restarting (a setting just changed), or after a camera
+  error, and says why ("Can't start: ..."); the page shows the same. A command not answered in 20 s
+  is "no answer" and isn't carried out later. **Auto-start** (a phone setting, off by default):
+  "Start recording when the camera check is good": once per opening of the app, when its own camera
+  check has held good for two stills. After a Stop it doesn't start again by itself until the app is
+  opened again.
+- **One voice for camera setup**: the server combines the verdicts of the phones in setup (not
+  recording) and set to **Setup voice: combined** (the default), and the speaking phone says them,
+  only when they change (held for 1.5 s, never repeated): "Both cameras look good", "Face-on good.
+  Down the line: you're at the left edge: aim the phone more toward you." A phone starting to record
+  isn't announced. The speaking phone is the one with **Practice voice** on (face-on first); with
+  none, any connected phone. **Setup voice: this phone** gives a phone its own voice back (and
+  leaves it out of the combined one).
+- **First swing check**: a session starts when a phone starts recording while none was. After its
+  first swing is analyzed (both clips, the Square shot paired or 25 s gone by, the clip quality
+  measured or 2 minutes gone by), the speaking phone says one line from the camera check
+  (summary.js `cameraCheck`/`impactCheck`), quality.py's warnings and the shot pairing: "First swing:
+  both cameras saw you, Square paired", or the problems: "First swing. Down the line: ball not
+  found. No Square shot." ("you're out of the picture at the top" is the hands leaving the picture at
+  the top of the backswing; also "partly out of the picture", "near the edge", "small in the
+  picture", "too dark", "grainy", "flickering light" (only at a fixed shutter or when strong),
+  "no clip", "the Square watcher isn't running"). After that only problems, once each until they
+  clear: no Square shot on 2 swings in a row, a missing clip on 2 in a row, the same camera problem
+  on 3 in a row, a phone that stops answering while recording, 3+ clips waiting on a phone, a
+  battery under 10%.
+- **How**: each phone (while the app is open) posts `POST /api/phones/<angle>/poll?wait=10` with
+  its state as JSON (recording, mode, shutter, shutterUsed, exposure, battery, charging, freeMb,
+  version, pending, saved, practiceVoice, setupVoice, autoStart, busy, cameraError) and its answers
+  to commands (`acks`). The server keeps the latest per phone and holds the request (a long poll)
+  until it has a command or a sentence for that phone, or 10 s pass: so the phone reports in about
+  every 10 s and a command arrives within a quarter of a second. A phone not heard from for 30 s is
+  gone; closing the app sends a last report, so it shows closed at once. Pressing Start/Stop or
+  changing a setting on the phone reports right away. The laptop posts
+  `POST /api/relay/heartbeat` (`{source, squareRunning, lastShotAt, version}`); gone after 90 s.
+  `POST /api/phones/command` (`{action: "start" | "stop", angle: "face" | "dtl" | "both"}`),
+  `GET /api/status` (the panel). All in `server/status.py`; tests in `server/tests/test_status.py`
+  and `capture/app/src/test/.../PhoneControlTest.kt`.
+
 ### `server/` - the home server (Python, FastAPI)
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON, and its quality record), `shots.jsonl` (launch
   monitor shots), `clubs.json` (clubs corrected on the review page), `swings.json` (each swing's
@@ -716,7 +785,8 @@ set SWINGCLIPS_CLUB_BACKEND=yolo
 - **`square-watcher.ps1`** (used): Square Golf's Windows app saves every shot to a plain SQLite
   file, `%USERPROFILE%\AppData\LocalLow\Invant\Square Golf\SQGDB.bytes` (`IVShotLog`: ball data,
   flight result, club data as JSON). The watcher reads new rows read-only via Windows'
-  `winsqlite3.dll` and posts them to `/api/shots`. Units: m/s and m (converted to mph and yd);
+  `winsqlite3.dll` and posts them to `/api/shots`. The laptop's launcher also posts a heartbeat,
+  `POST /api/relay/heartbeat`, which the review page's Ready bar shows. Units: m/s and m (converted to mph and yd);
   spin axis and side spin are positive-left in Square's data and flipped to positive-right.
 - **`shot-listener.ps1`** (alternative): stands in for GSPro on 127.0.0.1:921 so Square's
   official **SQG GSPro Connect** can be used instead of Square's app. Sends GSPro's player info

@@ -11,6 +11,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
+import android.os.BatteryManager
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
@@ -34,6 +35,8 @@ import android.widget.TextView
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class MainActivity : Activity() {
 
@@ -54,6 +57,17 @@ class MainActivity : Activity() {
     private lateinit var practiceButton: Button
     private lateinit var practiceView: TextView
     private lateinit var practiceVoice: PracticeVoice
+    private lateinit var phoneLink: PhoneLink
+    private lateinit var setupVoiceButton: Button
+    private lateinit var autoStartButton: Button
+    private val autoStart = AutoStart()
+    /** A settings dialog is open: the review page's Start is refused until it's closed. */
+    @Volatile private var settingOpen = false
+    /** The camera's last error since it was opened (reported to the review page). */
+    @Volatile private var cameraError: String? = null
+    /** What the camera really used for exposure (e.g. "1/1000 s, ISO 800"), and how ("manual", "auto"...). */
+    @Volatile private var shutterUsed: String? = null
+    @Volatile private var exposureKind: String? = null
 
     private val main = Handler(Looper.getMainLooper())
     private val saver = HandlerThread("saver").apply { start() }
@@ -96,10 +110,19 @@ class MainActivity : Activity() {
         uploader = Uploader(outbox, ::serverUrl) { pending, message -> main.post { showUpload(pending, message) } }
         uploader.start()
         checkServer()
-        cameraSetup = CameraSetup(this, preview, ::serverUrl, ::angle, { recorder }, { !armed && resumed }) { ok, text ->
-            setupView.text = text
-            setupView.setTextColor(if (ok) Color.rgb(74, 222, 128) else Color.rgb(245, 158, 11))
-        }
+        cameraSetup = CameraSetup(this, preview, ::serverUrl, ::angle, { recorder }, { !armed && resumed },
+            onVerdict = { ok, text ->
+                setupView.text = text
+                setupView.setTextColor(if (ok) Color.rgb(74, 222, 128) else Color.rgb(245, 158, 11))
+            },
+            ownVoice = { PhoneControl.speaksOwnSetup(setupVoice(), ::phoneLink.isInitialized && phoneLink.linked) },
+            onSteady = { ok -> if (autoStart.shouldStart(autoStartOn(), ok, armed)) autoStartNow() },
+        )
+        phoneLink = PhoneLink(::serverUrl, ::angle,
+            state = { onMain(1000) { linkState() } ?: linkState() },
+            onCommand = { cmd -> onMain(3000) { doCommand(cmd) } ?: CommandAck(cmd.id, false, "the phone didn't answer in time") },
+            say = { s -> main.post { if (s.flush) cameraSetup.sayNow(s.text) else cameraSetup.say(s.text) } },
+        )
         practiceVoice = PracticeVoice(::serverUrl, ::angle, ::practiceVoiceOn, { cameraSetup.say(it) }) { text ->
             main.post { practiceView.text = text }
         }
@@ -114,6 +137,8 @@ class MainActivity : Activity() {
         cameraSetup.reset()
         cameraSetup.start()
         practiceVoice.start()
+        autoStart.reset()
+        phoneLink.start()
     }
 
     override fun onPause() {
@@ -122,6 +147,8 @@ class MainActivity : Activity() {
         setArmed(false)
         cameraSetup.stop()
         practiceVoice.stop()
+        phoneLink.stop()
+        phoneLink.closing(linkState())
         stopSession()
         super.onPause()
     }
@@ -156,8 +183,11 @@ class MainActivity : Activity() {
             setStatus("Starting camera…", Color.WHITE)
             return
         }
+        cameraError = null
+        shutterUsed = null
+        exposureKind = null
         recorder = ReplayRecorder(this, cam.cameraId, m, preview.holder.surface, PRE_S + POST_S + 2.0,
-            onError = { msg -> main.post { setStatus("Camera problem: $msg", Color.rgb(245, 158, 11)) } },
+            onError = { msg -> main.post { cameraError = msg; setStatus("Camera problem: $msg", Color.rgb(245, 158, 11)) } },
             shutter = shutter(),
             onExposure = { report -> main.post { showExposure(report, m) } },
         ).also { it.start() }
@@ -242,6 +272,8 @@ class MainActivity : Activity() {
 
     private fun setArmed(on: Boolean) {
         armed = on
+        if (on) autoStart.started()
+        if (::phoneLink.isInitialized) phoneLink.poke()   // the review page hears of it now
         // Setup checks (and speech) only run while not recording; start the next setup fresh.
         if (::cameraSetup.isInitialized && !on) cameraSetup.reset()
         if (::setupView.isInitialized) setupView.visibility = if (on) View.GONE else View.VISIBLE
@@ -282,6 +314,72 @@ class MainActivity : Activity() {
 
     private val restoreState = Runnable { showState() }
 
+    // ---- The review page: Start/Stop from afar, and what this phone reports (PhoneLink) ----
+
+    private fun phoneNow() = PhoneNow(armed, recorder != null, if (settingOpen) PhoneControl.BUSY_SETTING else null, cameraError)
+
+    /** A command from the review page: exactly what the Start/Stop button does, then says so. */
+    private fun doCommand(cmd: PhoneCommand): CommandAck {
+        val d = PhoneControl.decide(cmd.action, phoneNow())
+        d.arm?.let { setArmed(it) }
+        if (d.ok) d.say?.let { cameraSetup.say(it) }
+        else cameraSetup.say("Can't ${cmd.action}: ${d.error}")
+        return CommandAck(cmd.id, d.ok, d.error)
+    }
+
+    /** The camera check held good and "Start recording when the camera check is good" is on. */
+    private fun autoStartNow() {
+        val d = PhoneControl.decide(PhoneControl.START, phoneNow())
+        if (d.arm != true) return
+        setArmed(true)
+        cameraSetup.say("Recording")
+    }
+
+    /** Runs [block] on the main thread and waits for it (null if it took longer than [timeoutMs]). */
+    private fun <T> onMain(timeoutMs: Long, block: () -> T): T? {
+        if (Looper.myLooper() == Looper.getMainLooper()) return block()
+        val done = CountDownLatch(1)
+        var out: T? = null
+        main.post { try { out = block() } finally { done.countDown() } }
+        return if (done.await(timeoutMs, TimeUnit.MILLISECONDS)) out else null
+    }
+
+    private val appVersion by lazy { runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() }
+
+    /** What this phone is doing, for the review page's Ready panel (server/status.py reads these). */
+    private fun linkState(): Map<String, Any?> {
+        val battery = getSystemService(BatteryManager::class.java)
+        return mapOf(
+            "recording" to armed,
+            "mode" to mode?.label,
+            "shutter" to Exposure.label(shutter()),
+            "shutterUsed" to shutterUsed,
+            "exposure" to exposureKind,
+            "battery" to battery?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it in 0..100 },
+            "charging" to battery?.isCharging,
+            "freeMb" to filesDir.usableSpace / 1_000_000,
+            "version" to appVersion,
+            "pending" to (outbox.listFiles { f -> f.name.endsWith(".mp4") }?.size ?: 0),
+            "saved" to saved,
+            "practiceVoice" to practiceVoiceOn(),
+            "setupVoice" to setupVoice(),
+            "autoStart" to autoStartOn(),
+            "busy" to if (settingOpen) PhoneControl.BUSY_SETTING else null,
+            "cameraError" to cameraError?.let { PhoneControl.cameraProblem(it) },
+        )
+    }
+
+    /** A settings dialog: while it's open the review page can't start this phone. */
+    private fun AlertDialog.Builder.showSetting() {
+        settingOpen = true
+        phoneLink.poke()
+        setOnDismissListener {
+            settingOpen = false
+            phoneLink.poke()
+        }
+        show()
+    }
+
     // ---- Settings ----
 
     private fun serverUrl() = prefs.getString("server", DEFAULT_SERVER) ?: DEFAULT_SERVER
@@ -315,7 +413,7 @@ class MainActivity : Activity() {
                 d.dismiss()
                 restartSession()
             }
-            .show()
+            .showSetting()
     }
 
     private fun updateModeButton() {
@@ -348,7 +446,7 @@ class MainActivity : Activity() {
                 // Restarting meters and locks again with the new setting.
                 restartSession()
             }
-            .show()
+            .showSetting()
     }
 
     private fun updateShutterButton() {
@@ -392,6 +490,8 @@ class MainActivity : Activity() {
         }
         exposureView.text = shown
         exposureView.setTextColor(if (ok) Color.rgb(74, 222, 128) else Color.rgb(245, 158, 11))
+        shutterUsed = used
+        exposureKind = r.kind
         cameraSetup.say(said)
     }
 
@@ -408,7 +508,7 @@ class MainActivity : Activity() {
                 updatePracticeButton()   // the default follows the angle
                 d.dismiss()
             }
-            .show()
+            .showSetting()
     }
 
     private fun updateAngleButton() {
@@ -433,7 +533,7 @@ class MainActivity : Activity() {
                 practiceVoice.restart()
             }
             .setNegativeButton("Cancel", null)
-            .show()
+            .showSetting()
     }
 
     /**
@@ -447,10 +547,41 @@ class MainActivity : Activity() {
     private fun togglePracticeVoice() {
         prefs.edit().putBoolean("practice_voice", !practiceVoiceOn()).apply()
         updatePracticeButton()
+        phoneLink.poke()
     }
 
     private fun updatePracticeButton() {
         practiceButton.text = if (practiceVoiceOn()) "Practice voice: on" else "Practice voice: off"
+    }
+
+    /**
+     * Who says the camera setup verdicts: "combined" (the default: the server says both phones'
+     * together, through the phone that speaks) or "own" (each phone says its own, as before 0.6).
+     */
+    private fun setupVoice() = PhoneControl.setupVoice(prefs.getString("setup_voice", null))
+
+    private fun toggleSetupVoice() {
+        val next = if (setupVoice() == PhoneControl.VOICE_OWN) PhoneControl.VOICE_COMBINED else PhoneControl.VOICE_OWN
+        prefs.edit().putString("setup_voice", next).apply()
+        updateSetupVoiceButton()
+        phoneLink.poke()
+    }
+
+    private fun updateSetupVoiceButton() {
+        setupVoiceButton.text = if (setupVoice() == PhoneControl.VOICE_OWN) "Setup voice: this phone" else "Setup voice: combined"
+    }
+
+    /** "Start recording when the camera check is good" (off unless turned on). */
+    private fun autoStartOn() = prefs.getBoolean("auto_start", false)
+
+    private fun toggleAutoStart() {
+        prefs.edit().putBoolean("auto_start", !autoStartOn()).apply()
+        updateAutoStartButton()
+        phoneLink.poke()
+    }
+
+    private fun updateAutoStartButton() {
+        autoStartButton.text = if (autoStartOn()) "Auto-start: on" else "Auto-start: off"
     }
 
     /** Says a sample result at the media volume (what speech uses), and shows that volume. */
@@ -621,6 +752,10 @@ class MainActivity : Activity() {
         // Practice mode: not a recording setting, so it stays usable while recording.
         practiceButton = button("") { togglePracticeVoice() }
         panel.addView(row(practiceButton, button("Voice check") { voiceCheck() }))
+        // Also not recording settings: who says the camera setup, and starting by itself once it's good.
+        setupVoiceButton = button("") { toggleSetupVoice() }.apply { textSize = 14f }
+        autoStartButton = button("") { toggleAutoStart() }.apply { textSize = 14f }
+        panel.addView(row(setupVoiceButton, autoStartButton))
         practiceView = TextView(this).apply { textSize = 12f; setTextColor(Color.rgb(160, 170, 165)) }
         panel.addView(practiceView)
         exposureView = TextView(this).apply { textSize = 12f; setPadding(0, dp(4), 0, 0) }
@@ -640,6 +775,8 @@ class MainActivity : Activity() {
         setSensitivity(prefs.getInt("sensitivity", 100))
         updateAngleButton()
         updatePracticeButton()
+        updateSetupVoiceButton()
+        updateAutoStartButton()
     }
 
     /** Fit the preview to the box with the recording's shape (portrait, so width and height swap). */

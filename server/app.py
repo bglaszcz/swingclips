@@ -47,6 +47,7 @@ import pose
 import quality
 import practice
 import setup
+import status
 import swing3d
 import swings
 import tri
@@ -89,6 +90,8 @@ records_lock = threading.Lock()
 
 # Name of the clip the worker is on right now, if any.
 pose_busy: str | None = None
+# Clips waiting for pose, as the worker last counted them (the Ready panel shows it).
+pose_queued = 0
 # Deleted but not yet moved: Windows can't move a file that's open (being analyzed, or streaming to a
 # browser), so these are hidden right away and moved as soon as they're free.
 pending_trash: set[str] = set()
@@ -224,15 +227,16 @@ def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False) -> 
 
 def pose_worker(stop: threading.Event):
     """Forever: find clips without pose results, newest first, and analyze them one at a time."""
-    global pose_busy
+    global pose_busy, pose_queued
     POSE_DIR.mkdir(parents=True, exist_ok=True)
     # Kept between clips so the worker processes only pay for importing MediaPipe once.
     pool = ProcessPoolExecutor(POSE_WORKERS)
     summarizer = None
     while not stop.is_set():
         retry_pending_trash()
-        todo = [p for p in clip_paths()
-                if pose_state(p.name) == "queued" and time.time() - p.stat().st_mtime > SETTLE_SECONDS]
+        queued = [p for p in clip_paths() if pose_state(p.name) == "queued"]
+        pose_queued = len(queued)
+        todo = [p for p in queued if time.time() - p.stat().st_mtime > SETTLE_SECONDS]
         if not todo:
             # Nothing new: analyze again, newest first, a clip whose pose came from another body model
             # (after SWINGCLIPS_POSE_BACKEND changed), so every swing is measured the same way.
@@ -532,6 +536,7 @@ async def lifespan(app: FastAPI):
     worker = threading.Thread(target=swing_worker, args=(stop,), daemon=True)
     worker.start()
     threading.Thread(target=practice_worker, args=(stop,), daemon=True).start()
+    threading.Thread(target=status_worker, args=(stop,), daemon=True).start()
     yield
     stop.set()
     worker.join(timeout=5)  # lets it close its JavaScript engine, which otherwise holds up the exit
@@ -742,6 +747,7 @@ SHOT_SLACK_S = 5.0
 
 @app.post("/api/shots")
 async def add_shot(request: Request):
+    global last_shot_at
     shot = await request.json()
     if not isinstance(shot, dict) or "received" not in shot or "ball" not in shot:
         raise HTTPException(400, "Expected a shot with 'received' and 'ball'")
@@ -754,6 +760,7 @@ async def add_shot(request: Request):
     SHOTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with files_lock, open(SHOTS_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(shot, separators=(",", ":")) + "\n")
+    last_shot_at = time.time()
     print(f"Shot: {shot.get('club')} ball {shot['ball'].get('speed')} mph", flush=True)
     return {"ok": True}
 
@@ -1150,9 +1157,14 @@ async def setup_still(angle: str, request: Request, rotation: int = 0):
     if not body or len(body) > 5_000_000:
         raise HTTPException(400, "Expected a JPEG")
     try:
-        return await asyncio.to_thread(camera_setup.judge, angle, body, rotation)
+        verdict = await asyncio.to_thread(camera_setup.judge, angle, body, rotation)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    # One phone says both verdicts together, when they change (status.py).
+    said = session_status.setup_verdicts(camera_setup.status())
+    if said:
+        print(f"Setup: {said}", flush=True)
+    return verdict
 
 
 @app.get("/api/setup")
@@ -1200,6 +1212,131 @@ def calib_status():
                                                for k, v in latest["cameras"].items()}}}
 
 
+# ---- Session status: the phones and the Square watcher report in (see status.py) ----
+session_status = status.Status()
+# When the newest shot came in (unix s): kept as shots arrive, read from shots.jsonl once at the start.
+last_shot_at: float | None = None
+_shots_read = False
+
+
+def newest_shot() -> float | None:
+    global last_shot_at, _shots_read
+    if last_shot_at is None and not _shots_read:
+        _shots_read = True
+        try:
+            with open(SHOTS_FILE, "rb") as f:
+                f.seek(max(0, f.seek(0, os.SEEK_END) - 8192))
+                for line in reversed(f.read().decode("utf-8", "replace").splitlines()):
+                    try:
+                        last_shot_at = datetime.fromisoformat(json.loads(line)["received"]).timestamp()
+                        break
+                    except (ValueError, KeyError, TypeError):
+                        continue
+        except OSError:
+            pass
+    return last_shot_at
+
+
+def status_worker(stop: threading.Event):
+    """Forever: time out unanswered commands, and while a session is open, check its swings."""
+    while not stop.is_set():
+        try:
+            status_tick()
+        except Exception:
+            traceback.print_exc()
+        stop.wait(2)
+
+
+def status_tick() -> list[str]:
+    """One look at the open session's swings (the first one's check, problems after); returns what was said."""
+    since = session_status.session_since()
+    if since is None:
+        return []
+    clips = listed_clips(since=since - PAIR_SLACK_S)
+    by_name = {c["name"]: c for c in clips}
+    swings_now = [dict(c) for c in clips
+                  if SWING_NAME.match(c["name"]) and not (c["partner"] and c["angle"] != "face")]
+    with records_lock:
+        records = {s["name"]: swing_records.get(s["name"]) for s in swings_now}
+    for s in swings_now:
+        s["t"] = recorded_at(CLIPS_DIR / s["name"])
+        partner = by_name.get(s["partner"] or "")
+        s["partnerPose"] = partner["pose"] if partner else None
+        rec = records[s["name"]]
+        # Only a record worked out with today's JavaScript and the swing's current partner.
+        if rec and rec.get("code") == swings_code and rec.get("partner") == s["partner"]:
+            if "error" in rec:
+                s["pose"], rec = "failed", None
+        else:
+            rec = None
+        s["record"] = rec
+        s["quality"] = {s["angle"]: s["quality"], **({"dtl": partner["quality"]} if partner else {})}
+    said = session_status.health_step(swings_now)
+    for text in said:
+        print(f"Status: {text}", flush=True)
+    return said
+
+
+@app.post("/api/phones/{angle}/poll")
+async def phone_poll(angle: str, request: Request, wait: float = Query(0, ge=0, le=status.POLL_WAIT_MAX_S)):
+    """A capture phone (0.6 and later) reports in: its state as JSON, with its answers to commands
+    ("acks"). Held open up to `wait` s until there's a command or something to say for it (a long
+    poll): {commands: [{id, action}], say: [{id, text, flush}], ms (the server's clock)}."""
+    if angle not in status.ANGLES:
+        raise HTTPException(404, "No such camera angle")
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "Expected JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Expected the phone's state")
+    session_status.heartbeat(angle, body)
+    give_up = time.monotonic() + wait
+    while not session_status.has_mail(angle) and time.monotonic() < give_up:
+        if await request.is_disconnected():
+            # The phone hung up to report something new: keep what's waiting for its next poll.
+            return Response(status_code=204)
+        await asyncio.sleep(0.25)
+    return session_status.take(angle)
+
+
+class PhoneCommand(BaseModel):
+    action: str
+    angle: str = "both"
+
+
+@app.post("/api/phones/command")
+def phone_command(body: PhoneCommand):
+    """Start or stop recording from the review page: {action: "start" | "stop", angle: "face" | "dtl" | "both"}.
+    Each phone's outcome so far (queued, or refused with why); its answer shows in /api/status."""
+    try:
+        out = session_status.command(body.action, body.angle)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    print("Phones: " + ", ".join(f"{r['action']} {r['angle']}: {r['error'] or 'sent'}" for r in out), flush=True)
+    return {"results": out}
+
+
+@app.post("/api/relay/heartbeat")
+async def relay_heartbeat(request: Request):
+    """The sim laptop's launcher: {source, squareRunning, lastShotAt, version}, about every 30 s."""
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "Expected JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Expected a heartbeat")
+    return {"ok": True, "ms": int(time.time() * 1000), "got": session_status.relay_heartbeat(body)}
+
+
+@app.get("/api/status")
+def get_status():
+    """The Ready panel (static/status.js): phones, Square, framing, the first swing's check, the pose queue."""
+    setup_now = {a: v and {k: x for k, x in v.items() if k not in ("lm", "focus")}
+                 for a, v in camera_setup.status().items()}
+    return session_status.snapshot(setup_now, {"queued": pose_queued, "busy": pose_busy}, newest_shot())
+
+
 @app.get("/api/pose/{name}")
 def get_pose(name: str):
     checked_clip(name)
@@ -1221,7 +1358,8 @@ class QuietPolling(logging.Filter):
         message = record.getMessage()
         # The phones' setup stills come every second; so do the Camera setup page's checks.
         return not any(path in message for path in ('"GET /api/clips ', '"GET /api/time ', " /api/setup",
-                                                         " /api/practice/latest"))
+                                                         " /api/practice/latest", " /api/phones/",
+                                                         '"GET /api/status ', " /api/relay/heartbeat"))
 
 
 class QuietShutdown(logging.Filter):
