@@ -49,3 +49,4 @@ certificates
 # club model training runs (train/club_train.py)
 /train/runs/
 /train/.venv/
+/train/__pycache__/
