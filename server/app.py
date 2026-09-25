@@ -6,6 +6,7 @@ Settings (environment variables): SWINGCLIPS_CLIPS (clips folder), SWINGCLIPS_PO
 default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 8000),
 SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landmarker_full.task),
 SWINGCLIPS_LABELS (hand labels for the scorecard, eval.py; default: a "labels" folder next to the clips folder).
+Once a clip's pose is saved, the same worker measures its light, grain, flicker and sharpness (quality.py).
 """
 import asyncio
 import bisect
@@ -31,6 +32,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import pose
+import quality
 import setup
 import swings
 
@@ -86,6 +88,35 @@ def error_file(name: str) -> Path:
     return POSE_DIR / (name + ".error.txt")
 
 
+def quality_file(name: str) -> Path:
+    # Beside the pose file, named by quality.py's own version: pose.VERSION stays as it is.
+    return POSE_DIR / f"{name}.quality.v{quality.VERSION}.json"
+
+
+def quality_error_file(name: str) -> Path:
+    return POSE_DIR / (name + ".quality.error.txt")
+
+
+# Quality records as last read, by clip name: (file's mtime, record). The clip list is polled often.
+quality_cache: dict[str, tuple[int, dict]] = {}
+
+
+def load_quality(name: str) -> dict | None:
+    """The clip's quality record (quality.py), or None if it hasn't been measured (yet)."""
+    try:
+        mtime = quality_file(name).stat().st_mtime_ns
+    except OSError:
+        return None
+    got = quality_cache.get(name)
+    if got is None or got[0] != mtime:
+        try:
+            got = (mtime, json.loads(quality_file(name).read_text()))
+        except (OSError, ValueError):
+            return None
+        quality_cache[name] = got
+    return got[1]
+
+
 def pose_state(name: str) -> str:
     if pose_file(name).exists():
         return "done"
@@ -100,12 +131,21 @@ def pose_worker(stop: threading.Event):
     POSE_DIR.mkdir(parents=True, exist_ok=True)
     # Kept between clips so the worker processes only pay for importing MediaPipe once.
     pool = ProcessPoolExecutor(POSE_WORKERS)
+    summarizer = None
     while not stop.is_set():
         retry_pending_trash()
         todo = [p for p in clip_paths()
                 if pose_state(p.name) == "queued" and time.time() - p.stat().st_mtime > SETTLE_SECONDS]
         if not todo:
-            stop.wait(5)
+            # Nothing to pose: measure a clip's quality instead (new ones first, then older clips).
+            try:
+                if summarizer is None:
+                    summarizer = swings.Summarizer(STATIC_DIR)
+                measured = quality_step(pool, summarizer)
+            except BrokenProcessPool:
+                pool, measured = ProcessPoolExecutor(POSE_WORKERS), True
+            if not measured:
+                stop.wait(5)
             continue
         clip = max(todo, key=recorded_at)
         with files_lock:
@@ -132,6 +172,62 @@ def pose_worker(stop: threading.Event):
             with files_lock:
                 pose_busy = None
     pool.shutdown(cancel_futures=True)
+    if summarizer is not None:
+        summarizer.close()
+
+
+def quality_step(pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> bool:
+    """Measures the newest analyzed clip without a quality record (quality.py). False if there was none."""
+    global pose_busy
+    clips = {c["name"]: c for c in listed_clips(with_shots=False)}
+    # Measured against an older pose file (its key positions may have moved): measured again.
+    todo = [c for c in clips.values() if c["pose"] == "done" and not quality_error_file(c["name"]).exists()
+            and (c["quality"] is None or c["quality"].get("poseVersion") != pose.VERSION)]
+    for c in sorted(todo, key=lambda c: c["recorded"], reverse=True):
+        other = clips.get(c["partner"] or "")
+        if c["angle"] == "dtl" and other and other["pose"] not in ("done", "failed"):
+            continue  # its key positions come from the face-on clip: wait for that
+        with files_lock:
+            if c["name"] in pending_trash or not (CLIPS_DIR / c["name"]).exists():
+                continue
+            pose_busy = c["name"]
+        try:
+            measure_quality(c, other if other and other["pose"] == "done" else None, pool, summarizer)
+        except BrokenProcessPool:
+            raise
+        except FileNotFoundError:
+            pass  # just deleted
+        except Exception:
+            quality_error_file(c["name"]).write_text(traceback.format_exc())
+            print(f"Quality: {c['name']} FAILED - see {quality_error_file(c['name'])}", flush=True)
+        finally:
+            with files_lock:
+                pose_busy = None
+        return True
+    return False
+
+
+def measure_quality(clip: dict, other: dict | None, pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> dict:
+    """Measures one clip's quality and saves it beside its pose file. `other` is its other angle, if
+    analyzed: a down-the-line clip's key positions are the face-on clip's, carried across."""
+    inp = swings.pose_input(clip, pose_file(clip["name"]))
+    if clip["angle"] == "dtl" and other is not None:
+        times = summarizer.call("positionTimes", swings.pose_input(other, pose_file(other["name"])), inp,
+                                swings.LEAD_SIDE)["dtl"]
+    else:
+        times = summarizer.call("positionTimes", inp, None, swings.LEAD_SIDE)["main"]
+    positions = (times or {}).get("times", {})
+    frames = [(f["t"], f["lm"]) for f in inp["frames"]]
+    started = time.perf_counter()
+    record = pool.submit(quality.measure, str(CLIPS_DIR / clip["name"]), frames, positions).result()
+    record["poseVersion"] = pose.VERSION
+    record["positions"] = {k: round(v, 4) for k, v in positions.items() if k in quality.SHARP_KEYS}
+    tmp = quality_file(clip["name"]).with_suffix(".tmp")
+    tmp.write_text(json.dumps(record, separators=(",", ":")))
+    tmp.replace(quality_file(clip["name"]))
+    warn = ", ".join(record["warnings"]) or "fine"
+    print(f"Quality: {clip['name']} in {time.perf_counter() - started:.1f} s: {warn}", flush=True)
+    return record
 
 
 def swing_worker(stop: threading.Event):
@@ -272,6 +368,8 @@ def listed_clips(with_shots: bool = True) -> list[dict]:
             "partner": None,
             # What the phone's camera really used (shutter, ISO), if it said.
             "camera": load_camera(p.name),
+            # Light, grain, flicker and sharpness, once measured (quality.py).
+            "quality": load_quality(p.name),
             "_t": t,
         })
     # Only the capture app's clips are named after the strike itself.

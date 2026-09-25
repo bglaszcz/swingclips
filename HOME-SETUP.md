@@ -117,8 +117,47 @@ exposure instead: **1/500**, **1/1000** or **1/2000**.
   prints it on each upload ("manual 1/1000 s ISO 1600"). By eye: at 1/1000 the clubhead is a
   short smear near impact rather than a long faint streak.
 
+### Clip quality: light, flicker and sharpness (the shutter test without labels)
+Once a clip's pose is saved, the server's pose worker measures the clip itself (`quality.py`) and
+keeps it beside the pose file as `<clip>.quality.v1.json` (listed in `/api/clips` as `quality`).
+Older clips are measured too, newest first, whenever there's no new clip to analyze (about 1-2 s
+each on a 320-pixel test clip; expect several seconds for a full-size 240 fps clip).
+- **Brightness**: the golfer's mean brightness (0-255) at address, in the box round the pose
+  landmarks. Under 70 is **dark**.
+- **Noise**: grain in the background at address (outside the golfer and the club's reach): the
+  spread of the difference between consecutive frames, with any change of brightness taken out
+  first, in the same 0-255 units. From 2.5 it's **grainy**.
+- **Flicker**: LED and fluorescent lights pulse at 100 or 120 Hz, which a short shutter catches.
+  The background's brightness per frame is fitted with a sine at each frequency, against the
+  clip's real frame times (phones drop frames); a swing of 2% or more that stands out from the
+  frame-to-frame noise is **flicker**, with the light's frequency when it matches 100 or 120 Hz at
+  the clip's frame rate. Banding (a rolling shutter catching the pulse partway down the sensor) is
+  measured apart, along the sensor's lines; 1% or more also counts as flicker. At 120 fps a 120 Hz
+  light pulses exactly once per frame and can't be seen from frame to frame (banding still shows).
+- **Sharpness**: detail round the hands and lower arms (variance of the Laplacian after a light
+  blur, so grain doesn't count as detail) at address (P1) and at P5, P6 and P7 from the swing's
+  key positions (a down-the-line clip's come from its face-on clip). P5-P7 are given as a share of
+  the same clip's address, so clips in different light compare fairly: near 1 means the hands stay
+  as sharp through the downswing as when still; a long shutter's streak brings it well down.
+- **Review page**: the camera check above the videos adds **dark**, **flicker** and **grainy**
+  with what to do, and (grey) the shutter setting and what each camera really used, from
+  `camera.json`. Clips from before capture app 0.4 simply don't show that line.
+- **Shutter test** (button at the top): every analyzed clip grouped by camera and shutter setting
+  (Auto, 1/500, 1/1000, 1/2000; "unknown" before app 0.4; "1/1000 (compensation)" where the phone
+  locked darker instead), over all clips and per session, with the real shutter, ISO, brightness,
+  noise, flicker and sharpness side by side; green marks the best setting for each camera. To
+  run the test: one session, same lights, 10 or so swings on Auto, then 10 at 1/1000 (and 1/2000
+  if the picture stays clean). A fixed shutter is working when P5-P7 / address is clearly higher
+  than on Auto with the noise still under ~2.5 and no flicker.
+- The same table is in the scorecard (`eval.py`, below), next to the noise floor.
+- The thresholds (70, 2.5, 2%, 1%) are first guesses, set on made-up test videos only: none of
+  this has been run on real phone clips yet. Phone video is compressed and denoised, so real grain
+  may read lower than it looks, and a hands crop at P6 sees a different background than at address.
+  Check the numbers against a few clips by eye before trusting a verdict, and adjust the constants
+  at the top of `quality.py` (bump its `VERSION` so every clip is measured again).
+
 ### `server/` - the home server (Python, FastAPI)
-- `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON), `shots.jsonl` (launch
+- `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON, and its quality record), `shots.jsonl` (launch
   monitor shots), `clubs.json` (clubs corrected on the review page), `swings.json` (each swing's
   numbers), `journal.json` (handicap and session notes), `excluded.json` (swings left out), `trash` (deleted clips; emptied by hand, never automatically).
 - A background worker runs MediaPipe pose on every frame of each new clip (4 processes, split at
@@ -221,13 +260,16 @@ to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of 
   and prints: key-position error in ms and frames (and pose.py's own ball-gone impact); joint
   error as a share of nose-to-ankle height by swing phase; left/right swaps; shaft found and its
   angle error; the one-frame angles (tilts, lead arm, forward bend) from tracked vs labeled joints;
-  the ball; your own consistency; and the **noise floor**, how much each number moves while you
-  stand still at address, over every analyzed clip (no labels needed). Results go to
+  the ball; your own consistency; the **noise floor**, how much each number moves while you
+  stand still at address, over every analyzed clip (no labels needed); and **clip quality by
+  shutter** (brightness, noise, flicker and sharpness grouped by camera and shutter setting, from
+  the server's quality records; see "Clip quality" above). Results go to
   `D:\SwingClips\eval\<date>_v<pose version>_<JavaScript fingerprint>.json`.
   - `--rerun`: analyze the labeled clips again with `pose.py` as it is now (cached per version of
     `pose.py`, `club.py` and the model), to try a change before deploying it.
   - `--compare <an earlier .json>`: every headline number, before and after.
   - `--no-noise`: skip the noise floor.
+  - `--no-quality`: skip the clip quality table.
   - With the club model (see "Training the club model"), a clubhead table too: its distance
     from the labeled clubhead, by phase.
 - Tests (no clips needed; a made-up swing): `cd server` then `python -m unittest discover tests`;

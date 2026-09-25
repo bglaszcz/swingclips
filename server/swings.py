@@ -9,6 +9,7 @@ it, every swing is worked out again in the background.
 import gzip
 import hashlib
 import json
+import threading
 from pathlib import Path
 
 from py_mini_racer import MiniRacer
@@ -16,6 +17,9 @@ from py_mini_racer import MiniRacer
 JS_FILES = ("phases.js", "metrics.js", "summary.js")
 # The trends assume a right-handed golfer (the lead side is the left).
 LEAD_SIDE = "left"
+# V8 sets itself up when the first engine starts; two threads starting one at once crash the process
+# ("Check failed: !IsConfigurablePoolInitialized()"). The pose and swing workers both start one.
+START_LOCK = threading.Lock()
 
 
 class Summarizer:
@@ -32,7 +36,8 @@ class Summarizer:
     def call(self, function: str, *args):
         """SwingSummary.<function>(*args), with the arguments and result passed as JSON."""
         if self.ctx is None:
-            self.ctx = MiniRacer()
+            with START_LOCK:
+                self.ctx = MiniRacer()
             for source in self.sources:
                 self.ctx.eval(source)
         args = json.dumps(list(args), separators=(",", ":"))

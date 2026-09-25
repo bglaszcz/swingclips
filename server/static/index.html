@@ -32,7 +32,7 @@
   @media (min-width: 900px) {
     main { grid-template-columns: 320px 1fr; height: calc(100vh - 49px); }
     #side { overflow-y: auto; border-right: 1px solid var(--line); }
-    #viewer, #trends, #progress, #setup, #compare { overflow-y: auto; }
+    #viewer, #trends, #progress, #setup, #shutter, #compare { overflow-y: auto; }
   }
   #listbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line);
              position: sticky; top: 0; background: var(--bg); z-index: 1; }
@@ -83,6 +83,8 @@
   #camcheck { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--warn); color: var(--text);
               font-size: 13px; }
   #camcheck b { color: var(--warn); }
+  #camcheck.info { border-color: var(--line); }
+  #camcheck .cc-info, #camcheck .cc-info b { color: var(--muted); }
   #stages { display: grid; grid-template-columns: 1fr; gap: 8px; }
   #stages.two { grid-template-columns: 1fr 1fr; }
   .stage { position: relative; min-width: 0; }
@@ -140,7 +142,7 @@
   #numbers tr.group th { text-align: left; padding-top: 10px; color: var(--text); }
   /* Session trends: the launch monitor's numbers against the swing's, one dot per swing. */
   #trends { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  @media (max-width: 899px) { #trends, #progress, #setup { order: -1; border-bottom: 1px solid var(--line); } }
+  @media (max-width: 899px) { #trends, #progress, #setup, #shutter { order: -1; border-bottom: 1px solid var(--line); } }
   #setup { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   #setup .note, .s-note { color: var(--muted); font-size: 12px; }
   .s-note { flex: 1; }
@@ -158,6 +160,16 @@
   .s-pic img { display: block; width: 100%; max-height: 62vh; object-fit: contain; background: #000; border-radius: 6px; }
   .s-pic canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
   #progress { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  /* Shutter test (shutter.js): clip quality by session, camera and shutter setting. */
+  #shutter { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  #shutter .note { color: var(--muted); font-size: 12px; }
+  .q-table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .q-table th, .q-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  .q-table th { color: var(--muted); font-weight: 600; white-space: normal; vertical-align: bottom; }
+  .q-table th:nth-child(-n+2), .q-table td:nth-child(-n+2) { text-align: left; }
+  .q-table tr.q-session td { text-align: left; font-weight: 600; padding-top: 12px; }
+  .q-table td.best { color: var(--accent); font-weight: 600; }
+  .q-table td.bad { color: var(--warn); }
   #p-status { color: var(--muted); font-size: 13px; flex: 1; }
   #p-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
   .p-tile { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line);
@@ -287,7 +299,8 @@
 <body>
 <header><h1>SwingClips</h1><span class="count" id="count"></span>
   <button id="setup-btn" class="small" title="Check both cameras before you start: live pictures from the phones">Camera setup</button>
-  <button id="progress-btn" class="small" title="How your swing and results are changing across sessions">Progress</button></header>
+  <button id="progress-btn" class="small" title="How your swing and results are changing across sessions">Progress</button>
+  <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button></header>
 <main>
   <aside id="side">
     <div id="listbar"></div>
@@ -402,6 +415,28 @@
     </div>
     <div class="note">The phones send a picture about once a second while they aren't recording, say what to fix out
       loud, and focus on you. Once both say good, tap Start on each phone.</div>
+  </section>
+  <section id="shutter" hidden>
+    <div class="t-head">
+      <strong>Shutter test</strong>
+      <span class="s-note" id="q-status"></span>
+      <button id="q-close" class="small">Close</button>
+    </div>
+    <div class="t-filters"><label><input type="checkbox" id="q-mixed"> Only sessions with more than one shutter setting</label></div>
+    <div class="t-card">
+      <strong>All clips</strong>
+      <div style="overflow-x: auto"><table class="q-table" id="q-all"></table></div>
+    </div>
+    <div class="t-card">
+      <strong>By session</strong>
+      <div style="overflow-x: auto"><table class="q-table" id="q-sessions"></table></div>
+    </div>
+    <div class="note">Medians per group, measured by the server from each clip (no labels). <b>Golfer</b>: brightness at
+      address, 0-255. <b>Noise</b>: grain in a still part of the background, in the same units (from about 2.5 it
+      shows). <b>Flicker</b>: clips where the lights pulsed or banded. <b>Sharp</b>: detail round the hands and lower
+      arms at address; <b>P6</b> and <b>P5-P7</b> are the same as a share of address in each clip, so clips in
+      different light compare fairly: nearer 1 is sharper through the downswing. Green is the best setting for
+      each camera. Clips from before capture app 0.4 are "unknown".</div>
   </section>
   <section id="progress" hidden>
     <div class="t-head">
@@ -1177,18 +1212,50 @@ const CAMERA_ADVICE = {
   hands: "your hands leave the picture at the top. Tilt the phone up or step it back",
 };
 
-/** A note above the videos when a camera didn't see the golfer well, so it's fixed before the next swing. */
+// The light check's codes (server/quality.py, measured from each clip), and what to do about them.
+const LIGHT_ADVICE = {
+  dark: q => `you're dark in the picture (brightness ${Math.round(q.brightness)} of 255). Add light on yourself, or use a longer shutter`,
+  flicker: q => `the lights flicker${q.flicker && q.flicker.mains ? ` (${q.flicker.mains} Hz)` : ""}, and this shutter catches it as the picture pulsing or banding. Use flicker-free lights, or turn off the ones that flicker`,
+  grainy: q => `the picture is grainy (noise ${q.noise.toFixed(1)}): the ISO is high for this light. Add light, or use a longer shutter`,
+};
+let lastCameraCheck = null;   // [analysis, input] of the open swing, to redo the check when the quality arrives
+
+/** "shutter set to 1/1000, camera used 1/1000 s at ISO 1600" from a clip's camera.json, or null
+ * (capture app before 0.4). */
+function shutterText(cam) {
+  if (!cam) return null;
+  const used = [cam.shutterSpeed ? `1/${cam.shutterSpeed} s` : null, cam.iso ? `ISO ${cam.iso}` : null].filter(Boolean).join(" at ");
+  const how = cam.exposure === "compensation" ? " (a fixed shutter wasn't allowed: locked darker instead)"
+    : cam.exposure === "refused" ? " (a fixed shutter wasn't allowed)" : "";
+  return `shutter set to ${cam.shutter || "Auto"}${used ? ", camera used " + used : ""}${how}`;
+}
+
+/** A note above the videos when a camera didn't see the golfer well or had a light problem, so it's
+ * fixed before the next swing; plus the shutter and ISO each camera used, when it said. */
 function showCameraCheck(a, main) {
+  lastCameraCheck = [a, main];
   const box = document.getElementById("camcheck");
   const cams = SwingSummary.cameras(a, main);
-  const lines = [["face", "Face-on camera"], ["dtl", "Down-the-line camera"]]
-    .flatMap(([cam, name]) => (cams[cam] || []).map(code => [name, CAMERA_ADVICE[code]]));
-  box.hidden = !lines.length;
-  box.replaceChildren(...lines.map(([name, text]) => {
+  const clipOf = name => name ? clips.find(c => c.name === name) : null;
+  const dtlName = main.angle === "dtl" ? main.name : partner ? partner.name : null;
+  const byCam = { face: main.angle === "dtl" ? null : clipOf(main.name), dtl: clipOf(dtlName) };
+  const lines = [], infos = [];
+  for (const [cam, name] of [["face", "Face-on camera"], ["dtl", "Down-the-line camera"]]) {
+    for (const code of cams[cam] || []) lines.push([name, CAMERA_ADVICE[code]]);
+    const c = byCam[cam], q = c && c.quality;
+    for (const code of (q && q.warnings) || []) if (LIGHT_ADVICE[code]) lines.push([name, LIGHT_ADVICE[code](q)]);
+    const shot = c && shutterText(c.camera);
+    if (shot) infos.push([name, shot]);
+  }
+  box.hidden = !lines.length && !infos.length;
+  box.classList.toggle("info", !lines.length);
+  const row = ([name, text], cls) => {
     const d = document.createElement("div");
+    if (cls) d.className = cls;
     d.append(Object.assign(document.createElement("b"), { textContent: name + ": " }), text + ".");
     return d;
-  }));
+  };
+  box.replaceChildren(...lines.map(l => row(l)), ...infos.map(l => row(l, "cc-info")));
 }
 
 /** A loaded clip in the shape SwingSummary.analyze takes. */
@@ -1374,6 +1441,7 @@ function open(name) {
   positionsRun++;
   positionsBox.hidden = true;
   document.getElementById("camcheck").hidden = true;
+  lastCameraCheck = null;
   document.getElementById("numbers").hidden = true;
   posList.replaceChildren();
   video.src = "/clips/" + encodeURIComponent(name);
@@ -1743,6 +1811,7 @@ async function refresh() {
   renderList();
   // New swings, finished analyses and shots show up in the trends as they arrive.
   trendsTick();
+  if (window.shutterTick) shutterTick();
   if (JSON.stringify(clips) !== was) updateExcludeButton();
   const now = clips.find(c => c.name === current);
   if (current === null && clips.length) {
@@ -1763,6 +1832,10 @@ async function refresh() {
              && beforePartner?.pose !== "done") loadPartnerPose();
     if (now && now.pose === "done" && (!before || before.pose !== "done")) loadPose(current);
     else updateSkeletonButton();
+    // The light check arrives a little after the pose (the server measures it next).
+    const q = c => JSON.stringify(c ? [c.quality, c.camera] : null);
+    const partnerNow = partner && clips.find(c => c.name === partner.name);
+    if (lastCameraCheck && (q(before) !== q(now) || q(beforePartner) !== q(partnerNow))) showCameraCheck(...lastCameraCheck);
   }
 }
 
@@ -1797,6 +1870,7 @@ setInterval(() => { if (!document.hidden) refresh(); }, 10000);
 </script>
 <script src="/static/trends.js"></script>
 <script src="/static/setup.js"></script>
+<script src="/static/shutter.js"></script>
 <script src="/static/labels.js"></script>
 <script src="/static/compare.js"></script>
 </body>

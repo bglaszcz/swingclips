@@ -88,13 +88,15 @@ function swingRow(c) {
            ...SwingSummary.shotNumbers(c.shot), ...(body || {}) };
 }
 
-/** The page shows one view at a time: a swing, one session's trends, progress, or camera setup. */
+/** The page shows one view at a time: a swing, one session's trends, progress, camera setup, or the shutter test. */
 function showView(which) {
   if (window.Compare) Compare.close(true);
   trendsBox.hidden = which !== "trends";
   progressBox.hidden = which !== "progress";
   document.getElementById("setup").hidden = which !== "setup";
   document.getElementById("setup-btn").classList.toggle("on", which === "setup");
+  document.getElementById("shutter").hidden = which !== "shutter";
+  document.getElementById("shutter-btn").classList.toggle("on", which === "shutter");
   viewer.hidden = which !== "swing" || !current;
   tipEl.hidden = pTipEl.hidden = true;
   if (which !== "swing") video.pause();
@@ -105,7 +107,7 @@ function showView(which) {
 
 /** Called when a swing is opened: back to the swing view. */
 function leaveTrendViews() {
-  if (!trendsKey && !progressOpen && document.getElementById("setup").hidden) return;
+  if (!trendsKey && !progressOpen && document.getElementById("setup").hidden && document.getElementById("shutter").hidden) return;
   showView("swing");
   renderList();
 }

@@ -7,6 +7,7 @@ golfer stands still at address (the noise floor). Labels come from the review pa
   .venv\\Scripts\\python.exe eval.py --compare D:\\SwingClips\\eval\\<an earlier result>.json
   .venv\\Scripts\\python.exe eval.py --compare    against the newest earlier baseline (MediaPipe, ray-cast club)
   .venv\\Scripts\\python.exe eval.py --no-noise   skip the noise floor
+  .venv\\Scripts\\python.exe eval.py --no-quality skip clip quality (light, grain, flicker, sharpness by shutter)
   .venv\\Scripts\\python.exe eval.py --only-val D:\\SwingClips\\club-dataset\\dataset.json
                                             only the swings the club model didn't train on
 
@@ -37,6 +38,7 @@ import numpy as np
 import app
 import models
 import pose
+import quality
 import swings
 
 EVAL_DIR = Path(os.environ.get("SWINGCLIPS_EVAL", app.CLIPS_DIR.parent / "eval"))
@@ -304,7 +306,35 @@ def stats(values, scale=1.0) -> dict:
     return {"n": int(len(v)), "median": float(np.median(a)), "p90": float(np.percentile(a, 90)), "bias": float(v.mean())}
 
 
-def summarize(clips: list[dict], label_checks: list[dict], noise: list[dict]) -> dict:
+def quality_rows(recs: list[dict]) -> list[dict]:
+    """Clip quality (quality.py) by camera angle and shutter setting: the medians of each group.
+    recs: [{clip, angle, camera (camera.json or None), quality (record or None)}]; clips without a
+    record yet are counted apart."""
+    groups = {}
+    for r in recs:
+        groups.setdefault((r["angle"], quality.shutter_group(r.get("camera"))), []).append(r)
+    med = lambda v: float(np.median(v)) if v else None
+    rows = []
+    for (angle, shutter), rs in sorted(groups.items()):
+        qs = [r["quality"] for r in rs if r.get("quality")]
+        cams = [r["camera"] for r in rs if r.get("camera")]
+        sharp = lambda key: med([q["sharpness"][key] for q in qs if q.get("sharpness") and q["sharpness"].get(key) is not None])
+        rows.append({
+            "angle": angle, "shutter": shutter, "clips": len(qs), "unmeasured": len(rs) - len(qs),
+            # What the camera really used: 1/<speed> s, and the ISO.
+            "speed": med([c["shutterSpeed"] for c in cams if c.get("shutterSpeed")]),
+            "iso": med([c["iso"] for c in cams if c.get("iso")]),
+            "brightness": med([q["brightness"] for q in qs if q.get("brightness") is not None]),
+            "noise": med([q["noise"] for q in qs if q.get("noise") is not None]),
+            "flicker": sum("flicker" in q.get("warnings", []) for q in qs),
+            "flickerPct": med([100 * q["flicker"]["amplitude"] for q in qs if q.get("flicker")]),
+            "bandingPct": med([100 * q["banding"] for q in qs if q.get("banding") is not None]),
+            "address": sharp("p1"), "p6": sharp("p6"), "downswing": sharp("downswing"),
+        })
+    return rows
+
+
+def summarize(clips: list[dict], label_checks: list[dict], noise: list[dict], clip_quality=()) -> dict:
     """The tables, as {table: [rows]}, plus a flat {key: number} of the headline numbers for --compare."""
     tables, flat = {}, {}
 
@@ -423,6 +453,12 @@ def summarize(clips: list[dict], label_checks: list[dict], noise: list[dict]) ->
                          "p90": float(np.percentile(sds, 90))})
             flat[f"noise.{angle}.{metric}.median_sd"] = rows[-1]["median"]
     tables["noise"] = rows
+
+    rows = quality_rows(list(clip_quality))
+    for r in rows:
+        for k in ("noise", "downswing"):
+            flat[f"quality.{r['angle']}.{r['shutter']}.{k}"] = r[k]
+    tables["quality"] = rows
     return {"tables": tables, "headline": flat}
 
 
@@ -486,6 +522,14 @@ def print_report(result: dict) -> None:
     table("Noise floor: spread (standard deviation) of each number while standing still at address", t["noise"],
           [("angle", "angle"), ("metric", "metric"), ("clips", "clips"), ("median", "median sd"), ("p90", "90th pct")],
           "Degrees for angles and turns, inches for sway / rise / depth, picture heights for widths.")
+    if t.get("quality"):
+        table("Clip quality by shutter (no labels needed; quality.py)", t["quality"],
+              [("angle", "angle"), ("shutter", "shutter"), ("clips", "clips"), ("unmeasured", "not yet"),
+               ("speed", "real 1/s"), ("iso", "ISO"), ("brightness", "golfer"), ("noise", "noise"),
+               ("flicker", "flicker clips"), ("flickerPct", "flicker %"), ("bandingPct", "banding %"),
+               ("address", "sharp P1"), ("p6", "P6 / P1"), ("downswing", "P5-P7 / P1")],
+              "Medians. golfer = brightness 0-255 at address; noise = grain in luma levels; sharp = variance of the "
+              "Laplacian round the hands, P6 and P5-P7 as a share of the same clip's address.")
 
 
 def print_compare(old: dict, new: dict) -> None:
@@ -532,6 +576,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rerun", action="store_true", help="analyze the labeled clips again with pose.py as it is now")
     ap.add_argument("--no-noise", action="store_true", help="skip the noise floor")
+    ap.add_argument("--no-quality", action="store_true",
+                    help="skip clip quality (light, grain, flicker and sharpness by shutter)")
     ap.add_argument("--compare", type=Path, nargs="?", const=LATEST,
                     help="an earlier result .json to show the changes against (on its own: the newest baseline one, "
                          "MediaPipe and the ray-cast club)")
@@ -614,14 +660,20 @@ def main(argv=None) -> int:
                 if nf:
                     noise.append({"clip": name, "angle": inp["angle"], **nf})
 
+        clip_quality = []
+        if not args.no_quality:
+            # Measured by the server as clips come in (app.py); every listed clip, labeled or not.
+            clip_quality = [{"clip": c["name"], "angle": c["angle"], "camera": c["camera"], "quality": c["quality"]}
+                            for c in app.listed_clips(with_shots=False) if c["pose"] == "done"]
+
         result = {
             "stamp": datetime.now().isoformat(timespec="seconds"),
             "poseVersion": pose.VERSION, "jsCode": summ.code, "poseModel": Path(pose.MODEL).name,
             "bodyModel": body_model(), "clubModel": club_model(),
             "rerun": args.rerun, "labeledClips": len(clips),
             "onlyVal": subset,
-            **summarize(clips, label_checks, noise),
-            "clips": clips, "labeler": label_checks, "noise": noise,
+            **summarize(clips, label_checks, noise, clip_quality),
+            "clips": clips, "labeler": label_checks, "noise": noise, "quality": clip_quality,
         }
     finally:
         summ.close()
