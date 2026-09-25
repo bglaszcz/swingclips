@@ -45,7 +45,11 @@ function qualityGroups(list) {
       iso: medianOf(g.clips.map(c => c.camera && c.camera.iso)),
       brightness: medianOf(qs.map(q => q.brightness)),
       noise: medianOf(qs.map(q => q.noise)),
-      flicker: qs.filter(q => (q.warnings || []).includes("flicker")).length,
+      // Flicker that matters (a fixed shutter), and mild flicker (on Auto: quality.py flickerLevel).
+      flicker: qs.filter(q => (q.warnings || []).includes("flicker") && q.flickerLevel !== "mild").length,
+      mildFlicker: qs.filter(q => (q.warnings || []).includes("flicker") && q.flickerLevel === "mild").length,
+      // Sharpness is only measured where impact could be believed.
+      sharp: qs.filter(q => q.sharpness).length,
       address: sharp("p1"), p6: sharp("p6"), downswing: sharp("downswing"),
     };
   }).sort((a, b) => (a.angle === b.angle ? 0 : a.angle === "face" ? -1 : 1) || shutterOrder(a.shutter) - shutterOrder(b.shutter));
@@ -58,8 +62,9 @@ const Q_COLS = [
   ["Clips", r => r.measured < r.clips.length ? `${r.measured} of ${r.clips.length}` : r.measured],
   ["Golfer", r => r.brightness, 0, "up"],
   ["Noise", r => r.noise, 1, "down"],
-  ["Flicker", r => r.measured ? `${r.flicker} of ${r.measured}` : null],
-  ["Sharp at address", r => r.address, 0],
+  ["Flicker", r => r.measured ? `${r.flicker} of ${r.measured}${r.mildFlicker ? ` (+${r.mildFlicker} mild)` : ""}` : null],
+  ["Sharpness from", r => r.measured ? `${r.sharp} of ${r.measured}` : null],
+  ["Sharp at address", r => r.address, 1],
   ["P6 / address", r => r.p6, 2, "up"],
   ["P5-P7 / address", r => r.downswing, 2, "up"],
 ];

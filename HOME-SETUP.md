@@ -121,14 +121,16 @@ exposure instead: **1/500**, **1/1000** or **1/2000**.
 
 ### Clip quality: light, flicker and sharpness (the shutter test without labels)
 Once a clip's pose is saved, the server's pose worker measures the clip itself (`quality.py`) and
-keeps it beside the pose file as `<clip>.quality.v1.json` (listed in `/api/clips` as `quality`).
+keeps it beside the pose file as `<clip>.quality.v2.json` (listed in `/api/clips` as `quality`).
 Older clips are measured too, newest first, whenever there's no new clip to analyze (about 1-2 s
-each on a 320-pixel test clip; expect several seconds for a full-size 240 fps clip).
+each on a 320-pixel test clip; expect several seconds for a full-size 240 fps clip). Updating to
+v2 measures every clip again.
 - **Brightness**: the golfer's mean brightness (0-255) at address, in the box round the pose
   landmarks. Under 70 is **dark**.
 - **Noise**: grain in the background at address (outside the golfer and the club's reach): the
   spread of the difference between consecutive frames, with any change of brightness taken out
-  first, in the same 0-255 units. From 2.5 it's **grainy**.
+  first, in the same 0-255 units. **Grainy** from 5% of the golfer's brightness (about 5 at a
+  brightness of 100; never under 2.5).
 - **Flicker**: LED and fluorescent lights pulse at 100 or 120 Hz, which a short shutter catches.
   The background's brightness per frame is fitted with a sine at each frequency, against the
   clip's real frame times (phones drop frames); a swing of 2% or more that stands out from the
@@ -136,27 +138,76 @@ each on a 320-pixel test clip; expect several seconds for a full-size 240 fps cl
   the clip's frame rate. Banding (a rolling shutter catching the pulse partway down the sensor) is
   measured apart, along the sensor's lines; 1% or more also counts as flicker. At 120 fps a 120 Hz
   light pulses exactly once per frame and can't be seen from frame to frame (banding still shows).
-- **Sharpness**: detail round the hands and lower arms (variance of the Laplacian after a light
-  blur, so grain doesn't count as detail) at address (P1) and at P5, P6 and P7 from the swing's
-  key positions (a down-the-line clip's come from its face-on clip). P5-P7 are given as a share of
-  the same clip's address, so clips in different light compare fairly: near 1 means the hands stay
-  as sharp through the downswing as when still; a long shutter's streak brings it well down.
-- **Review page**: the camera check above the videos adds **dark**, **flicker** and **grainy**
-  with what to do, and (grey) the shutter setting and what each camera really used, from
-  `camera.json`. Clips from before capture app 0.4 simply don't show that line.
+  How much it matters depends on the shutter (`flickerLevel`): on **Auto** it's **mild** (the
+  longer exposure evens most of each pulse out, and the numbers aren't affected) unless it's strong
+  (8% or more, or banding of 4%); at a **fixed shutter** it **matters**.
+- **Sharpness**: detail of the forearms and hands (variance of the Laplacian, after a light blur
+  so grain doesn't count, inside a band along each forearm and hand from the pose points, over the
+  variance of the brightness in that band) at address (P1) and at P5, P6 and P7 from the swing's
+  key positions (a down-the-line clip's come from its face-on clip). Only the band is measured, and
+  against its own contrast, so what's behind the arms (a busy wall at P6, a plain mat at address)
+  counts little. P5-P7 are given as a share of the same clip's address, so clips in different light
+  compare fairly: near 1 means the hands stay as sharp through the downswing as when still; a long
+  shutter's streak brings it well down.
+- **Only with a believable impact**: the key positions from the top on are placed from impact,
+  which comes from the ball leaving the mat. Sharpness is only worked out when the ball was seen
+  leaving 60 ms before to 10 ms after the strike the phone heard (from the clip's name; on good
+  clips it's 20-35 ms before), in this clip and, for a down-the-line clip, in the face-on clip its
+  positions come from. Otherwise `sharpnessSkipped` says why ("ball not found (down the line)",
+  "impact doubtful (face-on): 24 ms after the heard strike") and `impact` has each clip's numbers.
+  A wrong impact moves P5-P7 off the downswing, and the ratio then comes out backwards.
+- **Review page**: the camera check above the videos adds **dark**, **flicker** (worded by
+  shutter: mild on Auto, something to fix at a fixed shutter) and **grainy** with what to do, the
+  ball-not-found / impact-doubtful item, and (grey) the shutter setting and what each camera
+  really used, from `camera.json`. Clips from before capture app 0.4 simply don't show that line.
 - **Shutter test** (button at the top): every analyzed clip grouped by camera and shutter setting
   (Auto, 1/500, 1/1000, 1/2000; "unknown" before app 0.4; "1/1000 (compensation)" where the phone
   locked darker instead), over all clips and per session, with the real shutter, ISO, brightness,
-  noise, flicker and sharpness side by side; green marks the best setting for each camera. To
-  run the test: one session, same lights, 10 or so swings on Auto, then 10 at 1/1000 (and 1/2000
-  if the picture stays clean). A fixed shutter is working when P5-P7 / address is clearly higher
-  than on Auto with the noise still under ~2.5 and no flicker.
+  noise, flicker (and how many were mild), how many clips sharpness could be measured on, and
+  sharpness side by side; green marks the best setting for each camera. To run the test: one
+  session, same lights, 10 or so swings on Auto, then 10 at 1/1000 (and 1/2000 if the picture stays
+  clean). A fixed shutter is working when P5-P7 / address is clearly higher than on Auto, measured
+  on most of its clips, with the golfer not dark and no flicker that matters.
 - The same table is in the scorecard (`eval.py`, below), next to the noise floor.
-- The thresholds (70, 2.5, 2%, 1%) are first guesses, set on made-up test videos only: none of
-  this has been run on real phone clips yet. Phone video is compressed and denoised, so real grain
-  may read lower than it looks, and a hands crop at P6 sees a different background than at address.
-  Check the numbers against a few clips by eye before trusting a verdict, and adjust the constants
-  at the top of `quality.py` (bump its `VERSION` so every clip is measured again).
+- **Tuned on real clips** (v2): down-the-line clips from a Galaxy S21, 1080p at 240 fps, in a barn
+  with standard LED bulbs, as v1 measured them. Auto (1/250 s, ISO ~2,800-3,000): brightness
+  102-109, noise 2.7-3.75, 120 Hz flicker of 2.9-3.8%, banding 1.4-1.5%; they look normal by eye,
+  and v1's grainy (2.5) was too strict. Fixed 1/1000 s (ISO capped at 3,200): brightness 63-65
+  (dark, rightly), noise 2.1-2.35 (the phone denoises, so grain stays near a fixed share of the
+  brightness), flicker 3.7-4.2%, banding 2.0%. On the dark 1/1000 clips pose.py's ball-gone impact
+  failed (no ball, or the wrong spot: impact 100 ms late, or 24 ms after the heard strike), and v1's
+  sharpness came out backwards (0.8 at 1/1000 against 1.3 on Auto) though the 1/1000 frames are
+  clearly sharper by eye. What v2 changes isn't tried on real clips yet (it can't be here): check
+  a few clips by eye, and adjust the constants at the top of `quality.py` (bump its `VERSION` so
+  every clip is measured again). The real fix for the dark clips is light on the ball and golfer.
+
+### Trust per number: ok, shaky, no reading
+Every body number on the page (the swing numbers table and tempo line, the numbers over the video,
+Compare, Trends, Progress, and practice mode) is judged by one rule set (`static/trust.js`; the
+server runs the same file), so they all agree:
+- **ok**: shown as it is.
+- **Shaky**, greyed with a small **~** (hover for why): the key position it's read at was estimated
+  (P6); the ball wasn't seen leaving, or left too far from the heard strike, so the key positions
+  from the top on (P5-P7, tempo and downswing time) hang on a doubtful impact; the camera's light
+  check says **dark**, or **flicker** that matters (a fixed shutter); the noise floor says it moves
+  more while you stand still at address than half its usual swing-to-swing spread in a session;
+  or it's noisy by definition (head rise, and the plane numbers: hands and shaft to plane).
+- **No reading**, shown as **--** (hover for why): the camera check says part of you was out of
+  the picture (`out`) or your hands left it at the top (`hands`), or there's no number.
+- **The noise floor per number** comes from recent swings (the last 300): how much each number moves
+  in the 0.35-0.05 s before the takeaway (the same spread as the scorecard's noise floor, kept per
+  swing in `swings.json`), against its standard deviation within a session (a 45-minute gap starts
+  a new one), one club at a time, in sessions of at least 5 swings and 10 swings over them. The
+  server works it out whenever swings are analyzed (and every 10 minutes) and keeps it in
+  `noise.json` next to the clips folder (`/api/noise`); the page doesn't recompute it. A number
+  that's the same on every swing by definition (a turn at address) isn't judged.
+- **Trends and Progress** leave out numbers with no reading everywhere (charts, the "what goes
+  with" ranking, session medians). Shaky ones are hollow dots in the scatter and over-time charts
+  and greyed in the tables; **Leave out shaky** (Trends and Progress, one setting) takes them out of
+  the charts and correlations too. A Progress tile is greyed when most of the latest session's
+  swings behind it are shaky.
+- **Practice mode** speaks a number unless it has no reading, or was read at an estimated P6 (as
+  before); the other shaky ones are still spoken.
 
 ### Practice mode: the phone says the number (capture app 0.5)
 Pick one thing to work on and a range; after each swing the phone says the number and whether it
@@ -180,11 +231,11 @@ toward the ball". The phones face away from you, so voice is the channel.
   (close to the tracking noise), hands to plane at P6 and at the top and shaft to plane at P6 (they
   need the shaft seen at address, and P6 is often estimated). They work, but judge them over
   several swings, not one.
-- **Only numbers that can be trusted are spoken.** A body number from a camera whose camera check
-  says you were partly out of the picture or your hands left it at the top (`quality.camera`:
-  `out`, `hands`; the same rule the trends use), a P6 number where P6 was only estimated, or a
-  number that couldn't be measured is **"no reading"** instead. Square's numbers don't depend on the
-  cameras.
+- **Only numbers that can be trusted are spoken** (the trust rules above, `static/trust.js`, which
+  the server runs). A body number from a camera whose camera check says you were partly out of the
+  picture or your hands left it at the top (`quality.camera`: `out`, `hands`), a P6 number where P6
+  was only estimated, or a number that couldn't be measured is **"no reading"** instead. Square's
+  numbers don't depend on the cameras.
 - **When it speaks**: body numbers once the swing is analyzed (the upload settles for 15 s, then
   pose and the numbers: usually 30-60 s after the strike; given up after 4 minutes as "no
   reading"). A down-the-line number waits up to 90 s for the down-the-line clip if it hasn't come
@@ -216,7 +267,7 @@ toward the ball". The phones face away from you, so voice is the channel.
 ### `server/` - the home server (Python, FastAPI)
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON, and its quality record), `shots.jsonl` (launch
   monitor shots), `clubs.json` (clubs corrected on the review page), `swings.json` (each swing's
-  numbers), `journal.json` (handicap and session notes), `excluded.json` (swings left out),
+  numbers), `noise.json` (the noise floor per number, for the trust rules), `journal.json` (handicap and session notes), `excluded.json` (swings left out),
   `practice.json` and `practice-log.jsonl` (practice mode's target and what was spoken), `trash` (deleted clips; emptied by hand, never automatically).
 - A background worker runs MediaPipe pose on every frame of each new clip (4 processes, split at
   keyframes), then smooths it over the whole clip (median, then a local curve fit, so it doesn't lag
@@ -252,10 +303,11 @@ toward the ball". The phones face away from you, so voice is the channel.
   what chance gives with that many swings (p < 0.05); fewer than 5 swings, nothing is ranked. It
   updates as swings arrive.
 - **Swing numbers on the server** (`swings.py`): once a swing's clips are analyzed, a background
-  worker runs the page's own JavaScript (phases.js, metrics.js, summary.js) in an embedded V8
-  (`mini-racer`) and keeps each swing's body numbers, what could be measured (ball found, down the
-  line, P6 estimated) and where the golfer stood in each picture, in `swings.json`
-  (`/api/swings`). The records carry a fingerprint of that JavaScript: after an update that
+  worker runs the page's own JavaScript (phases.js, metrics.js, summary.js, trust.js) in an embedded
+  V8 (`mini-racer`) and keeps each swing's body numbers, what could be measured (ball found, down the
+  line, P6 estimated, the camera check with the impact item) and where the golfer stood in each
+  picture, in `swings.json` (`/api/swings`); plus, for the noise table only, every number at P1, P4,
+  P6 and P7 and each camera's noise floor at address (not sent to the page). The records carry a fingerprint of that JavaScript: after an update that
   changes it, every swing is worked out again (~0.2 s each). Right-handed only, for now.
 - **Progress** (button at the top): all sessions with one club over time. Tiles compare the latest
   session with the ones before it (median, or spread for consistency numbers), saying "better" /
@@ -331,7 +383,8 @@ to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of 
   - With the club model (see "Training the club model"), a clubhead table too: its distance
     from the labeled clubhead, by phase.
 - Tests (no clips needed; a made-up swing): `cd server` then `python -m unittest discover tests`;
-  the compare view's time mapping: `node --test tests/compare.test.js`. Practice mode's sentences,
+  the compare view's time mapping and the trust rules: `node --test tests/compare.test.js
+  tests/trust.test.js`. Practice mode's sentences,
   camera gating and waits (synthetic swings and shots): `python -m unittest tests.test_practice`;
   the phone's side of it (JVM, no phone): `gradlew :app:testDebugUnitTest` in `capture`.
 

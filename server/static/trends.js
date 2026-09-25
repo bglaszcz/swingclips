@@ -1,7 +1,9 @@
 // Trends: one session at a time (Trends on a session in the list) and all of them over time
 // (Progress). The swings' body numbers come from the server (/api/swings, worked out with
 // summary.js as each swing is analyzed); the launch monitor's come with the clips (/api/clips).
-// Uses the page's globals: clips, sessionsOf, shownClips, sessionTitle, clubName, open, viewer, video.
+// Uses the page's globals: clips, sessionsOf, shownClips, sessionTitle, clubName, open, viewer, video,
+// lightOf, trustCell, noiseTable. Each body number's trust is trust.js's (SwingTrust): numbers with
+// no reading are left out everywhere; shaky ones are hollow / greyed, or left out with "Leave out shaky".
 
 const trendsBox = document.getElementById("trends");
 const progressBox = document.getElementById("progress");
@@ -17,6 +19,8 @@ const trendPick = { x: "earlyExt", y: "path", club: null };
 try { Object.assign(trendPick, JSON.parse(localStorage.getItem("trends") || "{}"), { club: null }); } catch {}
 const progressPick = { club: null, period: "90", metric: "earlyExt" };
 try { Object.assign(progressPick, JSON.parse(localStorage.getItem("progress") || "{}"), { club: null }); } catch {}
+let leaveOutShaky = false;   // Trends and Progress: shaky numbers left out, not just marked
+try { leaveOutShaky = localStorage.getItem("leave-shaky") === "on"; } catch {}
 
 // ---- Fields ----
 
@@ -55,10 +59,14 @@ function fmtField(f, v) {
 async function loadTrendData() {
   try {
     const [s, j] = await Promise.all([fetch("/api/swings"), fetch("/api/journal")]);
-    if (s.ok) swingRecords = (await s.json()).swings;
+    if (s.ok) {
+      const got = await s.json();
+      swingRecords = got.swings;
+      if (got.noise) noiseTable = got.noise;
+    }
     if (j.ok) journal = await j.json();
   } catch { return false; }
-  const sig = JSON.stringify([swingRecords, journal, clips]);
+  const sig = JSON.stringify([swingRecords, journal, clips, noiseTable, leaveOutShaky]);
   if (sig === dataSig) return false;
   dataSig = sig;
   return true;
@@ -70,23 +78,34 @@ function swingPending(c) {
   return !swingRecords[c.name] && c.pose !== "failed" && (!other || other.pose !== "failed");
 }
 
-/** A listed swing as a row: its launch monitor numbers and its body numbers (null until worked out). */
+/**
+ * A listed swing as a row: its launch monitor numbers and its body numbers (null until worked out).
+ * r[key] is the body number as the charts and correlations use it: null with no reading (trust.js),
+ * and also when shaky with "Leave out shaky" on. r.shown has every number with a reading, r.trust
+ * each one's judgement; r.unseen the cameras that couldn't see the golfer.
+ */
 function swingRow(c) {
   const rec = swingRecords[c.name];
-  let body = rec && rec.body ? rec.body : null;
-  // A camera that couldn't see the golfer (partly out of the picture, hands gone at the top) gives
-  // numbers that look fine but aren't: leave them out.
-  const bad = cam => ((rec && rec.quality && rec.quality.camera && rec.quality.camera[cam]) || [])
-    .some(code => code === "out" || code === "hands");
-  const unseen = ["face", "dtl"].filter(bad);
-  if (body && unseen.length) {
-    body = { ...body };
-    for (const f of SwingSummary.BODY) if (unseen.includes(f.view)) body[f.key] = null;
-    if (unseen.includes("face")) body.tempo = body.backswing = body.downswing = null;
+  const trust = rec && rec.body ? SwingTrust.forSwing(rec, lightOf(c.name), noiseTable) : null;
+  let body = null, shown = null;
+  if (trust) {
+    body = {};
+    shown = {};
+    for (const f of SwingSummary.BODY) {
+      const j = trust[f.key], v = rec.body[f.key];
+      shown[f.key] = j.level === "none" ? null : v;
+      body[f.key] = j.level === "none" || (leaveOutShaky && j.level === "shaky") ? null : v;
+    }
   }
-  return { c, t: new Date(c.recorded).getTime(), club: c.shot ? c.shot.club : null, rec, body, unseen,
+  const bad = cam => ((rec && rec.quality && rec.quality.camera && rec.quality.camera[cam]) || [])
+    .some(code => SwingTrust.BAD_CAMERA.includes(code));
+  const unseen = ["face", "dtl"].filter(bad);
+  return { c, t: new Date(c.recorded).getTime(), club: c.shot ? c.shot.club : null, rec, body, shown, trust, unseen,
            ...SwingSummary.shotNumbers(c.shot), ...(body || {}) };
 }
+
+/** Whether row r's number for field f is shaky (a body number, trust.js). */
+const isShaky = (r, f) => !!(r.trust && r.trust[f.key] && r.trust[f.key].level === "shaky");
 
 /** The page shows one view at a time: a swing, one session's trends, progress, camera setup, or the shutter test. */
 function showView(which) {
@@ -158,6 +177,17 @@ function unseenNote(rows) {
   const parts = [["dtl", "down-the-line"], ["face", "face-on"]].filter(([cam]) => n(cam))
     .map(([cam, name]) => `${n(cam)} swing${n(cam) === 1 ? "'s" : "s'"} ${name} numbers left out (you were partly out of the picture)`);
   return parts.join(" · ");
+}
+
+// "Leave out shaky", in Trends and Progress alike.
+for (const box of document.querySelectorAll(".leave-shaky")) {
+  box.checked = leaveOutShaky;
+  box.onchange = () => {
+    leaveOutShaky = box.checked;
+    for (const b of document.querySelectorAll(".leave-shaky")) b.checked = leaveOutShaky;
+    try { localStorage.setItem("leave-shaky", leaveOutShaky ? "on" : "off"); } catch {}
+    renderTrendView();
+  };
 }
 
 // ---- Numbers ----
@@ -245,6 +275,7 @@ function renderTrends() {
     `${all.length} swing${all.length === 1 ? "" : "s"}`,
     left ? `${left} left out` : "",
     unseenNote(all),
+    leaveOutShaky ? "shaky numbers left out" : "",
     pending ? `${pending} still being worked out on the server` : "",
   ].filter(Boolean).join(" · ");
 
@@ -365,7 +396,11 @@ function drawScatter(rows, fx, fy) {
     svgEl("line", { x1: sx(a), x2: sx(b), y1: sy(at(a)), y2: sy(at(b)), class: "t-fit" }, svg);
   }
 
-  for (const r of pts) svgEl("circle", { cx: sx(r[fx.key]), cy: sy(r[fy.key]), r: 5, class: "t-dot" }, svg);
+  // Hollow: a shaky number on either axis.
+  const shakyWhy = r => [fx, fy].filter(f => isShaky(r, f)).map(f => `${f.label}: ${r.trust[f.key].text}`);
+  for (const r of pts) {
+    svgEl("circle", { cx: sx(r[fx.key]), cy: sy(r[fy.key]), r: 5, class: shakyWhy(r).length ? "t-dot hollow" : "t-dot" }, svg);
+  }
   const ring = svgEl("circle", { r: 8, class: "t-ring", visibility: "hidden" }, svg);
   for (const r of pts) {
     const cx = sx(r[fx.key]), cy = sy(r[fy.key]);
@@ -375,8 +410,11 @@ function drawScatter(rows, fx, fy) {
       ring.setAttribute("cx", cx); ring.setAttribute("cy", cy); ring.setAttribute("visibility", "visible");
       const k = svg.getBoundingClientRect().width / W, off = svg.getBoundingClientRect().left - svg.parentElement.getBoundingClientRect().left;
       const top = svg.getBoundingClientRect().top - svg.parentElement.getBoundingClientRect().top;
-      placeTip(tipEl, [[fmtField(fy, r[fy.key]), fieldName(fy)], [fmtField(fx, r[fx.key]), fieldName(fx)]],
-               `Swing ${r.order} · ${timeOf(r)}${r.club ? " · " + clubName(r.club) : ""}`, svg.parentElement, off + cx * k, top + cy * k);
+      const mark = f => isShaky(r, f) ? " ~" : "";
+      const why = shakyWhy(r);
+      placeTip(tipEl, [[fmtField(fy, r[fy.key]) + mark(fy), fieldName(fy)], [fmtField(fx, r[fx.key]) + mark(fx), fieldName(fx)]],
+               `Swing ${r.order} · ${timeOf(r)}${r.club ? " · " + clubName(r.club) : ""}${why.length ? " · shaky: " + why.join("; ") : ""}`,
+               svg.parentElement, off + cx * k, top + cy * k);
     };
     const hide = () => { ring.setAttribute("visibility", "hidden"); tipEl.hidden = true; };
     hit.addEventListener("pointerenter", show);
@@ -471,10 +509,11 @@ function renderTrendTable(rows, fx, fy) {
       tr.append(Object.assign(document.createElement("td"), { textContent: t }));
     }
     for (const f of cols) {
-      const pending = !f.shot && !r.body;
-      tr.append(Object.assign(document.createElement("td"), {
-        textContent: pending ? (swingPending(r.c) ? "…" : "–") : fmtField(f, r[f.key]),
-      }));
+      const td = document.createElement("td");
+      if (f.shot) td.textContent = fmtField(f, r[f.key]);
+      else if (!r.body) td.textContent = swingPending(r.c) ? "…" : "–";
+      else trustCell(td, fmtField(f, r.shown[f.key]), r.trust[f.key]);
+      tr.append(td);
     }
     tr.onclick = () => open(r.c.name);
     tbody.append(tr);
@@ -569,12 +608,20 @@ function renderTiles(sessions) {
     if (cam) sessions.forEach((s, i) => { if (s.moved[cam]) from = i; });
     const series = sessions.slice(from).map(s => sessionValue(s.rows, f)?.med ?? null);
     const now = series[series.length - 1];
+    const shaky = tileShaky(f, latest.rows);
     const before = series.slice(0, -1).filter(v => v != null);
     const base = before.length ? quantile([...before].sort((a, b) => a - b), 0.5) : null;
     const tile = document.createElement("div");
     tile.className = "p-tile";
     const label = Object.assign(document.createElement("span"), { className: "p-label", textContent: f.label });
     const value = Object.assign(document.createElement("b"), { textContent: now == null ? "–" : fmtTile(f, now) });
+    if (now != null && shaky) trustCell(value, value.textContent, shaky);
+    else if (now == null && !f.shot && latest.rows.some(r => r.body)) {
+      // No number: say why, when every swing's was left out.
+      const whys = latest.rows.map(r => r.trust && r.trust[f.key]).filter(Boolean);
+      if (whys.length && whys.every(j => j.level === "none")) trustCell(value, "–", whys[0]);
+      else if (whys.length && leaveOutShaky && whys.every(j => j.level !== "ok")) value.title = "Every swing's number was shaky (left out)";
+    }
     const delta = Object.assign(document.createElement("span"), { className: "p-delta" });
     if (now != null && base != null) {
       const d = now - base, bw = betterWorse(f, base, now);
@@ -588,10 +635,25 @@ function renderTiles(sessions) {
       delta.textContent = now == null ? "not enough swings" : cam && from > 0 ? "camera moved: no baseline yet" : "no earlier sessions";
     }
     tile.append(label, value, delta, sparkline(series));
-    tile.title = `${fieldName(f)}${f.spread ? " (standard deviation of the session's shots)" : " (session median)"}. Click to chart it.`;
+    if (!shaky) tile.title = `${fieldName(f)}${f.spread ? " (standard deviation of the session's shots)" : " (session median)"}. Click to chart it.`;
     tile.onclick = () => { progressPick.metric = key; savePicks(); renderProgress(); document.getElementById("p-chart").scrollIntoView({ block: "nearest" }); };
     return tile;
   }));
+}
+
+/**
+ * A tile's number is shaky when most of the latest session's swings that count toward it are:
+ * a judgement (level "shaky", the most common reason) or null. Only body numbers.
+ */
+function tileShaky(f, rows) {
+  if (f.shot || f.spread) return null;
+  const used = rows.filter(r => r[f.key] != null && r.trust);
+  const shaky = used.filter(r => isShaky(r, f));
+  if (!used.length || shaky.length * 2 <= used.length) return null;
+  const counts = {};
+  for (const r of shaky) for (const w of r.trust[f.key].why) counts[w] = (counts[w] || 0) + 1;
+  const top = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  return { level: "shaky", codes: [], why: top, text: `${shaky.length} of ${used.length} swings: ${top.join("; ")}` };
 }
 
 const fmtTile = (f, v) => f.unit === ":1" ? `${v.toFixed(1)} : 1`
@@ -618,8 +680,9 @@ function drawOverTime(sessions, f) {
   svg.setAttribute("aria-label", `${fieldName(f)} per session over time`);
   svg.replaceChildren();
   pTipEl.hidden = true;
-  const cols = sessions.map(s => ({ s, v: sessionValue(s.rows, f), swings: f.spread ? [] : s.rows.map(r => r[f.key]).filter(v => v != null) }));
-  const ys = cols.flatMap(c => [...c.swings, ...(c.v ? [c.v.med] : [])]);
+  const cols = sessions.map(s => ({ s, v: sessionValue(s.rows, f),
+    swings: f.spread ? [] : s.rows.filter(r => r[f.key] != null).map(r => ({ v: r[f.key], shaky: isShaky(r, f) })) }));
+  const ys = cols.flatMap(c => [...c.swings.map(x => x.v), ...(c.v ? [c.v.med] : [])]);
   const Y = niceTicks(...padded(ys));
   const n = Math.max(1, sessions.length);
   const step = (W - m.l - m.r) / n;
@@ -644,7 +707,8 @@ function drawOverTime(sessions, f) {
   });
   if (!sessions.length) return;
   const jitter = k => ((k * 0.618) % 1 - 0.5) * Math.min(step * 0.5, 24);
-  cols.forEach((c, i) => c.swings.forEach((v, k) => svgEl("circle", { cx: sx(i) + jitter(k), cy: sy(v), r: 2.5, class: "p-swing" }, svg)));
+  cols.forEach((c, i) => c.swings.forEach((x, k) =>
+    svgEl("circle", { cx: sx(i) + jitter(k), cy: sy(x.v), r: 2.5, class: x.shaky ? "p-swing hollow" : "p-swing" }, svg)));
   const withV = cols.map((c, i) => [c, i]).filter(([c]) => c.v);
   if (!f.spread) for (const [c, i] of withV) svgEl("line", { x1: sx(i), x2: sx(i), y1: sy(c.v.q1), y2: sy(c.v.q3), class: "p-iqr" }, svg);
   if (withV.length > 1) svgEl("polyline", { points: withV.map(([c, i]) => `${sx(i)},${sy(c.v.med)}`).join(" "), class: "p-line" }, svg);

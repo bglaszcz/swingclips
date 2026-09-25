@@ -11,7 +11,8 @@
 // current, viewer, video, video2, leadSide, speed, showSkeleton, open, isSecondary, shownClips,
 // fetchPose, analysisInput, syncPoint, followVideo, frameIndexAt, fitRect, freshCanvas, drawPose,
 // point, fmtValue, fmtWhen, clubName, side, READOUT, DTL_READOUT, SPEEDS, SKELETON, JOINTS, LM,
-// L_INDEX, R_INDEX, SHAFT_CONFIDENT, MIN_VISIBILITY, showToast; and trends.js's field and fmtField.
+// L_INDEX, R_INDEX, SHAFT_CONFIDENT, MIN_VISIBILITY, showToast, lightOf, trustCell, noiseTable; and
+// trends.js's field and fmtField. Each number's trust is trust.js's (SwingTrust), as on the swing page.
 (function (root) {
   const KEYS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
 
@@ -99,8 +100,6 @@
   const NUMBER_POSITIONS = ["p1", "p4", "p6", "p7"];
   const POSITION_TAGS = { p1: "P1 Address", p2: "P2", p3: "P3", p4: "P4 Top", p5: "P5", p6: "P6", p7: "P7 Impact", p8: "P8" };
   const GHOST_COLOR = "rgba(232, 121, 249, 0.8)", GHOST_JOINT = "rgba(232, 121, 249, 0.9)";
-  // Camera check codes that make a camera's body numbers unreliable (as the trends leave them out).
-  const BAD_CAMERA = ["out", "hands"];
   const SORTS = [
     ["newest", "Newest", null], ["carry", "Carry", -1], ["ballSpeed", "Ball speed", -1],
     ["clubSpeed", "Club speed", -1], ["smash", "Smash", -1], ["straight", "Straightest", 1],
@@ -164,7 +163,7 @@
     }
     await Promise.all(angles.map(async g => { poses[g] = await fetchPose(sw[g], vids[g]).catch(() => null); }));
     const main = sw.main, other = main === "face" ? "dtl" : "face";
-    const S = { ...sw, vids, poses, a: null, times: {}, estimated: {}, offset: { [main]: 0 }, address: {}, posIdx: {}, bad: {} };
+    const S = { ...sw, vids, poses, a: null, times: {}, estimated: {}, offset: { [main]: 0 }, address: {}, posIdx: {}, facts: null };
     if (sw[other]) {
       S.offset[other] = SwingSummary.syncOffset(syncPoint(sw[main], poses[main] || null), syncPoint(sw[other], poses[other] || null));
     }
@@ -184,8 +183,7 @@
         S.posIdx[g][p.key] = g === main ? p.index : frameIndexAt(p.t + S.offset[g], poses[g]);
       }
     }
-    const cams = SwingSummary.cameras(a, input);
-    for (const g of ["face", "dtl"]) S.bad[g] = (cams[g] || []).filter(code => BAD_CAMERA.includes(code));
+    S.facts = SwingTrust.factsOfAnalysis(a, input, lightOf(sw.name));
     return S;
   }
 
@@ -613,11 +611,14 @@
     return i == null ? null : a.dtlMetrics.values[i];
   }
 
-  function cell(text, dim, cls = "") {
-    const td = el("td", { textContent: text, className: cls });
-    if (dim) { td.classList.add("dim"); td.title = "That camera couldn't see all of this swing: the number doesn't hold up"; }
-    return td;
+  /** A cell with the number's trust (trust.js): greyed ~ when shaky, -- with no reading. */
+  function cell(text, j, cls = "") {
+    return trustCell(el("td", { className: cls }), text, j);
   }
+
+  /** Swing S's judgement for number n with value v, or null when it wasn't analyzed. */
+  const judge = (S, n, v, unit) => S.facts ? SwingTrust.judge(n, S.facts, v, noiseTable, unit) : null;
+  const both = (a, b) => a && b ? SwingTrust.worse(a, b) : a || b;
 
   function renderNumbers() {
     const A = cmp.A, B = cmp.B;
@@ -631,8 +632,9 @@
       const a = tA ? tA[k] : null, b = tB ? tB[k] : null;
       const f = x => finite(x) ? x.toFixed(d) + unit : "--";
       const diff = finite(a) && finite(b) ? (a - b > 0 ? "+" : "") + (a - b).toFixed(d) + unit : "--";
-      const dA = A.bad.face && A.bad.face.length, dB = B.bad.face && B.bad.face.length;
-      timing.append(el("tr", {}, el("td", { textContent: label }), cell(f(a), dA), cell(f(b), dB), cell(diff, dA || dB, "diff")));
+      const n = SwingTrust.numberOf({ ratio: "tempo", back: "backswing", down: "downswing" }[k]);
+      const jA = judge(A, n, a), jB = judge(B, n, b);
+      timing.append(el("tr", {}, el("td", { textContent: label }), cell(f(a), jA), cell(f(b), jB), cell(diff, both(jA, jB), "diff")));
     }
     if (tA || tB) wrap.append(el("div", { className: "c-scroll" }, timing));
 
@@ -653,14 +655,16 @@
       table.append(h1, h2);
       for (const [g, title, readout] of sections) {
         table.append(el("tr", { className: "group" }, el("th", { colSpan: cols.length * 3 + 1, textContent: title })));
-        const dA = !!(A.bad[g] && A.bad[g].length), dB = !!(B.bad[g] && B.bad[g].length);
         for (const [label, key, unit] of readout) {
           const tr = el("tr", {}, el("td", { textContent: label }));
           for (const k of cols) {
             const va = valuesAt(A, g, k), vb = valuesAt(B, g, k);
             const x = va && va[key], y = vb && vb[key];
             const d = finite(x) && finite(y) ? { [key]: x - y, clubSeen: va.clubSeen !== false && vb.clubSeen !== false } : null;
-            tr.append(cell(fmtValue(va, key, unit), dA), cell(fmtValue(vb, key, unit), dB), cell(fmtValue(d, key, unit), dA || dB, "diff"));
+            const n = { view: g, value: key, pos: k };
+            const jA = judge(A, n, x, unit), jB = judge(B, n, y, unit);
+            tr.append(cell(fmtValue(va, key, unit), jA), cell(fmtValue(vb, key, unit), jB),
+                      cell(fmtValue(d, key, unit), both(jA, jB), "diff"));
           }
           table.append(tr);
         }
@@ -688,10 +692,12 @@
     const notes = [];
     for (const [S, who] of [[A, "this swing"], [B, "the reference"]]) {
       for (const [g, name] of ANGLES) {
-        if (S.bad[g] && S.bad[g].length) notes.push(`The ${name.toLowerCase()} camera couldn't see all of ${who} (greyed out).`);
+        const codes = (S.facts && S.facts.camera[g]) || [];
+        if (codes.some(c => SwingTrust.BAD_CAMERA.includes(c))) notes.push(`The ${name.toLowerCase()} camera couldn't see all of ${who} (--).`);
       }
     }
-    notes.push("~ = estimated (the club couldn't be seen clearly then). Δ = this swing minus the reference. " +
+    notes.push("~ in a heading = that key position was estimated (the club couldn't be seen clearly then); a greyed ~ " +
+      "number is shaky (hover for why), and so is a difference with one. Δ = this swing minus the reference. " +
       "Body numbers from different sessions only compare if the phones stood in the same places.");
     wrap.append(el("div", { className: "note", textContent: notes.join(" ") }));
     return wrap;

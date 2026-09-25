@@ -149,6 +149,55 @@ class QualityVideos(unittest.TestCase):
         for key in ("p5", "p6", "p7"):
             self.assertLess(blurred["sharpness"][key], sharp["sharpness"][key])
 
+    def test_arms_not_background(self):
+        """A busy background where the hands pass in the downswing (not at address) barely changes
+        the downswing's share of address: only the band along the forearms is measured, and against
+        its own contrast. (Measured over the whole box round the hands, as v1 did, it came out 2.1
+        against 1.0.)"""
+        times = times_of(2.2)
+        yy, xx = np.mgrid[0:H, 0:W]
+        flat = np.full((H, W), 110, np.float32)
+        # Fine stripes to the picture's left of the golfer, where the hands are at P5 and P6.
+        busy = np.where((xx < W / 2 - 0.1 * H) & ((xx // 2) % 2 == 1), 240, 110).astype(np.float32)
+        arm = np.where((yy // 3 + xx // 3) % 2, 70, 130).astype(np.float32)
+
+        def draw(bg):
+            def frame(t, k):
+                lm = synthetic.landmarks(t, ASPECT)
+                bh = quality.body_height(lm) * H
+                inside = quality.arm_band(lm, (0, 0, W, H), W, H, 1.8 * quality.ARM_WIDTH * bh)
+                return to_u8(np.where(inside, arm, bg))
+            return frame
+
+        a = self.measure("arms-flat.mp4", times, draw(flat))["sharpness"]
+        b = self.measure("arms-busy.mp4", times, draw(busy))["sharpness"]
+        self.assertGreater(a["downswing"], 0.6, a)
+        self.assertAlmostEqual(a["downswing"], b["downswing"], delta=0.15)
+        self.assertAlmostEqual(a["p1"], b["p1"], delta=0.2 * a["p1"])
+
+    def test_sharpness_only_with_a_believable_impact(self):
+        times = times_of(2.2)
+        bg = texture(seed=2)
+        path = TMP / "impact.mp4"
+        write_video(path, times, lambda t, k: to_u8(bg))
+        measure = lambda timing: quality.measure(str(path), frames_for(times), self.positions, timing)
+        good = measure([{"angle": "face", "impact": 1.97, "strike": 2.0}])
+        self.assertIsNotNone(good["sharpness"])
+        self.assertIsNone(good["sharpnessSkipped"])
+        self.assertEqual(good["impact"]["clips"], [{"angle": "face", "ball": True, "lead": -30}])
+        for timing, why in (
+                ([{"angle": "dtl", "impact": None, "strike": 2.0}], "ball not found (down the line)"),
+                ([{"angle": "dtl", "impact": 2.1, "strike": 2.0}], "impact doubtful (down the line): 100 ms after the heard strike"),
+                ([{"angle": "face", "impact": 1.9, "strike": 2.0}], "impact doubtful (face-on): 100 ms before the heard strike"),
+                # A down-the-line clip carried from a face-on clip whose impact is off.
+                ([{"angle": "face", "impact": 2.024, "strike": 2.0}, {"angle": "dtl", "impact": 1.98, "strike": 2.01}],
+                 "impact doubtful (face-on): 24 ms after the heard strike")):
+            q = measure(timing)
+            self.assertIsNone(q["sharpness"], timing)
+            self.assertEqual(q["sharpnessSkipped"], why)
+            self.assertFalse(q["impact"]["ok"])
+            self.assertIsNotNone(q["noise"])                          # the light is still measured
+
     def test_no_positions_or_person(self):
         # No swing found and nobody tracked: light and grain still measured, over the start.
         times = times_of(1.0)
@@ -209,7 +258,11 @@ class Worker(unittest.TestCase):
             self.assertEqual(q["poseVersion"], app.pose.VERSION)
             self.assertEqual(q["warnings"], [])
             self.assertIn("p6", q["positions"])
-            self.assertAlmostEqual(q["sharpness"]["downswing"], 1, delta=0.2)   # nothing moves in the picture
+            # Nothing moves in the picture: near 1. (No arms are drawn, so the band along them
+            # samples a different patch of the background texture at each key position.)
+            self.assertAlmostEqual(q["sharpness"]["downswing"], 1, delta=0.35)
+            self.assertTrue(q["impact"]["ok"], q["impact"])          # the made-up ball leaves at the strike
+            self.assertEqual(q["shutter"], "unknown" if name == old else "1/1000")
 
         # The scorecard's label-free table, grouped by shutter (the old clip under "unknown").
         rows = scorecard.quality_rows([dict(c, clip=c["name"]) for c in listed.values()])
@@ -225,6 +278,38 @@ class Worker(unittest.TestCase):
         with app.files_lock:
             self.assertTrue(app.move_clip(new, to_trash=False))
         self.assertTrue(app.quality_file(new).exists())
+
+
+class RealClipNumbers(unittest.TestCase):
+    """The warnings on the numbers quality.py v1 read from real clips (Galaxy S21, 1080p 240 fps, a
+    barn under LED bulbs); see HOME-SETUP.md."""
+
+    def q(self, brightness, noise, amplitude, banding, shutter):
+        return {"brightness": brightness, "noise": noise, "banding": banding, "shutter": shutter,
+                "flicker": {"amplitude": amplitude, "share": 0.6, "hz": 120.0, "mains": 120}}
+
+    def test_auto_looks_normal(self):
+        for b, n in ((102, 3.75), (109, 2.7), (105, 3.3)):
+            q = self.q(b, n, 0.038, 0.015, "Auto")
+            self.assertEqual(quality.warnings(q), ["flicker"], q)   # a real flicker, kept
+            self.assertEqual(quality.flicker_level(q), "mild")
+
+    def test_fixed_shutter_is_dark_not_grainy_and_its_flicker_matters(self):
+        for b, n in ((63, 2.1), (65, 2.35)):
+            q = self.q(b, n, 0.042, 0.020, "1/1000")
+            self.assertEqual(quality.warnings(q), ["dark", "flicker"], q)
+            self.assertEqual(quality.flicker_level(q), "matters")
+
+    def test_grainy_still_caught(self):
+        self.assertIn("grainy", quality.warnings(self.q(105, 5.6, 0, 0, "Auto")))
+        self.assertIn("grainy", quality.warnings(self.q(40, 2.6, 0, 0, "Auto")))     # the floor
+        self.assertIn("grainy", quality.warnings({"noise": 5.0}))                    # no brightness
+        self.assertNotIn("grainy", quality.warnings({"noise": 4.9}))
+
+    def test_strong_flicker_on_auto_matters(self):
+        self.assertEqual(quality.flicker_level(self.q(105, 3, 0.09, 0.01, "Auto")), "matters")
+        self.assertEqual(quality.flicker_level(self.q(105, 3, 0.03, 0.05, "unknown")), "matters")
+        self.assertEqual(quality.flicker_level(self.q(105, 3, 0.03, 0.01, "unknown")), "mild")
 
 
 class Groups(unittest.TestCase):

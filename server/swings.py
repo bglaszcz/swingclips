@@ -1,10 +1,12 @@
 """Each swing's numbers for the trends, worked out on the server with the review page's own
-JavaScript (static/phases.js, metrics.js, summary.js), run in an embedded V8 (mini-racer), so the page
-and the server can't disagree.
+JavaScript (static/phases.js, metrics.js, summary.js, trust.js), run in an embedded V8 (mini-racer),
+so the page and the server can't disagree.
 
 A record per swing, keyed by the clip the swing is listed by (face-on, or a lone down-the-line one):
-{partner, code, body, quality, setup}. `code` fingerprints the JavaScript: after an update changes
-it, every swing is worked out again in the background.
+{partner, code, body, quality, setup, at, noise}. `at` (the numbers at the key positions) and `noise`
+(each camera's noise floor at address) feed the noise table (trust.js noiseTable) and stay on the
+server. `code` fingerprints the JavaScript: after an update changes it, every swing is worked out
+again in the background.
 """
 import gzip
 import hashlib
@@ -14,7 +16,7 @@ from pathlib import Path
 
 from py_mini_racer import MiniRacer
 
-JS_FILES = ("phases.js", "metrics.js", "summary.js")
+JS_FILES = ("phases.js", "metrics.js", "summary.js", "trust.js")
 # The trends assume a right-handed golfer (the lead side is the left).
 LEAD_SIDE = "left"
 # V8 sets itself up when the first engine starts; two threads starting one at once crash the process
@@ -34,14 +36,16 @@ class Summarizer:
         return self.call("summarize", main, other, LEAD_SIDE)
 
     def call(self, function: str, *args):
-        """SwingSummary.<function>(*args), with the arguments and result passed as JSON."""
+        """SwingSummary.<function>(*args), with the arguments and result passed as JSON. A dotted
+        name is called as it is (SwingTrust.speakable)."""
         if self.ctx is None:
             with START_LOCK:
                 self.ctx = MiniRacer()
             for source in self.sources:
                 self.ctx.eval(source)
         args = json.dumps(list(args), separators=(",", ":"))
-        return json.loads(self.ctx.eval(f"JSON.stringify(SwingSummary.{function}(...{args}))"))
+        name = function if "." in function else "SwingSummary." + function
+        return json.loads(self.ctx.eval(f"JSON.stringify({name}(...{args}))"))
 
     def close(self) -> None:
         if self.ctx is not None:

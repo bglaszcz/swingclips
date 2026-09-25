@@ -6,8 +6,11 @@ Settings (environment variables): SWINGCLIPS_CLIPS (clips folder), SWINGCLIPS_PO
 default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 8000),
 SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landmarker_full.task),
 SWINGCLIPS_LABELS (hand labels for the scorecard, eval.py; default: a "labels" folder next to the clips folder),
-SWINGCLIPS_PRACTICE / SWINGCLIPS_PRACTICE_LOG (practice mode's target and log; default next to the clips folder).
+SWINGCLIPS_PRACTICE / SWINGCLIPS_PRACTICE_LOG (practice mode's target and log; default next to the clips folder),
+SWINGCLIPS_NOISE (the noise floor per number; default noise.json next to the clips folder).
 Once a clip's pose is saved, the same worker measures its light, grain, flicker and sharpness (quality.py).
+The swing worker keeps each swing's numbers (swings.py) and the noise floor per number (noise.json),
+which the page's trust rules (static/trust.js) use.
 """
 import asyncio
 import bisect
@@ -63,6 +66,14 @@ PAIR_SLACK_S = 2.0
 # Each swing's numbers for the trends (see swings.py), by the clip it's listed by; kept in SWINGS_FILE.
 SWINGS_FILE = Path(os.environ.get("SWINGCLIPS_SWINGS", CLIPS_DIR.parent / "swings.json"))
 swing_records: dict[str, dict] = {}
+# The noise floor per number over recent swings (trust.js noiseTable), for the trust shown on the
+# page: worked out by the swing worker when the swings change, kept in NOISE_FILE.
+NOISE_FILE = Path(os.environ.get("SWINGCLIPS_NOISE", CLIPS_DIR.parent / "noise.json"))
+noise_table: dict = {}
+# Worked out again at least this often (s): clubs corrected, swings left out.
+NOISE_EVERY_S = 600
+# The most recent swings passed in: trust.js noiseTable uses its RECENT (300) of them.
+NOISE_RECENT = 300
 swings_code = ""   # fingerprint of the JavaScript the records are worked out with
 records_lock = threading.Lock()
 
@@ -220,8 +231,15 @@ def measure_quality(clip: dict, other: dict | None, pool: ProcessPoolExecutor, s
         times = summarizer.call("positionTimes", inp, None, swings.LEAD_SIDE)["main"]
     positions = (times or {}).get("times", {})
     frames = [(f["t"], f["lm"]) for f in inp["frames"]]
+    # The impacts the key positions hang on: this clip's, and for a down-the-line clip whose
+    # positions come from the face-on clip, that one's too.
+    timing = [{"angle": clip["angle"], "impact": inp.get("impact"), "strike": clip["strike"]}]
+    if clip["angle"] == "dtl" and other is not None:
+        o = swings.pose_input(other, pose_file(other["name"]))
+        timing.insert(0, {"angle": other["angle"], "impact": o.get("impact"), "strike": other["strike"]})
     started = time.perf_counter()
-    record = pool.submit(quality.measure, str(CLIPS_DIR / clip["name"]), frames, positions).result()
+    record = pool.submit(quality.measure, str(CLIPS_DIR / clip["name"]), frames, positions, timing,
+                         clip.get("camera")).result()
     record["poseVersion"] = pose.VERSION
     record["positions"] = {k: round(v, 4) for k, v in positions.items() if k in quality.SHARP_KEYS}
     tmp = quality_file(clip["name"]).with_suffix(".tmp")
@@ -234,11 +252,13 @@ def measure_quality(clip: dict, other: dict | None, pool: ProcessPoolExecutor, s
 
 def swing_worker(stop: threading.Event):
     """Forever: work out the numbers of each analyzed swing that has none, or old ones."""
-    global swing_records, swings_code
+    global swing_records, swings_code, noise_table
     summarizer = swings.Summarizer(STATIC_DIR)
     swings_code = summarizer.code
     with records_lock:
         swing_records = swings.load(SWINGS_FILE)
+    noise_table = swings.load(NOISE_FILE)
+    noise_at = 0.0
     try:
         while not stop.is_set():
             clips = {c["name"]: c for c in listed_clips(with_shots=False)}
@@ -270,9 +290,31 @@ def swing_worker(stop: threading.Event):
                 with records_lock:
                     swings.save(SWINGS_FILE, swing_records)
                 print(f"Swings: worked out the numbers of {done} swing(s)", flush=True)
+            if done or noise_table.get("code") != swings_code or time.time() - noise_at > NOISE_EVERY_S:
+                try:
+                    noise_table = work_out_noise(summarizer)
+                    swings.save(NOISE_FILE, noise_table)
+                except Exception:
+                    traceback.print_exc()
+                noise_at = time.time()
             stop.wait(5)
     finally:
         summarizer.close()
+
+
+def work_out_noise(summarizer: swings.Summarizer) -> dict:
+    """The noise table (trust.js noiseTable) from the listed swings' records, with the club each was
+    hit with; swings left out of the trends don't count."""
+    listed = [c for c in listed_clips() if not (c["partner"] and c["angle"] != "face") and not c["excluded"]]
+    with records_lock:
+        todo = [{"t": datetime.fromisoformat(c["recorded"]).timestamp(), "club": (c["shot"] or {}).get("club"),
+                 "record": {k: swing_records[c["name"]].get(k) for k in ("body", "error", "quality", "at", "noise")}}
+                for c in listed if swing_records.get(c["name"], {}).get("code") == swings_code]
+    # Only the latest go in (trust.js takes its RECENT = 300 of them): less to pass to the JavaScript.
+    todo = sorted(todo, key=lambda s: s["t"], reverse=True)[:NOISE_RECENT]
+    table = summarizer.call("SwingTrust.noiseTable", todo)
+    table.update(code=swings_code, updated=datetime.now().isoformat(timespec="seconds"))
+    return table
 
 
 def practice_worker(stop: threading.Event):
@@ -354,6 +396,7 @@ async def lifespan(app: FastAPI):
     stop.set()
     worker.join(timeout=5)  # lets it close its JavaScript engine, which otherwise holds up the exit
     camera_setup.close()
+    practice.close_rules()
 
 
 app = FastAPI(title="SwingClips", lifespan=lifespan)
@@ -833,8 +876,19 @@ def get_swings():
     # Only swings listed now, by the clip they're listed by (a lone angle may since have been paired).
     listed = {c["name"] for c in listed_clips(with_shots=False) if not (c["partner"] and c["angle"] != "face")}
     with records_lock:
-        records = {k: v for k, v in swing_records.items() if k in listed}
-    return {"code": swings_code, "swings": records}
+        # Without the numbers kept for the noise table: the page doesn't need them.
+        records = {k: {f: x for f, x in v.items() if f not in SERVER_ONLY} for k, v in swing_records.items() if k in listed}
+    return {"code": swings_code, "swings": records, "noise": noise_table}
+
+
+# Parts of a swing record that stay on the server.
+SERVER_ONLY = ("at", "noise")
+
+
+@app.get("/api/noise")
+def get_noise():
+    """The noise floor per number over recent swings (trust.js noiseTable)."""
+    return noise_table
 
 
 # ---- Hand labels, for the scorecard (eval.py) ----
