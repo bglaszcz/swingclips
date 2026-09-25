@@ -658,6 +658,16 @@ set SWINGCLIPS_POSE_BACKEND=rtmpose-m
   numbers follow. A clip that fails keeps its old result. Delete the line (or the file) to go back:
   the clips are then analyzed again with MediaPipe the same way.
 
+#### The ball search (pose.py, `BALL_VERSION` 2)
+Impact is the first frame the ball is gone. A spot only counts as the ball if it's a ball's size
+(1-3% of nose-to-feet height), where a ball sits for the camera's angle (face-on below the feet;
+down the line level with them or a little above) and leaves between 80 ms before and 10 ms after
+the strike the phone heard: sound arrives after the ball goes, never before. (Wrong spots once left
+~105 ms after the strike and put a swing's two angles 110 ms apart.) When only the ball search
+changes, the server checks each analyzed clip again in the background, a few seconds a clip: a
+saved ball that passes is kept, others are found again, and the swing's numbers follow
+("Ball: <clip>: impact 2.19 s -> 2.06 s" in the window).
+
 #### Trying another body model
 `models.py` can put the 2D joints from RTMPose or RTMW instead of MediaPipe, for the scorecard
 only: the server itself keeps using MediaPipe unless the setting below is made in *its* window, and

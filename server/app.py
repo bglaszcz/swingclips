@@ -163,14 +163,16 @@ def body_model() -> str:
     return b if b == models.DEFAULT else models.stamp(b)
 
 
-# Which model made each pose file, by clip name: (file's mtime, model). The worker checks every clip.
-_pose_models: dict[str, tuple[int, str]] = {}
-# Clips that failed to be analyzed again with the current model (kept as they were until a restart).
+# What made each pose file, by clip name: (file's mtime, body model, ball search version). The
+# worker checks every clip.
+_pose_models: dict[str, tuple[int, str, int]] = {}
+# Clips that failed to be analyzed again with the current model, or to have the ball found again
+# (kept as they were until a restart).
 _again_failed: set[str] = set()
+_ball_failed: set[str] = set()
 
 
-def pose_model(name: str) -> str | None:
-    """Which body model made a clip's pose file ("mediapipe" when it doesn't say), or None without one."""
+def _pose_stamp(name: str) -> tuple[str, int] | None:
     f = pose_file(name)
     try:
         mtime = f.stat().st_mtime_ns
@@ -178,16 +180,60 @@ def pose_model(name: str) -> str | None:
         return None
     got = _pose_models.get(name)
     if got is None or got[0] != mtime:
-        # pose.py writes "model" right after "version" (only for another backend), so the start will do.
+        # pose.py writes "model" and "ballVersion" near the start, so the start will do.
         try:
             with gzip.open(f, "rb") as g:
-                head = g.read(200).decode("utf-8", "replace")
+                head = g.read(400).decode("utf-8", "replace")
         except (OSError, EOFError):
             return None
         m = re.search(r'"model":"([^"]+)"', head)
-        got = (mtime, m.group(1) if m else models.DEFAULT)
+        b = re.search(r'"ballVersion":(\d+)', head)
+        got = (mtime, m.group(1) if m else models.DEFAULT, int(b.group(1)) if b else 1)
         _pose_models[name] = got
-    return got[1]
+    return got[1], got[2]
+
+
+def pose_model(name: str) -> str | None:
+    """Which body model made a clip's pose file ("mediapipe" when it doesn't say), or None without one."""
+    stamp = _pose_stamp(name)
+    return stamp and stamp[0]
+
+
+def pose_made(name: str) -> str | None:
+    """What a clip's pose file came from: body model and ball search, e.g. "rtmpose-m-256x192+ball2".
+    Quality records, swing numbers and 3D keep it, and are worked out again when it changes."""
+    stamp = _pose_stamp(name)
+    return stamp and f"{stamp[0]}+ball{stamp[1]}"
+
+
+def find_ball_again(clip: Path, pool: ProcessPoolExecutor) -> ProcessPoolExecutor:
+    """The ball search again on one analyzed clip (pose.find_ball_again): keeps a ball that passes
+    the current checks, else finds it again. Returns the pool (a fresh one if a worker died)."""
+    global pose_busy
+    with files_lock:
+        if not clip.exists() or clip.name in pending_trash:
+            return pool
+        pose_busy = clip.name
+    try:
+        doc = json.loads(gzip.decompress(pose_file(clip.name).read_bytes()))
+        result = pose.find_ball_again(str(clip), doc, pool, POSE_WORKERS)
+        tmp = pose_file(clip.name).with_suffix(".tmp")
+        tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
+        tmp.replace(pose_file(clip.name))
+        if (result.get("impact"), result.get("ball")) != (doc.get("impact"), doc.get("ball")):
+            was = f"{doc['impact']} s" if doc.get("impact") is not None else "none"
+            now = f"{result['impact']} s" if result.get("impact") is not None else "ball not found"
+            print(f"Ball: {clip.name}: impact {was} -> {now}", flush=True)
+    except Exception as e:
+        _ball_failed.add(clip.name)
+        print(f"Ball: {clip.name} FAILED (keeps its old result)", flush=True)
+        traceback.print_exc()
+        if isinstance(e, BrokenProcessPool):
+            pool = ProcessPoolExecutor(POSE_WORKERS)
+    finally:
+        with files_lock:
+            pose_busy = None
+    return pool
 
 
 def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False) -> ProcessPoolExecutor:
@@ -247,6 +293,12 @@ def pose_worker(stop: threading.Event):
                 if again:
                     pool = analyze_clip(max(again, key=recorded_at), pool, again=True)
                     continue
+                # Then the ball search again, newest first, on clips from an older one (pose.BALL_VERSION).
+                reball = [p for p in clip_paths() if p.name not in _ball_failed and pose_state(p.name) == "done"
+                          and (_pose_stamp(p.name) or (None, pose.BALL_VERSION))[1] != pose.BALL_VERSION]
+                if reball:
+                    pool = find_ball_again(max(reball, key=recorded_at), pool)
+                    continue
                 # Then measure a clip's quality (new ones first, then older clips).
                 try:
                     if summarizer is None:
@@ -274,7 +326,7 @@ def quality_step(pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> bo
     # Measured against an older pose file (its key positions may have moved): measured again.
     todo = [c for c in clips.values() if c["pose"] == "done" and not quality_error_file(c["name"]).exists()
             and (c["quality"] is None or c["quality"].get("poseVersion") != pose.VERSION
-                 or c["quality"].get("poseModel", models.DEFAULT) != pose_model(c["name"]))]
+                 or c["quality"].get("poseModel", models.DEFAULT) != pose_made(c["name"]))]
     for c in sorted(todo, key=lambda c: c["recorded"], reverse=True):
         other = clips.get(c["partner"] or "")
         if c["angle"] == "dtl" and other and other["pose"] not in ("done", "failed"):
@@ -320,7 +372,7 @@ def measure_quality(clip: dict, other: dict | None, pool: ProcessPoolExecutor, s
     record = pool.submit(quality.measure, str(CLIPS_DIR / clip["name"]), frames, positions, timing,
                          clip.get("camera")).result()
     record["poseVersion"] = pose.VERSION
-    record["poseModel"] = pose_model(clip["name"])
+    record["poseModel"] = pose_made(clip["name"])
     record["positions"] = {k: round(v, 4) for k, v in positions.items() if k in quality.SHARP_KEYS}
     tmp = quality_file(clip["name"]).with_suffix(".tmp")
     tmp.write_text(json.dumps(record, separators=(",", ":")))
@@ -352,7 +404,7 @@ def swing_worker(stop: threading.Event):
                 other = other if other and other["pose"] == "done" else None
                 old = swing_records.get(c["name"])
                 # Worked out again when the JavaScript, the partner or either clip's body model changed.
-                made_by = [pose_model(c["name"]), other and pose_model(other["name"])]
+                made_by = [pose_made(c["name"]), other and pose_made(other["name"])]
                 if (old and old.get("code") == swings_code and old.get("partner") == (other and other["name"])
                         and old.get("poseModel", [models.DEFAULT, other and models.DEFAULT]) == made_by):
                     continue
@@ -438,7 +490,7 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
                 session, why = None, f"recorded in another mode than calibrated ({', '.join(sorted(map(str, modes)))})"
         # The body model is in the key too: after a switch the pose files are analyzed again.
         key = (f"{session['id'] if session else why}|tri{tri.VERSION}|pose{pose.VERSION}"
-               f"|{pose_model(name)}|{pose_model(c['partner'])}")
+               f"|{pose_made(name)}|{pose_made(c['partner'])}")
         if rec.get("key3d") == key:
             continue
         rec = dict(rec, key3d=key, body3d=None, why3d=None if session else why)

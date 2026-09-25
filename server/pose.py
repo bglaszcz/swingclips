@@ -15,6 +15,7 @@ casting in club.py, and saves its clubhead per frame too; raycast, the default, 
 exactly as it was.
 """
 import os
+import re
 import time
 from concurrent.futures import ProcessPoolExecutor
 
@@ -31,6 +32,9 @@ import models
 MODEL = os.environ.get("SWINGCLIPS_POSE_MODEL", os.path.join(
     os.path.dirname(__file__), "..", "public", "mediapipe", "pose_landmarker_full.task"))
 VERSION = 6
+# The ball search's own version: when only it changes, the server finds the ball again in each
+# analyzed clip (find_ball_again, a few seconds a clip) instead of analyzing it all over.
+BALL_VERSION = 2
 # MediaPipe works on a 256px input internally, so half size loses nothing and halves the conversion.
 SCALE = 0.5
 ROTATE_CW = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
@@ -51,6 +55,25 @@ BALL_STEP_SECONDS = 0.15
 # within HANDS_WINDOW_SECONDS either side.
 HANDS_AT_IMPACT = 0.2
 HANDS_WINDOW_SECONDS = 0.1
+# The ball goes a little before the phone hears the strike (sound travels; 8-53 ms on real clips,
+# never after): a spot that "leaves" outside this window around the heard strike (s) isn't the ball.
+# Wrong spots once left 104-106 ms after the strike.
+STRIKE_WINDOW = (-0.08, 0.01)
+# The ball's radius as a share of nose-to-feet height: 1.1-2.6% on real clips (wrong spots 0.9% and 3.2%).
+BALL_RADIUS = (0.010, 0.030)
+# Where the ball sits against the lowest foot point, in nose-to-feet heights (+ = lower in the
+# picture): face-on the camera looks down on it, 0.16-0.36 below; down the line it's farther away,
+# 0.02-0.15 above. Clips of unknown angle get the whole range.
+BALL_ROWS = {"face": (0.0, 0.6), "dtl": (-0.3, 0.1), None: (-0.3, 0.6)}
+CLIP_NAME = re.compile(r"^swing_(?:(face|dtl)_)?\d+x\d+_\d+fps_\d+(?:_(\d+)ms)?")
+
+
+def clip_facts(path):
+    """(angle "face" | "dtl" | None, heard strike in clip seconds | None) from a capture-app clip name."""
+    m = CLIP_NAME.match(os.path.basename(path))
+    if not m:
+        return None, None
+    return m.group(1), (int(m.group(2)) / 1000 if m.group(2) else None)
 
 
 def probe(path):
@@ -231,8 +254,9 @@ def top_of_backswing(frames):
     return min(rows, key=lambda r: r[1])[0] if rows else None
 
 
-def ball_candidates(path, rotation, frames, first):
-    """Places near the feet that look like a ball in frame `first` and are gone at the end.
+def ball_candidates(path, rotation, frames, first, angle=None):
+    """Places near the feet that look like a ball in frame `first` and are gone at the end: the size
+    of a ball for the golfer's size, where a ball sits for the camera's angle.
 
     Returns [(cx, cy, r)] in upright full-size pixels, best first.
     """
@@ -256,10 +280,13 @@ def ball_candidates(path, rotation, frames, first):
     x0 = int(max(0, min(x for x, _ in feet) - 0.6 * height))
     x1 = int(min(w, max(x for x, _ in feet) + 0.6 * height))
     y0 = int(max(0, foot_y - 0.3 * height))
-    y1 = int(min(h, foot_y + 0.5 * height))
+    y1 = int(min(h, foot_y + 0.6 * height))
     region = cv2.GaussianBlur(first[y0:y1, x0:x1], (5, 5), 1.2)
-    # A ball is ~43 mm against ~1.6 m nose to feet; allow for it being nearer or farther than the golfer.
+    # Circles looked for broadly (a ball is ~43 mm against ~1.6 m nose to feet, nearer or farther
+    # than the golfer), then kept only at a ball's size and where a ball sits for this angle: the
+    # search itself stays as it was, so the circles it finds don't shift.
     r_min, r_max = max(3, int(0.006 * height)), max(6, int(0.04 * height))
+    rows = BALL_ROWS.get(angle, BALL_ROWS[None])
     circles = cv2.HoughCircles(region, cv2.HOUGH_GRADIENT, dp=1, minDist=r_min * 2, param1=80, param2=14,
                                minRadius=r_min, maxRadius=r_max)
     if circles is None:
@@ -267,6 +294,8 @@ def ball_candidates(path, rotation, frames, first):
     scored = []
     for cx, cy, r in circles[0]:
         cx, cy = cx + x0, cy + y0
+        if not (BALL_RADIUS[0] <= r / height <= BALL_RADIUS[1] and rows[0] <= (cy - foot_y) / height <= rows[1]):
+            continue
         k = int(r * 2.1) + 1
         if cx - k < 0 or cy - k < 0 or cx + k >= w or cy + k >= h:
             continue
@@ -357,19 +386,22 @@ def find_impact(path, rotation, frames, jobs, pool):
 
     The ball is looked for at the start of the clip (address) and, failing that, at the top of the
     backswing: from down the line the clubhead sits between the camera and the ball at address.
+    The clip's name gives the camera's angle (where to look) and when the phone heard the strike
+    (when the ball can have gone).
     """
+    angle, strike = clip_facts(path)
     with av.open(path) as c:
         first = upright_gray(next(c.decode(video=0)), rotation)
-    found = find_impact_from(path, rotation, frames, jobs, pool, first)
+    found = find_impact_from(path, rotation, frames, jobs, pool, first, angle, strike)
     top = top_of_backswing(frames)
     if found[1] is None and top is not None:
-        found = find_impact_from(path, rotation, frames, jobs, pool, frame_at(path, rotation, top))
+        found = find_impact_from(path, rotation, frames, jobs, pool, frame_at(path, rotation, top), angle, strike)
     return found
 
 
-def find_impact_from(path, rotation, frames, jobs, pool, first):
+def find_impact_from(path, rotation, frames, jobs, pool, first, angle=None, strike=None):
     """find_impact, with the ball looked for in the frame `first`."""
-    candidates = ball_candidates(path, rotation, frames, first)
+    candidates = ball_candidates(path, rotation, frames, first, angle)
     if not candidates:
         return None, None
     refs = [ball_patch(first, cand) for cand in candidates]
@@ -386,6 +418,9 @@ def find_impact_from(path, rotation, frames, jobs, pool, first):
             near = np.abs(speed[0] - times[found[0]]) <= HANDS_WINDOW_SECONDS
             if not near.any() or speed[1][near].max() < HANDS_AT_IMPACT * speed[1].max():
                 found = None
+        # And it leaves just before the phone hears the strike, never well before or after it.
+        if found and strike is not None and not (STRIKE_WINDOW[0] <= times[found[0]] - strike <= STRIKE_WINDOW[1]):
+            found = None
         if found and (best is None or found[1] > best[1]):
             best = (found[0], found[1], cand)
     if best is None:
@@ -436,6 +471,7 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
     h, w = (bg.shape[:2] if bg is not None else (1, 1))
     out = {
         "version": VERSION,
+        "ballVersion": BALL_VERSION,
         "rotation": rotation,
         "seconds": round(time.perf_counter() - started, 2),
         "ball": ball,
@@ -468,6 +504,63 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
         if clubm:
             cost["club"] = round(ms["club"], 1)
         out = {"version": VERSION, **stamps, "msPerFrame": cost, **out}
+    return out
+
+
+def ball_fits(path, doc) -> bool:
+    """Whether a saved result's ball passes the current ball search's checks: left in the window
+    around the heard strike, a ball's size, where a ball sits for the camera's angle."""
+    ball, impact = doc.get("ball"), doc.get("impact")
+    lm = next((f["lm"] for f in doc.get("frames") or [] if f.get("lm")), None)
+    if not ball or impact is None or not lm:
+        return False
+    angle, strike = clip_facts(path)
+    foot_y = max(lm[i * 3 + 1] for i in FEET)
+    height = foot_y - lm[NOSE * 3 + 1]
+    if height <= 0:
+        return False
+    rows = BALL_ROWS.get(angle, BALL_ROWS[None])
+    return ((strike is None or STRIKE_WINDOW[0] <= impact - strike <= STRIKE_WINDOW[1])
+            and BALL_RADIUS[0] <= ball["r"] / height <= BALL_RADIUS[1]
+            and rows[0] <= (ball["y"] - foot_y) / height <= rows[1])
+
+
+def find_ball_again(path, doc, pool: ProcessPoolExecutor, workers: int) -> dict:
+    """A saved pose result checked by the current ball search, for when only the ball search
+    changed. A ball that passes its checks is kept as it was; otherwise (or with no ball) it's found
+    again, from the saved (smoothed) landmarks, with the shaft length drawn from it: a few seconds
+    a clip instead of a whole analysis."""
+    if ball_fits(path, doc):
+        out = {}
+        for k, v in doc.items():
+            out[k] = v
+            if k == "version":
+                out["ballVersion"] = BALL_VERSION
+        out["ballVersion"] = BALL_VERSION
+        return out
+    keys, _, rotation = probe(path)
+    if not keys:
+        keys = [0]
+    groups = np.array_split(np.arange(len(keys)), min(workers, len(keys)))
+    jobs = []
+    for g in groups:
+        start = keys[g[0]]
+        end = keys[g[-1] + 1] if g[-1] + 1 < len(keys) else None
+        jobs.append((path, start, end, rotation))
+    frames = [(f["t"], None if f["lm"] is None else [tuple(f["lm"][i:i + 3]) for i in range(0, len(f["lm"]), 3)],
+               None, None, None) for f in doc["frames"]]
+    ball, impact = find_impact(path, rotation, frames, jobs, pool)
+    first = next((lm for _, lm, *_ in frames if lm is not None), None)
+    with av.open(path) as c:
+        g = upright_gray(next(c.decode(video=0)), rotation)
+    h, w = g.shape[:2]
+    out = {}
+    for k, v in doc.items():
+        out[k] = v
+        if k == "version":
+            out["ballVersion"] = BALL_VERSION
+    out.update(ballVersion=BALL_VERSION, ball=ball, impact=impact,
+               clubLength=club.length(first, ball, w, h) if first is not None else doc.get("clubLength"))
     return out
 
 

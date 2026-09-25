@@ -212,7 +212,8 @@ class PipelineTest(unittest.TestCase):
             fakes.clip(cls.clips[rotation], rotation)
 
     def test_default_output_unchanged(self):
-        """With the default backend, byte for byte what pose.py gave before body backends."""
+        """With the default backend, byte for byte what pose.py gave before body backends (bar the
+        ball search's version stamp)."""
         old = reference_pose()
         if old is None:
             self.skipTest(f"needs git and commit {REFERENCE_COMMIT[:7]}")
@@ -221,6 +222,8 @@ class PipelineTest(unittest.TestCase):
                 new = analyze(pose, self.clips[rotation])
                 self.assertNotIn("model", new)
                 self.assertTrue(any(f["lm"] for f in new["frames"]))
+                # The ball search's version stamp (pose.BALL_VERSION) is the one thing added since.
+                self.assertEqual(new.pop("ballVersion"), pose.BALL_VERSION)
                 self.assertEqual(json.dumps(new), json.dumps(analyze(old, self.clips[rotation])), rotation)
 
     @needs_ort
