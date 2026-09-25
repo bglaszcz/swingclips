@@ -5,12 +5,16 @@ golfer stands still at address (the noise floor). Labels come from the review pa
   .venv\\Scripts\\python.exe eval.py              score the saved pose results against the labels
   .venv\\Scripts\\python.exe eval.py --rerun      analyze the labeled clips again first, with pose.py as it is now
   .venv\\Scripts\\python.exe eval.py --compare D:\\SwingClips\\eval\\<an earlier result>.json
+  .venv\\Scripts\\python.exe eval.py --compare    against the newest earlier MediaPipe result
   .venv\\Scripts\\python.exe eval.py --no-noise   skip the noise floor
+
+With SWINGCLIPS_POSE_BACKEND set (rtmpose-m, rtmpose-l, rtmw; see models.py), --rerun analyzes with
+that body model instead, cached apart from MediaPipe's.
 
 The key positions and numbers are worked out by the review page's own JavaScript (as the server
 does, see swings.py), so the scorecard scores exactly what the page shows. Prints the tables and
 writes everything to SWINGCLIPS_EVAL (default: an "eval" folder next to the clips folder) as
-<date>_v<pose version>_<JavaScript fingerprint>.json.
+<date>_v<pose version>_<JavaScript fingerprint>.json (with _<body model> after it for another backend).
 """
 import argparse
 import bisect
@@ -27,6 +31,7 @@ from pathlib import Path
 import numpy as np
 
 import app
+import models
 import pose
 import swings
 
@@ -78,14 +83,26 @@ def saved_pose(name: str) -> Path | None:
 
 
 def pipeline_fingerprint() -> str:
-    """Changes whenever pose.py, club.py or the pose model changes, so --rerun caches don't go stale."""
+    """Changes whenever pose.py, club.py or the pose model changes, so --rerun caches don't go stale.
+    Another body backend (models.py) changes it too, and so does its model file."""
     here = Path(__file__).parent
     h = hashlib.sha1()
     for f in ("pose.py", "club.py"):
         h.update((here / f).read_bytes())
     model = Path(pose.MODEL)
     h.update(f"{model.name}:{model.stat().st_size if model.is_file() else 0}".encode())
+    backend = models.backend()
+    if backend != models.DEFAULT:
+        body = models.model_path(backend)
+        h.update((here / "models.py").read_bytes())
+        h.update(f"{backend}:{body.name}:{body.stat().st_size if body.is_file() else 0}".encode())
     return h.hexdigest()[:10]
+
+
+def body_model() -> str:
+    """Which model places the 2D landmarks: "mediapipe", or the backend's model, e.g. rtmpose-m-256x192."""
+    backend = models.backend()
+    return backend if backend == models.DEFAULT else models.stamp(backend)
 
 
 def rerun_pose(name: str, cache: Path, pool: ProcessPoolExecutor, workers: int) -> Path | None:
@@ -398,7 +415,8 @@ def table(title: str, rows: list[dict], columns: list[tuple[str, str]], note: st
 def print_report(result: dict) -> None:
     t = result["tables"]
     print(f"Scorecard {result['stamp']}: pose.py v{result['poseVersion']}, JavaScript {result['jsCode']}, "
-          f"model {result['poseModel']}, {result['labeledClips']} labeled clip(s)"
+          f"model {result['poseModel']}, body {result.get('bodyModel', models.DEFAULT)}, "
+          f"{result['labeledClips']} labeled clip(s)"
           + (" (analyzed again with --rerun)" if result["rerun"] else ""))
     table("Key positions: labeled vs found (ms; + = found late)", t["events"],
           [("angle", "angle"), ("event", "event"), ("labeled", "n"), ("missed", "missed"), ("median", "median |err|"),
@@ -428,7 +446,8 @@ def print_report(result: dict) -> None:
 def print_compare(old: dict, new: dict) -> None:
     a, b = old.get("headline", {}), new["headline"]
     keys = [k for k in b if k in a and a[k] is not None and b[k] is not None]
-    print(f"\nCompared with {old.get('stamp')} (pose.py v{old.get('poseVersion')}, JavaScript {old.get('jsCode')}):")
+    print(f"\nCompared with {old.get('stamp')} (pose.py v{old.get('poseVersion')}, JavaScript {old.get('jsCode')}, "
+          f"body {old.get('bodyModel', models.DEFAULT)}):")
     if not keys:
         print("  nothing in common to compare")
         return
@@ -440,11 +459,27 @@ def print_compare(old: dict, new: dict) -> None:
 
 # ---- Main ----
 
+LATEST = Path("<latest>")
+
+
+def latest_mediapipe(folder: Path) -> Path | None:
+    """The newest result in the folder whose landmarks came from MediaPipe (results from before
+    other backends existed have no bodyModel and count)."""
+    for f in sorted(folder.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True):
+        try:
+            doc = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(doc, dict) and "headline" in doc and doc.get("bodyModel", models.DEFAULT) == models.DEFAULT:
+            return f
+    return None
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rerun", action="store_true", help="analyze the labeled clips again with pose.py as it is now")
     ap.add_argument("--no-noise", action="store_true", help="skip the noise floor")
-    ap.add_argument("--compare", type=Path, help="an earlier result .json to show the changes against")
+    ap.add_argument("--compare", type=Path, nargs="?", const=LATEST,
+                    help="an earlier result .json to show the changes against (on its own: the newest MediaPipe one)")
     ap.add_argument("--out", type=Path, default=EVAL_DIR, help=f"where results go (default {EVAL_DIR})")
     args = ap.parse_args(argv)
 
@@ -517,6 +552,7 @@ def main(argv=None) -> int:
         result = {
             "stamp": datetime.now().isoformat(timespec="seconds"),
             "poseVersion": pose.VERSION, "jsCode": summ.code, "poseModel": Path(pose.MODEL).name,
+            "bodyModel": body_model(),
             "rerun": args.rerun, "labeledClips": len(clips),
             **summarize(clips, label_checks, noise),
             "clips": clips, "labeler": label_checks, "noise": noise,
@@ -528,9 +564,15 @@ def main(argv=None) -> int:
 
     print_report(result)
     if args.compare:
-        print_compare(json.loads(args.compare.read_text(encoding="utf-8")), result)
+        earlier = latest_mediapipe(args.out) if args.compare == LATEST else args.compare
+        if earlier is None:
+            print(f"\nNothing to compare with: no earlier MediaPipe result in {args.out} (run without "
+                  "SWINGCLIPS_POSE_BACKEND first)")
+        else:
+            print_compare(json.loads(earlier.read_text(encoding="utf-8")), result)
     args.out.mkdir(parents=True, exist_ok=True)
-    out = args.out / f"{datetime.now():%Y-%m-%d_%H%M}_v{pose.VERSION}_{summ.code}.json"
+    body = "" if result["bodyModel"] == models.DEFAULT else f"_{result['bodyModel']}"
+    out = args.out / f"{datetime.now():%Y-%m-%d_%H%M}_v{pose.VERSION}_{summ.code}{body}.json"
     out.write_text(json.dumps(result, indent=1), encoding="utf-8")
     print(f"\nSaved {out}")
     return 0

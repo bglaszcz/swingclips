@@ -179,6 +179,40 @@ to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of 
   - `--no-noise`: skip the noise floor.
 - Tests (no clips needed; a made-up swing): `cd server` then `python -m unittest discover tests`.
 
+#### Trying another body model
+`models.py` can put the 2D joints from RTMPose or RTMW instead of MediaPipe, for the scorecard
+only: the server itself keeps using MediaPipe unless the setting below is made in *its* window, and
+MediaPipe still runs alongside either way (the person mask for the club, the 3D estimate for forward
+bend and scale, and any point the other model doesn't have). `SWINGCLIPS_POSE_BACKEND` picks it:
+`mediapipe` (default), `rtmpose-m` (256x192, 17 points), `rtmpose-l` (384x288, 17 points) or `rtmw`
+(RTMW-l 384x288, 133 points: adds heels, toes and the index fingers, which the club's grip uses).
+Each crop is around the golfer: the previous frame's points plus 25%, or MediaPipe's on the first
+frame and after the model loses them.
+
+In a Command Prompt on the server:
+
+```
+cd /d D:\SwingClips\app\server
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe fetch_models.py
+.venv\Scripts\python.exe eval.py --rerun
+set SWINGCLIPS_POSE_BACKEND=rtmpose-m
+.venv\Scripts\python.exe eval.py --rerun --compare
+```
+
+- `fetch_models.py` downloads the three models (~400 MB, from MMPose's releases) into
+  `public\models` (not in git); `fetch_models.py rtmpose-m` for just one.
+- The first `eval.py --rerun`, without the setting, is the MediaPipe baseline. `--compare` on its
+  own compares with the newest MediaPipe result; give it a file to compare with that instead.
+- Each model's reruns are cached apart (`D:\SwingClips\eval\pose\<fingerprint>`), and results are
+  saved with the model in the name (`..._rtmpose-m-256x192.json`). `set SWINGCLIPS_POSE_BACKEND=`
+  goes back to MediaPipe in that window.
+- It prints the cost per frame for each clip (`pose: <clip>: <n> frames, MediaPipe <ms> ms/frame,
+  rtmpose-m-256x192 <ms> ms/frame (in each of 4 worker(s))`), and the pose files keep it
+  (`msPerFrame`). Each worker runs the model on one thread; `set SWINGCLIPS_ORT_THREADS=2` to try two.
+- Confidence isn't on the same scale as MediaPipe's visibility (the model's peak score, 0-1), and
+  the page weighs the hands by it. Worth keeping in mind if hand numbers shift.
+
 ### `relay/` - launch monitor to server (runs on the sim laptop, nothing to install)
 - **`square-watcher.ps1`** (used): Square Golf's Windows app saves every shot to a plain SQLite
   file, `%USERPROFILE%\AppData\LocalLow\Invant\Square Golf\SQGDB.bytes` (`IVShotLog`: ball data,

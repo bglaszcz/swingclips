@@ -42,3 +42,6 @@ yarn-error.log*
 next-env.d.ts
 
 certificates
+
+# body models for the home server (server/fetch_models.py)
+/public/models/
