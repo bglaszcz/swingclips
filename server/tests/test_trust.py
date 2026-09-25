@@ -170,5 +170,10 @@ class Server(unittest.TestCase):
             self.assertIn("body", rec)
 
 
+def tearDownModule():
+    # practice.py keeps a V8 for the trust rules; left open, it keeps the process from exiting (Windows).
+    practice.close_rules()
+
+
 if __name__ == "__main__":
     unittest.main()
