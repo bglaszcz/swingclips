@@ -49,6 +49,7 @@ class Setup:
 
     def judge(self, angle: str, jpeg: bytes, rotation: int) -> dict:
         """Finds the golfer in a still and keeps it as the camera's latest. Returns the verdict."""
+        import calib
         import mediapipe as mp
         img = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
         if img is None:
@@ -71,6 +72,9 @@ class Setup:
                 # The board on the mat, not a golfer, is what this still is for.
                 verdict.update(ok=True, codes=[], board=board_seen, text=board_seen["text"], say=board_seen["say"])
             verdict["lm"] = lm
+            # With 3D on the phone sends its stills at full size: the mat board is too small to find
+            # in a ~960 px one (HOME-SETUP.md, 3D).
+            verdict["fullStill"] = calib.enabled()
             verdict["time"] = time.time()
             self.latest[angle] = {"verdict": verdict, "jpeg": upright.tobytes() if ok else jpeg}
         return verdict

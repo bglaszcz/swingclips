@@ -16,7 +16,7 @@ monitor's numbers for that shot.
 ## A session
 
 1. **Server** - running (see "Server" below for updates).
-2. **Phones** - open **SwingClips** on each (capture app 0.6); nothing to press, they stay on their
+2. **Phones** - open **SwingClips** on each (capture app 0.7); nothing to press, they stay on their
    stands. Stand at the ball: **one** phone (the one with Practice voice on, face-on by default)
    says how both cameras see you, only when it changes: "Both cameras look good", or "Face-on good.
    Down the line: tilt the phone up".
@@ -146,8 +146,10 @@ It prints where each camera stands (face-on around z +3, down the line around x 
 0.5-2 m up), the fit in pixels, and warns when the board looks turned round; it saves
 `calib\sessions\<date>_<time>.json`. With 3D on, the camera setup does the same by itself from the
 phones' setup stills when a phone sees the board ("Face on: board seen", and "Both cameras are
-calibrated for 3D" once both have): **but** the capture app sends ~960 px stills, and in tests the
-mat board at 3 m was found at full resolution only, so for now use the clips.
+calibrated for 3D" once both have). With 3D on, the server asks for full-size stills (capture app
+0.7: the recording mode's size, e.g. 1920 x 1080, instead of ~960 px), since in tests the mat board
+at 3 m was found at full resolution only. Not yet tried on the real setup: if the stills still miss
+the board, use the clips.
 
 A session's positions hold for the swings after it until a camera moves: each swing's golfer
 position and size in each picture (the same check that marks "camera moved" in Progress) is compared
@@ -201,8 +203,8 @@ beside the 2D tracker's error on the same joints.
 5. Moving a tripod between swings stops 3D for the later ones.
 6. A label pass on both angles of a few swings: the 3D joints land on the labels about as well as
    the 2D tracker or better.
-7. Whether the setup stills can find the board at all (they're half resolution): if not, the
-   capture app needs a full-size still, or a "calibrate" recording, for the voice prompt to work.
+7. Whether the setup stills find the board (full size with 3D on, capture app 0.7): if not, the
+   capture app needs a "calibrate" recording for the voice prompt to work.
 
 ### Shutter: a sharper club and hands (capture app 0.4)
 On **Auto** (the default, same as before 0.4) the phone picks its own exposure, which at 240 fps

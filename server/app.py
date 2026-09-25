@@ -232,31 +232,36 @@ def pose_worker(stop: threading.Event):
     # Kept between clips so the worker processes only pay for importing MediaPipe once.
     pool = ProcessPoolExecutor(POSE_WORKERS)
     summarizer = None
-    while not stop.is_set():
-        retry_pending_trash()
-        queued = [p for p in clip_paths() if pose_state(p.name) == "queued"]
-        pose_queued = len(queued)
-        todo = [p for p in queued if time.time() - p.stat().st_mtime > SETTLE_SECONDS]
-        if not todo:
-            # Nothing new: analyze again, newest first, a clip whose pose came from another body model
-            # (after SWINGCLIPS_POSE_BACKEND changed), so every swing is measured the same way.
-            model = body_model()
-            again = [p for p in clip_paths() if p.name not in _again_failed and pose_state(p.name) == "done"
-                     and pose_model(p.name) not in (None, model)]
-            if again:
-                pool = analyze_clip(max(again, key=recorded_at), pool, again=True)
+    try:
+        while not stop.is_set():
+            retry_pending_trash()
+            queued = [p for p in clip_paths() if pose_state(p.name) == "queued"]
+            pose_queued = len(queued)
+            todo = [p for p in queued if time.time() - p.stat().st_mtime > SETTLE_SECONDS]
+            if not todo:
+                # Nothing new: analyze again, newest first, a clip whose pose came from another body model
+                # (after SWINGCLIPS_POSE_BACKEND changed), so every swing is measured the same way.
+                model = body_model()
+                again = [p for p in clip_paths() if p.name not in _again_failed and pose_state(p.name) == "done"
+                         and pose_model(p.name) not in (None, model)]
+                if again:
+                    pool = analyze_clip(max(again, key=recorded_at), pool, again=True)
+                    continue
+                # Then measure a clip's quality (new ones first, then older clips).
+                try:
+                    if summarizer is None:
+                        summarizer = swings.Summarizer(STATIC_DIR)
+                    measured = quality_step(pool, summarizer)
+                except BrokenProcessPool:
+                    pool, measured = ProcessPoolExecutor(POSE_WORKERS), True
+                if not measured:
+                    stop.wait(5)
                 continue
-            # Then measure a clip's quality (new ones first, then older clips).
-            try:
-                if summarizer is None:
-                    summarizer = swings.Summarizer(STATIC_DIR)
-                measured = quality_step(pool, summarizer)
-            except BrokenProcessPool:
-                pool, measured = ProcessPoolExecutor(POSE_WORKERS), True
-            if not measured:
-                stop.wait(5)
-            continue
-        pool = analyze_clip(max(todo, key=recorded_at), pool)
+            pool = analyze_clip(max(todo, key=recorded_at), pool)
+    except KeyboardInterrupt:
+        # Ctrl+C reaches the pool's processes too, and comes back here out of the clip they were on.
+        # Nothing half done was saved: that clip is simply analyzed (or measured) again at the next start.
+        print("Pose: stopped (Ctrl+C); the clip it was on is picked up again at the next start", flush=True)
     pool.shutdown(cancel_futures=True)
     if summarizer is not None:
         summarizer.close()

@@ -21,7 +21,8 @@ import java.util.Locale
  * server finds the golfer and says what to fix; this says it out loud when it changes (and repeats
  * a problem now and then) if [ownVoice] (otherwise the server says both phones' verdicts together
  * through one phone), shows it via [onVerdict], and focuses the camera on the golfer. [onSteady]
- * hears each verdict that has held for two stills in a row (for auto-start).
+ * hears each verdict that has held for two stills in a row (for auto-start). With 3D on the server
+ * asks for full-size stills (the recording mode's size), to find the mat board in them.
  */
 class CameraSetup(
     ctx: Context,
@@ -51,6 +52,7 @@ class CameraSetup(
     private var saidAt = 0L
     private var focusCenter: Pair<Float, Float>? = null   // where the golfer was when last focused on
     private var seenCenter: Pair<Float, Float>? = null    // and in the still before this one
+    @Volatile private var fullStill = false              // the server wants full-size stills (3D on)
 
     fun start() {
         running = true
@@ -98,7 +100,8 @@ class CameraSetup(
         if (!active() || rec == null || !holder.surface.isValid || preview.width == 0) return next()
         // PixelCopy gives the picture as shown (upright, the preview's shape), so the server
         // needn't turn it; copying it into any other shape would stretch it.
-        val scale = STILL_SIZE.toFloat() / maxOf(preview.width, preview.height)
+        val size = if (fullStill) maxOf(rec.mode.width, rec.mode.height) else STILL_SIZE
+        val scale = size.toFloat() / maxOf(preview.width, preview.height)
         val bmp = Bitmap.createBitmap(maxOf(1, (preview.width * scale).toInt()), maxOf(1, (preview.height * scale).toInt()),
             Bitmap.Config.ARGB_8888)
         try {
@@ -113,7 +116,9 @@ class CameraSetup(
 
     private fun send(bmp: Bitmap, rotation: Int) {
         try {
-            val jpeg = ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.JPEG, 80, it) }.toByteArray()
+            // Less compression at full size: the mat board's marker bits are only a few pixels.
+            val quality = if (fullStill) FULL_QUALITY else QUALITY
+            val jpeg = ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray()
             bmp.recycle()
             val conn = URL("${serverUrl().trimEnd('/')}/api/setup/${angle()}?rotation=$rotation").openConnection() as HttpURLConnection
             conn.connectTimeout = 3000
@@ -124,6 +129,7 @@ class CameraSetup(
             conn.outputStream.use { it.write(jpeg) }
             if (conn.responseCode == 200) {
                 val v = JSONObject(conn.inputStream.bufferedReader().readText())
+                fullStill = v.optBoolean("fullStill")
                 main.post { handle(v) }
             } else {
                 Log.w(ReplayRecorder.TAG, "setup still: server said ${conn.responseCode}")
@@ -177,6 +183,8 @@ class CameraSetup(
     companion object {
         private const val INTERVAL_MS = 1000L
         private const val STILL_SIZE = 960
+        private const val QUALITY = 80
+        private const val FULL_QUALITY = 90
         private const val REPEAT_MS = 12_000L
         // Refocus when the golfer's middle has moved this share of the picture (the phone moved).
         private const val REFOCUS_MOVE = 0.08
