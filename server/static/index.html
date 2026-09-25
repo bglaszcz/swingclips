@@ -32,7 +32,7 @@
   @media (min-width: 900px) {
     main { grid-template-columns: 320px 1fr; height: calc(100vh - 49px); }
     #side { overflow-y: auto; border-right: 1px solid var(--line); }
-    #viewer, #trends, #progress, #setup { overflow-y: auto; }
+    #viewer, #trends, #progress, #setup, #compare { overflow-y: auto; }
   }
   #listbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line);
              position: sticky; top: 0; background: var(--bg); z-index: 1; }
@@ -243,6 +243,45 @@
   #t-table tbody tr { cursor: pointer; }
   #t-table tbody tr:hover { background: var(--sel); }
   #t-table th.sel { color: var(--text); }
+  /* Compare (compare.js): two swings side by side, one row per camera angle. */
+  #compare { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  @media (max-width: 899px) { #compare { order: -1; border-bottom: 1px solid var(--line); } }
+  .c-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .c-head strong { font-size: 16px; }
+  .c-head .c-status { flex: 1; color: var(--muted); font-size: 13px; }
+  .c-whos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .c-who { font-size: 13px; color: var(--muted); min-width: 0; }
+  .c-who b { display: block; color: var(--text); font-size: 14px; }
+  .c-row { display: flex; flex-direction: column; gap: 4px; }
+  .c-rowtitle { font-size: 13px; color: var(--muted); }
+  .c-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #compare video { height: 42vh; cursor: pointer; }
+  @media (max-width: 899px) { #compare video { height: 32vh; } .c-tag { display: none; } }
+  .c-stage.ref video { outline: 2px solid rgba(232, 121, 249, 0.6); outline-offset: -2px; }
+  .c-tag, .c-time, .c-pos { position: absolute; z-index: 1; padding: 2px 8px; border-radius: 10px; background: rgba(0, 0, 0, 0.6);
+                            color: #fff; font-size: 12px; pointer-events: none; font-variant-numeric: tabular-nums; }
+  .c-tag { top: 8px; left: 8px; }
+  .c-time { bottom: 8px; left: 8px; }
+  .c-pos { top: 8px; right: 8px; background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .c-time:empty { display: none; }
+  #c-scrub { width: 100%; padding: 0; border: 0; accent-color: var(--accent); }
+  #compare .note { color: var(--muted); font-size: 12px; }
+  .c-numbers { display: flex; flex-direction: column; gap: 8px; }
+  .c-scroll { overflow-x: auto; }
+  .c-table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .c-table th, .c-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  .c-table th { color: var(--muted); font-weight: 600; }
+  .c-table th:first-child, .c-table td:first-child { text-align: left; color: var(--muted); }
+  .c-table th.c-poshead { text-align: center; color: var(--text); border-left: 1px solid var(--line); }
+  .c-table td.diff { font-weight: 600; }
+  .c-table td.dim { opacity: 0.35; }
+  .c-table tr.group th { text-align: left; padding-top: 10px; color: var(--text); }
+  .c-picktable tbody tr, .c-picktable tr:not(:first-child) { cursor: pointer; }
+  .c-picktable tr:not(:first-child):hover { background: var(--sel); }
+  .c-picktable tr.off { cursor: default; opacity: 0.5; }
+  .c-picktable tr.off:hover { background: none; }
+  .c-picktable td:first-child { color: var(--text); }
+  .c-picktable .c-status { color: var(--muted); font-size: 12px; text-align: left; }
 </style>
 </head>
 <body>
@@ -281,6 +320,7 @@
       <button id="headbox" title="Show where the head was at address">Head</button>
       <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane</button>
       <button id="label-btn" title="Label this swing by hand, for the scorecard (L)">Label</button>
+      <button id="compare-btn" title="Compare this swing with another one, side by side (C)">Compare…</button>
       <button id="exclude" title="Leave this swing out of the trends and progress (someone else's swing, a practice waggle…)">Leave out</button>
       <button id="delete-clip" class="danger" title="Move this clip to the trash">Delete</button>
       <span id="frame"></span>
@@ -310,6 +350,7 @@
     </div>
     <div id="title"></div>
   </section>
+  <section id="compare" hidden></section>
   <section id="trends" hidden>
     <div class="t-head">
       <strong id="t-title">Session trends</strong><span id="t-status"></span>
@@ -908,23 +949,33 @@ function toPartnerTime(t) {
   return t + partnerOffset();
 }
 
-/** Puts the second video where the first one is: exactly when paused, loosely while playing. */
-function syncPartner() {
-  if (!partner || !video2.readyState) return;
-  const dur = video2.duration || 0;
-  const target = toPartnerTime(video.currentTime);
+/**
+ * Puts video v at `target` (its own seconds) while video `lead` plays or stands: exactly when paused,
+ * loosely while playing, at `factor` times the lead's speed (compare.js plays a slower swing faster).
+ */
+function followVideo(v, lead, target, factor = 1) {
+  if (!v.readyState) return;
+  const dur = v.duration || 0;
   const clamped = Math.max(0, Math.min(dur - 0.001, target));
-  if (video.paused || target < 0 || target > dur) {
-    if (!video2.paused) video2.pause();
-    if (Math.abs(video2.currentTime - clamped) > 0.0005) video2.currentTime = clamped;
+  if (lead.paused || target < 0 || target > dur) {
+    if (!v.paused) v.pause();
+    if (Math.abs(v.currentTime - clamped) > 0.0005) v.currentTime = clamped;
     return;
   }
-  if (video2.playbackRate !== video.playbackRate) video2.playbackRate = video.playbackRate;
-  if (video2.paused) video2.play().catch(() => {});
+  // Browsers play from 1/16x to 16x.
+  const rate = Math.max(0.0625, Math.min(16, lead.playbackRate * factor));
+  if (Math.abs(v.playbackRate - rate) > 1e-3) v.playbackRate = rate;
+  if (v.paused) v.play().catch(() => {});
   // Nudge it back only once it has drifted: seeking a playing video stutters.
-  if (!video2.seeking && Math.abs(video2.currentTime - target) > Math.max(0.03, 0.2 * video.playbackRate)) {
-    video2.currentTime = target;
+  if (!v.seeking && Math.abs(v.currentTime - target) > Math.max(0.03, 0.2 * rate)) {
+    v.currentTime = target;
   }
+}
+
+/** Puts the second video where the first one is: exactly when paused, loosely while playing. */
+function syncPartner() {
+  if (!partner) return;
+  followVideo(video2, video, toPartnerTime(video.currentTime));
 }
 
 for (const ev of ["play", "pause", "seeked", "ratechange"]) video.addEventListener(ev, syncPartner);
@@ -1309,6 +1360,7 @@ function open(name) {
   const c0 = clips.find(c => c.name === name);
   if (c0 && isSecondary(c0)) name = c0.partner;
   current = name;
+  if (window.Compare) Compare.close(true);
   leaveTrendViews();
   document.querySelectorAll("#list li").forEach(li => li.classList.toggle("sel", li.dataset.name === name));
   // Opening a clip in a closed session opens the session.
@@ -1634,6 +1686,7 @@ async function deleteClips(swingNames) {
 }
 
 function closeViewer() {
+  if (window.Compare) Compare.close(true);
   current = null;
   pose = null;
   positions = [];
@@ -1693,8 +1746,12 @@ async function refresh() {
   if (JSON.stringify(clips) !== was) updateExcludeButton();
   const now = clips.find(c => c.name === current);
   if (current === null && clips.length) {
-    const wanted = decodeURIComponent(location.hash.slice(1));
+    // A link to a comparison (#compare=a,b) opens the first swing, then the comparison.
+    const pair = window.SwingCompare && SwingCompare.parseHash(location.hash);
+    let wanted = pair ? pair[0] : location.hash.slice(1);
+    try { wanted = pair ? wanted : decodeURIComponent(wanted); } catch {}
     open(clips.some(c => c.name === wanted) ? wanted : shownClips()[0].name);
+    if (pair && clips.some(c => c.name === pair[0])) Compare.show(pair[0], pair[1]);
   } else if (now && isSecondary(now)) {
     // Its face-on clip just arrived: open the swing through that.
     open(now.partner);
@@ -1741,5 +1798,6 @@ setInterval(() => { if (!document.hidden) refresh(); }, 10000);
 <script src="/static/trends.js"></script>
 <script src="/static/setup.js"></script>
 <script src="/static/labels.js"></script>
+<script src="/static/compare.js"></script>
 </body>
 </html>

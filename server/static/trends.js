@@ -90,6 +90,7 @@ function swingRow(c) {
 
 /** The page shows one view at a time: a swing, one session's trends, progress, or camera setup. */
 function showView(which) {
+  if (window.Compare) Compare.close(true);
   trendsBox.hidden = which !== "trends";
   progressBox.hidden = which !== "progress";
   document.getElementById("setup").hidden = which !== "setup";

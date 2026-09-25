@@ -28,7 +28,7 @@ Square Omni's numbers for that shot.
 | Folder | Runs on | What it does |
 | --- | --- | --- |
 | `capture/` | Android phones (9+) | Kotlin/Camera2 app. Keeps the last few seconds of video in memory and cuts a clip 2 s either side of each strike (240/120/30 fps). Each phone is set to face-on or down the line. Uploads each clip to the server, retrying until it's confirmed. |
-| `server/` | Home server (Windows) | Python/FastAPI. Stores clips, runs MediaPipe pose on every frame, and serves the review page: both angles of a swing side by side and in sync, skeleton overlay, spine angle, plane line down the line, key positions P1-P8, swing numbers from both angles, sessions with trends against the launch monitor, progress across sessions, delete to trash with Undo, and each swing's shot numbers. |
+| `server/` | Home server (Windows) | Python/FastAPI. Stores clips, runs MediaPipe pose on every frame, and serves the review page: both angles of a swing side by side and in sync, skeleton overlay, spine angle, plane line down the line, key positions P1-P8, swing numbers from both angles, sessions with trends against the launch monitor, progress across sessions, comparing any two swings side by side, delete to trash with Undo, and each swing's shot numbers. |
 | `relay/` | Sim laptop | `square-watcher.ps1` reads new shots from Square Golf's local shot database and posts them to the server, which pairs each one with its clip by time. `shot-listener.ps1` is an unused alternative that stands in for GSPro. |
 | `src/` | Phone browser | The original web app (Next.js), plus this fork's pose overlay and key-position stills. Still works on its own, but a phone's browser can't record above 30 fps, which is why `capture/` exists. |
 
