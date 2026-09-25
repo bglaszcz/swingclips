@@ -22,10 +22,15 @@
    * Their impacts line up: by the ball when both saw it go, else by the strike each phone heard.
    */
   function syncOffset(a, b) {
-    if (a.impact != null && b.impact != null) return b.impact - a.impact;
-    if (a.strike != null && b.strike != null) return b.strike - a.strike;
-    // Mixed or missing: the capture app puts the strike about 2 s in.
-    return (b.impact ?? b.strike ?? 2.0) - (a.impact ?? a.strike ?? 2.0);
+    // Each clip's impact: where the ball was seen to go, if that fits the strike its phone heard;
+    // else placed from the heard strike (a ball found at the wrong spot once put a swing's two
+    // angles 110 ms apart); else the capture app's usual 2 s in.
+    const at = c => {
+      if (c.impact != null && impactCheck(c) === null) return c.impact;
+      if (c.strike != null) return c.strike - HEARD_LAG;
+      return c.impact ?? 2.0;
+    };
+    return at(b) - at(a);
   }
 
   /** Picture width / height as shown, from the clip's name (…_1920x1080_…) and the pose file's rotation. */
@@ -50,6 +55,9 @@
   // the phone a little after the ball goes, so on good clips impact is 20-35 ms before the strike.
   // Clips without the strike in their name were cut 2.0-2.25 s before it. quality.py has the same.
   const IMPACT_WINDOW = [-0.06, 0.01], STRIKE_FALLBACK = [2.0, 2.25];
+  // How long after the ball goes a phone typically hears the strike, s (20-35 ms on good clips, both
+  // phones): places impact from the heard strike when a clip's own ball can't be believed.
+  const HEARD_LAG = 0.025;
 
   /**
    * Whether a clip's impact can be believed: null if so, "noball" when the server didn't see the
@@ -72,8 +80,10 @@
    *   dtlMetrics | null, dtlIndex(key): frame index of position key in the down-the-line clip}
    */
   function analyze(main, other, leadSide) {
+    // A ball-gone that doesn't fit the heard strike isn't impact: impact then comes from the hands,
+    // as when no ball was seen.
     const positions = Phases.detect(main.frames, main.aspect, leadSide, strikeWindow(main.name, main.strike),
-                                    main.impact);
+                                    impactCheck(main) === null ? main.impact : null);
     const metrics = main.angle === "dtl" ? null : Metrics.compute(main.frames, main.aspect, leadSide, positions);
     const dtl = other || (main.angle === "dtl" ? main : null);
     const offset = other ? syncOffset(main, other) : 0;

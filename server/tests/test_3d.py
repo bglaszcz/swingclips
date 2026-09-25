@@ -283,7 +283,8 @@ class SwingWorkerTest(unittest.TestCase):
     def add_swing(self, unix, face, dtl):
         names = []
         for angle, data in (("face", face), ("dtl", dtl)):
-            name = f"swing_{angle}_1920x1080_240fps_{unix}_2000ms.mp4"
+            # Each phone names its clip after the strike it heard, a little after the ball went.
+            name = f"swing_{angle}_1920x1080_240fps_{unix}_{round((data['impact'] + 0.025) * 1000)}ms.mp4"
             (self.app.CLIPS_DIR / name).write_bytes(b"not a video")
             os.utime(self.app.CLIPS_DIR / name, (unix, unix))
             self.app.pose_file(name).write_bytes(gzip.compress(json.dumps(data).encode()))
@@ -355,8 +356,8 @@ class SwingWorkerTest(unittest.TestCase):
         self.app.pass_3d(self.records(), self.js, mock.Mock(is_set=lambda: False))
         labels = self.dir / "labels"
         labels.mkdir()
-        infos = {"face": {"name": face_name, "angle": "face", "strike": 2.0},
-                 "dtl": {"name": dtl_name, "angle": "dtl", "strike": 2.0}}
+        infos = {"face": {"name": face_name, "angle": "face", "strike": face["impact"] + 0.025},
+                 "dtl": {"name": dtl_name, "angle": "dtl", "strike": dtl["impact"] + 0.025}}
         for angle, data, start in (("face", face, 0.0), ("dtl", dtl, -0.35)):
             cam = tri.Camera(ses["cameras"][angle])
             frames = {}
