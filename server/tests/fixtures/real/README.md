@@ -22,6 +22,12 @@ Score (from `server/`; `--rerun` needs the videos, so not here):
     SWINGCLIPS_POSE=tests/fixtures/real/pose SWINGCLIPS_EVAL=/tmp/eval \
     python eval.py --no-noise --no-quality
 
+Key positions: `python tune_positions.py` scores `phases.js` on both pose folders, leave one swing
+out, and says which tuning to use (`docs/key-positions.md` has the evidence behind the rules).
+`key-positions.json` holds each labeled clip's errors, which `tests/test_fixtures.py` keeps later
+changes from making worse; after a change that makes them better, `python tune_positions.py
+--baseline` saves the new ones.
+
 Label definitions the owner used: takeaway = first frame the clubhead visibly moves back; P2/P6/P8
 shaft parallel to the ground; P3/P5 lead arm parallel; P4 top; P7 impact = first frame the ball is
 gone. Blur (Shift+click) only for motion streaks. The owner labels as a golfer, not a tracker: when

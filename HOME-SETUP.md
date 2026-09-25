@@ -282,7 +282,10 @@ toward the ball". The phones face away from you, so voice is the channel.
   and P8 are when the shaft passes horizontal; marked ~ when the shaft wasn't clearly seen then.
   A P6 crossing only counts 30-100 ms before impact (otherwise it's put 55 ms before, marked ~): in
   the downswing the tracker can latch onto the arms and "cross" right after the top.
-  P1 (address) is 0.1 s before the shaft starts moving back. This assumes a face-on camera (see
+  P1 (address) is 0.1 s before the shaft starts moving back (the takeaway: the first frame the
+  shaft turns away from its angle at address). P3 / P5 are where the lead forearm passes level,
+  P4 where the hands start down; they follow your hand labels (`docs/key-positions.md`, and
+  `tune_positions.py` to score them again after labeling more). This assumes a face-on camera (see
   "Two angles" for the down-the-line one). Newer clips carry the heard strike's exact time, which
   narrows the impact search to ±0.15 s around it.
 - Swing numbers (`static/metrics.js`), on the video (Angles) and in a table at address / top /
