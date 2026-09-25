@@ -100,10 +100,52 @@ function suggestions(swings) {
   return out;
 }
 
-function openForLabeling(name) {
+/** Opens a swing in labeling mode; opts {angle: "face" | "dtl", t} goes to that frame. */
+function openForLabeling(name, opts) {
   open(name);
   // Labeling mode once the swing is on screen.
-  setTimeout(() => window.Labels && Labels.start && Labels.start(), 50);
+  setTimeout(() => window.Labels && Labels.start && Labels.start(opts), 50);
+}
+
+/** The worklist: every fix from the label checks, by swing and angle, with repeats of the same fix
+ * (hips on 10 frames) on one line. Go opens the swing at the first of them in labeling mode, where
+ * the points are ringed in red and Next fix (N) steps through the rest. */
+function renderWorklist(rows, swings) {
+  const box = document.getElementById("lv-work");
+  const byClip = new Map(rows.filter(r => r.pass === 1 && r.clip).map(r => [r.clip, r]));
+  const blocks = [];
+  let frames = 0, swingsWith = 0;
+  for (const s of swings) {
+    const lines = [];
+    for (const r of [s.face, s.dtl].filter(Boolean)) {
+      const groups = new Map();
+      for (const f of byClip.get(r.clip)?.fixes || []) {
+        const key = f.kind + "|" + f.text;
+        if (!groups.has(key)) groups.set(key, { f, ts: [] });
+        if (f.t != null) groups.get(key).ts.push(f.t);
+      }
+      for (const { f, ts } of groups.values()) {
+        const angle = r.angle === "dtl" ? "dtl" : "face";
+        // The other angle isn't labeled: go there instead.
+        const to = f.kind === "other" ? { angle: angle === "dtl" ? "face" : "dtl", t: 0 } : { angle, t: ts[0] ?? null };
+        frames += Math.max(1, ts.length);
+        const where = f.kind === "other" ? "" : ts.length > 1 ? ` · ${ts.length} frames` : ts.length ? ` · ${ts[0].toFixed(3)} s` : "";
+        const go = lvEl("button", { className: "small", textContent: "Go" });
+        go.onclick = () => openForLabeling(s.main, to);
+        lines.push(lvEl("div", { className: "lv-work-line" },
+          lvEl("span", { className: "lv-work-angle", textContent: s.hasDtl ? (angle === "dtl" ? "Down the line" : "Face-on") : "" }),
+          lvEl("span", { className: "lv-work-text", textContent: f.text + where }), go));
+      }
+    }
+    if (!lines.length) continue;
+    swingsWith++;
+    const title = (s.c ? fmtWhen(s.c.recorded) : s.main) + (s.c && s.c.shot ? " · " + clubName(s.c.shot.club) : "");
+    blocks.push(lvEl("div", { className: "lv-work-swing" }, lvEl("div", { className: "lv-work-title", textContent: title }), ...lines));
+  }
+  document.getElementById("lv-work-count").textContent = blocks.length
+    ? `${frames} frame(s) to look at on ${swingsWith} swing(s)` : "";
+  box.replaceChildren(...(blocks.length ? blocks
+    : [lvEl("span", { className: "lv-done", textContent: "Nothing to fix: every check passes." })]));
 }
 
 function renderLabelView() {
@@ -150,6 +192,8 @@ function renderLabelView() {
   }
   if (!swings.length) body.append(lvEl("tr", {}, lvEl("td", { colSpan: 5, textContent: "Nothing labeled yet: open a swing and press L." })));
   table.replaceChildren(lvEl("thead", {}, head), body);
+
+  renderWorklist(rows, swings);
 
   const next = suggestions(swings);
   const nextBox = document.getElementById("lv-next");

@@ -226,6 +226,15 @@
   .lv-todo { color: #d97706; }
   .lv-issues div { color: #d97706; font-size: 12px; margin-bottom: 2px; }
   #lv-next { display: flex; flex-wrap: wrap; gap: 6px; }
+  #lv-work { display: flex; flex-direction: column; gap: 10px; }
+  .lv-work-title { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+  .lv-work-line { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0;
+                  border-bottom: 1px solid var(--line); }
+  .lv-work-angle { color: var(--muted); min-width: 92px; }
+  .lv-work-text { flex: 1; min-width: 0; }
+  @media (max-width: 600px) { .lv-work-angle { min-width: 0; } }
+  #labelpanel .lp-fix { border-left: 3px solid #ef4444; padding-left: 8px; }
+  #labelpanel .lp-fixtext { color: #ef4444; font-size: 13px; }
   /* Shutter test (shutter.js): clip quality by session, camera and shutter setting. */
   #shutter { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   #shutter .note { color: var(--muted); font-size: 12px; }
@@ -583,6 +592,13 @@
       <button id="lv-close" class="small">Close</button>
     </div>
     <div class="t-card" id="lv-summary"></div>
+    <div class="t-card">
+      <strong>Worklist</strong> <span class="lv-muted" id="lv-work-count"></span>
+      <div class="note">What the checks found, swing by swing. <b>Go</b> opens it in labeling mode on the first frame:
+        the points to fix are ringed in red, and <b>Next fix</b> (or N) steps through the rest. Fixed items drop off
+        the list a moment after they're saved.</div>
+      <div id="lv-work"></div>
+    </div>
     <div class="t-card">
       <strong>Label next</strong>
       <div class="note">Unlabeled swings from the clubs, sessions, light and shutter settings you have fewest of.</div>

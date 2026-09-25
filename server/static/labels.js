@@ -40,6 +40,9 @@
   let message = "";
   // `${clip}|${pass}` -> {doc, state: "loading" | "ready" | "saving" | "saved" | "error", timer}
   const docs = new Map();
+  // What the server's label checks (labelcheck.py) say to fix, by clip: [{kind, t, points, event, text}].
+  let fixes = new Map(), fixesTimer = null;
+  const FIX_COLOR = "#ef4444";
 
   // ---- The clip on screen ----
 
@@ -110,11 +113,58 @@
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
       if (e.changes === changes) e.state = "saved";
       refreshCount();
+      clearTimeout(fixesTimer);
+      fixesTimer = setTimeout(loadFixes, 1200);
     } catch (err) {
       e.state = "error";
       message = `Not saved: ${err.message}`;
     }
     render();
+  }
+
+  function loadFixes() {
+    fetch("/api/labels/summary", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => {
+      if (!d) return;
+      fixes = new Map((d.clips || []).filter(c => c.pass === labelPass && c.clip).map(c => [c.clip, c.fixes || []]));
+      render();
+      redraw();
+    }).catch(() => {});
+  }
+
+  /** The fixes on the frame at time t of clip `name`. */
+  function fixesAt(name, t) {
+    return (fixes.get(name) || []).filter(f => f.t != null && Math.abs(f.t - t) < 0.0008);
+  }
+
+  /** This swing's fixes with a frame to go to, in order: face-on first, then down the line. */
+  function swingFixes() {
+    const out = [];
+    for (const [which, name] of [["main", current], ["dtl", partner && partner.name]]) {
+      if (!name) continue;
+      for (const f of fixes.get(name) || []) if (f.t != null) out.push({ ...f, which, name });
+    }
+    return out;
+  }
+
+  /** Goes to the next fix after the frame on screen (across both angles), wrapping round. */
+  function nextFix() {
+    const list = swingFixes();
+    if (!list.length) return;
+    const t = frameTime(), here = active === "main" ? 0 : 1;
+    const key = f => [f.which === "main" ? 0 : 1, f.t];
+    const after = list.find(f => { const [w, ft] = key(f); return w > here || (w === here && t != null && ft > t + 0.0008); });
+    goTo((after || list[0]).which, (after || list[0]).t);
+  }
+
+  /** Shows the frame at time t (the clip's own seconds) of the "main" or "dtl" clip. */
+  function goTo(which, t) {
+    if (which !== active) setActive(which);
+    const a = activeClip();
+    if (!a.pose) return;
+    const f = a.pose.frames;
+    let i = 0;
+    while (i + 1 < f.length && Math.abs(f[i + 1].t - t) <= Math.abs(f[i].t - t)) i++;
+    showFrame(i);
   }
 
   function refreshCount() {
@@ -271,6 +321,7 @@
       for (const k in overlays) if (overlays[k]) setOverlay(k, false);
       message = "";
       refreshCount();
+      loadFixes();
     } else if (shownBefore) {
       if (shownBefore.skeleton) setSkeleton(true);
       for (const k in overlays) if (shownBefore[k]) setOverlay(k, true);
@@ -320,6 +371,22 @@
       ctx.beginPath();
       ctx.arc(b.x, b.y, size * 1.4, 0, 2 * Math.PI);
       ctx.stroke();
+    }
+    // What the label checks say to fix here: a red dashed ring round each point concerned.
+    const toFix = fixesAt(name, t);
+    if (toFix.length) {
+      ctx.strokeStyle = FIX_COLOR;
+      ctx.lineWidth = Math.max(2, r.w / 250);
+      ctx.setLineDash([6, 4]);
+      for (const key of new Set(toFix.flatMap(f => f.points || []))) {
+        const q = key === "ball" ? e.doc.ball : pts[key];
+        if (!q || q.x == null) continue;
+        const at = toPx(q);
+        ctx.beginPath();
+        ctx.arc(at.x, at.y, size * 2.2, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
     }
     const here = EVENTS.filter(([k]) => e.doc.events[k] === t).map(([, label]) => label);
     if (here.length) {
@@ -393,8 +460,10 @@
       ...EVENTS.map(([k, label, key]) => {
         const v = doc.events[k];
         const i = v == null ? null : frameIndexAt(v, a.pose);
-        return chip(`${key}  ${v == null ? "–" : v.toFixed(3)}`, {
-          on: v != null && v === t, done: v != null, title: `${label} (key ${key}${k === "impact" ? " or I" : ""})`,
+        const flagged = (fixes.get(a.name) || []).some(f => f.event === k);
+        return chip(`${key}  ${v == null ? "–" : v.toFixed(3)}${flagged ? " !" : ""}`, {
+          on: v != null && v === t, done: v != null,
+          title: `${label} (key ${key}${k === "impact" ? " or I" : ""})${flagged ? ": the Labels page says to check this one" : ""}`,
           onclick: i == null ? () => setEvent(k) : () => showFrame(i),
         });
       })));
@@ -409,6 +478,16 @@
       }),
       chip(doc.ball ? "Ball ✓" : "Ball", { on: ballArmed, done: !!doc.ball, title: "B, then click the ball's middle (at address)",
         onclick: () => { ballArmed = !ballArmed; render(); } })));
+    const fixHere = t == null ? [] : fixesAt(a.name, t);
+    const all = swingFixes();
+    if (all.length || fixHere.length) {
+      kids.push(el("div", { className: "lp-row lp-fix" },
+        el("span", { className: "lp-label", textContent: fixHere.length ? "To fix here" : "To fix in this swing" }),
+        ...(fixHere.length ? [...new Set(fixHere.map(f => f.text))].map(text => el("span", { className: "lp-fixtext", textContent: text }))
+          : [el("span", { className: "lp-label", textContent: `${all.length} frame(s) on the Labels page's worklist` })]),
+        el("span", { className: "grow" }),
+        all.length ? chip(`Next fix › (${all.length})`, { onclick: nextFix, title: "The next frame to fix in this swing (N)" }) : null));
+    }
     const next = ballArmed ? "the ball's middle" : POINTS[target][1];
     kids.push(el("div", { className: "lp-prompt" }, "Click: ", el("b", { textContent: next })));
 
@@ -452,6 +531,7 @@
     if ((k === "ArrowLeft" || k === "ArrowRight") && active === "dtl") { handled(); stepActive(k === "ArrowLeft" ? -1 : 1); return; }
     if (EVENT_KEYS[k]) { handled(); setEvent(EVENT_KEYS[k]); return; }
     if (k === "x") { handled(); setPoint({ hidden: true }); return; }
+    if (k === "n") { handled(); nextFix(); return; }
     if (k === "Tab") { handled(); target = (target + (ev.shiftKey ? POINTS.length - 1 : 1)) % POINTS.length; render(); return; }
     if (k === "Backspace") { handled(); clearPoint(); return; }
     if (k === "b") { handled(); ballArmed = !ballArmed; render(); return; }
@@ -473,7 +553,18 @@
   window.Labels = {
     drawOn,
     /** Labeling mode on, for the swing on screen (the Labels view opens swings this way). */
-    start() { if (!on) setOn(true); },
+    start(opts) {
+      if (!on) setOn(true);
+      if (!opts || opts.t == null) return;
+      // The swing was just opened: wait for its analysis (and its other angle's) before going there.
+      let tries = 0;
+      const go = () => {
+        const need = opts.angle === "dtl" ? partner && partner.pose : pose;
+        if (need && need.frames && need.frames.length) goTo(opts.angle === "dtl" ? "dtl" : "main", opts.t);
+        else if (tries++ < 50) setTimeout(go, 100);
+      };
+      go();
+    },
     /** Another swing was opened: labels follow its clips, starting on the face-on angle. */
     opened() { active = "main"; lastFrameKey = null; ballArmed = false; message = ""; render(); },
   };

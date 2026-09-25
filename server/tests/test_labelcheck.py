@@ -80,6 +80,14 @@ class CheckTest(unittest.TestCase):
         r = labelcheck.check(label({"1.000000": RIGHT}), pose_with(TRACKED))
         self.assertFalse(any("outer edge" in i for i in r["issues"]))
 
+    def test_fixes_name_the_frame_and_points(self):
+        wide = dict(RIGHT, l_hip={"x": 0.60, "y": 0.55}, r_hip={"x": 0.40, "y": 0.55})
+        r = labelcheck.check(label({"1.000000": wide}, {"impact": 1.95}), pose_with(TRACKED))
+        kinds = {f["kind"]: f for f in r["fixes"]}
+        self.assertEqual(kinds["hips"]["t"], 1.0)
+        self.assertEqual(kinds["hips"]["points"], ["l_hip", "r_hip"])
+        self.assertEqual((kinds["impact"]["t"], kinds["impact"]["event"]), (1.95, "impact"))
+
     def test_angles_disagree(self):
         face = label(events={"p4": 1.80, "impact": 2.05})
         dtl = label(events={"p4": 1.83, "impact": 2.05})                  # 30 ms later down the line

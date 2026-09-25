@@ -56,24 +56,33 @@ def aspect_of(name: str, rotation: int) -> float:
 
 
 def check(doc: dict, pose: dict | None) -> dict:
-    """One label file: what it has and a list of possible slips (plain sentences)."""
+    """One label file: what it has, a list of possible slips (plain sentences), and the same as fixes
+    to work through: {kind, t (the clip's frame time to go to, or None), points (label keys to ring),
+    event (a key moment's key), text}."""
     events = doc.get("events") or {}
     frames = doc.get("frames") or {}
-    issues = []
+    issues, fixes = [], []
+    first_t = min((float(k) for k in frames), default=None)
 
     have = [k for k in EVENTS if isinstance(events.get(k), (int, float))]
     times = [events[k] for k in have]
     if any(b <= a for a, b in zip(times, times[1:])):
         order = [k for k in sorted(have, key=lambda k: events[k])]
         issues.append("Key moments are out of order: " + " → ".join(k.upper() if k != "takeaway" else "T" for k in order))
+        for a, b in zip(have, have[1:]):
+            if events[b] <= events[a]:
+                fixes.append({"kind": "order", "t": events[b], "event": b, "points": [],
+                              "text": f"{_name(b)} is marked before {_name(a)}: one of them is on the wrong frame"})
 
     point_frames, all_blur = 0, 0
-    for pts in frames.values():
+    for key, pts in frames.items():
         if sum(1 for k in POINTS if pts.get(k)) >= FRAME_DONE:
             point_frames += 1
-        seen = [pts[k] for k in BODY if pts.get(k) and not pts[k].get("hidden")]
-        if len(seen) >= 4 and all(p.get("blur") for p in seen):
+        seen = [k for k in BODY if pts.get(k) and not pts[k].get("hidden")]
+        if len(seen) >= 4 and all(pts[k].get("blur") for k in seen):
             all_blur += 1
+            fixes.append({"kind": "blur", "t": float(key), "points": seen,
+                          "text": "Joints marked blurry: redo them with a normal click (Shift only for a motion streak)"})
     if all_blur:
         issues.append(f"Every joint is marked blurry on {all_blur} frame(s). Blur (Shift+click) is for motion "
                       "streaks; a soft-focus joint is a normal click.")
@@ -110,11 +119,16 @@ def check(doc: dict, pose: dict | None) -> dict:
                     crossed.append(what)
             if len(crossed) >= SWAP_PAIRS:
                 swapped.append((t, crossed))
+                fixes.append({"kind": "swap", "t": t,
+                              "text": f"Left and right look swapped ({', '.join(crossed)}): left is the lead side",
+                              "points": [k for a, b, what in PAIRS if what in crossed for k in (a, b)]})
             elif face_on and all(pts.get(k) and pts[k].get("x") is not None and not pts[k].get("hidden")
                                  for k in ("l_hip", "r_hip")):
                 wider = abs(pts["l_hip"]["x"] - pts["r_hip"]["x"]) * aspect - math.dist(tracked("l_hip"), tracked("r_hip"))
                 if wider > HIP_WIDE * height:
                     wide_hips += 1
+                    fixes.append({"kind": "hips", "t": t, "points": ["l_hip", "r_hip"],
+                                  "text": "Hips at the outer edge: click the hip joint centres, well inside the outline"})
         if wide_hips:
             issues.append(f"The hips look clicked at the outer edge on {wide_hips} frame(s). Click the hip joint centre: "
                           "where the thigh bone meets the pelvis, well inside the outline.")
@@ -128,12 +142,17 @@ def check(doc: dict, pose: dict | None) -> dict:
             d = math.dist((ball["x"] * aspect, ball["y"]), (tball["x"] * aspect, tball["y"]))
             if height and d > BALL_OFF * height:
                 issues.append("The ball is far from where the tracker found it: check B was clicked on the ball.")
+                fixes.append({"kind": "ball", "t": events.get("takeaway", first_t), "points": ["ball"],
+                              "text": "The ball is far from where the tracker found it: press B and click the ball"})
 
         imp, timp = events.get("impact"), pose.get("impact")
         if isinstance(imp, (int, float)) and isinstance(timp, (int, float)) and abs(imp - timp) > IMPACT_OFF:
             ms = round((imp - timp) * 1000)
             issues.append(f"Impact is {abs(ms)} ms {'after' if ms > 0 else 'before'} the frame the tracker saw the ball "
                           "go. Impact is the first frame the ball is gone (either could be off).")
+            fixes.append({"kind": "impact", "t": imp, "event": "impact", "points": [],
+                          "text": f"Impact is {abs(ms)} ms {'after' if ms > 0 else 'before'} where the tracker saw the ball go: "
+                                  "check it's the first frame the ball is gone"})
 
     return {
         "events": len(have),
@@ -142,7 +161,12 @@ def check(doc: dict, pose: dict | None) -> dict:
         "frames": len(frames),
         "ball": bool(doc.get("ball")),
         "issues": issues,
+        "fixes": sorted(fixes, key=lambda f: (f["t"] is None, f["t"] or 0)),
     }
+
+
+def _name(k: str) -> str:
+    return "Takeaway" if k == "takeaway" else "Impact" if k == "impact" else k.upper()
 
 
 def _address_height(pf: list) -> float | None:
@@ -188,19 +212,44 @@ def summary(labels_dir: Path, pose_path) -> list[dict]:
         row = {"clip": clip, "pass": label_pass, "angle": (doc.get("clip") or {}).get("angle", "face"),
                "partner": partner, "updated": doc.get("updated"), "pose": bool(pp and pp.is_file()), **got[1]}
         row["issues"] = list(row["issues"])
+        row["fixes"] = list(row.get("fixes", []))
         if partner and (label_pass, partner) not in labeled:
             row["issues"].append("The other camera angle of this swing isn't labeled yet.")
+            row["fixes"].append({"kind": "other", "t": None, "points": [], "clip": partner,
+                                 "text": "The other camera angle isn't labeled yet"})
         out.append(row)
+    rows = {(r["pass"], r["clip"]): r for r in out if "clip" in r}
     for row in out:
-        # Once per swing, on the face-on row (the view shows a swing's rows together).
-        if "clip" in row and row["angle"] != "dtl":
-            row["issues"] += angles_disagree(docs.get((row["pass"], row["clip"])), docs.get((row["pass"], row["partner"])))
+        # Once per swing: the sentence on the face-on row, a fix on each angle at its own frame.
+        if "clip" not in row or row["angle"] == "dtl":
+            continue
+        doc, other = docs.get((row["pass"], row["clip"])), docs.get((row["pass"], row["partner"]))
+        for k, apart in _disagreements(doc, other):
+            row["issues"].append(_disagreement_text(k, apart))
+            text = (f"{_name(k)} differs by {round(abs(apart) * 1000)} ms from the other angle "
+                    "(lined up by impact): put both on the same moment of the swing")
+            for r, d in ((row, doc), (rows.get((row["pass"], row["partner"])), other)):
+                if r is not None:
+                    r["fixes"].append({"kind": "angles", "t": d["events"][k], "event": k, "points": [], "text": text})
+    for row in out:
+        if "fixes" in row:
+            row["fixes"].sort(key=lambda f: (f["t"] is None, f["t"] or 0))
     return out
 
 
 def angles_disagree(doc: dict | None, other: dict | None) -> list[str]:
-    """Key moments marked at different points of the swing on the two angles. The clips' clocks differ,
-    so they're lined up by the two labeled impacts."""
+    """Key moments marked at different points of the swing on the two angles, as sentences."""
+    return [_disagreement_text(k, apart) for k, apart in _disagreements(doc, other)]
+
+
+def _disagreement_text(k: str, apart: float) -> str:
+    return (f"{_name(k)} differs by {round(abs(apart) * 1000)} ms between the angles (later "
+            f"{'face-on' if apart > 0 else 'down the line'}, lined up by the impacts). Check both.")
+
+
+def _disagreements(doc: dict | None, other: dict | None) -> list[tuple[str, float]]:
+    """(key moment, seconds apart) for moments the two angles put at different points of the swing.
+    The clips' clocks differ, so they're lined up by the two labeled impacts."""
     if not doc or not other:
         return []
     ev, ov = doc.get("events") or {}, other.get("events") or {}
@@ -212,7 +261,5 @@ def angles_disagree(doc: dict | None, other: dict | None) -> list[str]:
             continue
         apart = (ev[k] - ev["impact"]) - (ov[k] - ov["impact"])
         if abs(apart) > ANGLES_APART:
-            name = "Takeaway" if k == "takeaway" else k.upper()
-            out.append(f"{name} differs by {round(abs(apart) * 1000)} ms between the angles (later "
-                       f"{'face-on' if apart > 0 else 'down the line'}, lined up by the impacts). Check both.")
+            out.append((k, apart))
     return out
