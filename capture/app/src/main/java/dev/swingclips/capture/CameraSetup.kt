@@ -19,7 +19,9 @@ import java.util.Locale
  * Camera setup, for a phone whose screen faces away from the golfer: while it isn't recording, a
  * still of the preview goes to the server about once a second (POST /api/setup/<angle>). The
  * server finds the golfer and says what to fix; this says it out loud when it changes (and repeats
- * a problem now and then), shows it via [onVerdict], and focuses the camera on the golfer.
+ * a problem now and then) if [ownVoice] (otherwise the server says both phones' verdicts together
+ * through one phone), shows it via [onVerdict], and focuses the camera on the golfer. [onSteady]
+ * hears each verdict that has held for two stills in a row (for auto-start).
  */
 class CameraSetup(
     ctx: Context,
@@ -30,6 +32,9 @@ class CameraSetup(
     /** Only while this is true (the phone is set up, not recording). */
     private val active: () -> Boolean,
     private val onVerdict: (ok: Boolean, text: String) -> Unit,
+    /** Whether this phone says its own verdicts ("own" setup voice, or the server can't combine them). */
+    private val ownVoice: () -> Boolean = { true },
+    private val onSteady: (ok: Boolean) -> Unit = {},
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val thread = HandlerThread("setup").apply { start() }
@@ -69,6 +74,11 @@ class CameraSetup(
     /** Say something outside the setup checks (e.g. what shutter the camera is really using). */
     fun say(text: String) {
         if (speechReady) tts.speak(text, TextToSpeech.QUEUE_ADD, null, "note")
+    }
+
+    /** Say something now, cutting off what's being said (a newer setup verdict replaces an older one). */
+    fun sayNow(text: String) {
+        if (speechReady) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "setup")
     }
 
     /** Forget what was said and focused, e.g. after recording: the next setup starts fresh. */
@@ -136,7 +146,10 @@ class CameraSetup(
         heardCount = if (say == heard) heardCount + 1 else 1
         heard = say
         val now = System.currentTimeMillis()
-        if (heardCount >= 2 && speechReady && (say != said || (!ok && now - saidAt > REPEAT_MS))) {
+        if (heardCount >= 2) onSteady(ok && !v.has("board"))   // the mat board, not the golfer: not a go
+        if (!ownVoice()) {
+            said = null   // so switching back to its own voice says the current verdict
+        } else if (heardCount >= 2 && speechReady && (say != said || (!ok && now - saidAt > REPEAT_MS))) {
             tts.speak(say, TextToSpeech.QUEUE_FLUSH, null, "setup")
             said = say
             saidAt = now

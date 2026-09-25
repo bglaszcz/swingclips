@@ -16,12 +16,12 @@ Square Omni's numbers for that shot.
 ## A session
 
 1. **Server** - running (`server\Start server.cmd`).
-2. **Laptop** - open Square Golf's app on the driving range, then run `Square watcher.cmd`.
-3. **Phones** - open **SwingClips** on each, check the angle (Face-on / Down the line), sensitivity
-   and mode. Stand at the ball: each phone says whether it can see all of you ("Down the line:
-   good") and focuses on you; **Camera setup** on the review page shows both live. Then **Start
-   recording** on both.
-4. **Review** - `http://homeserver:8000` on a PC, or `http://192.168.86.250:8000` on a phone.
+2. **Phones** - open **SwingClips** on each. Stand at the ball: one phone says how both cameras see
+   you ("Both cameras look good", or what to fix).
+3. **Laptop** - start the Square watcher and Square Golf's app (driving range).
+4. **Review page** - `http://homeserver:8000` on a PC, or `http://192.168.86.250:8000` on a phone:
+   **Start both** in the Ready bar at the top, and hit balls once it's green. After the first swing
+   a phone says "First swing: both cameras saw you, Square paired" (or what's wrong).
 
 ## What's in the repo
 

@@ -165,7 +165,7 @@ function Test-SquareRunning {
 function Send-Heartbeat {
     if (-not $Server) { return }
     $beat = [ordered]@{ source = "square-watcher"; squareRunning = (Test-SquareRunning)
-                        lastShotAt = $lastShotAt; version = 1 }
+                        lastShotAt = $lastShotAt; version = "1" }
     try {
         Invoke-RestMethod -Uri ($Server.TrimEnd('/') + "/api/relay/heartbeat") -Method Post -ContentType "application/json" `
             -Body ($beat | ConvertTo-Json -Compress) -TimeoutSec 3 | Out-Null
