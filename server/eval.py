@@ -36,10 +36,13 @@ from pathlib import Path
 import numpy as np
 
 import app
+import calib
 import models
 import pose
 import quality
+import swing3d
 import swings
+import tri
 
 EVAL_DIR = Path(os.environ.get("SWINGCLIPS_EVAL", app.CLIPS_DIR.parent / "eval"))
 LEAD_SIDE = swings.LEAD_SIDE
@@ -295,6 +298,61 @@ def consistency(first: dict, second: dict, aspect: float, height: float | None) 
     return out
 
 
+# ---- 3D from both phones (SWINGCLIPS_3D=on, calibrated) ----
+
+def swing_3d(main_clip: dict, other: dict, mi: dict, oi: dict, main_path: Path, other_path: Path, summ) -> tuple:
+    """(the swing's 3D file, its session) as the server made it, else made now with the latest
+    calibration before the swing (without the camera-move check); (None, None) without one."""
+    saved = app.file_3d(main_clip["name"])
+    all_sessions = calib.sessions()
+    if saved.is_file():
+        doc = json.loads(saved.read_text(encoding="utf-8"))
+        ses = next((s for s in all_sessions if s["id"] == doc.get("session")), None)
+        return (doc, ses) if ses else (None, None)
+    if not calib.enabled():
+        return None, None
+    ses = calib.session_before(app.recorded_at(app.CLIPS_DIR / main_clip["name"]), all_sessions) \
+        if (app.CLIPS_DIR / main_clip["name"]).exists() else (all_sessions[-1] if all_sessions else None)
+    if ses is None:
+        return None, None
+    doc, _ = swing3d.build(mi, oi, swing3d.read_pose(main_path), swing3d.read_pose(other_path), ses, summ, None, LEAD_SIDE)
+    return doc, ses
+
+
+def score_3d(doc: dict, ses: dict, views: list[tuple[str, dict, dict]], summ) -> dict:
+    """The 3D joints put back into each labeled view, against the labels there, beside the 2D
+    tracker's own error on the same joints. views: [(angle, label, pose input)]."""
+    out = {"swing": doc.get("face"), "reprojection": doc.get("reprojection"), "boneSpreadPct": doc.get("boneSpreadPct"),
+           "syncMs": None if doc.get("offset") is None else 1000 * (doc["offset"] - doc["offsetImpact"]), "joints": []}
+    for angle, label, inp in views:
+        cam = tri.Camera(ses["cameras"][angle])
+        w, h = cam.size
+        frames = inp["frames"]
+        ts = [f["t"] for f in frames]
+        aspect = summ.call("aspectOf", inp["name"], inp["rotation"])
+        events = label.get("events") or {}
+        height = body_height(frames, events)
+        if height is None:
+            continue
+        shift = 0.0 if angle == "face" else doc["offset"]
+        for tkey, points in (label.get("frames") or {}).items():
+            t = float(tkey)
+            X = tri.at_time(doc, t - shift)
+            if X is None:
+                continue
+            i = frame_index(ts, t)
+            lm = frames[i]["lm"] if abs(ts[i] - t) <= SAME_FRAME else None
+            px = cam.project(X)
+            for joint, idx in JOINTS.items():
+                xy = labeled_xy(points.get(joint))
+                if xy is None or not np.isfinite(X[idx]).all():
+                    continue
+                err3 = math.hypot((px[idx, 0] / w - xy[0]) * aspect, px[idx, 1] / h - xy[1]) / height
+                err2 = None if lm is None else math.hypot((lm[idx * 3] - xy[0]) * aspect, lm[idx * 3 + 1] - xy[1]) / height
+                out["joints"].append({"angle": angle, "joint": joint, "phase": phase_of(t, events), "err3d": err3, "err2d": err2})
+    return out
+
+
 # ---- Summaries ----
 
 def stats(values, scale=1.0) -> dict:
@@ -338,7 +396,7 @@ def quality_rows(recs: list[dict]) -> list[dict]:
     return rows
 
 
-def summarize(clips: list[dict], label_checks: list[dict], noise: list[dict], clip_quality=()) -> dict:
+def summarize(clips: list[dict], label_checks: list[dict], noise: list[dict], clip_quality=(), three_d=()) -> dict:
     """The tables, as {table: [rows]}, plus a flat {key: number} of the headline numbers for --compare."""
     tables, flat = {}, {}
 
@@ -458,6 +516,30 @@ def summarize(clips: list[dict], label_checks: list[dict], noise: list[dict], cl
             flat[f"noise.{angle}.{metric}.median_sd"] = rows[-1]["median"]
     tables["noise"] = rows
 
+    rows = []
+    for c in three_d:
+        r = c.get("reprojection") or {}
+        rows.append({"swing": c["swing"], "face": (r.get("face") or {}).get("median"), "facep90": (r.get("face") or {}).get("p90"),
+                     "dtl": (r.get("dtl") or {}).get("median"), "dtlp90": (r.get("dtl") or {}).get("p90"),
+                     "bones": c.get("boneSpreadPct"), "sync": c.get("syncMs")})
+    if rows:
+        for k in ("face", "dtl", "bones"):
+            vals = [r[k] for r in rows if r[k] is not None]
+            flat[f"3d.{k}.median"] = float(np.median(vals)) if vals else None
+    tables["threeD"] = rows
+    rows = []
+    for angle in ("face", "dtl"):
+        for group, names in JOINT_GROUPS.items():
+            recs = [j for c in three_d for j in c["joints"] if j["angle"] == angle and j["joint"] in names]
+            if not recs:
+                continue
+            s3 = stats([j["err3d"] for j in recs], 100)
+            s2 = stats([j["err2d"] for j in recs], 100)
+            rows.append({"angle": angle, "joints": group, "labeled": len(recs), "median3d": s3.get("median"),
+                         "p90_3d": s3.get("p90"), "median2d": s2.get("median"), "p90_2d": s2.get("p90")})
+            flat[f"3d.joints.{angle}.{group}.median_pct"] = rows[-1]["median3d"]
+    tables["threeDJoints"] = rows
+
     rows = quality_rows(list(clip_quality))
     for r in rows:
         for k in ("noise", "downswing"):
@@ -526,6 +608,16 @@ def print_report(result: dict) -> None:
     table("Noise floor: spread (standard deviation) of each number while standing still at address", t["noise"],
           [("angle", "angle"), ("metric", "metric"), ("clips", "clips"), ("median", "median sd"), ("p90", "90th pct")],
           "Degrees for angles and turns, inches for sway / rise / depth, picture heights for widths.")
+    if t.get("threeD"):
+        table("3D from both phones: reprojection error (px) and bone-length spread before the filter (%)", t["threeD"],
+              [("swing", "swing"), ("face", "face-on"), ("facep90", "90th"), ("dtl", "down the line"), ("dtlp90", "90th"),
+               ("bones", "bones %"), ("sync", "sync vs impact frames (ms)")],
+              "Reprojection: each view's points against the 3D joints put back into it (before the filter).")
+    if t.get("threeDJoints"):
+        table("3D joints put back into each view vs the labels (% of nose-to-ankle height), beside the 2D tracker's",
+              t["threeDJoints"], [("angle", "angle"), ("joints", "joints"), ("labeled", "n"), ("median3d", "3D median"),
+                                  ("p90_3d", "3D 90th"), ("median2d", "2D median"), ("p90_2d", "2D 90th")],
+              "Swings with labels on both angles only.")
     if t.get("quality"):
         table("Clip quality by shutter (no labels needed; quality.py)", t["quality"],
               [("angle", "angle"), ("shutter", "shutter"), ("clips", "clips"), ("unmeasured", "not yet"),
@@ -605,7 +697,7 @@ def main(argv=None) -> int:
     if not first:
         print(f"No labels in {app.LABELS_DIR} yet: label some clips in the review page first (press L).")
         return 1
-    summ = swings.Summarizer(app.STATIC_DIR)
+    summ = swings.Summarizer(app.STATIC_DIR, swings.JS_3D if calib.enabled() else ())
     pool = None
     try:
         paths: dict[str, Path | None] = {}
@@ -629,7 +721,7 @@ def main(argv=None) -> int:
                 paths[name] = rerun_pose(name, cache, pool, workers) if args.rerun else saved_pose(name)
             return paths[name]
 
-        clips, label_checks, inputs = [], [], {}
+        clips, label_checks, inputs, three_d = [], [], {}, []
         for main_clip, other in swing_list.values():
             main_path, other_path = pose_of(main_clip), pose_of(other)
             if main_path is None:
@@ -643,6 +735,11 @@ def main(argv=None) -> int:
                     continue
                 inputs[info["name"]] = inp
                 clips.append(score_clip(summ, first[info["name"]], inp, pred, predicted["dtlSide"]))
+            if oi is not None and main_clip["angle"] == "face" and main_clip["name"] in first and other["name"] in first:
+                doc, ses = swing_3d(main_clip, other, mi, oi, main_path, other_path, summ)
+                if doc is not None:
+                    three_d.append(score_3d(doc, ses, [("face", first[main_clip["name"]], mi),
+                                                       ("dtl", first[other["name"]], oi)], summ))
         for name, doc in second.items():
             if name in first and name in inputs:
                 inp = inputs[name]
@@ -679,8 +776,8 @@ def main(argv=None) -> int:
             "bodyModel": body_model(), "clubModel": club_model(),
             "rerun": args.rerun, "labeledClips": len(clips),
             "onlyVal": subset,
-            **summarize(clips, label_checks, noise, clip_quality),
-            "clips": clips, "labeler": label_checks, "noise": noise, "quality": clip_quality,
+            **summarize(clips, label_checks, noise, clip_quality, three_d),
+            "clips": clips, "threeD": three_d, "labeler": label_checks, "noise": noise, "quality": clip_quality,
         }
     finally:
         summ.close()

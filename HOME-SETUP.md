@@ -83,6 +83,111 @@ monitor's numbers for that shot.
   about 1/240 s at 240 fps; see "Shutter" below for faster), and the phone focused on the golfer, not the wall behind (tap on the golfer in the
   camera preview before starting, if the phone allows it).
 
+### 3D from both phones (off by default: `SWINGCLIPS_3D=on`)
+Groundwork for real 3D: with both phones calibrated, each swing's joints are triangulated from the
+two views, and the page shows true pelvis and thorax turn, sway / thrust / lift in inches and a
+kinematic sequence next to the face-on estimates. Nothing changes unless the server runs with
+`SWINGCLIPS_3D=on` (in `Start server.cmd`: `set SWINGCLIPS_3D=on` before it starts Python): the
+2D numbers, key positions, trends and pose files stay exactly as they are either way.
+
+**Axes**: metres from the ball, **x** toward the target, **y** up, **z** toward the golfer's front
+(from the golfer toward the ball and the face-on phone). Right-handed golfer only, for now.
+
+**1. Print the boards** (`server/board.py`; print at *Actual size*, then check the 100 mm line
+with a ruler):
+- `python board.py lens` -> `board-lens.pdf`, one letter page (7 x 9 squares of 25 mm). Glue it
+  to foam board: it has to stay flat.
+- `python board.py mat` -> `board-mat.pdf`, the mat board at full size (5 x 7 squares of 150 mm,
+  0.75 x 1.05 m) for a print shop (A0 or a 36" roll), or `python board.py mat --tile letter` for
+  20 letter pages to trim and tape together (line up the squares on the 10 mm overlaps; glue to
+  foam board). It must be this big: from hand height 3 m away the mat is seen almost edge-on
+  (about 18 degrees), so a square 150 mm deep looks ~20 px tall in a 1080p frame and a marker
+  bit ~3 px. If yours prints at another size, measure a square and pass `--square-mm` to
+  `calib.py session`.
+
+**2. Calibrate each phone's lens, once per phone and mode** (`server/calib.py lens`): in the mode
+you swing in (1080p 240 fps high-speed crops the sensor, so its numbers aren't the 30 fps ones),
+record the lens board waved slowly in front of the phone, 0.4-1 m away: tilted every way, and into
+every corner and edge of the picture. The capture app records when it hears a strike, so clap to
+start each 4 s clip; two or three clips is plenty. Then on the server:
+
+    python calib.py lens --phone s23ultra --angle face D:\SwingClips\clips\swing_face_1920x1080_240fps_...mp4 ...
+    python calib.py lens --phone s21 --angle dtl D:\SwingClips\clips\swing_dtl_1920x1080_240fps_...mp4 ...
+
+It writes `D:\SwingClips\calib\s23ultra-1920x1080_240fps.json` (intrinsics, distortion, image size,
+reprojection error) and notes which phone films which angle (`calib\phones.json`). It says
+**good** when the RMS error is under 0.5 px and the corners reached 75% of the picture, and what to
+do about it otherwise; the exit code is 2 when it isn't good. Delete those clips afterwards (they
+show up as swings). Redo it if a phone's software update changes the camera, or for another mode.
+
+**3. Each session, place the cameras** (after the tripods are set, before the first swing): lay the
+mat board flat on the mat with its centre on the ball's spot, the **x arrow pointing at the
+target** and the **y arrow away from you**, stand clear, clap, and leave it ~5 s. Then:
+
+    python calib.py session <face-on clip> <down-the-line clip>
+
+It prints where each camera stands (face-on around z +3, down the line around x -3.5, both
+0.5-2 m up), the fit in pixels, and warns when the board looks turned round; it saves
+`calib\sessions\<date>_<time>.json`. With 3D on, the camera setup does the same by itself from the
+phones' setup stills when a phone sees the board ("Face on: board seen", and "Both cameras are
+calibrated for 3D" once both have): **but** the capture app sends ~960 px stills, and in tests the
+mat board at 3 m was found at full resolution only, so for now use the clips.
+
+A session's positions hold for the swings after it until a camera moves: each swing's golfer
+position and size in each picture (the same check that marks "camera moved" in Progress) is compared
+with the first swing after the calibration, and a swing past it gets no 3D ("the face-on camera
+moved since calibration ..."). Swings in another recording mode than the calibration get none either.
+
+**What the server does**: for each swing with both angles, the swing worker pairs the frames by the
+impact sync (each face-on frame with the down-the-line points interpolated to the same moment: the
+phones drop different frames), then refines the sync within a frame and a half by where the elbows
+and wrists triangulate best in the downswing (the impact frames alone are only good to ~4 ms). It
+triangulates every landmark (a DLT weighted by the model's confidence), filters the swing so each
+bone keeps one length and the motion is smooth (~15 Hz), and saves `<face clip>.3d.json` beside the
+pose files (`/api/3d/<clip>`). Its numbers (`static/metrics3d.js`) go in the swing's record in
+`swings.json` as `body3d`.
+
+**The review page**: a **3D from both phones** panel under the swing numbers, only for calibrated
+swings: a stick figure that follows the video (drag to turn it), a table at P1 / P4 / P6 / P7 with
+the 2D estimate in brackets, and the kinematic sequence chart.
+- **Pelvis turn**: the hip line's heading about the vertical, from address; + closed, - open.
+  **Thorax turn**: the same for the chest (spine from mid-hips to mid-shoulders, shoulder line
+  square to it), as a rotation then **forward bend** toward the ball then **side bend** (lead
+  shoulder up +). **X-factor**: thorax minus pelvis. **Pelvis side bend**: lead hip higher +. No
+  pelvis forward tilt: that needs points on the front and back of the pelvis.
+- **Sway / thrust / lift** (inches from address): the middle of the hips (and of the shoulders)
+  toward the target, toward the ball (+ at impact = early extension) and up.
+- **Kinematic sequence**: how fast the pelvis and thorax rotate toward the target, and how fast the
+  lead arm (shoulder to wrist) and club (hands to clubhead) swing, from the top to just after
+  impact, with each one's peak. The textbook order is pelvis, thorax, arm, club, each faster than
+  the last. The club only shows with the club model on (`SWINGCLIPS_CLUB_BACKEND=yolo`, it has the
+  clubhead); the **club check** then compares hands-to-clubhead with the club's standard length
+  (less 4.5" of grip above the hands): more than 10% off means the calibration or the clubhead
+  points are off.
+- The line above the figure says how well it fits: the **reprojection error** (the 3D points put
+  back into each picture, median px), how much **bone lengths varied** before the filter (a few %
+  is normal; 15%+ means one view is off), and how far the sync moved from the impact frames.
+
+**Scorecard**: with 3D on, `eval.py` adds each swing's reprojection error and bone-length spread,
+and for swings labeled on both angles, the 3D joints put back into each view against the labels,
+beside the 2D tracker's error on the same joints.
+
+**Not tested on real clips yet** (all of it was built against made-up cameras and a made-up swing:
+`tests/test_3d.py`). To check on the real setup, in order:
+1. Print both boards; the 100 mm line measures 100 mm.
+2. Lens calibration on a real 240 fps clip from each phone comes out **good** (RMS under 0.5 px).
+   Motion blur at 1/240 s may need slower waving or the fixed 1/1000 shutter.
+3. The mat board is found in both phones' full-resolution clips at your distances, and the camera
+   positions printed match a tape measure (within a few cm), with no "turned round" warning.
+4. On real swings: reprojection error under ~5 px, bone spread under ~10%, and the sync correction
+   within ±4 ms. Pelvis and thorax turn at the top in a plausible range (pelvis ~40-50, thorax
+   ~85-100 for a full swing), and the kinematic sequence order stable across swings of one club.
+5. Moving a tripod between swings stops 3D for the later ones.
+6. A label pass on both angles of a few swings: the 3D joints land on the labels about as well as
+   the 2D tracker or better.
+7. Whether the setup stills can find the board at all (they're half resolution): if not, the
+   capture app needs a full-size still, or a "calibrate" recording, for the voice prompt to work.
+
 ### Shutter: a sharper club and hands (capture app 0.4)
 On **Auto** (the default, same as before 0.4) the phone picks its own exposure, which at 240 fps
 is about 1/240 s: the club is a faint streak through the downswing. The **Shutter** button (next
@@ -296,7 +401,8 @@ toward the ball". The phones face away from you, so voice is the channel.
   the wrists and index fingers weighted by MediaPipe's confidence, smoothed over ±45 ms (a local
   curve fit that leans on confident frames and drops one-frame glitches), and ends once a wrist is
   lost behind the head in the finish. A kinematic
-  sequence isn't attempted: from face-on alone the turn speeds come out in the wrong order.
+  sequence isn't attempted: from face-on alone the turn speeds come out in the wrong order (with
+  both phones calibrated, the 3D panel has one: see "3D from both phones").
 - **Session trends** (Trends on a session in the list; `static/summary.js`): each swing's numbers
   (tempo, turns and sway at the top / impact, and the down-the-line ones: hips and bend at impact,
   hands to plane at P6 and the top, hand height and depth) against Square's (path, face, face to
@@ -588,7 +694,6 @@ practice mode (one number, spoken after each swing).
 3. **Compare two swings**: a reference swing (a good one, or one from before a focus) next to the
    current one, synced on impact, key-position cards lined up (the two-angle sync code carries
    over).
-4. **Later, maybe: 3D from both cameras.** With the two phones' positions calibrated once,
-   triangulate real 3D joint positions. That would replace the estimated face-on turns and could
-   make a kinematic sequence possible. A much bigger project; only worth it if the estimated
-   turns stop being good enough.
+4. **3D from both cameras**: the groundwork is in, off by default (see "3D from both phones"):
+   calibration, triangulation, true turns and a kinematic sequence. Next: testing it on the real
+   setup, then deciding whether the 3D turns replace the face-on estimates in Trends and Progress.
