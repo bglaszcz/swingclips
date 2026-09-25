@@ -16,8 +16,13 @@ monitor's numbers for that shot.
 ## A session
 
 1. **Server** - running (see "Server" below for updates).
-2. **Laptop** - open Square Golf's app on the driving range, then run `Square watcher.cmd`
-   (in `Dropbox\SwingClips`).
+2. **Laptop** - double-click `Start golf.cmd` (in `Dropbox\SwingClips`): it opens Square Golf's app
+   if it isn't open and starts the Square watcher in a minimized window if it isn't running (both
+   still work on their own, as before). Pick the driving range in Square's app.
+   `Start golf.cmd -Startup` adds it to Windows sign-in, so it happens when the laptop starts. If
+   Square's app isn't found, put the path of its shortcut or .exe in `square-app.txt` next to it.
+   The watcher also tells the server every ~20 s that it's alive, whether Square's app is open and
+   when the last shot came (`POST /api/relay/heartbeat`), for the review page's status.
 3. **Phones** - open **SwingClips** on each, check the angle (Face-on / Down the line),
    sensitivity and mode, then **Start recording** on both.
 4. **Review** - `http://homeserver:8000` on a PC, or `http://192.168.86.250:8000` on a phone.

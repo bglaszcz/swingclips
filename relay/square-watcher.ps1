@@ -154,6 +154,24 @@ function Send-Shot($shot) {
     }
 }
 
+# Every ~20 s: tell the server the watcher is alive, whether Square's app is open and when the last
+# shot came (the review page's Ready panel shows it). Quiet if the server doesn't take it (older server).
+$lastShotAt = $null
+$lastBeat = [datetime]::MinValue
+function Test-SquareRunning {
+    [bool](Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ProcessName -like "*Square*" -or ($_.MainWindowTitle -and $_.MainWindowTitle -like "*Square Golf*") })
+}
+function Send-Heartbeat {
+    if (-not $Server) { return }
+    $beat = [ordered]@{ source = "square-watcher"; squareRunning = (Test-SquareRunning)
+                        lastShotAt = $lastShotAt; version = 1 }
+    try {
+        Invoke-RestMethod -Uri ($Server.TrimEnd('/') + "/api/relay/heartbeat") -Method Post -ContentType "application/json" `
+            -Body ($beat | ConvertTo-Json -Compress) -TimeoutSec 3 | Out-Null
+    } catch {}
+}
+
 if (-not (Test-Path -LiteralPath $Database)) {
     Say "Can't find Square's shot database at $Database. Has Square Golf's app been run on this PC?" "Yellow"
     exit 1
@@ -170,6 +188,7 @@ $lastRetry = Get-Date
 
 while ($true) {
     Start-Sleep -Milliseconds 500
+    if (((Get-Date) - $lastBeat).TotalSeconds -ge 20) { $lastBeat = Get-Date; Send-Heartbeat }
     if ($unsent.Count -gt 0 -and ((Get-Date) - $lastRetry).TotalSeconds -gt 15) {
         $lastRetry = Get-Date
         $retry = @($unsent); $unsent.Clear()
@@ -198,6 +217,7 @@ while ($true) {
         Say $line "White"
         Add-Content -Path (Join-Path $LogDir ("square-shots-" + $received.ToString("yyyy-MM-dd") + ".jsonl")) `
             -Value ($shot | ConvertTo-Json -Depth 5 -Compress) -Encoding UTF8
+        $lastShotAt = $received.ToString("o")
         if (Send-Shot $shot) { Say "         sent to the server" "DarkGray" }
     }
 }
