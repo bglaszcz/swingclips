@@ -77,8 +77,15 @@ echo set SWINGCLIPS_POSE_BACKEND=rtmpose-m> D:\SwingClips\app\server\settings.cm
 :: How accurate the tracking is, against your hand labels
 cd /d D:\SwingClips\app\server
 .venv\Scripts\python.exe eval.py
+
+:: Would a GPU help? RTMPose and the club model on the CPU vs the GPU, and whole clips
+:: (install requirements-dml.txt first: HOME-SETUP.md, "Using a GPU")
+.venv\Scripts\python.exe bench_models.py
 ```
 
+- `settings.cmd` can also put the ONNX models on a GPU (`SWINGCLIPS_ORT_PROVIDER=dml` or `cuda`,
+  with `SWINGCLIPS_REQUIREMENTS` naming the matching package file); off by default, see
+  HOME-SETUP.md, "Using a GPU".
 - `Start server.cmd` runs the server in its window. Ctrl+C or closing the window stops it (answer
   Y to "Terminate batch job"). After a change of body model or of the analysis, the server
   analyzes older clips again in the background, newest first, while new swings go first.
@@ -130,7 +137,7 @@ node --test tests/compare.test.js tests/trust.test.js tests/goodshots.test.js
 | Folder | Runs on | What it does |
 | --- | --- | --- |
 | `capture/` | Android phones (9+) | Kotlin/Camera2 app. Keeps the last few seconds of video in memory and cuts a clip 2 s either side of each strike (240/120/30 fps; shutter Auto or fixed). Each phone is face-on or down the line. Uploads each clip, reports in to the server (start/stop from the review page), speaks camera setup, first-swing and practice results. |
-| `server/` | Home server (Windows) | Python/FastAPI. Stores clips; runs pose on every frame (MediaPipe, or RTMPose through ONNX), finds the ball, impact and club shaft; works out key positions P1-P8 and swing numbers from both angles; clip quality; trust per number; good-shot ranges; practice mode; the labeling mode and scorecard (`eval.py`); two-camera 3D (off until calibrated). Serves the review page. |
+| `server/` | Home server (Windows) | Python/FastAPI. Stores clips; runs pose on every frame (MediaPipe, or RTMPose through ONNX, on the CPU or a GPU), finds the ball, impact and club shaft; works out key positions P1-P8 and swing numbers from both angles; clip quality; trust per number; good-shot ranges; practice mode; the labeling mode and scorecard (`eval.py`); two-camera 3D (off until calibrated). Serves the review page. |
 | `relay/` | Sim laptop | `square-watcher.ps1` reads new shots from Square Golf's local shot database and posts them to the server, which pairs each with its swing by time; `Start golf.cmd` starts Square's app and the watcher. `shot-listener.ps1` is an unused alternative that stands in for GSPro. |
 | `train/` | Gaming PC (GPU) | Trains the club keypoint model (YOLO-pose) from labeled frames. |
 | `docs/` | | Reports, such as how the key positions are defined against the labels. |

@@ -669,6 +669,101 @@ New **face-on** clips go first, so the spoken checks and practice numbers keep u
 down-the-line ones catch up between sets. `SWINGCLIPS_BODY_STRIDE=1` (settings.cmd) runs RTMPose on
 every frame; `SWINGCLIPS_POSE_WORKERS=n` sets the workers.
 
+#### Using a GPU (off by default)
+Only the ONNX models can go on a GPU: RTMPose and the club model (`models.py`, through ONNX
+Runtime's DirectML or CUDA). MediaPipe (~17 ms a frame), the club shaft search (~18 ms) and decoding
+(~7 ms) stay on the CPU. Per frame in each worker, RTMPose is ~40 ms on every other frame, so ~20 of
+~62 ms, and only up to 0.9 s after the strike. So even a GPU that ran RTMPose for free would take
+well under a third off a clip; how much exactly is what `bench_models.py` measures, including that
+floor. Freeing the cores may speed MediaPipe up a little too, which only a real run shows.
+
+`SWINGCLIPS_ORT_PROVIDER` in `settings.cmd` picks where the models run: `cpu` (the default),
+`dml` (DirectML: any DirectX 12 GPU on Windows, including the Intel graphics built into the CPU,
+and AMD and NVIDIA cards), `cuda` (NVIDIA) or `auto` (the first of cuda, dml, cpu that's installed).
+Each needs its own ONNX Runtime package **in place of** the CPU one (they all install the same
+folder): `SWINGCLIPS_REQUIREMENTS=requirements-dml.txt` or `requirements-cuda.txt` in `settings.cmd`
+makes `Start server.cmd` install that file instead of `requirements.txt`, and `ort_package.py`
+takes the other package out first (it does the same going back). The window says where the models
+ended up ("ONNX Runtime: rtmpose-m-256x192.onnx on DirectML"), and falls back to the CPU, saying
+why, if the GPU isn't there or won't load them. On a GPU the body model runs on every frame by
+default (`SWINGCLIPS_BODY_STRIDE=2` puts it back to every other); the 6 workers stay, since
+MediaPipe and the shaft still need the cores, and they take turns on the GPU. `SWINGCLIPS_ORT_DEVICE=1`
+picks the second GPU when there are two.
+
+**1. Try the built-in graphics first (free).** The i5-12400 has Intel UHD Graphics 730; the
+i5-12400**F** has none. Task Manager, Performance: an "Intel(R) UHD Graphics 730" GPU means it's
+there. (Not listed: an F, or switched off in the BIOS.) Keep its driver current (Windows Update, or
+Intel's driver page). Then, with the server stopped (it would slow the benchmark and be slowed):
+
+```
+cd /d D:\SwingClips\app\server
+"Stop server.cmd"
+echo set SWINGCLIPS_REQUIREMENTS=requirements-dml.txt>> settings.cmd
+.venv\Scripts\python.exe ort_package.py requirements-dml.txt
+.venv\Scripts\python.exe -m pip install -r requirements-dml.txt
+call settings.cmd
+.venv\Scripts\python.exe bench_models.py
+```
+
+(`>>` adds the line to `settings.cmd`; a single `>` would replace the RTMPose line.) It takes a few
+minutes on the newest clip, or name one: `bench_models.py D:\SwingClips\clips\<clip>.mp4`.
+
+**2. Reading the benchmark.** It ends with a verdict like:
+
+```
+Verdict: swing_face_..._2031ms.mp4, 6 worker(s)
+  RTMPose-m: CPU xx ms, DirectML (Intel(R) UHD Graphics 730) xx ms (x.x x) a frame, one worker alone
+  Whole clip (rtmpose-m): CPU xx s (every 2 frames) -> DirectML (...) xx s (every frame), DirectML (...) xx s (every 2 frames)
+    CPU, every 2 frames: ms a frame in each worker: mediapipe xx, body xx
+  Floor, no body model at all: xx s. No GPU gets the body model's clips below this; ...
+  Keeping up (a swing, two clips, every ~20 s: 10 s a clip or less): yes/no, best xx s (...)
+  Fastest: settings.cmd with SWINGCLIPS_REQUIREMENTS=requirements-dml.txt, SWINGCLIPS_ORT_PROVIDER=dml; ...
+  DirectML (...) against the CPU, same frames: body points x.xx px apart (at most x.x px), ...
+```
+
+- The model lines are one worker alone. With 6 workers sharing a small GPU each one waits its turn,
+  so the **whole clip** line is the one that counts: it's the server's own run, workers and all.
+- **Floor**: the clip without RTMPose at all. The gap from the CPU's time down to the floor is all
+  any GPU can win on the body model. A card only beats the built-in graphics where the built-in
+  graphics' time is still well above the floor.
+- **Every frame vs every 2 frames** on the GPU: every frame is the default there (the gap filling
+  goes away); if every 2 frames is much faster, set `SWINGCLIPS_BODY_STRIDE=2` too. The verdict
+  names the fastest settings.
+- **Against the CPU**: a GPU's arithmetic isn't bit for bit the CPU's, so the points move a little
+  (a fraction of a pixel typically; a point can jump a pixel or two where the model is unsure).
+  That's why the next step is the scorecard, not just the timing.
+
+**3. Check it against the labels, then switch.** `eval.py` keeps a GPU run's cached analyses apart
+from the CPU's and names its result `..._dml.json`:
+
+```
+call settings.cmd
+.venv\Scripts\python.exe eval.py --rerun
+.venv\Scripts\python.exe eval.py --rerun --provider dml --compare D:\SwingClips\eval\<the result just saved>.json
+```
+
+The differences should be within the noise: key positions within a frame, joints within ~0.1% of
+height. Then `echo set SWINGCLIPS_ORT_PROVIDER=dml>> settings.cmd` and start the server. Clips
+already analyzed stay as they are (new pose files say `"provider": "dml"`). To go back, delete both
+lines from `settings.cmd` and restart: the CPU package is put back. (With the DirectML package
+installed but `SWINGCLIPS_ORT_PROVIDER` not set, the models run on the CPU through
+onnxruntime-directml 1.24.4, the last DirectML release, rather than onnxruntime 1.30: fine for the
+benchmark, but go back if the GPU isn't used.)
+
+**4. A small card.** Only worth it if the built-in graphics leave a big gap above the floor. The
+server's case decides the card:
+- **NVIDIA RTX 3050 6 GB** (70 W, powered from the slot, low-profile versions exist): with
+  `requirements-cuda.txt` and `SWINGCLIPS_ORT_PROVIDER=cuda` (CUDA 13 through pip, ~0.7 GB; needs
+  NVIDIA driver 580 or newer), or with `dml` like any other card. Run the benchmark with both.
+- **Any DirectX 12 card** with `dml`, e.g. a low-profile Intel Arc A310 or AMD Radeon RX 6400.
+- Check before buying: **the case** (a slim case takes only low-profile cards, with the short
+  bracket; look at the length and whether it's one or two slots thick), **the power supply**
+  (a 70-75 W card needs no cable, but small OEM supplies can be 180-260 W: add the CPU's 65 W, up to
+  ~117 W in bursts, and the card's), and **the slot** (a free PCIe x16-sized slot; the RTX 3050 6 GB
+  runs at x8, fine here). With a card in, the BIOS may turn the built-in graphics off; that's fine.
+- 6 workers each hold their own copy of the model on the card: a few hundred MB each with CUDA, so
+  6 GB is plenty.
+
 #### The ball search (pose.py, `BALL_VERSION` 2)
 Impact is the first frame the ball is gone. A spot only counts as the ball if it's a ball's size
 (1-3% of nose-to-feet height), where a ball sits for the camera's angle (face-on below the feet;
@@ -699,6 +794,9 @@ cd /d D:\SwingClips\app\server
 set SWINGCLIPS_POSE_BACKEND=rtmpose-m
 .venv\Scripts\python.exe eval.py --rerun --compare
 ```
+
+(With a GPU package picked in `settings.cmd`, install `requirements-dml.txt` or
+`requirements-cuda.txt` instead of `requirements.txt`: see "Using a GPU".)
 
 - `fetch_models.py` downloads the three models (~400 MB, from MMPose's releases) into
   `public\models` (not in git); `fetch_models.py rtmpose-m` for just one.

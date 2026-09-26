@@ -1,0 +1,6 @@
+# The server with the ONNX models on an NVIDIA GPU through CUDA (SWINGCLIPS_ORT_PROVIDER=cuda). In
+# place of requirements.txt (settings.cmd: set SWINGCLIPS_REQUIREMENTS=requirements-cuda.txt). The
+# [cuda,cudnn] extras bring the CUDA 13 and cuDNN 9 DLLs as packages (~0.7 GB to download); only the NVIDIA
+# driver needs installing (580 or newer). DirectML works on NVIDIA cards too, with nothing extra.
+-r requirements-common.txt
+onnxruntime-gpu[cuda,cudnn]==1.30.0

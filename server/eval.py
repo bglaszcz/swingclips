@@ -14,12 +14,15 @@ golfer stands still at address (the noise floor). Labels come from the review pa
 With SWINGCLIPS_POSE_BACKEND set (rtmpose-m, rtmpose-l, rtmw; see models.py), --rerun analyzes with
 that body model instead, cached apart from MediaPipe's. With SWINGCLIPS_CLUB_BACKEND=yolo, the club
 model finds the shaft (and the clubhead, scored in its own table) instead of the ray casting.
+With SWINGCLIPS_ORT_PROVIDER (or --provider dml|cuda|auto) those models run on a GPU for --rerun, cached
+apart from the CPU's: a GPU's results differ a little, so score it against the labels before the
+server uses it (HOME-SETUP.md, "Using a GPU").
 
 The key positions and numbers are worked out by the review page's own JavaScript (as the server
 does, see swings.py), so the scorecard scores exactly what the page shows. Prints the tables and
 writes everything to SWINGCLIPS_EVAL (default: an "eval" folder next to the clips folder) as
 <date>_v<pose version>_<JavaScript fingerprint>.json (with _<body model> and _<club model> after it
-for the other backends).
+for the other backends, and _<provider> on a GPU).
 """
 import argparse
 import bisect
@@ -106,12 +109,24 @@ def pipeline_fingerprint() -> str:
         body = models.model_path(backend)
         h.update((here / "models.py").read_bytes())
         h.update(f"{backend}:{body.name}:{body.stat().st_size if body.is_file() else 0}".encode())
-        # How often it runs (SWINGCLIPS_BODY_STRIDE) changes the result too.
-        h.update(f"stride{pose.BODY_STRIDE}".encode())
+        # How often it runs (SWINGCLIPS_BODY_STRIDE, or by default the CPU's or the GPU's) changes the result too.
+        h.update(f"stride{pose.body_stride()}".encode())
     if models.club_backend() != models.CLUB_DEFAULT:
         h.update((here / "models.py").read_bytes())
         h.update(f"club:{models.club_stamp()}".encode())
+    # So does where the models run: a GPU's floating point isn't the CPU's (other kernels, other
+    # summing order), and a nudge can move a SimCC peak by a bin or a confidence past a threshold.
+    # Nothing added on the CPU, so the CPU's caches stay as they were.
+    if (backend != models.DEFAULT or models.club_backend() != models.CLUB_DEFAULT) and provider() != models.PROVIDER_DEFAULT:
+        h.update(f"provider:{provider()}".encode())
     return h.hexdigest()[:10]
+
+
+def provider() -> str:
+    """Where the ONNX models run ("cpu", "dml", "cuda"); only matters with another body or club model."""
+    if models.backend() == models.DEFAULT and models.club_backend() == models.CLUB_DEFAULT:
+        return models.PROVIDER_DEFAULT
+    return models.provider()
 
 
 def body_model() -> str:
@@ -579,7 +594,8 @@ def print_report(result: dict) -> None:
     print(f"Scorecard {result['stamp']}: pose.py v{result['poseVersion']}, JavaScript {result['jsCode']}, "
           f"model {result['poseModel']}, body {result.get('bodyModel', models.DEFAULT)}, "
           f"club {result.get('clubModel', models.CLUB_DEFAULT)}, "
-          f"{result['labeledClips']} labeled clip(s)"
+          + (f"on {models.PROVIDER_NAMES[result['provider']]}, " if result.get("provider") else "")
+          + f"{result['labeledClips']} labeled clip(s)"
           + (" (club dataset's validation swings only)" if result.get("onlyVal") else "")
           + (" (analyzed again with --rerun)" if result["rerun"] else ""))
     table("Key positions: labeled vs found (ms; + = found late)", t["events"],
@@ -637,7 +653,9 @@ def print_compare(old: dict, new: dict) -> None:
     a, b = old.get("headline", {}), new["headline"]
     keys = [k for k in b if k in a and a[k] is not None and b[k] is not None]
     print(f"\nCompared with {old.get('stamp')} (pose.py v{old.get('poseVersion')}, JavaScript {old.get('jsCode')}, "
-          f"body {old.get('bodyModel', models.DEFAULT)}, club {old.get('clubModel', models.CLUB_DEFAULT)}):")
+          f"body {old.get('bodyModel', models.DEFAULT)}, club {old.get('clubModel', models.CLUB_DEFAULT)}"
+          + (f", on {models.PROVIDER_NAMES[old['provider']]}" if old.get("provider") in models.PROVIDER_NAMES else "")
+          + "):")
     if not keys:
         print("  nothing in common to compare")
         return
@@ -685,7 +703,12 @@ def main(argv=None) -> int:
     ap.add_argument("--only-val", type=Path, metavar="DATASET_JSON",
                     help="score only the validation swings of a club dataset (club_dataset.py's dataset.json)")
     ap.add_argument("--out", type=Path, default=EVAL_DIR, help=f"where results go (default {EVAL_DIR})")
+    ap.add_argument("--provider", choices=["auto", *models.PROVIDERS],
+                    help="where --rerun runs the body and club models (default: SWINGCLIPS_ORT_PROVIDER, else cpu)")
     args = ap.parse_args(argv)
+    if args.provider:
+        # Before the worker processes start: they read it when they load the models.
+        os.environ["SWINGCLIPS_ORT_PROVIDER"] = args.provider
 
     first, second = labels(1), labels(2)
     subset = None
@@ -707,7 +730,9 @@ def main(argv=None) -> int:
             workers = app.POSE_WORKERS
             pool = ProcessPoolExecutor(workers)
             cache = args.out / "pose" / pipeline_fingerprint()
-            print(f"Analyzing labeled clips again (cached in {cache})")
+            where = provider()
+            print(f"Analyzing labeled clips again (cached in {cache})"
+                  + (f", the models on {models.PROVIDER_NAMES[where]}" if where != models.PROVIDER_DEFAULT else ""))
         # Each swing once: through its face-on clip, or a down-the-line clip on its own.
         swing_list = {}
         for doc in first.values():
@@ -776,6 +801,8 @@ def main(argv=None) -> int:
             "stamp": datetime.now().isoformat(timespec="seconds"),
             "poseVersion": pose.VERSION, "jsCode": summ.code, "poseModel": Path(pose.MODEL).name,
             "bodyModel": body_model(), "clubModel": club_model(),
+            # Only on a GPU, so results from the CPU look as they always did.
+            **({"provider": provider()} if args.rerun and provider() != models.PROVIDER_DEFAULT else {}),
             "rerun": args.rerun, "labeledClips": len(clips),
             "onlyVal": subset,
             **summarize(clips, label_checks, noise, clip_quality, three_d),
@@ -799,6 +826,8 @@ def main(argv=None) -> int:
     body = "" if result["bodyModel"] == models.DEFAULT else f"_{result['bodyModel']}"
     if result["clubModel"] != models.CLUB_DEFAULT:
         body += "_" + result["clubModel"].replace("@", "-")
+    if "provider" in result:
+        body += f"_{result['provider']}"
     out = args.out / f"{datetime.now():%Y-%m-%d_%H%M}_v{pose.VERSION}_{summ.code}{body}.json"
     out.write_text(json.dumps(result, indent=1), encoding="utf-8")
     print(f"\nSaved {out}")

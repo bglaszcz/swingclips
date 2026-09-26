@@ -1,0 +1,6 @@
+# The server with the ONNX models on a DirectX 12 GPU through DirectML (SWINGCLIPS_ORT_PROVIDER=dml):
+# the Intel graphics in the CPU, or an AMD, Intel or NVIDIA card. In place of requirements.txt
+# (settings.cmd: set SWINGCLIPS_REQUIREMENTS=requirements-dml.txt). Its CPU provider is ONNX
+# Runtime's own, so the CPU still works with it. 1.24.4 is the last onnxruntime-directml release.
+-r requirements-common.txt
+onnxruntime-directml==1.24.4

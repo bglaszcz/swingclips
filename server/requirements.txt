@@ -1,8 +1,4 @@
-fastapi==0.141.1
-uvicorn==0.53.0
-mediapipe==1.0.1
-av==18.1.0
-opencv-python==5.0.0.93
-numpy==2.5.3
-mini-racer==0.14.1
+# The server on the CPU (the default). With a GPU, requirements-dml.txt or requirements-cuda.txt
+# instead (HOME-SETUP.md, "Using a GPU"): each ONNX Runtime package replaces the others.
+-r requirements-common.txt
 onnxruntime==1.30.0

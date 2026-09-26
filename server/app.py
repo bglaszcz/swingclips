@@ -11,7 +11,9 @@ SWINGCLIPS_NOISE (the noise floor per number; default noise.json next to the cli
 SWINGCLIPS_GOODSHOTS (the rules for which shots count as good, for your personal ranges; default
 goodshots.json next to the clips folder),
 SWINGCLIPS_3D=on (3D from both phones: calib.py, tri.py; off by default) and SWINGCLIPS_CALIB (its
-calibrations; default: a "calib" folder next to the clips folder).
+calibrations; default: a "calib" folder next to the clips folder),
+SWINGCLIPS_ORT_PROVIDER (where the ONNX body and club models run: cpu, the default, dml, cuda or auto;
+see models.py and HOME-SETUP.md, "Using a GPU").
 Once a clip's pose is saved, the same worker measures its light, grain, flicker and sharpness (quality.py).
 The swing worker keeps each swing's numbers (swings.py) and the noise floor per number (noise.json),
 which the page's trust rules (static/trust.js) use.
@@ -61,6 +63,8 @@ STATIC_DIR = Path(__file__).parent / "static"
 VIDEO_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}
 # Leave a few cores for serving video; pose splits each clip across this many processes.
 # Half the logical CPUs, up to 6 (6 on the i5-12400): more fight over the cores. SWINGCLIPS_POSE_WORKERS overrides.
+# The same with the ONNX models on a GPU (SWINGCLIPS_ORT_PROVIDER): MediaPipe, the shaft search and
+# decoding still run on the CPU, and the workers take turns on the GPU (each has its own session).
 POSE_WORKERS = int(os.environ.get("SWINGCLIPS_POSE_WORKERS", 0)) or max(1, min(6, (os.cpu_count() or 4) // 2))
 # A clip still being copied in keeps changing; wait until it has been left alone this long.
 SETTLE_SECONDS = 15
@@ -1447,6 +1451,12 @@ if __name__ == "__main__":
             print(f"Body model {backend}: couldn't download it ({e}); using MediaPipe until the next start")
             os.environ["SWINGCLIPS_POSE_BACKEND"] = models.DEFAULT
     print(f"Body model: {body_model()} (clips analyzed with another are analyzed again when the server is idle)")
+    if models.provider_setting() != models.PROVIDER_DEFAULT and (
+            models.backend() != models.DEFAULT or models.club_backend() != models.CLUB_DEFAULT):
+        print(f"ONNX models on: {models.PROVIDER_NAMES[models.provider()]} (SWINGCLIPS_ORT_PROVIDER="
+              f"{models.provider_setting()}), body model on "
+              + ("every frame" if pose.body_stride() == 1 else f"every {pose.body_stride()} frames")
+              + f", {POSE_WORKERS} workers")
     print(f"Open http://localhost:{PORT} here, or http://<this PC's name>:{PORT} from other devices")
     logging.getLogger("uvicorn.access").addFilter(QuietPolling())
     logging.getLogger("uvicorn.error").addFilter(QuietShutdown())

@@ -57,8 +57,10 @@ BALL_STEP_SECONDS = 0.15
 # 240 fps it runs on every BODY_STRIDE-th frame, with the frames between filled in from their
 # neighbours (4 ms apart; the smoothing spans +-20 ms anyway), and only up to BODY_AFTER_STRIKE s
 # after the heard strike: no number is measured later in the follow-through. MediaPipe still runs
-# on every frame. SWINGCLIPS_BODY_STRIDE=1 runs it on every frame.
-BODY_STRIDE = max(1, int(os.environ.get("SWINGCLIPS_BODY_STRIDE", "2")))
+# on every frame. SWINGCLIPS_BODY_STRIDE=1 runs it on every frame. On a GPU (SWINGCLIPS_ORT_PROVIDER,
+# models.py) it's no longer the slow part, so there every frame is the default (body_stride()).
+BODY_STRIDE = max(1, int(os.environ["SWINGCLIPS_BODY_STRIDE"])) if os.environ.get("SWINGCLIPS_BODY_STRIDE") else None
+BODY_STRIDE_CPU, BODY_STRIDE_GPU = 2, 1
 BODY_AFTER_STRIKE = 0.9
 # The ball search looks this far either side of the heard strike (the whole clip without one).
 BALL_SEARCH_SECONDS = 0.6
@@ -75,6 +77,14 @@ BALL_RADIUS = (0.010, 0.030)
 # 0.02-0.15 above. Clips of unknown angle get the whole range.
 BALL_ROWS = {"face": (0.0, 0.6), "dtl": (-0.3, 0.1), None: (-0.3, 0.6)}
 CLIP_NAME = re.compile(r"^swing_(?:(face|dtl)_)?\d+x\d+_\d+fps_\d+(?:_(\d+)ms)?")
+
+
+def body_stride() -> int:
+    """How often the body model runs: SWINGCLIPS_BODY_STRIDE, else every other frame on the CPU and
+    every frame on a GPU."""
+    if BODY_STRIDE is not None:
+        return BODY_STRIDE
+    return BODY_STRIDE_GPU if models.on_gpu() else BODY_STRIDE_CPU
 
 
 def clip_facts(path):
@@ -137,7 +147,7 @@ def run_chunk(args):
     body_until, stride = args[7] if len(args) > 7 else (None, 1)
     tracker = models.BodyTracker(models.load(*body)) if body else None
     ran = []                                 # per frame: whether the body model placed its points
-    clubber = models.ClubRunner(clubm) if clubm else None
+    clubber = models.load_club(clubm) if clubm else None
     timing = {"frames": 0, "mediapipe": 0.0, "body": 0.0, "club": 0.0}
     lm = PoseLandmarker.create_from_options(PoseLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=MODEL), running_mode=RunningMode.VIDEO, num_poses=1,
@@ -521,7 +531,7 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
         jobs.append((path, start, end, rotation))
     _, strike = clip_facts(path)
     body_until = strike + BODY_AFTER_STRIKE if strike is not None else None
-    stride = BODY_STRIDE if body else 1
+    stride = body_stride() if body else 1
     chunks = list(pool.map(run_chunk, [j + (bg, body, clubm, (body_until, stride)) for j in jobs]))
     rows = sorted(((fr, r) for chunk, timing in chunks for fr, r in zip(chunk, timing["ran"])), key=lambda x: x[0][0])
     frames = [fr for fr, _ in rows]
@@ -568,6 +578,10 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
         stamps = {"model": models.stamp(backend)} if body else {}
         if clubm:
             stamps["clubModel"] = models.club_stamp(clubm)
+        # Where they ran, when not on the CPU: a GPU's arithmetic differs a little (models.py).
+        where = models.provider()
+        if where != models.PROVIDER_DEFAULT:
+            stamps["provider"] = where
         cost = {"mediapipe": round(ms["mediapipe"], 1)}
         if body:
             cost["body"] = round(ms["body"], 1)

@@ -1,5 +1,5 @@
-"""Other body models than MediaPipe, and the club model, run through ONNX Runtime on the CPU, to score
-with eval.py --rerun.
+"""Other body models than MediaPipe, and the club model, run through ONNX Runtime, to score with
+eval.py --rerun.
 
 Chosen with SWINGCLIPS_POSE_BACKEND: mediapipe (the default: nothing here runs), rtmpose-m,
 rtmpose-l or rtmw. pose.py still runs MediaPipe on every frame, for the person mask (the club
@@ -16,9 +16,16 @@ pose model with three keypoints, grip end, hosel and clubhead, trained on the ha
 (club_dataset.py, then train/club_train.py on a PC with a GPU) and exported to ONNX. It looks at a
 crop around the golfer, big enough for the club to fit, and club.py turns its points into the shaft
 scores its tracking takes.
+
+Both run on the CPU unless SWINGCLIPS_ORT_PROVIDER picks a GPU: cpu (the default), dml (DirectML:
+any DirectX 12 GPU on Windows, the Intel graphics built into the CPU too), cuda (NVIDIA) or auto (the
+first of cuda, dml, cpu that the installed ONNX Runtime has). The GPU ones need another ONNX Runtime
+package in place of the CPU one: requirements-dml.txt or requirements-cuda.txt (HOME-SETUP.md, "Using
+a GPU"). SWINGCLIPS_ORT_DEVICE picks the GPU by number (0, the default, is the first).
 """
 import hashlib
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -138,23 +145,107 @@ def uncrop(points, transform, size):
     return [((u - iw / 2) * s + cx, (v - ih / 2) * s + cy, c) for u, v, c in points]
 
 
+# ---- Where a model runs: ONNX Runtime's execution provider ----
+
+PROVIDER_DEFAULT = "cpu"
+PROVIDERS = {"cpu": "CPUExecutionProvider", "dml": "DmlExecutionProvider", "cuda": "CUDAExecutionProvider"}
+PROVIDER_NAMES = {"cpu": "CPU", "dml": "DirectML", "cuda": "CUDA"}
+AUTO_ORDER = ("cuda", "dml", "cpu")
+# Which package has which provider, for the messages: each replaces "onnxruntime", none sits beside it.
+PACKAGES = {"dml": ("onnxruntime-directml", "requirements-dml.txt"),
+            "cuda": ("onnxruntime-gpu", "requirements-cuda.txt")}
+_told: set = set()
+
+
+def provider_setting() -> str:
+    """SWINGCLIPS_ORT_PROVIDER as set: cpu, dml, cuda or auto (read each time, so tests can set it)."""
+    name = os.environ.get("SWINGCLIPS_ORT_PROVIDER", PROVIDER_DEFAULT).strip().lower() or PROVIDER_DEFAULT
+    if name != "auto" and name not in PROVIDERS:
+        raise ValueError(f"SWINGCLIPS_ORT_PROVIDER={name!r}: use one of auto, {', '.join(PROVIDERS)}")
+    return name
+
+
+def available() -> list[str]:
+    """The providers the installed ONNX Runtime has, by short name, in AUTO_ORDER."""
+    import onnxruntime as ort
+    have = set(ort.get_available_providers())
+    return [p for p in AUTO_ORDER if PROVIDERS[p] in have]
+
+
+def _tell(message: str) -> None:
+    """Printed once per process (each pose worker loads its own models)."""
+    if message not in _told:
+        _told.add(message)
+        print(message, file=sys.stderr, flush=True)
+
+
+def provider() -> str:
+    """Where models run: the setting, or for auto the first of cuda, dml, cpu the installed ONNX
+    Runtime has. A GPU it doesn't have falls back to the CPU, with a message saying why."""
+    want = provider_setting()
+    if want == "cpu":
+        return "cpu"
+    have = available()
+    if want == "auto":
+        return next(p for p in AUTO_ORDER if p in have or p == "cpu")
+    if want in have:
+        return want
+    package, reqs = PACKAGES[want]
+    _tell(f"ONNX Runtime: SWINGCLIPS_ORT_PROVIDER={want}, but the installed onnxruntime has only "
+          f"{', '.join(have) or 'cpu'}; running on the CPU. Install {package} ({reqs}; set "
+          f"SWINGCLIPS_REQUIREMENTS={reqs} in settings.cmd) in place of onnxruntime.")
+    return "cpu"
+
+
+def on_gpu() -> bool:
+    return provider() != "cpu"
+
+
+def session(path: Path, threads: int | None = None, where: str | None = None):
+    """An ONNX Runtime session for the model file on `where` (default: provider()), and the provider
+    it actually got. One CPU thread by default: pose.py already runs one per worker process. If the
+    GPU won't take the model (no driver, out of memory) it runs on the CPU, with a message."""
+    import onnxruntime as ort
+    where = where or provider()
+    opts = ort.SessionOptions()
+    opts.intra_op_num_threads = threads or int(os.environ.get("SWINGCLIPS_ORT_THREADS", "1"))
+    opts.inter_op_num_threads = 1
+    if where == "cpu":
+        return ort.InferenceSession(str(path), opts, providers=["CPUExecutionProvider"]), "cpu"
+    device = int(os.environ.get("SWINGCLIPS_ORT_DEVICE") or 0)
+    if where == "dml":
+        # DirectML takes one Run at a time and no memory pattern (ONNX Runtime's DirectML notes).
+        opts.enable_mem_pattern = False
+        opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+    try:
+        if where == "cuda" and hasattr(ort, "preload_dlls"):
+            # The CUDA and cuDNN DLLs from the nvidia-* packages requirements-cuda.txt installs.
+            ort.preload_dlls()
+        sess = ort.InferenceSession(str(path), opts, providers=[(PROVIDERS[where], {"device_id": device}),
+                                                                "CPUExecutionProvider"])
+    except Exception as e:                                     # noqa: BLE001 - any GPU failure: the CPU
+        _tell(f"ONNX Runtime: {path.name} wouldn't load on {PROVIDER_NAMES[where]} ({e}); running on the CPU.")
+        return session(path, threads, "cpu")
+    got = next((p for p, full in PROVIDERS.items() if full == sess.get_providers()[0]), "cpu")
+    if got != where:
+        _tell(f"ONNX Runtime: {path.name} got {sess.get_providers()[0]} instead of {PROVIDERS[where]}.")
+    return sess, got
+
+
 # ---- Running a model ----
 
 class Runner:
     """One loaded model. keypoints() takes an RGB crop and gives [(x, y, conf)] in its pixels."""
 
-    def __init__(self, name: str, path: Path | str | None = None, threads: int | None = None):
-        import onnxruntime as ort
+    def __init__(self, name: str, path: Path | str | None = None, threads: int | None = None,
+                 where: str | None = None):
         self.name = name
         self.spec = SPECS[name]
         self.path = Path(path) if path else model_path(name)
         if not self.path.is_file():
             raise FileNotFoundError(f"{self.path} is missing: run fetch_models.py first")
-        opts = ort.SessionOptions()
-        # One thread by default: pose.py already runs one of these per worker process.
-        opts.intra_op_num_threads = threads or int(os.environ.get("SWINGCLIPS_ORT_THREADS", "1"))
-        opts.inter_op_num_threads = 1
-        self.session = ort.InferenceSession(str(self.path), opts, providers=["CPUExecutionProvider"])
+        self.session, self.provider = session(self.path, threads, where)
+        _tell_loaded(self.path, self.provider)
         inp = self.session.get_inputs()[0]
         self.input_name = inp.name
         # The file's own input shape (1, 3, height, width) wins over the table, where it's fixed.
@@ -179,6 +270,12 @@ class Runner:
         h, w = rgb.shape[:2]
         patch, t = crop(rgb, box, self.size)
         return [(x / w, y / h, c) for x, y, c in uncrop(self.keypoints(patch), t, self.size)]
+
+
+def _tell_loaded(path: Path, got: str) -> None:
+    """Which provider a model got, when it isn't the CPU (the default says nothing, as before)."""
+    if got != "cpu" or provider_setting() != "cpu":
+        _tell(f"ONNX Runtime: {path.name} on {PROVIDER_NAMES[got]}")
 
 
 def decode_simcc(simcc_x, simcc_y, iw, ih):
@@ -237,7 +334,7 @@ def load(name: str, path: Path | str | None = None) -> Runner:
     worker processes live across clips, and loading took ~1 s a clip in each."""
     if name not in SPECS:
         raise ValueError(f"no ONNX model for {name!r}: use one of {', '.join(SPECS)}")
-    key = (name, str(path) if path else None)
+    key = (name, str(path) if path else None, provider())
     if key not in _loaded:
         _loaded[key] = Runner(name, path)
     return _loaded[key]
@@ -286,6 +383,21 @@ def club_stamp(path: Path | str | None = None) -> str:
     return f"{path.stem}@{h.hexdigest()[:8]}"
 
 
+_clubs: dict[tuple, "ClubRunner"] = {}
+
+
+def load_club(path: Path | str | None = None) -> "ClubRunner":
+    """The club model, kept once loaded like load()'s: on a GPU each load takes a while. Loaded again
+    when the file changes (a retrained model) or the provider does."""
+    path = Path(path) if path else club_model_path()
+    st = path.stat() if path.is_file() else None
+    key = (str(path), st and (st.st_mtime_ns, st.st_size), provider())
+    if key not in _clubs:
+        _clubs.clear()
+        _clubs[key] = ClubRunner(path)
+    return _clubs[key]
+
+
 def club_box(points, w, h):
     """The crop for the club around the golfer's landmarks [(x, y, conf)] (picture units), in pixels;
     None without a box."""
@@ -300,16 +412,13 @@ class ClubRunner:
     """The club model. find() takes the upright RGB picture and the golfer's landmarks and gives
     (score, [(x, y, visibility)] for grip, hosel, head) in picture units (0-1), or None."""
 
-    def __init__(self, path: Path | str | None = None, threads: int | None = None):
-        import onnxruntime as ort
+    def __init__(self, path: Path | str | None = None, threads: int | None = None, where: str | None = None):
         self.path = Path(path) if path else club_model_path()
         if not self.path.is_file():
             raise FileNotFoundError(f"{self.path} is missing: train it (HOME-SETUP.md, \"Training the club "
                                     "model\") or point SWINGCLIPS_CLUB_MODEL at it")
-        opts = ort.SessionOptions()
-        opts.intra_op_num_threads = threads or int(os.environ.get("SWINGCLIPS_ORT_THREADS", "1"))
-        opts.inter_op_num_threads = 1
-        self.session = ort.InferenceSession(str(self.path), opts, providers=["CPUExecutionProvider"])
+        self.session, self.provider = session(self.path, threads, where)
+        _tell_loaded(self.path, self.provider)
         inp = self.session.get_inputs()[0]
         self.input_name = inp.name
         h, w = inp.shape[2:4]
