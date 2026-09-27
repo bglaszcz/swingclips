@@ -572,7 +572,7 @@ class Status:
     def _phone_row(self, a: str, p: dict, now: float) -> dict:
         row = {"key": a, "label": NAMES[a], "angle": a}
         if p["age"] is None:
-            return {**row, "level": "off", "text": "not seen (open SwingClips 0.6 on this phone)"}
+            return {**row, "level": "off", "text": "not seen (open the SwingClips app on this phone)"}
         if not p["connected"]:
             why = "app closed" if p.get("closing") else f"last heard {ago(p['age'])}"
             return {**row, "level": "bad" if p["expected"] else "off", "text": f"not connected ({why})"}
