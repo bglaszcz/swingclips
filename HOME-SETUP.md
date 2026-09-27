@@ -848,7 +848,8 @@ cd /d D:\SwingClips\app\server
 **3. Training**, on the gaming PC (RTX 5070 Ti). A Blackwell card (sm_120) needs PyTorch built
 for **CUDA 12.8 or newer**: the plain `pip install torch` on Windows is CPU-only, and builds for
 CUDA 12.6 and older can't run on it. Needs a current NVIDIA driver (570 or newer) and 64-bit
-Python 3.12 from python.org. In a Command Prompt, with the repository cloned to `C:\swingclips`:
+Python 3.12 or 3.13 from python.org (3.13 with PyTorch 2.11 + cu128 works). In a Command Prompt, with the
+repository cloned to `C:\swingclips` (on the dev PC it's `D:\SwingClips-dev\swingclips`, the same PC):
 
 ```
 cd /d C:\swingclips\train
@@ -878,6 +879,25 @@ py -3.12 -m venv .venv
   classes and keypoints, then give their order, e.g. `--pretrain-points 0,-1,1` (-1 for one it
   doesn't have). If its keypoints aren't these points at all (say, only the shaft's ends), skip it.
   Compare the scorecard with and without it; the pretraining only helps if it helps there.
+
+**First results (2026-09-26, 20 labeled swings: 482 club frames, 16 swings to train, 4 to score).**
+Training takes ~10 minutes (150 epochs) for any size on the 5070 Ti. Scored on the 4 swings it never
+saw, RTMPose-m on, against the ray casting (ms a frame on one CPU thread, as each server worker runs it):
+
+| | CPU ms a frame | downswing found, face / DTL | downswing angle error, face / DTL |
+|---|---|---|---|
+| ray casting (default) | ~18 | 10% / 0% | 5.4° / - |
+| `yolo11n-pose --imgsz 416` | 29-38 | 80% / 100% | 3.1° / 10.3° |
+| `yolo11n-pose` (640) | 71-95 | 70% / 67% | 1.9° / 5.7° |
+| `yolo11s-pose` (640, the default) | 200-290 | 80% / 100% | 3.1° / 4.3° |
+
+The model replaces the ray casting (it isn't run as well), so the small one costs the server ~20 ms a
+frame more; the default `s` would triple a clip's time. P6 and P8 get better with any of them
+(P6 within a frame on all 4 swings; P8 8 ms against 15-29), but the takeaway and P2 get worse: their
+rules read the ray casting's 2 degree steps (docs/key-positions.md), which the model's smooth angle
+doesn't have. Four swings is too few to choose between the models, so: `yolo11n-pose --imgsz 416`
+for now, not on the server until the takeaway and P2 rules read the model's angle and more swings
+are labeled (40+ swings for a real score).
 
 **4. Scoring it**, on the server (or any PC with the clips, labels and the model file):
 
