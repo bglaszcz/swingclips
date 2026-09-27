@@ -95,6 +95,10 @@ def saved_pose(name: str) -> Path | None:
     return None
 
 
+# --deep: reruns as the server's deep pass (pose.deep_profile) instead of the quick analysis.
+DEEP = False
+
+
 def pipeline_fingerprint() -> str:
     """Changes whenever pose.py, club.py or the pose model changes, so --rerun caches don't go stale.
     Another body backend (models.py) changes it too, and so does its model file; so does the club
@@ -108,6 +112,12 @@ def pipeline_fingerprint() -> str:
     model = Path(pose.MODEL)
     h.update(f"{model.name}:{model.stat().st_size if model.is_file() else 0}".encode())
     h.update(json.dumps(pose.speed_settings(), sort_keys=True).encode())
+    if DEEP:
+        # The server's deep pass (--deep): its body stride and club model instead of the settings'.
+        d = pose.deep_profile()
+        club_file = d and d["clubModel"]
+        h.update(f"deep:{d and d['bodyStride']}:{club_file and models.club_stamp(str(club_file))}".encode())
+        h.update((here / "models.py").read_bytes())
     backend = models.backend()
     if backend != models.DEFAULT:
         body = models.model_path(backend)
@@ -153,7 +163,7 @@ def rerun_pose(name: str, cache: Path, pool: ProcessPoolExecutor, workers: int) 
     if clip is None:
         return None
     print(f"  analyzing {name} ...", flush=True)
-    result = pose.analyze(str(clip), pool, workers)
+    result = pose.analyze(str(clip), pool, workers, deep=pose.deep_profile() if DEEP else None)
     cache.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp")
     tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
@@ -698,6 +708,9 @@ def latest_mediapipe(folder: Path, only_val: str | None = None) -> Path | None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rerun", action="store_true", help="analyze the labeled clips again with pose.py as it is now")
+    ap.add_argument("--deep", action="store_true",
+                    help="with --rerun: the server's deep pass (pose.deep_profile: SWINGCLIPS_DEEP_BODY_STRIDE, "
+                         "SWINGCLIPS_DEEP_CLUB_MODEL) instead of the quick one")
     ap.add_argument("--no-noise", action="store_true", help="skip the noise floor")
     ap.add_argument("--no-quality", action="store_true",
                     help="skip clip quality (light, grain, flicker and sharpness by shutter)")
@@ -710,6 +723,8 @@ def main(argv=None) -> int:
     ap.add_argument("--provider", choices=["auto", *models.PROVIDERS],
                     help="where --rerun runs the body and club models (default: SWINGCLIPS_ORT_PROVIDER, else cpu)")
     args = ap.parse_args(argv)
+    global DEEP
+    DEEP = args.deep
     if args.provider:
         # Before the worker processes start: they read it when they load the models.
         os.environ["SWINGCLIPS_ORT_PROVIDER"] = args.provider

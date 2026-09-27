@@ -19,6 +19,7 @@ below trade work for time. speed_settings() lists the ones that can change the r
 cache fingerprint; SPEED_AS_BEFORE sets them all back to how clips were analyzed before them.
 """
 import os
+from pathlib import Path
 import re
 import time
 from concurrent.futures import ProcessPoolExecutor
@@ -255,6 +256,10 @@ def run_chunk(args):
     body_until, stride = args[7] if len(args) > 7 else (None, 1)
     opts = {**RUN_DEFAULTS, **(args[8] if len(args) > 8 else {})}
     mp_after, shaft_every = opts["mp_after"], opts["shaft_stride"]
+    # With a club model: also the ray-cast shaft (the deep pass, for address and the takeaway), in
+    # timing["ray"], one per frame.
+    ray_too = bool(clubm) and opts["ray_too"]
+    rays = []
     tracker = models.BodyTracker(models.load(*body)) if body else None
     ran = []                                 # per frame: whether the body model placed its points
     mp_ran = []                              # per frame: whether MediaPipe ran
@@ -291,6 +296,7 @@ def run_chunk(args):
                     out.append((t, None, None, None, None))
                     ran.append(False)
                     mp_ran.append(False)
+                    rays.append(None)
                     continue
                 clock = now
                 yuv = f.to_ndarray(format="yuv420p")
@@ -322,7 +328,7 @@ def run_chunk(args):
                         timing["convert"] += time.perf_counter() - clock
                     return full
 
-                landmarks = world = shaft = head = None
+                landmarks = world = shaft = head = ray = None
                 if res.pose_landmarks:
                     landmarks = [(p.x, p.y, p.visibility) for p in res.pose_landmarks[0]]
                     if tracker is not None and in_swing and k % stride == 0:
@@ -344,6 +350,11 @@ def run_chunk(args):
                         shaft = club.model_scores(found, landmarks, img.shape[1], img.shape[0])
                         head = club.clubhead(found)
                         timing["club"] += time.perf_counter() - clock
+                        if ray_too and bg is not None and res.segmentation_masks and in_swing:
+                            clock = time.perf_counter()
+                            ray = shaft_scores(f, rotation, landmarks, res.segmentation_masks[0].numpy_view(), bg)
+                            timing["shaft"] += time.perf_counter() - clock
+                            timing["shaft_frames"] += 1
                     elif bg is not None and res.segmentation_masks and in_swing and k % shaft_every == 0:
                         # The shaft too only until then: nothing is measured from it later on.
                         clock = time.perf_counter()
@@ -355,17 +366,20 @@ def run_chunk(args):
                         tracker.frame(None, None)        # lost: the next crop comes from MediaPipe
                     ran.append(False)
                 out.append((t, landmarks, world, shaft, head))
+                rays.append(ray)
             if end_pts is None and last is not None:
                 timing["last"] = upright_gray(last, rotation)
     finally:
         lm.close()
     timing["ran"] = ran
     timing["mp"] = mp_ran
+    if ray_too:
+        timing["ray"] = rays
     return out, timing
 
 
 # run_chunk's speed settings when a job doesn't give them: everything as before them.
-RUN_DEFAULTS = {"mp_after": 1, "convert": "full", "shaft_stride": 1, "threads": None}
+RUN_DEFAULTS = {"mp_after": 1, "convert": "full", "shaft_stride": 1, "threads": None, "ray_too": False}
 
 # OpenCV's BT.601 YUV -> RGB (studio range, as its I420 conversion: the same constants, / 2^20),
 # as a matrix on (Y, U, V, 1).
@@ -815,9 +829,32 @@ def find_impact_from(path, rotation, frames, jobs, pool, first, angle=None, stri
     return {"x": round(cx / w, 4), "y": round(cy / h, 4), "r": round(r / h, 4)}, round(times[best[0]], 6)
 
 
-def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None = None):
+def deep_profile() -> dict | None:
+    """The server's deep pass, after a session (app.py): every clip analyzed again the slow, careful
+    way, as analyze's `deep`: the body model on every frame (SWINGCLIPS_DEEP_BODY_STRIDE, default 1)
+    and the club model (SWINGCLIPS_DEEP_CLUB_MODEL, or public\\models\\club-deep.onnx when it's there),
+    with the ray-cast shaft too for address and the takeaway (rayTakeaway). None when it's off
+    (SWINGCLIPS_DEEP=off) or would change nothing (no body model and no club model)."""
+    if os.environ.get("SWINGCLIPS_DEEP", "on").strip().lower() == "off":
+        return None
+    club_path = os.environ.get("SWINGCLIPS_DEEP_CLUB_MODEL", "").strip()
+    club_model = Path(club_path) if club_path else models.models_dir() / "club-deep.onnx"
+    if club_path and not club_model.is_file():
+        raise SystemExit(f"SWINGCLIPS_DEEP_CLUB_MODEL={club_path}: no such file")
+    club_model = club_model if club_model.is_file() else None
+    if models.backend() == models.DEFAULT and club_model is None:
+        return None
+    return {"bodyStride": max(1, int(os.environ.get("SWINGCLIPS_DEEP_BODY_STRIDE") or 1)), "clubModel": club_model,
+            "rayTakeaway": True}
+
+
+def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None = None, deep: dict | None = None):
     """Pose for every frame of the clip, plus the ball, impact and club shaft, as a JSON-ready dict.
-    `timing`, if given, gets where the time went (parts(), and the steps in this process)."""
+    `timing`, if given, gets where the time went (parts(), and the steps in this process).
+
+    `deep`, the server's after-session pass (app.py, deep_profile()): {"bodyStride": n, "clubModel":
+    .onnx path or None} in place of SWINGCLIPS_BODY_STRIDE and SWINGCLIPS_CLUB_BACKEND/_MODEL, and the
+    result says so ("pass": "deep")."""
     started = time.perf_counter()
     backend = models.backend()
     body = None
@@ -826,8 +863,11 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
         if not os.path.isfile(body[1]):
             raise FileNotFoundError(f"{body[1]} is missing: run fetch_models.py first")
     clubm = None
-    if models.club_backend() != models.CLUB_DEFAULT:
+    if deep is not None:
+        clubm = str(deep["clubModel"]) if deep.get("clubModel") else None
+    elif models.club_backend() != models.CLUB_DEFAULT:
         clubm = str(models.club_model_path())
+    if clubm:
         if not os.path.isfile(clubm):
             raise FileNotFoundError(f"{clubm} is missing: train it (HOME-SETUP.md, \"Training the club model\") "
                                     "or point SWINGCLIPS_CLUB_MODEL at it")
@@ -841,7 +881,7 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
         keys = [0]
     _, strike = clip_facts(path)
     body_until = strike + BODY_AFTER_STRIKE if strike is not None else None
-    stride = body_stride() if body else 1
+    stride = (deep["bodyStride"] if deep is not None else body_stride()) if body else 1
     if speed["split"] == "cost" and pts:
         costs = job_costs(pts, tb, body_until, speed["mpStrideAfter"], stride, speed["shaftStride"], body, clubm,
                           bg is not None)
@@ -852,18 +892,22 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
     jobs = [(path, start, end, rotation) for start, end in runs]
     opts = {"mp_after": speed["mpStrideAfter"], "convert": speed["convert"], "shaft_stride": speed["shaftStride"],
             "threads": decode_threads()}
+    if deep is not None and clubm and deep.get("rayTakeaway"):
+        opts["ray_too"] = True
     clock = time.perf_counter()
     chunks = list(pool.map(run_chunk, [j + (bg, body, clubm, (body_until, stride), opts) for j in jobs]))
     stages["workers"] = time.perf_counter() - clock
     clock = time.perf_counter()
-    rows = sorted(((fr, r, m) for chunk, tm in chunks
-                   for fr, r, m in zip(chunk, tm["ran"], tm.get("mp") or [True] * len(chunk))),
+    rows = sorted(((fr, r, m, y) for chunk, tm in chunks
+                   for fr, r, m, y in zip(chunk, tm["ran"], tm.get("mp") or [True] * len(chunk),
+                                          tm.get("ray") or [None] * len(chunk))),
                   key=lambda x: x[0][0])
-    frames = [fr for fr, _, _ in rows]
+    frames = [fr for fr, _, _, _ in rows]
+    rays = [y for _, _, _, y in rows] if opts.get("ray_too") else None
     if speed["mpStrideAfter"] > 1:
-        frames = fill_skipped(frames, [m for _, _, m in rows], speed["mpStrideAfter"])
+        frames = fill_skipped(frames, [m for _, _, m, _ in rows], speed["mpStrideAfter"])
     if body and stride > 1:
-        frames = fill_body(frames, [r for _, r, _ in rows], models.SPECS[backend].layout, body_until)
+        frames = fill_body(frames, [r for _, r, _, _ in rows], models.SPECS[backend].layout, body_until)
     timings = [tm for _, tm in chunks]
     ms = per_frame_ms(timings)
     print(f"pose: {os.path.basename(path)}: {len(frames)} frames, MediaPipe {ms['mediapipe']:.1f} ms/frame"
@@ -882,6 +926,7 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
     stages["smooth"] = time.perf_counter() - clock
     clock = time.perf_counter()
     shaft = club.track(times, [s for _, _, _, s, _ in frames])
+    ray_shaft = club.track(times, rays) if rays is not None else None
     stages["track"] = time.perf_counter() - clock
     if timing is not None:
         timing.update(parts(timings, len(frames)), stages=stages, jobs=len(jobs),
@@ -916,6 +961,12 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
         # null. Straight from the model, per frame: not smoothed or tracked (the shaft angle is).
         for fr, (*_, head) in zip(out["frames"], frames):
             fr["clubhead"] = head
+    if ray_shaft is not None:
+        # clubRay: the ray-cast shaft as "club" would be without the club model. The model's angle
+        # wobbles a degree or two at address, so address and the takeaway come from this one
+        # (phases.js); the rest of the swing from the model's.
+        for fr, c in zip(out["frames"], ray_shaft):
+            fr["clubRay"] = list(c) if c else None
     if body or clubm:
         # Which models placed the 2D landmarks and the club, and their cost; the defaults' output
         # has none of it.
@@ -932,7 +983,25 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
         if clubm:
             cost["club"] = round(ms["club"], 1)
         out = {"version": VERSION, **stamps, "msPerFrame": cost, **out}
+    if deep is not None:
+        # Near the start, where the server reads what made a pose file (app.py, _pose_stamp).
+        out = {"version": VERSION, "pass": "deep", **out}
     return out
+
+
+def low_priority():
+    """For the pose workers (ProcessPoolExecutor's initializer): below normal priority, so recording
+    and uploads from the phones, and the pages, always come first while a clip is analyzed."""
+    try:
+        if os.name == "nt":
+            import ctypes
+            BELOW_NORMAL_PRIORITY_CLASS = 0x4000
+            k = ctypes.windll.kernel32
+            k.SetPriorityClass(k.GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS)
+        else:
+            os.nice(5)
+    except (OSError, AttributeError):
+        pass
 
 
 def ball_fits(path, doc) -> bool:

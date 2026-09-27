@@ -343,6 +343,11 @@ class Status:
     def _recording(self, now: float) -> set[str]:
         return {a for a in ANGLES if self.connected(a, now) and self.phones[a]["hb"].get("recording")}
 
+    def recording(self, now: float | None = None) -> bool:
+        """Whether a phone is recording now (the server's session check, app.session_on)."""
+        with self.lock:
+            return bool(self._recording(self.clock() if now is None else now))
+
     def heartbeat(self, angle: str, body: dict) -> None:
         """A phone's poll: what it's doing, and its answers to commands."""
         now = self.clock()
@@ -527,7 +532,7 @@ class Status:
 
     def snapshot(self, setup_status: dict, pose: dict, last_shot: float | None) -> dict:
         """The Ready panel: a row per thing to check, each ok / warn / bad, and the raw state.
-        setup_status: setup.Setup.status(); pose: {"queued", "busy"}; last_shot: unix s of the last
+        setup_status: setup.Setup.status(); pose: {"queued", "busy", "deepLeft", "held"}; last_shot: unix s of the last
         shot the server got."""
         now = self.clock()
         with self.lock:
@@ -552,9 +557,18 @@ class Status:
                 rows.append({"key": "first", "label": "First swing", "level": "ok" if f["ok"] else "warn",
                              "text": f["text"]})
             queued = pose.get("queued") or 0
-            rows.append({"key": "server", "label": "Server", "level": "ok" if queued < POSE_BEHIND else "warn",
-                         "text": "Pose: up to date" if not queued else f"Pose: {queued} clip{'s' if queued != 1 else ''} waiting"
-                         + (" (working on one)" if pose.get("busy") else "")})
+            deep_left = pose.get("deepLeft") or 0
+            if pose.get("held"):
+                # SWINGCLIPS_DURING_SESSION=wait: clips waiting is how it should be until the session ends.
+                text, level = f"Recording only: {queued} clip{'s' if queued != 1 else ''} to analyze after the session", "ok"
+            elif queued:
+                text = f"Pose: {queued} clip{'s' if queued != 1 else ''} waiting" + (" (working on one)" if pose.get("busy") else "")
+                level = "ok" if queued < POSE_BEHIND else "warn"
+            else:
+                text, level = "Pose: up to date", "ok"
+                if deep_left:
+                    text += f"; deep pass: {deep_left} clip{'s' if deep_left != 1 else ''} to go"
+            rows.append({"key": "server", "label": "Server", "level": level, "text": text})
             levels = [r["level"] for r in rows if r["level"] != "off"]
             level = "bad" if "bad" in levels else "warn" if "warn" in levels else "ok"
             first_bad = next((r for r in rows if r["level"] == "bad"), None) or next((r for r in rows if r["level"] == "warn"), None)

@@ -66,6 +66,15 @@ VIDEO_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/w
 # The same with the ONNX models on a GPU (SWINGCLIPS_ORT_PROVIDER): MediaPipe, the shaft search and
 # decoding still run on the CPU, and the workers take turns on the GPU (each has its own session).
 POSE_WORKERS = int(os.environ.get("SWINGCLIPS_POSE_WORKERS", 0)) or max(1, min(6, (os.cpu_count() or 4) // 2))
+# A session is on while a phone is recording, and for SESSION_QUIET_S after the last clip came in.
+# Recording comes first then: the pose workers always run below normal priority (pose.low_priority),
+# and the heavy work (analyzing clips again, the deep pass) waits for the end of the session.
+# SWINGCLIPS_DURING_SESSION: "quick" (default) analyzes new clips as they come, face-on first, for the
+# spoken checks and Practice voice; "wait" leaves them all until the session is over.
+SESSION_QUIET_S = 600
+DURING_SESSION = os.environ.get("SWINGCLIPS_DURING_SESSION", "quick").strip().lower() or "quick"
+if DURING_SESSION not in ("quick", "wait"):
+    raise SystemExit(f"SWINGCLIPS_DURING_SESSION={DURING_SESSION!r}: use quick or wait")
 # A clip still being copied in keeps changing; wait until it has been left alone this long.
 SETTLE_SECONDS = 15
 
@@ -97,6 +106,8 @@ records_lock = threading.Lock()
 pose_busy: str | None = None
 # Clips waiting for pose, as the worker last counted them (the Ready panel shows it).
 pose_queued = 0
+# Analyzed clips still waiting for the deep pass (0 while a session is on, or with it off).
+pose_deep_left = 0
 # Deleted but not yet moved: Windows can't move a file that's open (being analyzed, or streaming to a
 # browser), so these are hidden right away and moved as soon as they're free.
 pending_trash: set[str] = set()
@@ -161,6 +172,29 @@ def pose_state(name: str) -> str:
     return "processing" if name == pose_busy else "queued"
 
 
+def deep_profile() -> dict | None:
+    """The deep pass's settings (pose.deep_profile), or None with it off."""
+    return pose.deep_profile()
+
+
+def session_on(now: float | None = None) -> bool:
+    """Whether a session is on: a phone recording, or a clip in the last SESSION_QUIET_S."""
+    now = time.time() if now is None else now
+    if session_status.recording(now):
+        return True
+    newest = 0.0
+    for p in clip_paths():
+        try:
+            newest = max(newest, p.stat().st_mtime)
+        except OSError:
+            pass
+    return now - newest < SESSION_QUIET_S
+
+
+def new_pool() -> ProcessPoolExecutor:
+    return ProcessPoolExecutor(POSE_WORKERS, initializer=pose.low_priority)
+
+
 def body_model() -> str:
     """Which model places the 2D landmarks in new pose files: "mediapipe", or e.g. "rtmpose-m-256x192"
     (SWINGCLIPS_POSE_BACKEND, see models.py)."""
@@ -168,16 +202,17 @@ def body_model() -> str:
     return b if b == models.DEFAULT else models.stamp(b)
 
 
-# What made each pose file, by clip name: (file's mtime, body model, ball search version). The
-# worker checks every clip.
-_pose_models: dict[str, tuple[int, str, int]] = {}
+# What made each pose file, by clip name: (file's mtime, body model, ball search version, deep pass).
+# The worker checks every clip.
+_pose_models: dict[str, tuple[int, str, int, bool]] = {}
 # Clips that failed to be analyzed again with the current model, or to have the ball found again
 # (kept as they were until a restart).
 _again_failed: set[str] = set()
 _ball_failed: set[str] = set()
+_deep_failed: set[str] = set()
 
 
-def _pose_stamp(name: str) -> tuple[str, int] | None:
+def _pose_stamp(name: str) -> tuple[str, int, bool] | None:
     f = pose_file(name)
     try:
         mtime = f.stat().st_mtime_ns
@@ -193,9 +228,9 @@ def _pose_stamp(name: str) -> tuple[str, int] | None:
             return None
         m = re.search(r'"model":"([^"]+)"', head)
         b = re.search(r'"ballVersion":(\d+)', head)
-        got = (mtime, m.group(1) if m else models.DEFAULT, int(b.group(1)) if b else 1)
+        got = (mtime, m.group(1) if m else models.DEFAULT, int(b.group(1)) if b else 1, '"pass":"deep"' in head)
         _pose_models[name] = got
-    return got[1], got[2]
+    return got[1], got[2], got[3]
 
 
 def pose_model(name: str) -> str | None:
@@ -205,10 +240,16 @@ def pose_model(name: str) -> str | None:
 
 
 def pose_made(name: str) -> str | None:
-    """What a clip's pose file came from: body model and ball search, e.g. "rtmpose-m-256x192+ball2".
-    Quality records, swing numbers and 3D keep it, and are worked out again when it changes."""
+    """What a clip's pose file came from: body model, ball search and the deep pass, e.g.
+    "rtmpose-m-256x192+ball3+deep". Quality records, swing numbers and 3D keep it, and are worked out
+    again when it changes."""
     stamp = _pose_stamp(name)
-    return stamp and f"{stamp[0]}+ball{stamp[1]}"
+    return stamp and f"{stamp[0]}+ball{stamp[1]}" + ("+deep" if stamp[2] else "")
+
+
+def is_deep(name: str) -> bool:
+    stamp = _pose_stamp(name)
+    return bool(stamp and stamp[2])
 
 
 def find_ball_again(clip: Path, pool: ProcessPoolExecutor) -> ProcessPoolExecutor:
@@ -234,23 +275,26 @@ def find_ball_again(clip: Path, pool: ProcessPoolExecutor) -> ProcessPoolExecuto
         print(f"Ball: {clip.name} FAILED (keeps its old result)", flush=True)
         traceback.print_exc()
         if isinstance(e, BrokenProcessPool):
-            pool = ProcessPoolExecutor(POSE_WORKERS)
+            pool = new_pool()
     finally:
         with files_lock:
             pose_busy = None
     return pool
 
 
-def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False) -> ProcessPoolExecutor:
-    """Runs pose on one clip and saves the result; returns the pool (a fresh one if a worker died)."""
+def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False,
+                 deep: dict | None = None) -> ProcessPoolExecutor:
+    """Runs pose on one clip and saves the result (the deep pass's way with `deep`, deep_profile());
+    returns the pool (a fresh one if a worker died)."""
     global pose_busy
     with files_lock:
         if not clip.exists() or clip.name in pending_trash:
             return pool
         pose_busy = clip.name
-    print(f"Pose: {clip.name} ...{' again, with ' + body_model() if again else ''}", flush=True)
+    how = (" deep" if deep else "") + (" again, with " + body_model() if again else "")
+    print(f"Pose: {clip.name} ...{how}", flush=True)
     try:
-        result = pose.analyze(str(clip), pool, POSE_WORKERS)
+        result = pose.analyze(str(clip), pool, POSE_WORKERS, deep=deep)
         tmp = pose_file(clip.name).with_suffix(".tmp")
         tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
         tmp.replace(pose_file(clip.name))
@@ -261,6 +305,8 @@ def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False) -> 
     except Exception as e:
         if again:  # a clip that was analyzed before keeps its old result
             _again_failed.add(clip.name)
+            if deep:
+                _deep_failed.add(clip.name)
         else:
             error_file(clip.name).write_text(traceback.format_exc())
         print(f"Pose: {clip.name} FAILED{' (keeps its old result)' if again else ' - see ' + str(error_file(clip.name))}",
@@ -269,7 +315,7 @@ def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False) -> 
             traceback.print_exc()
         if isinstance(e, BrokenProcessPool):
             # A worker process died (e.g. a bad video crashed the decoder); start fresh ones.
-            pool = ProcessPoolExecutor(POSE_WORKERS)
+            pool = new_pool()
     finally:
         with files_lock:
             pose_busy = None
@@ -277,11 +323,12 @@ def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False) -> 
 
 
 def pose_worker(stop: threading.Event):
-    """Forever: find clips without pose results, newest first, and analyze them one at a time."""
-    global pose_busy, pose_queued
+    """Forever: find clips without pose results, newest first, and analyze them one at a time. While a
+    session is on, only new clips (or none, SWINGCLIPS_DURING_SESSION=wait); after it, the heavy work."""
+    global pose_busy, pose_queued, pose_deep_left
     POSE_DIR.mkdir(parents=True, exist_ok=True)
     # Kept between clips so the worker processes only pay for importing MediaPipe once.
-    pool = ProcessPoolExecutor(POSE_WORKERS)
+    pool = new_pool()
     summarizer = None
     try:
         while not stop.is_set():
@@ -289,14 +336,25 @@ def pose_worker(stop: threading.Event):
             queued = [p for p in clip_paths() if pose_state(p.name) == "queued"]
             pose_queued = len(queued)
             todo = [p for p in queued if time.time() - p.stat().st_mtime > SETTLE_SECONDS]
-            if not todo:
-                # Nothing new: analyze again, newest first, a clip whose pose came from another body model
-                # (after SWINGCLIPS_POSE_BACKEND changed), so every swing is measured the same way.
+            busy = session_on()
+            waiting = busy and DURING_SESSION == "wait"
+            deep = None if busy else deep_profile()
+            pose_deep_left = 0 if deep is None else sum(
+                1 for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done" and not is_deep(p.name))
+            if todo and not waiting:
+                # Face-on clips first: the phones' spoken checks and practice numbers mostly need them, and
+                # during a session the down-the-line ones catch up between sets. After a session a new
+                # clip goes straight to the deep pass.
+                pool = analyze_clip(max(todo, key=lambda p: ("_face_" in p.name, recorded_at(p))), pool, deep=deep)
+                continue
+            if not busy:
+                # Analyze again, newest first, a clip whose pose came from another body model (after
+                # SWINGCLIPS_POSE_BACKEND changed), so every swing is measured the same way.
                 model = body_model()
                 again = [p for p in clip_paths() if p.name not in _again_failed and pose_state(p.name) == "done"
                          and pose_model(p.name) not in (None, model)]
                 if again:
-                    pool = analyze_clip(max(again, key=recorded_at), pool, again=True)
+                    pool = analyze_clip(max(again, key=recorded_at), pool, again=True, deep=deep)
                     continue
                 # Then the ball search again, newest first, on clips from an older one (pose.BALL_VERSION).
                 reball = [p for p in clip_paths() if p.name not in _ball_failed and pose_state(p.name) == "done"
@@ -304,19 +362,25 @@ def pose_worker(stop: threading.Event):
                 if reball:
                     pool = find_ball_again(max(reball, key=recorded_at), pool)
                     continue
-                # Then measure a clip's quality (new ones first, then older clips).
-                try:
-                    if summarizer is None:
-                        summarizer = swings.Summarizer(STATIC_DIR)
-                    measured = quality_step(pool, summarizer)
-                except BrokenProcessPool:
-                    pool, measured = ProcessPoolExecutor(POSE_WORKERS), True
-                if not measured:
-                    stop.wait(5)
+                # Then the deep pass, newest first: the last session's swings are ready first.
+                if deep is not None:
+                    deepen = [p for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done"
+                              and not is_deep(p.name)]
+                    if deepen:
+                        pool = analyze_clip(max(deepen, key=recorded_at), pool, again=True, deep=deep)
+                        continue
+            if waiting:
+                stop.wait(5)
                 continue
-            # Face-on clips first: the phones' spoken checks and practice numbers mostly need them, and
-        # during a session the down-the-line ones catch up between sets.
-        pool = analyze_clip(max(todo, key=lambda p: ("_face_" in p.name, recorded_at(p))), pool)
+            # Then measure a clip's quality (new ones first, then older clips).
+            try:
+                if summarizer is None:
+                    summarizer = swings.Summarizer(STATIC_DIR)
+                measured = quality_step(pool, summarizer)
+            except BrokenProcessPool:
+                pool, measured = new_pool(), True
+            if not measured:
+                stop.wait(5)
     except KeyboardInterrupt:
         # Ctrl+C reaches the pool's processes too, and comes back here out of the clip they were on.
         # Nothing half done was saved: that clip is simply analyzed (or measured) again at the next start.
@@ -1398,7 +1462,9 @@ def get_status():
     """The Ready panel (static/status.js): phones, Square, framing, the first swing's check, the pose queue."""
     setup_now = {a: v and {k: x for k, x in v.items() if k not in ("lm", "focus")}
                  for a, v in camera_setup.status().items()}
-    return session_status.snapshot(setup_now, {"queued": pose_queued, "busy": pose_busy}, newest_shot())
+    return session_status.snapshot(setup_now, {"queued": pose_queued, "busy": pose_busy, "deepLeft": pose_deep_left,
+                                              "held": DURING_SESSION == "wait" and session_on()},
+                                   newest_shot())
 
 
 @app.get("/api/pose/{name}")

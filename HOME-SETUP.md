@@ -658,6 +658,23 @@ set SWINGCLIPS_POSE_BACKEND=rtmpose-m
   numbers follow. A clip that fails keeps its old result. Delete the line (or the file) to go back:
   the clips are then analyzed again with MediaPipe the same way.
 
+#### Recording first, the deep pass after the session
+During a session the server's first job is taking the clips in; the careful analysis comes after.
+- **A session is on** while a phone is recording, and until 10 minutes after the last clip came in.
+- **During it**, new clips are analyzed as they arrive, face-on first, the quick way below, so the
+  spoken checks and Practice voice work. `set SWINGCLIPS_DURING_SESSION=wait` in `settings.cmd`
+  leaves them all until the session is over (the Ready panel then says "Recording only: n clips to
+  analyze after the session"; no spoken first-swing check or practice numbers).
+- The pose workers always run **below normal priority**, so uploads and the pages come first
+  whatever the server is doing.
+- **After it**, the **deep pass**: every clip is analyzed again, newest first, the slow way: the body
+  model on every frame (`SWINGCLIPS_DEEP_BODY_STRIDE`, default 1) and the club model when
+  `public\models\club-deep.onnx` is there (or `SWINGCLIPS_DEEP_CLUB_MODEL` names one). Clips that
+  arrive after a session go straight to it. Swing numbers, clip quality and 3D are worked out again
+  from the deep result (their pose stamp ends in `+deep`). The Ready panel shows "deep pass: n clips
+  to go". A session starting stops it between clips; it carries on after. `SWINGCLIPS_DEEP=off` turns
+  it off.
+
 #### Keeping up during a session
 A clip took ~35 s with RTMPose (a swing, two clips, comes every ~20 s), so a 40-swing session left
 40+ clips waiting. Then: RTMPose runs on every other frame up to 0.9 s after the heard strike, with
@@ -987,6 +1004,21 @@ rules read the ray casting's 2 degree steps (docs/key-positions.md), which the m
 doesn't have. Four swings is too few to choose between the models, so: `yolo11n-pose --imgsz 416`
 for now, not on the server until the takeaway and P2 rules read the model's angle and more swings
 are labeled (40+ swings for a real score).
+
+**Second round (2026-09-27, 31 swings: 721 club frames, 25 to train, 6 to score), in the deep pass**
+(`eval.py --rerun --deep`, median / 90th percentile ms). The club model's angle wobbles a degree
+or two at address, which put the takeaway 17-33 ms later; so with the club model the deep pass also
+runs the ray casting (`clubRay` in the pose file) and address and the takeaway come from that:
+
+| | takeaway face / DTL | P2 face / DTL | P5 face / DTL | P6 face / DTL | P8 face / DTL | downswing shaft found, face |
+|---|---|---|---|---|---|---|
+| quick (the server during a session) | 21/50, 17/52 | 0/29, 17/23 | 2/102, 8/121 | 8/17, 13/19 | 15/40, 29/37 | 25% |
+| deep, no club model | 21/50, 17/54 | 0/21, 8/17 | 0/6, 4/7 | 8/17, 8/18 | 8/42, 8/40 | 25% |
+| deep, `yolo11s-pose` 640 | 21/50, 17/54 | 4/19, 4/22 | 0/6, 4/7 | 2/4, 0/4 | 6/13, 8/13 | 88% |
+| deep, `yolo11n-pose` 416 | 21/50, 17/54 | 23/54, 21/67 | 0/6, 4/7 | 4/4, 4/4 | 4/6, 8/11 | 81% |
+
+So the deep pass uses `yolo11s-pose` at 640 (`public\models\club-deep.onnx` on the server); ~270 ms a
+frame on the CPU doesn't matter after a session. The small one loses P2.
 
 **4. Scoring it**, on the server (or any PC with the clips, labels and the model file):
 

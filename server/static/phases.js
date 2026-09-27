@@ -403,8 +403,14 @@
     // tracked, the takeaway is where it starts to turn away from its angle at rest; otherwise,
     // where the hands' quiet stretch ends. Either way P1 sits a little before that.
     const until = shaft.p2 ? frames[shaft.p2.index].t : ms[top].t;
-    const restEnd = shaftRestEnd(frames, until);
-    const moved = restEnd >= 0 ? shaftTakeaway(frames, restEnd, until) : -1;
+    // With the club model (the server's deep pass) the pose file also has the ray-cast shaft
+    // (clubRay): steadier at address, where the model's angle wobbles a degree or two, so the rest
+    // and the takeaway come from it. Same frames, so the indices hold.
+    const restFrames = frames.some(f => f.clubRay !== undefined)
+      ? frames.map(f => (f.clubRay === undefined ? f : Object.assign({}, f, { club: f.clubRay })))
+      : frames;
+    const restEnd = shaftRestEnd(restFrames, until);
+    const moved = restEnd >= 0 ? shaftTakeaway(restFrames, restEnd, until) : -1;
     const takeaway = moved >= 0 ? frames[moved].t : restEnd >= 0 ? frames[restEnd].t : ms[address].t;
     const p1 = found.find(p => p.key === "p1");
     const a = nearestFrame(frames, takeaway - ADDRESS_LEAD);
