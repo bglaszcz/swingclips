@@ -78,14 +78,22 @@ echo set SWINGCLIPS_POSE_BACKEND=rtmpose-m> D:\SwingClips\app\server\settings.cm
 cd /d D:\SwingClips\app\server
 .venv\Scripts\python.exe eval.py
 
-:: Would a GPU help? RTMPose and the club model on the CPU vs the GPU, and whole clips
-:: (install requirements-dml.txt first: HOME-SETUP.md, "Using a GPU")
+:: How long a clip takes and where the time goes, with the speed settings as before and as set
+:: now; RTMPose and the club model on the CPU vs a GPU, if one is installed
+:: (HOME-SETUP.md, "Keeping up during a session" and "Using a GPU")
 .venv\Scripts\python.exe bench_models.py
+
+:: Do the speed settings score no worse on the labeled clips? (dev PC or server, with the clips)
+.venv\Scripts\python.exe bench_models.py --accuracy
 ```
 
 - `settings.cmd` can also put the ONNX models on a GPU (`SWINGCLIPS_ORT_PROVIDER=dml` or `cuda`,
   with `SWINGCLIPS_REQUIREMENTS` naming the matching package file); off by default, see
   HOME-SETUP.md, "Using a GPU".
+- Less work a clip, so the server keeps up with a swing every ~20 s: MediaPipe on every 4th frame
+  after the swing, a cheaper picture for it, the clip split between the workers by cost (on by
+  default; `settings.cmd` can put each back), and a faster shaft search and empty scene (the same
+  numbers). See HOME-SETUP.md, "Keeping up during a session".
 - `Start server.cmd` runs the server in its window. Ctrl+C or closing the window stops it (answer
   Y to "Terminate batch job"). After a change of body model or of the analysis, the server
   analyzes older clips again in the background, newest first, while new swings go first.

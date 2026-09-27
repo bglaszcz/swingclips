@@ -213,11 +213,12 @@ class PipelineTest(unittest.TestCase):
 
     def test_default_output_unchanged(self):
         """With the default backend, byte for byte what pose.py gave before body backends (bar the
-        ball search's version stamp)."""
+        ball search's version stamp), with the speed settings as before them (test_speed.py)."""
         old = reference_pose()
         if old is None:
             self.skipTest(f"needs git and commit {REFERENCE_COMMIT[:7]}")
-        with mock.patch.dict(os.environ, {"SWINGCLIPS_POSE_BACKEND": "", "SWINGCLIPS_CLUB_BACKEND": ""}):
+        with mock.patch.dict(os.environ, {"SWINGCLIPS_POSE_BACKEND": "", "SWINGCLIPS_CLUB_BACKEND": "",
+                                          **pose.SPEED_AS_BEFORE}):
             for rotation in (0, 90):
                 new = analyze(pose, self.clips[rotation])
                 self.assertNotIn("model", new)

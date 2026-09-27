@@ -261,12 +261,13 @@ class PipelineTest(unittest.TestCase):
 
     def test_cpu_output_unchanged(self):
         """With the body and club models on the CPU (the default, or cpu or auto set with only the
-        CPU package), exactly what pose.py gave before providers."""
+        CPU package), exactly what pose.py gave before providers (the speed settings as before them:
+        test_speed.py)."""
         old = reference_modules()
         if old is None:
             self.skipTest(f"needs git and commit {REFERENCE_COMMIT[:7]}")
         for extra in ({}, {"SWINGCLIPS_CLUB_BACKEND": "yolo", "SWINGCLIPS_CLUB_MODEL": str(MODELS / models.CLUB_FILE)}):
-            env = {**os.environ, **NO_SETTINGS, **fake_models(), **extra}
+            env = {**os.environ, **NO_SETTINGS, **fake_models(), **pose.SPEED_AS_BEFORE, **extra}
             env.pop("SWINGCLIPS_BODY_STRIDE", None)
             with mock.patch.dict(os.environ, env, clear=True):
                 before = analyze(old, self.clip)
@@ -418,7 +419,9 @@ class BenchTest(unittest.TestCase):
         verdict = text[text.index("Verdict"):]
         self.assertIn("RTMPose-m: CPU", verdict)
         self.assertIn("Club model: CPU", verdict)
-        self.assertIn("Whole clip (rtmpose-m): CPU", verdict)
+        self.assertIn("Keeping up, whole clip on the CPU (rtmpose-m every 2 frames, 2 worker(s)): ", verdict)
+        self.assertIn("with the speed settings as before -> ", verdict)
+        self.assertIn("as set now: ms a frame in each worker (frames it ran on, of 48): decode ", verdict)
         self.assertIn("every 2 frames", verdict)
         self.assertIn("Floor, no body model at all:", verdict)
         self.assertIn("Only the CPU here", verdict)

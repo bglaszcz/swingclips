@@ -660,19 +660,108 @@ set SWINGCLIPS_POSE_BACKEND=rtmpose-m
 
 #### Keeping up during a session
 A clip took ~35 s with RTMPose (a swing, two clips, comes every ~20 s), so a 40-swing session left
-40+ clips waiting. Now: RTMPose runs on every other frame up to 0.9 s after the heard strike, with
+40+ clips waiting. Then: RTMPose runs on every other frame up to 0.9 s after the heard strike, with
 the frames between filled in from their neighbours (4 ms apart; on the labeled swings the key
 positions came out the same or better and joints within 0.3% of height), the club shaft is searched
 over the same stretch, the ball search reads only +-0.6 s round the strike, RTMPose stays loaded
-between clips, and the server uses half the logical CPUs (6 on the i5-12400). About 20 s a clip.
+between clips, and the server uses half the logical CPUs (6 on the i5-12400). About 20 s a clip
+(`bench_models.py`: 20.4 s; 16.1 s with no body model at all, so a GPU can't get it to 10 s).
 New **face-on** clips go first, so the spoken checks and practice numbers keep up; the
 down-the-line ones catch up between sets. `SWINGCLIPS_BODY_STRIDE=1` (settings.cmd) runs RTMPose on
 every frame; `SWINGCLIPS_POSE_WORKERS=n` sets the workers.
 
+**Less work a clip (2026-09-27).** The goal is 10 s a clip. Most of the rest was MediaPipe on every
+frame, the club shaft search and turning each 1080p frame into pictures. What changed:
+
+- **The same numbers, faster (always on).** Tested against the code before, to the last bit
+  (`tests/test_speed.py`): the shaft search works out each pixel's difference from the empty scene
+  with OpenCV instead of numpy (~7x faster for that step), and turns upright and masks only the
+  square around the hands it looks in, not the whole picture (about half the shaft search's time
+  went on those); the empty scene (the median of the keyframes, ~2 s while every worker waited) is
+  found bit by bit on all the CPUs; the full-size picture is turned upright only on the frames the
+  body model runs on; the ball search reuses the clip's last frame from the workers.
+- **Settings that change the numbers a little** (`settings.cmd`; each has its own cache in
+  `eval.py --rerun`, and the pose file records them as `"speed"` when any isn't as before):
+
+| Setting | Default | As before | What it does |
+|---|---|---|---|
+| `SWINGCLIPS_MP_STRIDE_AFTER` | 4 | 1 | MediaPipe on every 4th frame after the swing (later than 0.9 s after the heard strike: ~1.1 s of each 4 s clip), the frames between filled in. Nothing is measured there: on the 37 labeled swings every number summary.js works out is the same with it (`tests/test_speed.py`). |
+| `SWINGCLIPS_FRAME_CONVERT` | `planes` | `full` | MediaPipe's half-size picture straight from the decoded frame's brightness and colour planes, instead of converting the whole 1080p frame and halving it: ~2.5x less work, within ~1 level. The body model's crop is made as before. |
+| `SWINGCLIPS_POSE_SPLIT` | `cost` | `even` | The clip is cut between the workers by what each part costs, not by the number of keyframes: the end of the clip (MediaPipe only, every 4th frame) is cheap, and an even cut left one worker idle while the others were still in the downswing. |
+| `SWINGCLIPS_SHAFT_STRIDE` | 1 | 1 | The shaft searched on every n-th frame of the swing, the tracking filling the rest as it does blurred frames. 2 halves the search; off by default, since the takeaway, P2, P6 and P8 come from the shaft. Try it with the check below. |
+| `SWINGCLIPS_DECODE_THREADS` | FFmpeg's own | | Threads each worker decodes with. Doesn't change the numbers; FFmpeg's own choice was as fast as 1 or 2 in the cloud, so try it only with the benchmark. |
+
+  In the cloud (4 CPUs, 3 workers, a 4 s 1080p 240 fps clip; MediaPipe is slower there, ~35 ms a
+  frame): 37-39 s before, 26-27 s with the settings as before (the same numbers), 22 s with
+  the defaults. The server's own run is what counts: see "Checking it" below.
+
+**What reads frames outside the swing.** The swing here is from the takeaway to 0.9 s after the
+heard strike. Before it, at address: P1 and the takeaway (the shaft still for 0.3 s before it, and
+its angle at address), the noise floor (0.35 to 0.05 s before the takeaway, which the trust rules
+read), everything "vs address" (turns, sway, rise, bend change: from P1), the setup and camera
+check (at P1), the plane line down the line (the shaft at address), the club length to draw (the
+first frame), the ball (looked for in the first frame) and, only when the shaft isn't tracked, P1
+from the hands (0.2 s still before the top). After it: nothing measured; the skeleton and hand path
+on the video, and the compare view's ghost.
+
+So MediaPipe stays on every frame at address. On the labeled swings the takeaway comes 0.7-1.6 s
+before the heard strike, and the capture app's clips start 2 s before it; everything above needs
+from ~0.45 s before the takeaway. That leaves at most ~0.8 s of address (~0.4 s on average, about
+a tenth of a clip) that nothing reads, and where it ends isn't known until the pose has run: a
+first pass to find it would cost about what it saves. Also measured and left out: MediaPipe on a
+smaller picture (its time doesn't change: it looks at a 256-pixel crop of the golfer either way).
+
+**Checking it.** On the server (the server stopped: it would slow the run and be slowed):
+
+```
+cd /d D:\SwingClips\app\server
+call settings.cmd
+.venv\Scripts\python.exe bench_models.py --each --workers 6,8
+```
+
+The verdict starts with a line like:
+
+```
+  Keeping up, whole clip on the CPU (rtmpose-m every 2 frames, 6 worker(s)): 20.4 s with the speed settings as before -> xx s as set now (...)
+    as before: ms a frame in each worker (frames it ran on, of 984): decode x, convert x, MediaPipe x, body x, shaft x
+      6 worker(s) busy x-x s of the x s they took (loading MediaPipe x s in all)
+      outside the workers: empty scene x s, ball search x s, smoothing x s, shaft tracking x s
+    as set now: ...
+    as set now, but SWINGCLIPS_FRAME_CONVERT=full: xx s
+    as set now, and SWINGCLIPS_SHAFT_STRIDE=2: xx s
+    as set now, and SWINGCLIPS_BODY_STRIDE=3: xx s
+    as set now, 8 workers: xx s
+```
+
+`--each` puts each setting back on its own (what each one is worth) and tries two more that change
+more (the shaft on every other frame, RTMPose on every third); `--workers 6,8` other worker counts:
+with less to do a frame, 8 may use the i5-12400's 12 threads better than 6. Without them it's just
+before and now (a few minutes).
+
+Then the accuracy, on the dev PC (or the server) with the clips and labels, in one command:
+
+```
+.venv\Scripts\python.exe bench_models.py --accuracy
+```
+
+It runs `eval.py --rerun` with the speed settings as before (and `SWINGCLIPS_BODY_STRIDE` unset) and
+as set now (both cached, ~25 min each the first time), then `tune_positions.py` on both, and ends
+with **No worse: yes** or **NO** and why. No worse means, as set now against as before: every key
+position's median error (per angle) within a frame (4.2 ms), none more missed; the tracked joints
+within 1 px (median over the swings' frames, full-size picture); impact (the ball-gone frame) within
+a frame and the ball found as often; the shaft found as often (within 2 points) and its angle
+within 0.5 degrees; the key positions left out of the tuning (tune_positions.py) within a frame.
+With **NO**, put the settings back one at a time (`set SWINGCLIPS_FRAME_CONVERT=full`, and so on)
+and run it again to find the one. To try a setting that changes more, set it first
+(`set SWINGCLIPS_SHAFT_STRIDE=2` or `set SWINGCLIPS_BODY_STRIDE=3`) and run the same command.
+
+Clips already analyzed keep their results; the settings apply to new ones (the pose version is the
+same, so nothing is analyzed again).
+
 #### Using a GPU (off by default)
 Only the ONNX models can go on a GPU: RTMPose and the club model (`models.py`, through ONNX
-Runtime's DirectML or CUDA). MediaPipe (~17 ms a frame), the club shaft search (~18 ms) and decoding
-(~7 ms) stay on the CPU. Per frame in each worker, RTMPose is ~40 ms on every other frame, so ~20 of
+Runtime's DirectML or CUDA). MediaPipe (~17 ms a frame), the club shaft search (~18 ms, less since
+"Keeping up during a session" above) and decoding (~7 ms) stay on the CPU. Per frame in each worker, RTMPose is ~40 ms on every other frame, so ~20 of
 ~62 ms, and only up to 0.9 s after the strike. So even a GPU that ran RTMPose for free would take
 well under a third off a clip; how much exactly is what `bench_models.py` measures, including that
 floor. Freeing the cores may speed MediaPipe up a little too, which only a real run shows.

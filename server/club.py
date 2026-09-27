@@ -15,6 +15,9 @@ instead of the rays (model_scores), blurred clubhead included; the same tracking
 
 Angles are in degrees in the upright picture, 0 = pointing right, 90 = down (y grows downward).
 """
+import os
+from concurrent.futures import ThreadPoolExecutor
+
 import av
 import cv2
 import numpy as np
@@ -62,7 +65,52 @@ def background(path, rotation, rotate_codes):
         for f in c.decode(s):
             img = f.to_ndarray(format="bgr24")
             frames.append(cv2.rotate(img, rotate_codes[rotation]) if rotation in rotate_codes else img)
-    return np.median(np.stack(frames), axis=0).astype(np.uint8) if frames else None
+    return median(frames) if frames else None
+
+
+def median(frames, threads=None):
+    """np.median(np.stack(frames), axis=0).astype(np.uint8) for uint8 pictures, exactly, and ~4x
+    faster on one thread: np.median sorts ~17 values for every pixel of a 1080p picture (~2 s a
+    clip, while the workers wait for it). Here the middle value is found bit by bit, counting how
+    many frames are below each candidate; bands of rows on `threads` threads (numpy lets go of the
+    GIL on whole arrays), all the CPUs by default."""
+    rows = frames[0].shape[0]
+    threads = max(1, min(threads or os.cpu_count() or 1, rows))
+    if threads == 1:
+        return _median(frames)
+    edges = np.linspace(0, rows, threads + 1).astype(int)
+    out = np.empty_like(frames[0])
+
+    def band(k):
+        a, b = edges[k], edges[k + 1]
+        out[a:b] = _median([f[a:b] for f in frames])
+    with ThreadPoolExecutor(threads) as pool:
+        list(pool.map(band, range(threads)))
+    return out
+
+
+def _median(frames):
+    n = len(frames)
+    shape = frames[0].shape
+    below = np.empty(shape, np.uint8)
+    less = np.empty(shape, bool)
+
+    def kth(k):
+        """The k-th smallest value (0-based) at each pixel."""
+        out = np.zeros(shape, np.uint8)
+        for bit in (128, 64, 32, 16, 8, 4, 2, 1):
+            cand = out | np.uint8(bit)
+            below.fill(0)
+            for f in frames:
+                np.less(f, cand, out=less)
+                np.add(below, less, out=below, casting="unsafe")
+            # No more than k values under the candidate: the k-th smallest is at least that.
+            np.putmask(out, below <= k, cand)
+        return out
+    if n % 2:
+        return kth(n // 2)
+    # An even count: the mean of the two middle values, rounded down as astype(np.uint8) does.
+    return ((kth(n // 2 - 1).astype(np.uint16) + kth(n // 2)) // 2).astype(np.uint8)
 
 
 def grip(lm, w, h):
@@ -74,36 +122,74 @@ def body_height(lm, h):
     return max(lm[i][1] for i in FEET) * h - lm[NOSE][1] * h
 
 
-def scores(img, lm, mask, bg):
-    """Score for each ray direction (len(ANGLES) floats), or None if the frame can't be scored."""
-    h, w = img.shape[:2]
+def reach(height):
+    """How far from the grip the rays and their side bands reach, in pixels."""
+    return int(FAR * height + (max(BANDS) + SIDE_GAP) * height) + 2
+
+
+def region(lm, w, h):
+    """The square around the hands the rays can reach, (x0, y0, x1, y1) in pixels of the upright
+    picture w x h, or None if the frame can't be scored."""
     height = body_height(lm, h)
     if height <= 0:
         return None
     g = grip(lm, w, h)
-    # Only the square the rays can reach.
-    reach = int(FAR * height + (max(BANDS) + SIDE_GAP) * height) + 2
-    x0, y0 = max(0, int(g[0]) - reach), max(0, int(g[1]) - reach)
-    x1, y1 = min(w, int(g[0]) + reach), min(h, int(g[1]) + reach)
+    r = reach(height)
+    x0, y0 = max(0, int(g[0]) - r), max(0, int(g[1]) - r)
+    x1, y1 = min(w, int(g[0]) + r), min(h, int(g[1]) + r)
     if x1 <= x0 or y1 <= y0:
         return None
-    diff = np.linalg.norm(img[y0:y1, x0:x1].astype(np.float32) - bg[y0:y1, x0:x1], axis=2)
+    return x0, y0, x1, y1
+
+
+def scores(img, lm, mask, bg):
+    """Score for each ray direction (len(ANGLES) floats), or None if the frame can't be scored."""
+    h, w = img.shape[:2]
+    box = region(lm, w, h)
+    if box is None:
+        return None
+    x0, y0, x1, y1 = box
+    return region_scores(img[y0:y1, x0:x1], mask[y0:y1, x0:x1], bg[y0:y1, x0:x1], box, lm, w, h)
+
+
+_ONES = np.ones((1, 3), np.float32)
+
+
+def region_scores(img, mask, bg, box, lm, w, h):
+    """scores() from only the square region(lm, w, h) = box of the picture (w x h), the mask and the
+    background: pose.py cuts it out before turning the frame upright, which is most of the work
+    on a full picture."""
+    height = body_height(lm, h)
+    g = grip(lm, w, h)
+    x0, y0 = box[:2]
+    # How far each pixel is from the empty scene: the length of the BGR difference. Exactly
+    # np.linalg.norm(img.astype(np.float32) - bg, axis=2) (whole numbers, below 2^24 when
+    # squared and summed, so float32 holds them exactly), ~7x faster.
+    d = cv2.absdiff(img, bg)
+    diff = cv2.sqrt(cv2.transform(cv2.multiply(d, d, dtype=cv2.CV_32F), _ONES))
     diff = cv2.GaussianBlur(diff, (5, 5), 0)
-    diff[mask[y0:y1, x0:x1]] = np.nan
+    np.putmask(diff, mask, np.nan)
 
     r = np.linspace(NEAR * height, FAR * height, SAMPLES)
     ca, sa = np.cos(ANGLES)[:, None], np.sin(ANGLES)[:, None]
     gx, gy = g[0] - x0, g[1] - y0
+    # The rays' centre lines, once (added in the same order as before, so the sums come out the same).
+    cx, cy = gx + ca * r, gy + sa * r
 
     def along(offset):
-        x = (gx + ca * r - sa * offset).astype(np.float32)
-        y = (gy + sa * r + ca * offset).astype(np.float32)
+        x = (cx - sa * offset).astype(np.float32)
+        y = (cy + ca * offset).astype(np.float32)
         return cv2.remap(diff, x, y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=np.nan)
 
     best = np.zeros(len(ANGLES), np.float32)
     for band in BANDS:
         half = band * height
-        centre = np.mean([along(k) for k in np.linspace(-half, half, 3)], axis=0)
+        if half:
+            centre = np.mean([along(k) for k in np.linspace(-half, half, 3)], axis=0)
+        else:
+            # A band of no width samples the same line three times: once is enough (the mean of
+            # the three copies kept, so the rounding stays as it was).
+            centre = np.mean([along(0.0)] * 3, axis=0)
         sides = np.minimum(along(half + SIDE_GAP * height), along(-half - SIDE_GAP * height))
         v = centre - sides
         seen = ~np.isnan(v)
