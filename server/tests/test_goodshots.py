@@ -6,6 +6,7 @@ the server does). The rules themselves, on synthetic swings: node --test tests/g
 """
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -78,8 +79,14 @@ class Endpoints(unittest.TestCase):
         self.assertEqual(c.get("/api/goodshots").json()["settings"]["minCount"], 5)   # unchanged
 
 
+# The shots these tests were hand-checked on (the fixtures hold more as more swings get labeled):
+# 7 with the 7 iron, 2 each with the PW and driver, listed by their face-on clip.
+CHECKED = {"1790206444", "1790271665", "1790271726", "1790271783", "1790271802", "1790278981",
+           "1790279635", "1790353476", "1790353497", "1790353993", "1790354067"}
+
+
 class RealShots(unittest.TestCase):
-    """The owner's shots: 7 with the 7 iron, 2 each with the PW and driver."""
+    """The owner's hand-checked shots (CHECKED)."""
 
     @classmethod
     def setUpClass(cls):
@@ -90,6 +97,8 @@ class RealShots(unittest.TestCase):
         for c in clips:
             if c["partner"] and c["angle"] != "face":
                 continue   # listed by its face-on clip
+            if re.search(r"fps_(\d+)", c["name"])[1] not in CHECKED:
+                continue
             other = by_name.get(c["partner"]) if c["partner"] else None
             rec = cls.summ.summarize(swings.pose_input(c, REAL / "pose" / f"{c['name']}.v6.json.gz"),
                                      swings.pose_input(other, REAL / "pose" / f"{other['name']}.v6.json.gz") if other else None)

@@ -34,7 +34,10 @@ MODEL = os.environ.get("SWINGCLIPS_POSE_MODEL", os.path.join(
 VERSION = 6
 # The ball search's own version: when only it changes, the server finds the ball again in each
 # analyzed clip (find_ball_again, a few seconds a clip) instead of analyzing it all over.
-BALL_VERSION = 2
+BALL_VERSION = 3
+# Saved results from a ball search older than this have the impact timed again, not just checked
+# (3: face-on counts the ball as gone once it starts to move, BALL_STILL).
+BALL_TIMING_VERSION = 3
 # MediaPipe works on a 256px input internally, so half size loses nothing and halves the conversion.
 SCALE = 0.5
 ROTATE_CW = {90: cv2.ROTATE_90_CLOCKWISE, 180: cv2.ROTATE_180, 270: cv2.ROTATE_90_COUNTERCLOCKWISE}
@@ -49,6 +52,13 @@ SMOOTH_SECONDS = 0.02   # half-width of the curve-fitting window
 # Ball search: how many candidate spots to follow, and the span either side of a drop that must look settled.
 BALL_CANDIDATES = 6
 BALL_STEP_SECONDS = 0.15
+# A frame still shows the ball while its spot matches at least this share of how well it matched
+# while settled; below that the ball has started to leave. Face-on the ball's first frame on the move
+# (a streak starting at its spot) still matches 0.66-0.97, while a sitting ball stays at ~1.0: 0.85
+# puts 15 of 17 labeled face-on swings on the labeled frame and none early (0.5 had 7 a frame or
+# more late, one 21 ms: dropped frames after the streak). Down the line the club passes between the
+# camera and the ball just before contact, so anything above 0.5 goes early there (by up to 21 ms).
+BALL_STILL = {"face": 0.85, "dtl": 0.5, None: 0.5}
 # The hands peak in the follow-through, at impact they are at ~40% of that or more; anything "leaving"
 # while the hands are slower than this share of their peak isn't the ball. Down the line the hands
 # move mostly away from the camera right at impact and look nearly still, so it's their fastest
@@ -392,12 +402,13 @@ def run_ball_chunk(args):
     return out
 
 
-def ball_leaves(times, scores):
+def ball_leaves(times, scores, still=0.5):
     """When the ball goes: the spot looks the same for a while, then suddenly not at all.
 
     At address the club sits against the ball, so the spot changes a little in the takeaway; what
     counts is the drop from wherever it settled to nothing. Returns (index of the first frame
-    without the ball, strength of the drop), or None.
+    without the ball, strength of the drop), or None. A frame whose spot matches less than `still`
+    times the settled level no longer shows the ball where it sat.
     """
     t = np.asarray(times)
     s = np.asarray(scores)
@@ -418,8 +429,8 @@ def ball_leaves(times, scores):
     # Pin it to the frame: the first one after the last that still looks like the settled ball.
     lo = np.searchsorted(t, t[i] - BALL_STEP_SECONDS)
     hi = np.searchsorted(t, t[i] + BALL_STEP_SECONDS)
-    still = [j for j in range(lo, hi) if s[j] >= level / 2]
-    first_gone = still[-1] + 1 if still else i
+    kept = [j for j in range(lo, hi) if s[j] >= still * level]
+    first_gone = kept[-1] + 1 if kept else i
     return (first_gone, drop) if first_gone < len(s) else None
 
 
@@ -485,7 +496,7 @@ def find_impact_from(path, rotation, frames, jobs, pool, first, angle=None, stri
     speed = hand_speed(frames)
     best = None
     for k, cand in enumerate(candidates):
-        found = ball_leaves(times, [r[1][k] for r in rows])
+        found = ball_leaves(times, [r[1][k] for r in rows], BALL_STILL.get(angle, BALL_STILL[None]))
         # Something else near the feet can change for good too (a leg, a shadow); the ball leaves
         # while the hands are moving fast.
         if found and speed is not None:
@@ -611,10 +622,10 @@ def ball_fits(path, doc) -> bool:
 
 def find_ball_again(path, doc, pool: ProcessPoolExecutor, workers: int) -> dict:
     """A saved pose result checked by the current ball search, for when only the ball search
-    changed. A ball that passes its checks is kept as it was; otherwise (or with no ball) it's found
-    again, from the saved (smoothed) landmarks, with the shaft length drawn from it: a few seconds
+    changed. A ball that passes its checks is kept as it was, unless it was timed by a search older
+    than BALL_TIMING_VERSION; otherwise (or with no ball) it's found again, from the saved (smoothed) landmarks, with the shaft length drawn from it: a few seconds
     a clip instead of a whole analysis."""
-    if ball_fits(path, doc):
+    if doc.get("ballVersion", 1) >= BALL_TIMING_VERSION and ball_fits(path, doc):
         out = {}
         for k, v in doc.items():
             out[k] = v

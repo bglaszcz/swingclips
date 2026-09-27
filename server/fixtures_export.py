@@ -11,10 +11,12 @@ Run it again after labeling more: it replaces what's there. Then score with (see
 import argparse
 import gzip
 import json
+import re
 import shutil
 import urllib.request
 from pathlib import Path
 
+import models
 import pose
 
 HERE = Path(__file__).parent
@@ -28,6 +30,17 @@ def get(server: str, path: str) -> bytes:
         return r.read()
 
 
+def pose_folder(body: bytes) -> str:
+    """The fixtures folder for a gzipped pose result: pose, or pose-<backend> from its model stamp
+    (e.g. "rtmpose-m-256x192" -> pose-rtmpose-m)."""
+    head = gzip.decompress(body)[:300].decode("utf-8", "replace")
+    stamp = re.search(r'"model":"([^"]+)"', head)
+    if not stamp:
+        return "pose"
+    backend = next((b for b in sorted(models.SPECS, key=len, reverse=True) if stamp[1].startswith(b)), None)
+    return f"pose-{backend or stamp[1]}"
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--server", default="http://192.168.86.250:8000")
@@ -36,9 +49,8 @@ def main(argv=None) -> int:
 
     listing = {c["name"]: c for c in json.loads(get(args.server, "/api/clips"))}
     passes = json.loads(get(args.server, "/api/labels"))
-    for sub in ("labels", "pose"):
-        shutil.rmtree(args.out / sub, ignore_errors=True)
-        (args.out / sub).mkdir(parents=True)
+    shutil.rmtree(args.out / "labels", ignore_errors=True)
+    (args.out / "labels").mkdir(parents=True)
 
     need = set()
     for label_pass, names in passes.items():
@@ -50,7 +62,7 @@ def main(argv=None) -> int:
             if (doc.get("partner") or {}).get("name"):
                 need.add(doc["partner"]["name"])
 
-    clips, missing = [], []
+    clips, missing, folders = [], [], {}
     for name in sorted(need):
         try:
             body = get(args.server, f"/api/pose/{name}")
@@ -59,13 +71,21 @@ def main(argv=None) -> int:
             continue
         if body[:2] != b"\x1f\x8b":
             body = gzip.compress(body)
-        (args.out / "pose" / f"{name}.v{pose.VERSION}.json.gz").write_bytes(body)
+        # Into the folder for the model that made it: pose/ for MediaPipe alone, pose-<backend>/ for a
+        # body model (the server's SWINGCLIPS_POSE_BACKEND), so each folder stays one pipeline's.
+        folder = pose_folder(body)
+        if folder not in folders:
+            shutil.rmtree(args.out / folder, ignore_errors=True)
+            (args.out / folder).mkdir(parents=True)
+        folders[folder] = folders.get(folder, 0) + 1
+        (args.out / folder / f"{name}.v{pose.VERSION}.json.gz").write_bytes(body)
         if name in listing:
             clips.append({k: listing[name].get(k) for k in CLIP_FIELDS})
     (args.out / "clips.json").write_text(json.dumps(clips, indent=1), encoding="utf-8")
 
     labeled = sum(len(v) for v in passes.values())
-    print(f"{labeled} label file(s), {len(clips)} clip(s) with pose into {args.out}"
+    print(f"{labeled} label file(s), {len(clips)} clip(s) with pose into {args.out} "
+          f"({', '.join(f'{n} in {f}' for f, n in sorted(folders.items()))})"
           + (f"; no pose (still queued, or trashed) for: {', '.join(missing)}" if missing else ""))
     return 0
 

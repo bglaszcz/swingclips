@@ -275,6 +275,8 @@ class PipelineTest(unittest.TestCase):
                             mock.patch.object(models, "available", return_value=["cpu"]):
                         now = analyze(pose, self.clip)
                     self.assertNotIn("provider", now)
+                    # The ball search's own version moves on without the providers (pose.BALL_VERSION).
+                    now["ballVersion"] = before["ballVersion"]
                     self.assertEqual(json.dumps(now), json.dumps(before), (setting, extra))
 
     def test_on_a_gpu(self):
