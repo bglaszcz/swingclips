@@ -419,7 +419,9 @@ class BenchTest(unittest.TestCase):
         verdict = text[text.index("Verdict"):]
         self.assertIn("RTMPose-m: CPU", verdict)
         self.assertIn("Club model: CPU", verdict)
-        self.assertIn("Keeping up, whole clip on the CPU (rtmpose-m every 2 frames, 2 worker(s)): ", verdict)
+        # As many workers as the server would start on this PC (app.POSE_WORKERS: half the CPUs, up to 6).
+        self.assertIn(f"Keeping up, whole clip on the CPU (rtmpose-m every 2 frames, {bench_models.app.POSE_WORKERS} "
+                      "worker(s)): ", verdict)
         self.assertIn("with the speed settings as before -> ", verdict)
         self.assertIn("as set now: ms a frame in each worker (frames it ran on, of 48): decode ", verdict)
         self.assertIn("every 2 frames", verdict)
