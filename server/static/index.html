@@ -876,10 +876,28 @@ function drawLabel(ctx, text, at, fontSize) {
   ctx.fillText(text, x + padX, y + h * 0.7);
 }
 
-/** The shaft from the hands at the tracked angle (club = [degrees, confidence]). */
-function drawShaft(ctx, lm, club, toPx, r, lineWidth, p = pose) {
+/** The shaft from the hands at the tracked angle (club = [degrees, confidence]), or with the club
+ * model (the deep pass) from the hands to the clubhead it found (head = [x, y, confidence], picture
+ * units), with a dot on it: the club's real length on screen, which shrinks when it points toward or
+ * away from the camera, where a fixed length overshoots. */
+function drawShaft(ctx, lm, club, toPx, r, lineWidth, p = pose, head = null) {
   const grip = toPx({ x: (lm[L_INDEX * 3] + lm[R_INDEX * 3]) / 2, y: (lm[L_INDEX * 3 + 1] + lm[R_INDEX * 3 + 1]) / 2 });
   const len = (p.clubLength || 0.25) * r.h, a = club[0] * Math.PI / 180;
+  if (head && club[1] >= SHAFT_CONFIDENT) {
+    const h = toPx({ x: head[0], y: head[1] });
+    ctx.save();
+    ctx.lineWidth = lineWidth * 1.2;
+    ctx.strokeStyle = ctx.fillStyle = SHAFT_COLOR;
+    ctx.beginPath();
+    ctx.moveTo(grip.x, grip.y);
+    ctx.lineTo(h.x, h.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(h.x, h.y, lineWidth * 2.2, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.lineWidth = lineWidth * 1.2;
   if (club[1] >= SHAFT_CONFIDENT) {
@@ -924,7 +942,7 @@ function drawPose(ctx, frame, r, withLabel, p = pose) {
     ctx.fill();
   }
 
-  if (frame.club) drawShaft(ctx, lm, frame.club, toPx, r, lineWidth, p);
+  if (frame.club) drawShaft(ctx, lm, frame.club, toPx, r, lineWidth, p, frame.clubhead);
   if (p.reference) drawSpine(ctx, p.reference, toPx, lineWidth, true);
   const spine = spineLine(lm, p.video);
   if (spine) {
