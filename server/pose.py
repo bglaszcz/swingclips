@@ -13,6 +13,10 @@ leaves the output exactly as it was.
 SWINGCLIPS_CLUB_BACKEND=yolo has a trained club model (models.py) find the shaft instead of the ray
 casting in club.py, and saves its clubhead per frame too; raycast, the default, leaves the output
 exactly as it was.
+
+Keeping up during a session (a swing, two clips, every ~20 s): the settings under "Keeping up"
+below trade work for time. speed_settings() lists the ones that can change the result, for eval.py's
+cache fingerprint; SPEED_AS_BEFORE sets them all back to how clips were analyzed before them.
 """
 import os
 import re
@@ -97,6 +101,85 @@ def body_stride() -> int:
     return BODY_STRIDE_GPU if models.on_gpu() else BODY_STRIDE_CPU
 
 
+# ---- Keeping up: settings that trade work for time (HOME-SETUP.md, "Keeping up during a session") ----
+# Read each time (tests set them), in the main process: the workers get them with their jobs.
+#
+# SWINGCLIPS_MP_STRIDE_AFTER: MediaPipe on every n-th frame after the swing (later than
+# BODY_AFTER_STRIKE after the heard strike: ~1.1 s of a 4 s capture clip), the frames between filled
+# in from their neighbours. Nothing is measured there (P8 comes at most ~0.35 s after the strike); the
+# review page still draws the skeleton on every frame. 1 = every frame, as before.
+MP_STRIDE_AFTER = 4
+# SWINGCLIPS_FRAME_CONVERT: how MediaPipe's half-size picture is made from the decoded frame.
+#   planes: straight from the decoded YUV planes (the brightness averaged 2x2, the colour as coded,
+#           which 4:2:0 already has at half size), then to RGB. ~2.5x less work; within ~1 level of
+#           full's (rounding, and clipping in the brightest colours).
+#   full:   the whole 1080p frame to RGB, then halved (as before). The body model's crop is made from
+#           the full-size picture either way, converted only on the frames it runs on.
+FRAME_CONVERTS = ("planes", "full")
+# SWINGCLIPS_POSE_SPLIT: where the clip is cut between the workers (always at keyframes).
+#   cost: so each worker gets about the same work, by what each frame costs (COST_MS): frames after
+#         the swing cost little (MediaPipe only, and only every MP_STRIDE_AFTER-th), so an even
+#         split left the last worker idle while the others were still in the downswing.
+#   even: the same number of keyframes each (as before).
+POSE_SPLITS = ("cost", "even")
+# What a frame costs, roughly (ms in one worker on the i5-12400; only the proportions matter).
+COST_MS = {"decode": 9, "mediapipe": 21, "shaft": 8, "body": 47, "club": 50}
+# SWINGCLIPS_SHAFT_STRIDE: the club shaft searched on every n-th frame of the swing, with club.track
+# filling the frames between as it does blurred ones. 1 (every frame) is the default.
+# SWINGCLIPS_DECODE_THREADS: threads FFmpeg decodes each worker's frames with (frame and slice
+# threading); unset, FFmpeg's own choice (as before). Doesn't change the result: decoding is exact.
+# The result-changing settings as clips were analyzed before them: as set in the environment, and
+# as speed_settings() gives them.
+SPEED_AS_BEFORE = {"SWINGCLIPS_MP_STRIDE_AFTER": "1", "SWINGCLIPS_FRAME_CONVERT": "full",
+                   "SWINGCLIPS_POSE_SPLIT": "even", "SWINGCLIPS_SHAFT_STRIDE": "1"}
+BEFORE = {"mpStrideAfter": 1, "convert": "full", "split": "even", "shaftStride": 1}
+
+
+def _setting(name, default):
+    return os.environ.get(name, "").strip().lower() or default
+
+
+def _count(name, default):
+    value = _setting(name, str(default))
+    if not value.isdigit() or int(value) < 1:
+        raise ValueError(f"{name}={value!r}: use a whole number, 1 or more")
+    return int(value)
+
+
+def mp_stride_after() -> int:
+    return _count("SWINGCLIPS_MP_STRIDE_AFTER", MP_STRIDE_AFTER)
+
+
+def frame_convert() -> str:
+    value = _setting("SWINGCLIPS_FRAME_CONVERT", FRAME_CONVERTS[0])
+    if value not in FRAME_CONVERTS:
+        raise ValueError(f"SWINGCLIPS_FRAME_CONVERT={value!r}: use one of {', '.join(FRAME_CONVERTS)}")
+    return value
+
+
+def pose_split() -> str:
+    value = _setting("SWINGCLIPS_POSE_SPLIT", POSE_SPLITS[0])
+    if value not in POSE_SPLITS:
+        raise ValueError(f"SWINGCLIPS_POSE_SPLIT={value!r}: use one of {', '.join(POSE_SPLITS)}")
+    return value
+
+
+def shaft_stride() -> int:
+    return _count("SWINGCLIPS_SHAFT_STRIDE", 1)
+
+
+def decode_threads() -> int | None:
+    """SWINGCLIPS_DECODE_THREADS, or None for FFmpeg's own choice."""
+    return _count("SWINGCLIPS_DECODE_THREADS", 1) if _setting("SWINGCLIPS_DECODE_THREADS", "") else None
+
+
+def speed_settings() -> dict:
+    """The settings above that can change the result, as they are now: for eval.py's cache
+    fingerprint, and saved in the pose file when any differs from SPEED_AS_BEFORE."""
+    return {"mpStrideAfter": mp_stride_after(), "convert": frame_convert(), "split": pose_split(),
+            "shaftStride": shaft_stride()}
+
+
 def clip_facts(path):
     """(angle "face" | "dtl" | None, heard strike in clip seconds | None) from a capture-app clip name."""
     m = CLIP_NAME.match(os.path.basename(path))
@@ -105,19 +188,24 @@ def clip_facts(path):
     return m.group(1), (int(m.group(2)) / 1000 if m.group(2) else None)
 
 
-def probe(path):
-    """Keyframe pts, time base, and how far to turn frames clockwise to display them upright.
+def probe(path, every_frame=False):
+    """Keyframe pts, time base, and how far to turn frames clockwise to display them upright; with
+    `every_frame`, every frame's pts after them (sorted).
 
     PyAV's frame.rotation is the display matrix angle (counter-clockwise), e.g. -90 for a
     portrait phone clip. (Reading it with OpenCV instead crashes: its FFmpeg DLLs clash with PyAV's.)
     """
     with av.open(path) as c:
         s = c.streams.video[0]
-        keys = [p.pts for p in c.demux(s) if p.is_keyframe and p.pts is not None]
+        packets = [(p.pts, p.is_keyframe) for p in c.demux(s) if p.pts is not None]
+    keys = sorted(pts for pts, key in packets if key)
     with av.open(path) as c:
         first = next(c.decode(video=0))
         rotation = int(-getattr(first, "rotation", 0)) % 360
-        return sorted(keys), float(c.streams.video[0].time_base), rotation
+        tb = float(c.streams.video[0].time_base)
+    if every_frame:
+        return keys, tb, rotation, sorted(pts for pts, _ in packets)
+    return keys, tb, rotation
 
 
 def upright_gray(frame, rotation):
@@ -144,9 +232,16 @@ def run_chunk(args):
     World landmarks are MediaPipe's 3D estimate: metres, origin between the hips, z away from the
     camera. With a body model (`body` = (backend name, .onnx path)), its points replace MediaPipe's
     2D landmarks where it has them, the shaft scores included. With a club model (`clubm`, its .onnx
-    path) the shaft scores come from it, and the clubhead with them. timing: {frames, mediapipe, body,
-    club} in seconds spent.
+    path) the shaft scores come from it, and the clubhead with them. `opts` (from analyze) has the
+    speed settings: mp_after, convert, shaft_stride, threads.
+
+    timing: seconds spent in each part (start: loading MediaPipe; decode, convert, mediapipe, body,
+    club, shaft) and how many frames each ran on (decoded, frames: MediaPipe's, shaft_frames); "ran":
+    per frame, whether the body model placed its points; "mp": whether MediaPipe ran (it skips
+    frames after the swing, fill_skipped fills them); "last": the clip's last frame, upright gray,
+    from the job that reads to the end (the ball search compares with it).
     """
+    started = time.perf_counter()
     cv2.setNumThreads(1)
     import mediapipe as mp
     from mediapipe.tasks.python import BaseOptions
@@ -155,63 +250,137 @@ def run_chunk(args):
     path, start_pts, end_pts, rotation, bg, body, clubm = args[:7]
     # When the body model stops (clip seconds, or None for the whole clip) and how often it runs.
     body_until, stride = args[7] if len(args) > 7 else (None, 1)
+    opts = {**RUN_DEFAULTS, **(args[8] if len(args) > 8 else {})}
+    mp_after, shaft_every = opts["mp_after"], opts["shaft_stride"]
     tracker = models.BodyTracker(models.load(*body)) if body else None
     ran = []                                 # per frame: whether the body model placed its points
+    mp_ran = []                              # per frame: whether MediaPipe ran
     clubber = models.load_club(clubm) if clubm else None
-    timing = {"frames": 0, "mediapipe": 0.0, "body": 0.0, "club": 0.0}
+    timing = {"frames": 0, "decoded": 0, "shaft_frames": 0, "start": 0.0, "decode": 0.0, "convert": 0.0,
+              "mediapipe": 0.0, "body": 0.0, "club": 0.0, "shaft": 0.0}
     lm = PoseLandmarker.create_from_options(PoseLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=MODEL), running_mode=RunningMode.VIDEO, num_poses=1,
         output_segmentation_masks=True))
+    timing["start"] = time.perf_counter() - started
     out = []
+    last = None
     try:
         with av.open(path) as c:
             tb = float(c.streams.video[0].time_base)
-            for f in decode_range(c, start_pts, end_pts):
-                full = cv2.cvtColor(f.to_ndarray(format="yuv420p"), cv2.COLOR_YUV2RGB_I420)
-                rgb = cv2.resize(full, None, fx=SCALE, fy=SCALE, interpolation=cv2.INTER_AREA)
+            if opts["threads"]:
+                cc = c.streams.video[0].codec_context
+                cc.thread_type, cc.thread_count = "AUTO", opts["threads"]
+            frames = decode_range(c, start_pts, end_pts)
+            while True:
+                clock = time.perf_counter()
+                f = next(frames, None)
+                if f is None:
+                    break
+                last = f
+                now = time.perf_counter()
+                timing["decode"] += now - clock
+                timing["decoded"] += 1
+                t = f.pts * tb
+                k = len(out)
+                in_swing = body_until is None or t <= body_until
+                if not in_swing and k % mp_after:
+                    # After the swing, MediaPipe only on every mp_after-th frame: filled in later.
+                    out.append((t, None, None, None, None))
+                    ran.append(False)
+                    mp_ran.append(False)
+                    continue
+                clock = now
+                yuv = f.to_ndarray(format="yuv420p")
+                full = None                  # the full-size picture, upright RGB, made when needed
+                if opts["convert"] == "planes":
+                    rgb = half_rgb(yuv)
+                else:
+                    unturned = cv2.cvtColor(yuv, cv2.COLOR_YUV2RGB_I420)
+                    rgb = cv2.resize(unturned, None, fx=SCALE, fy=SCALE, interpolation=cv2.INTER_AREA)
                 if rotation in ROTATE_CW:
                     rgb = cv2.rotate(rgb, ROTATE_CW[rotation])
-                    if tracker is not None or clubber is not None:
-                        full = cv2.rotate(full, ROTATE_CW[rotation])
-                t = f.pts * tb
-                started = time.perf_counter()
+                now = time.perf_counter()
+                timing["convert"] += now - clock
                 res = lm.detect_for_video(
                     mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb)),
                     int(round(t * 1000)))
                 timing["frames"] += 1
-                timing["mediapipe"] += time.perf_counter() - started
+                timing["mediapipe"] += time.perf_counter() - now
+                mp_ran.append(True)
+
+                def picture():
+                    """The full-size picture, upright RGB (converted once, when a model needs it)."""
+                    nonlocal full
+                    if full is None:
+                        clock = time.perf_counter()
+                        full = unturned if opts["convert"] == "full" else cv2.cvtColor(yuv, cv2.COLOR_YUV2RGB_I420)
+                        if rotation in ROTATE_CW:
+                            full = cv2.rotate(full, ROTATE_CW[rotation])
+                        timing["convert"] += time.perf_counter() - clock
+                    return full
+
                 landmarks = world = shaft = head = None
                 if res.pose_landmarks:
                     landmarks = [(p.x, p.y, p.visibility) for p in res.pose_landmarks[0]]
-                    if tracker is not None and (body_until is None or t <= body_until) and len(out) % stride == 0:
+                    if tracker is not None and in_swing and k % stride == 0:
                         # The full-size picture: the half size is plenty for MediaPipe's 256px input,
                         # but the crop around the golfer would lose the hands' detail.
-                        started = time.perf_counter()
-                        landmarks = tracker.frame(full, landmarks)
-                        timing["body"] += time.perf_counter() - started
+                        img = picture()
+                        clock = time.perf_counter()
+                        landmarks = tracker.frame(img, landmarks)
+                        timing["body"] += time.perf_counter() - clock
                         ran.append(True)
                     else:
                         ran.append(False)
                     if res.pose_world_landmarks:
                         world = [(p.x, p.y, p.z) for p in res.pose_world_landmarks[0]]
                     if clubber is not None:
-                        started = time.perf_counter()
-                        found = clubber.find(full, landmarks)
-                        shaft = club.model_scores(found, landmarks, full.shape[1], full.shape[0])
+                        img = picture()
+                        clock = time.perf_counter()
+                        found = clubber.find(img, landmarks)
+                        shaft = club.model_scores(found, landmarks, img.shape[1], img.shape[0])
                         head = club.clubhead(found)
-                        timing["club"] += time.perf_counter() - started
-                    elif bg is not None and res.segmentation_masks and (body_until is None or t <= body_until):
+                        timing["club"] += time.perf_counter() - clock
+                    elif bg is not None and res.segmentation_masks and in_swing and k % shaft_every == 0:
                         # The shaft too only until then: nothing is measured from it later on.
+                        clock = time.perf_counter()
                         shaft = shaft_scores(f, rotation, landmarks, res.segmentation_masks[0].numpy_view(), bg)
+                        timing["shaft"] += time.perf_counter() - clock
+                        timing["shaft_frames"] += 1
                 else:
                     if tracker is not None:
-                        tracker.frame(full, None)        # lost: the next crop comes from MediaPipe
+                        tracker.frame(None, None)        # lost: the next crop comes from MediaPipe
                     ran.append(False)
                 out.append((t, landmarks, world, shaft, head))
+            if end_pts is None and last is not None:
+                timing["last"] = upright_gray(last, rotation)
     finally:
         lm.close()
     timing["ran"] = ran
+    timing["mp"] = mp_ran
     return out, timing
+
+
+# run_chunk's speed settings when a job doesn't give them: everything as before them.
+RUN_DEFAULTS = {"mp_after": 1, "convert": "full", "shaft_stride": 1, "threads": None}
+
+# OpenCV's BT.601 YUV -> RGB (studio range, as its I420 conversion: the same constants, / 2^20),
+# as a matrix on (Y, U, V, 1).
+_CY, _CUB, _CUG, _CVG, _CVR = (v / (1 << 20) for v in (1220542, 2116026, -409993, -852492, 1673527))
+YUV_TO_RGB = np.array([[_CY, 0, _CVR, -16 * _CY - 128 * _CVR],
+                       [_CY, _CUG, _CVG, -16 * _CY - 128 * (_CUG + _CVG)],
+                       [_CY, _CUB, 0, -16 * _CY - 128 * _CUB]], np.float32)
+
+
+def half_rgb(yuv):
+    """MediaPipe's half-size picture (not yet upright) from a decoded yuv420p frame (PyAV's
+    to_ndarray: the Y rows, then U, then V): Y averaged over 2x2 pixels, U and V as coded (4:2:0 has
+    them at half size already), then to RGB (SWINGCLIPS_FRAME_CONVERT=planes)."""
+    h, w = yuv.shape[0] * 2 // 3, yuv.shape[1]
+    y = cv2.resize(yuv[:h], (w // 2, h // 2), interpolation=cv2.INTER_AREA)
+    u = yuv[h:h + h // 4].reshape(h // 2, w // 2)
+    v = yuv[h + h // 4:h + h // 2].reshape(h // 2, w // 2)
+    return cv2.transform(cv2.merge([y, u, v]), YUV_TO_RGB)
 
 
 def fill_body(frames, ran, layout, until):
@@ -240,19 +409,136 @@ def fill_body(frames, ran, layout, until):
     return out
 
 
+def fill_skipped(frames, mp_ran, most):
+    """The frames MediaPipe skipped (after the swing, SWINGCLIPS_MP_STRIDE_AFTER), with the
+    landmarks, their visibility and the world landmarks in a straight line between the nearest
+    frames either side it ran on and found the golfer, at most `most` frames apart; after the last
+    one, it held. Where either side found no one, they stay None."""
+    have = [i for i, (fr, r) in enumerate(zip(frames, mp_ran)) if r and fr[1] is not None]
+    out = list(frames)
+
+    def mix(a, b, w):
+        if a is None or b is None:
+            return None
+        return [tuple(pa[j] + w * (pb[j] - pa[j]) for j in range(len(pa))) for pa, pb in zip(a, b)]
+
+    for k, a in enumerate(have):
+        b = have[k + 1] if k + 1 < len(have) else None
+        end = b if b is not None else len(frames)
+        if b is not None and b - a > most:
+            continue
+        ta, la, wa = frames[a][0], frames[a][1], frames[a][2]
+        for i in range(a + 1, end):
+            if mp_ran[i]:
+                break
+            t, _, _, *rest = frames[i]
+            if b is None:
+                if i - a >= most:
+                    break
+                out[i] = (t, list(la), None if wa is None else list(wa), *rest)
+                continue
+            tb_, lb, wb = frames[b][0], frames[b][1], frames[b][2]
+            w = (t - ta) / (tb_ - ta) if tb_ > ta else 0.0
+            out[i] = (t, mix(la, lb, w), mix(wa, wb, w), *rest)
+    return out
+
+
+def job_costs(pts, tb, body_until, mp_after, body_stride_, shaft_every, body, clubm, raycast):
+    """What each frame costs (COST_MS, only the proportions matter), for split_jobs."""
+    out = []
+    for k, p in enumerate(pts):
+        t = p * tb
+        in_swing = body_until is None or t <= body_until
+        c = COST_MS["decode"]
+        if in_swing or k % mp_after == 0:
+            c += COST_MS["mediapipe"]
+            if clubm:
+                c += COST_MS["club"]
+            elif raycast and in_swing:
+                c += COST_MS["shaft"] / shaft_every
+        if body and in_swing:
+            c += COST_MS["body"] / body_stride_
+        out.append(c)
+    return out
+
+
+def split_jobs(keys, pts, costs, workers):
+    """The keyframes cut into at most `workers` runs (start pts, end pts | None) that each cost
+    about the same: the most any one costs as small as it can be (every cut at a keyframe)."""
+    keys = sorted(keys)
+    # The cost of each keyframe's run of frames (up to the next keyframe).
+    seg = np.zeros(len(keys))
+    idx = np.clip(np.searchsorted(keys, pts, side="right") - 1, 0, len(keys) - 1)
+    np.add.at(seg, idx, costs)
+    n, m = len(keys), max(1, min(workers, len(keys)))
+    pre = np.concatenate([[0.0], np.cumsum(seg)])
+    # best[j][i]: the smallest largest run cutting the first i segments into j runs.
+    best = np.full((m + 1, n + 1), np.inf)
+    cut = np.zeros((m + 1, n + 1), int)
+    best[0][0] = 0.0
+    for j in range(1, m + 1):
+        for i in range(j, n + 1):
+            # The last run is segments c..i-1, for each possible c.
+            v = np.maximum(best[j - 1][j - 1:i], pre[i] - pre[j - 1:i])
+            c = int(np.argmin(v))
+            best[j][i], cut[j][i] = v[c], c + j - 1
+    bounds, i = [], n
+    for j in range(m, 0, -1):
+        bounds.append((cut[j][i], i))
+        i = cut[j][i]
+    bounds.reverse()
+    return [(keys[a], keys[b] if b < n else None) for a, b in bounds]
+
+
 def shaft_scores(frame, rotation, landmarks, person, bg):
     """club.scores for one frame: full-size upright picture, with the person mask grown a little so
-    the golfer's outline doesn't count either."""
-    img = frame.to_ndarray(format="bgr24")
-    if rotation in ROTATE_CW:
-        img = cv2.rotate(img, ROTATE_CW[rotation])
-    h, w = img.shape[:2]
+    the golfer's outline doesn't count either.
+
+    Only the square around the hands the rays reach (club.region) is turned upright, and only that
+    part of the mask is scaled up and grown: the same numbers as doing the whole picture, at a
+    fraction of the work (a full 1080p picture turned and masked cost ~10 ms a frame)."""
+    h, w = bg.shape[:2]
+    box = club.region(landmarks, w, h)
+    if box is None:
+        return None
+    img = upright_crop(frame.to_ndarray(format="bgr24"), rotation, box)
     # Grown by 6% of the golfer's height: at 3% the edge of a leg (dark trousers on a dark mat) still
     # showed past the mask and passed for the shaft down the line.
     grow = max(3, int(0.06 * club.body_height(landmarks, h)))
-    mask = cv2.resize((person > 0.5).astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST)
+    mask = grown_mask(person, w, h, box, grow)
+    x0, y0, x1, y1 = box
+    return club.region_scores(img, mask, bg[y0:y1, x0:x1], box, landmarks, w, h)
+
+
+def upright_crop(img, rotation, box):
+    """cv2.rotate(img, ROTATE_CW[rotation])[y0:y1, x0:x1] for box = (x0, y0, x1, y1) in the upright
+    picture, turning only that part."""
+    x0, y0, x1, y1 = box
+    hs, ws = img.shape[:2]                   # as stored
+    if rotation == 90:
+        part = img[hs - x1:hs - x0, y0:y1]
+    elif rotation == 180:
+        part = img[hs - y1:hs - y0, ws - x1:ws - x0]
+    elif rotation == 270:
+        part = img[x0:x1, ws - y1:ws - y0]
+    else:
+        return img[y0:y1, x0:x1]
+    return cv2.rotate(part, ROTATE_CW[rotation])
+
+
+def grown_mask(person, w, h, box, grow):
+    """The person mask (MediaPipe's, at its own size) scaled up to w x h (nearest pixel) and grown
+    by a grow x grow square, as booleans, cut to box: exactly the whole mask done so and then cut,
+    working only on the box and the margin the growing reaches into."""
+    x0, y0, x1, y1 = box
+    ex0, ey0, ex1, ey1 = max(0, x0 - grow), max(0, y0 - grow), min(w, x1 + grow), min(h, y1 + grow)
+    mh, mw = person.shape[:2]
+    # cv2.resize's nearest pixel: source = floor(destination * source size / destination size).
+    rows = np.minimum(np.floor(np.arange(ey0, ey1) * (1.0 / (h / mh))).astype(np.intp), mh - 1)
+    cols = np.minimum(np.floor(np.arange(ex0, ex1) * (1.0 / (w / mw))).astype(np.intp), mw - 1)
+    mask = (person[np.ix_(rows, cols)] > 0.5).astype(np.uint8)
     mask = cv2.dilate(mask, np.ones((grow, grow), np.uint8)) > 0
-    return club.scores(img, landmarks, mask, bg)
+    return mask[y0 - ey0:y1 - ey0, x0 - ex0:x1 - ex0]
 
 
 def smooth(times, landmarks, spatial=2):
@@ -319,23 +605,18 @@ def top_of_backswing(frames):
     return min(rows, key=lambda r: r[1])[0] if rows else None
 
 
-def ball_candidates(path, rotation, frames, first, angle=None):
-    """Places near the feet that look like a ball in frame `first` and are gone at the end: the size
-    of a ball for the golfer's size, where a ball sits for the camera's angle.
+def ball_candidates(path, rotation, frames, first, angle=None, last=None):
+    """Places near the feet that look like a ball in frame `first` and are gone at the end (`last`,
+    the clip's last frame upright gray: read here when not given): the size of a ball for the
+    golfer's size, where a ball sits for the camera's angle.
 
     Returns [(cx, cy, r)] in upright full-size pixels, best first.
     """
     lm = next((lm for _, lm, *_ in frames if lm is not None), None)
     if lm is None:
         return []
-    with av.open(path) as c:
-        s = c.streams.video[0]
-        if s.duration:
-            c.seek(int(s.duration * 0.9), stream=s, backward=True)
-        last = None
-        for f in c.decode(s):
-            last = f
-        last = upright_gray(last, rotation)
+    if last is None:
+        last = last_frame(path, rotation)
     h, w = first.shape
     feet = [(lm[i][0] * w, lm[i][1] * h) for i in FEET]
     foot_y = max(y for _, y in feet)
@@ -375,6 +656,18 @@ def ball_candidates(path, rotation, frames, first, angle=None):
             scored.append((bright * gone, (float(cx), float(cy), float(r))))
     scored.sort(key=lambda s: -s[0])
     return [c for _, c in scored[:BALL_CANDIDATES]]
+
+
+def last_frame(path, rotation):
+    """The clip's last frame, upright gray."""
+    with av.open(path) as c:
+        s = c.streams.video[0]
+        if s.duration:
+            c.seek(int(s.duration * 0.9), stream=s, backward=True)
+        last = None
+        for f in c.decode(s):
+            last = f
+        return upright_gray(last, rotation)
 
 
 def ball_patch(gray, c):
@@ -447,30 +740,34 @@ def hand_speed(frames):
     return t, np.hypot(x[b] - x[a], y[b] - y[a]) / dt
 
 
-def find_impact(path, rotation, frames, jobs, pool):
+def find_impact(path, rotation, frames, jobs, pool, last=None, keys=None):
     """The ball's spot and the time of the first frame it's gone from, or (None, None).
 
     The ball is looked for at the start of the clip (address) and, failing that, at the top of the
     backswing: from down the line the clubhead sits between the camera and the ball at address.
     The clip's name gives the camera's angle (where to look) and when the phone heard the strike
-    (when the ball can have gone).
+    (when the ball can have gone). `last` (the clip's last frame, upright gray) and `keys`
+    (keyframe pts and time base, from probe) save reading them again.
     """
     angle, strike = clip_facts(path)
     if strike is not None:
-        jobs = window_jobs(path, rotation, jobs, strike - BALL_SEARCH_SECONDS, strike + BALL_SEARCH_SECONDS)
+        jobs = window_jobs(path, rotation, jobs, strike - BALL_SEARCH_SECONDS, strike + BALL_SEARCH_SECONDS, keys)
     with av.open(path) as c:
         first = upright_gray(next(c.decode(video=0)), rotation)
-    found = find_impact_from(path, rotation, frames, jobs, pool, first, angle, strike)
+    if last is None:
+        last = last_frame(path, rotation)
+    found = find_impact_from(path, rotation, frames, jobs, pool, first, angle, strike, last)
     top = top_of_backswing(frames)
     if found[1] is None and top is not None:
-        found = find_impact_from(path, rotation, frames, jobs, pool, frame_at(path, rotation, top), angle, strike)
+        found = find_impact_from(path, rotation, frames, jobs, pool, frame_at(path, rotation, top), angle, strike,
+                                 last)
     return found
 
 
-def window_jobs(path, rotation, jobs, t0, t1):
+def window_jobs(path, rotation, jobs, t0, t1, keys=None):
     """`jobs` cut down to the part of the clip from t0 to t1 s (split across as many workers):
-    each starts on a keyframe, so decoding is quick."""
-    keys, tb, _ = probe(path)
+    each starts on a keyframe, so decoding is quick. `keys`: (keyframe pts, time base), else probed."""
+    keys, tb = keys if keys is not None else probe(path)[:2]
     inside = [k for k in keys if t0 - 0.3 <= k * tb <= t1]
     if len(inside) < 2:
         return jobs
@@ -484,9 +781,9 @@ def window_jobs(path, rotation, jobs, t0, t1):
     return out
 
 
-def find_impact_from(path, rotation, frames, jobs, pool, first, angle=None, strike=None):
+def find_impact_from(path, rotation, frames, jobs, pool, first, angle=None, strike=None, last=None):
     """find_impact, with the ball looked for in the frame `first`."""
-    candidates = ball_candidates(path, rotation, frames, first, angle)
+    candidates = ball_candidates(path, rotation, frames, first, angle, last)
     if not candidates:
         return None, None
     refs = [ball_patch(first, cand) for cand in candidates]
@@ -515,8 +812,9 @@ def find_impact_from(path, rotation, frames, jobs, pool, first, angle=None, stri
     return {"x": round(cx / w, 4), "y": round(cy / h, 4), "r": round(r / h, 4)}, round(times[best[0]], 6)
 
 
-def analyze(path, pool: ProcessPoolExecutor, workers: int):
-    """Pose for every frame of the clip, plus the ball, impact and club shaft, as a JSON-ready dict."""
+def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None = None):
+    """Pose for every frame of the clip, plus the ball, impact and club shaft, as a JSON-ready dict.
+    `timing`, if given, gets where the time went (parts(), and the steps in this process)."""
     started = time.perf_counter()
     backend = models.backend()
     body = None
@@ -530,34 +828,62 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
         if not os.path.isfile(clubm):
             raise FileNotFoundError(f"{clubm} is missing: train it (HOME-SETUP.md, \"Training the club model\") "
                                     "or point SWINGCLIPS_CLUB_MODEL at it")
-    keys, _, rotation = probe(path)
+    speed = speed_settings()
+    clock = time.perf_counter()
+    stages = {}                              # seconds for each step, in this process (see timing)
+    keys, tb, rotation, pts = probe(path, every_frame=True)
     bg = club.background(path, rotation, ROTATE_CW)
+    stages["background"] = time.perf_counter() - clock
     if not keys:
         keys = [0]
-    groups = np.array_split(np.arange(len(keys)), min(workers, len(keys)))
-    jobs = []
-    for g in groups:
-        start = keys[g[0]]
-        end = keys[g[-1] + 1] if g[-1] + 1 < len(keys) else None
-        jobs.append((path, start, end, rotation))
     _, strike = clip_facts(path)
     body_until = strike + BODY_AFTER_STRIKE if strike is not None else None
     stride = body_stride() if body else 1
-    chunks = list(pool.map(run_chunk, [j + (bg, body, clubm, (body_until, stride)) for j in jobs]))
-    rows = sorted(((fr, r) for chunk, timing in chunks for fr, r in zip(chunk, timing["ran"])), key=lambda x: x[0][0])
-    frames = [fr for fr, _ in rows]
+    if speed["split"] == "cost" and pts:
+        costs = job_costs(pts, tb, body_until, speed["mpStrideAfter"], stride, speed["shaftStride"], body, clubm,
+                          bg is not None)
+        runs = split_jobs(keys, pts, costs, workers)
+    else:
+        groups = np.array_split(np.arange(len(keys)), min(workers, len(keys)))
+        runs = [(keys[g[0]], keys[g[-1] + 1] if g[-1] + 1 < len(keys) else None) for g in groups]
+    jobs = [(path, start, end, rotation) for start, end in runs]
+    opts = {"mp_after": speed["mpStrideAfter"], "convert": speed["convert"], "shaft_stride": speed["shaftStride"],
+            "threads": decode_threads()}
+    clock = time.perf_counter()
+    chunks = list(pool.map(run_chunk, [j + (bg, body, clubm, (body_until, stride), opts) for j in jobs]))
+    stages["workers"] = time.perf_counter() - clock
+    clock = time.perf_counter()
+    rows = sorted(((fr, r, m) for chunk, tm in chunks
+                   for fr, r, m in zip(chunk, tm["ran"], tm.get("mp") or [True] * len(chunk))),
+                  key=lambda x: x[0][0])
+    frames = [fr for fr, _, _ in rows]
+    if speed["mpStrideAfter"] > 1:
+        frames = fill_skipped(frames, [m for _, _, m in rows], speed["mpStrideAfter"])
     if body and stride > 1:
-        frames = fill_body(frames, [r for _, r in rows], models.SPECS[backend].layout, body_until)
-    ms = per_frame_ms([timing for _, timing in chunks])
+        frames = fill_body(frames, [r for _, r, _ in rows], models.SPECS[backend].layout, body_until)
+    timings = [tm for _, tm in chunks]
+    ms = per_frame_ms(timings)
     print(f"pose: {os.path.basename(path)}: {len(frames)} frames, MediaPipe {ms['mediapipe']:.1f} ms/frame"
           + (f", {models.stamp(backend)} {ms['body']:.1f} ms/frame" if body else "")
           + (f", club model {ms['club']:.1f} ms/frame" if clubm else "")
           + f" (in each of {len(jobs)} worker(s))", flush=True)
-    ball, impact = find_impact(path, rotation, frames, jobs, pool)
+    last = next((t["last"] for t in timings if t.get("last") is not None), None)
+    stages["fill"] = time.perf_counter() - clock
+    clock = time.perf_counter()
+    ball, impact = find_impact(path, rotation, frames, jobs, pool, last=last, keys=(keys, tb))
+    stages["ball"] = time.perf_counter() - clock
+    clock = time.perf_counter()
     times = [t for t, *_ in frames]
     smoothed = smooth(times, [lm for _, lm, *_ in frames])
     world = smooth(times, [w for _, _, w, *_ in frames], spatial=3)
+    stages["smooth"] = time.perf_counter() - clock
+    clock = time.perf_counter()
     shaft = club.track(times, [s for _, _, _, s, _ in frames])
+    stages["track"] = time.perf_counter() - clock
+    if timing is not None:
+        timing.update(parts(timings, len(frames)), stages=stages, jobs=len(jobs),
+                      workerSeconds=[round(sum(v for k, v in t.items() if k in PARTS or k == "start"), 2)
+                                     for t in timings])
     first = next((lm for lm in smoothed if lm is not None), None)
     h, w = (bg.shape[:2] if bg is not None else (1, 1))
     out = {
@@ -578,6 +904,10 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int):
                     "club": list(c) if c else None}
                    for t, lm, w, c in zip(times, smoothed, world, shaft)],
     }
+    if speed != BEFORE:
+        # The speed settings the clip was analyzed with, when any isn't as before them (the output
+        # as before otherwise).
+        out["speed"] = speed
     if clubm:
         # clubhead: [x, y, confidence 0-1] in picture units where the club model is sure of it, else
         # null. Straight from the model, per frame: not smoothed or tracked (the shaft angle is).
@@ -667,4 +997,22 @@ def per_frame_ms(timings):
     # The body model's cost per frame it ran on.
     nb = max(1, sum(sum(t.get("ran", [])) for t in timings))
     out["body"] = 1000 * sum(t["body"] for t in timings) / nb
+    return out
+
+
+# The parts of a worker's time, and what each is counted per.
+PARTS = {"decode": "decoded", "convert": "frames", "mediapipe": "frames", "body": "ran", "shaft": "shaft_frames",
+         "club": "frames"}
+
+
+def parts(timings, frames):
+    """Where the workers' time went: {part: {"ms": per frame it ran on, "frames": how many,
+    "seconds": in all workers together}} for decode, convert, mediapipe, body, shaft and club, plus
+    "start" (loading MediaPipe, seconds in all) and "frames" (the clip's)."""
+    out = {"frames": frames, "start": round(sum(t.get("start", 0.0) for t in timings), 2)}
+    for part, per in PARTS.items():
+        total = sum(t.get(part, 0.0) for t in timings)
+        n = sum(sum(t.get(per, [])) if per == "ran" else t.get(per, 0) for t in timings)
+        if total:
+            out[part] = {"ms": round(1000 * total / max(n, 1), 2), "frames": n, "seconds": round(total, 2)}
     return out

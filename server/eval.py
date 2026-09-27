@@ -16,7 +16,8 @@ that body model instead, cached apart from MediaPipe's. With SWINGCLIPS_CLUB_BAC
 model finds the shaft (and the clubhead, scored in its own table) instead of the ray casting.
 With SWINGCLIPS_ORT_PROVIDER (or --provider dml|cuda|auto) those models run on a GPU for --rerun, cached
 apart from the CPU's: a GPU's results differ a little, so score it against the labels before the
-server uses it (HOME-SETUP.md, "Using a GPU").
+server uses it (HOME-SETUP.md, "Using a GPU"). pose.py's speed settings (HOME-SETUP.md, "Keeping up
+during a session") are cached apart too; bench_models.py --accuracy scores them against as before.
 
 The key positions and numbers are worked out by the review page's own JavaScript (as the server
 does, see swings.py), so the scorecard scores exactly what the page shows. Prints the tables and
@@ -97,13 +98,16 @@ def saved_pose(name: str) -> Path | None:
 def pipeline_fingerprint() -> str:
     """Changes whenever pose.py, club.py or the pose model changes, so --rerun caches don't go stale.
     Another body backend (models.py) changes it too, and so does its model file; so does the club
-    model, and every retraining of it (its stamp has the file's hash)."""
+    model, and every retraining of it (its stamp has the file's hash); and so does each of pose.py's
+    speed settings that can change the result (pose.speed_settings: SWINGCLIPS_MP_STRIDE_AFTER,
+    SWINGCLIPS_FRAME_CONVERT, SWINGCLIPS_POSE_SPLIT, SWINGCLIPS_SHAFT_STRIDE)."""
     here = Path(__file__).parent
     h = hashlib.sha1()
     for f in ("pose.py", "club.py"):
         h.update((here / f).read_bytes())
     model = Path(pose.MODEL)
     h.update(f"{model.name}:{model.stat().st_size if model.is_file() else 0}".encode())
+    h.update(json.dumps(pose.speed_settings(), sort_keys=True).encode())
     backend = models.backend()
     if backend != models.DEFAULT:
         body = models.model_path(backend)
