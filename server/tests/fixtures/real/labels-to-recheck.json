@@ -1,0 +1,68 @@
+{
+ "note": "Labels left out of tune_positions.py and the key-position test until they're relabeled (python tune_positions.py --all-labels scores them too). On these swings the takeaway sits exactly on the labeling page's suggested P1 frame, which phases.js puts 0.1 s before the club moves, and P2-P5 mostly on the suggested frames too: labels taken from the detector can't score it. Relabel them without the suggested frames ([ ]) and take the clip out of this list (docs/key-positions.md).",
+ "clips": {
+  "swing_1920x1080_240fps_1790206528.mp4": [
+   "takeaway",
+   "p2",
+   "p3",
+   "p4",
+   "p5"
+  ],
+  "swing_dtl_1920x1080_240fps_1790271783_2228ms.mp4": [
+   "takeaway",
+   "p2",
+   "p3",
+   "p4",
+   "p5"
+  ],
+  "swing_dtl_1920x1080_240fps_1790354525_2149ms.mp4": [
+   "takeaway",
+   "p2",
+   "p3",
+   "p4",
+   "p5"
+  ],
+  "swing_dtl_1920x1080_240fps_1790372037_2241ms.mp4": [
+   "takeaway",
+   "p2",
+   "p3",
+   "p4",
+   "p5"
+  ],
+  "swing_dtl_1920x1080_240fps_1790372055_2024ms.mp4": [
+   "takeaway",
+   "p2",
+   "p3",
+   "p4",
+   "p5"
+  ],
+  "swing_face_1920x1080_240fps_1790271783_2209ms.mp4": [
+   "takeaway",
+   "p2",
+   "p3",
+   "p4",
+   "p5"
+  ],
+  "swing_face_1920x1080_240fps_1790354525_2137ms.mp4": [
+   "takeaway",
+   "p2",
+   "p3",
+   "p4",
+   "p5"
+  ],
+  "swing_face_1920x1080_240fps_1790372037_2192ms.mp4": [
+   "takeaway",
+   "p2",
+   "p3",
+   "p4",
+   "p5"
+  ],
+  "swing_face_1920x1080_240fps_1790372055_2214ms.mp4": [
+   "takeaway",
+   "p2",
+   "p3",
+   "p4",
+   "p5"
+  ]
+ }
+}

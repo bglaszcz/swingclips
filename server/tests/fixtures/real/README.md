@@ -29,11 +29,15 @@ Key positions: `python tune_positions.py` scores `phases.js` on both pose folder
 out, and says which tuning to use (`docs/key-positions.md` has the evidence behind the rules).
 `key-positions.json` holds each labeled clip's errors, which `tests/test_fixtures.py` keeps later
 changes from making worse; after a change that makes them better, `python tune_positions.py
---baseline` saves the new ones.
+--baseline` saves the new ones. `labels-to-recheck.json` lists labels both leave out until they're
+redone (ones taken from the labeling page's suggested frames, which can only agree with the
+detector); `tune_positions.py --all-labels` scores them anyway.
 
 Label definitions the owner used: takeaway = first frame the clubhead visibly moves back; P2/P6/P8
-shaft parallel to the ground; P3/P5 lead arm parallel; P4 top; P7 impact = first frame the ball is
-gone. Blur (Shift+click) only for motion streaks.
+shaft parallel to the ground; P3/P5 lead arm parallel; P4 top = the last frame before the club starts
+down (after a pause at the top: where it leaves, not where it arrives); P7 impact = first frame the
+ball is gone. Step to each moment frame by frame rather than confirming a suggested frame ([ ]): the
+suggestions are the detector's own positions. Blur (Shift+click) only for motion streaks.
 Joints go at the joint centre, estimated when covered (X only when it can't be placed): the hip is where
 the thigh bone meets the pelvis, well inside the outline. Labels before 2026-09-25 put face-on hips at
 the outer edge (~6% of height wider each side); the Labels view flags those frames and they're being

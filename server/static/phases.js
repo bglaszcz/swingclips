@@ -31,8 +31,9 @@
   const REST_SECONDS = 0.3, REST_DEGREES = 2, ADDRESS_LEAD = 0.1;
   // The few numbers the key positions are tuned by (tune_positions.py picks them on the labeled
   // swings, scoring each swing with them tuned on the others; tests/test_fixtures.py holds the result):
-  //  - takeawayDegrees: the takeaway is the first frame from which the shaft stays more than this
-  //    off its address angle (the tracked angle moves in 2-degree steps: 1 = any change);
+  //  - takeawayDegrees: the takeaway is found from the first frame from which the shaft stays more
+  //    than this off its address angle (the tracked angle moves in 2-degree steps: 1 = any change),
+  //    extended back to address along the shaft's early motion (see shaftTakeaway);
   //  - topSpeedShares, topSmoothSeconds: the top is found from the last moments before impact the
   //    lead wrist moves at these two shares of its downswing peak (see handsStartDown), with its
   //    positions smoothed over +- this.
@@ -244,10 +245,13 @@
   }
 
   /**
-   * The takeaway: the first frame from which the shaft stays more than TUNING.takeawayDegrees off
-   * its angle at address (the median over the rest before restEnd) all the way to time `until`
-   * (P2, or the top). Index into frames, or -1. The owner labels the first frame the clubhead
-   * visibly moves; the end of a 2-degree rest window came ~50 ms after it on every clip.
+   * The takeaway: where the shaft starts to turn away from its angle at address (the median over
+   * the rest before restEnd). Index into frames, or -1. The tracked angle moves in 2-degree steps,
+   * so the first frame from which it stays more than TUNING.takeawayDegrees off (all the way to time
+   * `until`, P2 or the top) is already a step into the motion; the next step (2 degrees further)
+   * gives the shaft's early speed, and the line through the two is extended back to the address
+   * angle. The owner labels the first frame the clubhead visibly moves: the first step came ~25 ms
+   * after it (median, RTMPose-m), the line back to address ~17 ms (docs/key-positions.md).
    */
   function shaftTakeaway(frames, restEnd, until) {
     const ref = frames[restEnd].club[0];
@@ -259,14 +263,23 @@
     }
     off.sort((x, y) => x - y);
     const address = ref + off[off.length >> 1];
-    let first = -1;
-    for (let i = frames.length - 1; i > start; i--) {
-      const f = frames[i];
-      if (f.t > until || !f.club) continue;
-      if (Math.abs(((f.club[0] - address + 540) % 360) - 180) <= TUNING.takeawayDegrees) break;
-      first = i;
-    }
-    return first;
+    // The first frame from which the shaft stays more than `degrees` off address until `until`.
+    const staysOff = degrees => {
+      let first = -1;
+      for (let i = frames.length - 1; i > start; i--) {
+        const f = frames[i];
+        if (f.t > until || !f.club) continue;
+        if (Math.abs(((f.club[0] - address + 540) % 360) - 180) <= degrees) break;
+        first = i;
+      }
+      return first;
+    };
+    const d = TUNING.takeawayDegrees, first = staysOff(d), next = first >= 0 ? staysOff(d + 2) : -1;
+    if (next <= first) return first;
+    const t = frames[first].t - (frames[next].t - frames[first].t) * d / 2;
+    let i = first;
+    while (i > start && Math.abs(frames[i - 1].t - t) < Math.abs(frames[i].t - t)) i--;
+    return i;
   }
 
 
