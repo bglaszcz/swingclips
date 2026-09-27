@@ -6,6 +6,7 @@ numbers say how the rules do on swings they weren't tuned on.
   python tune_positions.py --folders pose        just MediaPipe's pose files
   python tune_positions.py --labels D:\\SwingClips\\labels --pose D:\\SwingClips\\pose --clips clips.json
 
+Labels listed in tests/fixtures/real/labels-to-recheck.json are left out (--all-labels scores them).
 Prints, per key position and angle, the median, 90th percentile and mean (bias, + = found late)
 of the error in ms and the share within one frame; then which tuning the whole set picks, which is
 what phases.js should hold. RTMPose-m is the primary target; the pick also counts MediaPipe at half
@@ -33,17 +34,22 @@ KNOB_EVENTS = {"takeawayDegrees": ["takeaway"], "topSpeedShares": ["p4"], "topSm
 PRIMARY, SECONDARY = "pose-rtmpose-m", "pose"
 # The errors test_fixtures.py holds phases.js to (tune_positions.py --baseline writes it).
 BASELINE = REAL / "key-positions.json"
+# Labels left out until they're redone: {"clips": {clip name: [events]}} (the file's note says why).
+RECHECK = REAL / "labels-to-recheck.json"
 
 
-def load_swings(labels_dir: Path, clips_file: Path) -> list[dict]:
-    """Each labeled swing once: {main, other (clip dicts), labels: {clip name: events}}."""
+def load_swings(labels_dir: Path, clips_file: Path, recheck: Path | None = RECHECK) -> list[dict]:
+    """Each labeled swing once: {main, other (clip dicts), labels: {clip name: events}}, without the
+    events listed in `recheck` (None: all of them)."""
+    skip = json.loads(recheck.read_text(encoding="utf-8"))["clips"] if recheck and recheck.is_file() else {}
     labels = {}
     for f in sorted(labels_dir.glob("*.json")):
         if f.name.endswith(".pass2.json"):
             continue
         doc = json.loads(f.read_text(encoding="utf-8"))
-        if doc.get("events"):
-            labels[doc["clip"]["name"]] = doc["events"]
+        events = {k: v for k, v in (doc.get("events") or {}).items() if k not in skip.get(doc["clip"]["name"], ())}
+        if events:
+            labels[doc["clip"]["name"]] = events
     clips = {c["name"]: c for c in json.loads(clips_file.read_text(encoding="utf-8"))}
     out = {}
     for name in labels:
@@ -170,12 +176,16 @@ def main(argv=None) -> int:
     ap.add_argument("--clips", type=Path, default=REAL / "clips.json")
     ap.add_argument("--pose", type=Path, default=REAL, help="the folder holding the pose folders")
     ap.add_argument("--folders", nargs="+", default=[PRIMARY, SECONDARY])
+    ap.add_argument("--all-labels", action="store_true",
+                    help=f"also score the labels {RECHECK.name} leaves out until they're redone")
     ap.add_argument("--json", type=Path, help="also write the rows here")
     ap.add_argument("--baseline", action="store_true",
                     help=f"save each labeled clip's errors with phases.js as it is to {BASELINE.relative_to(HERE)}, "
                          "which tests/test_fixtures.py holds later changes to")
     args = ap.parse_args(argv)
-    swing_list = load_swings(args.labels, args.clips)
+    if args.baseline and args.all_labels:
+        ap.error("--baseline saves the errors without the labels to recheck; leave out --all-labels")
+    swing_list = load_swings(args.labels, args.clips, None if args.all_labels else RECHECK)
     scorers = {f: Scorer(args.pose / f, swing_list) for f in args.folders}
     try:
         base = next(iter(scorers.values())).tuning()

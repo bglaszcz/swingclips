@@ -4,175 +4,257 @@ How the takeaway, P3, P4 and P5 are found (`server/static/phases.js`), the evide
 labels in `server/tests/fixtures/real/` behind each rule, and where labels and rules still
 disagree. Impact, P2, P6 and P8 are unchanged (impact and P6 were already right).
 
-Scored on the 18 labeled clips (10 swings: 7 iron, pitching wedge, driver) with both body models:
-MediaPipe (`pose/`) and RTMPose-m (`pose-rtmpose-m/`), which the server will probably switch to and
-is the primary target. `python tune_positions.py` (in `server/`) reproduces every number here.
+Scored on the 37 labeled clips (20 swings: 20 face-on, 17 down the line; 7 iron, 9 iron, 5 iron,
+PW, GW, 3 wood, driver) with both body models: RTMPose-m (`pose-rtmpose-m/`), which the server
+runs and is the primary target, and MediaPipe alone (`pose/`). `python tune_positions.py` (in
+`server/`) reproduces every number here.
+
+**Five swings' labels are left out of the scoring for now** (takeaway and P2-P5 on 1790206528,
+1790271783, 1790354525, 1790372037 and 1790372055, both angles; listed in
+`tests/fixtures/real/labels-to-recheck.json`): they were taken from the labeling page's suggested
+frames, so they measure the detector against itself (see "Labels taken from the suggested frames"
+below). So each takeaway-to-P5 row is 15 swings face-on and 13 down the line. `python
+tune_positions.py --all-labels` scores them too.
 
 ## What each key position now means
 
-| | Before | Now |
-|---|---|---|
-| **Takeaway** | the end of a 0.3 s stretch with the shaft within 2° | the first frame from which the shaft stays off its angle at address (any change of the tracked angle, which moves in 2° steps) until P2 |
-| **P3** lead arm parallel, back | lead shoulder to the hands most level in the picture | the lead **forearm** (elbow to wrist) rising through level, face-on |
-| **P4** top | the end of the last 20 ms rise of the wrists and index fingers | where the **hands start down**: the lead wrist's speed climbing into the downswing, extended back along a straight line to zero speed |
-| **P5** lead arm parallel, down | lead shoulder to the hands most level | the lead forearm falling through level |
+| | Rule |
+|---|---|
+| **Takeaway** | where the shaft starts to turn away from its angle at address: the first frame from which the tracked angle stays off its address value (a 2° step) until P2, extended back to the address angle along the line through that step and the next one |
+| **P3** lead arm parallel, back | the lead **forearm** (elbow to wrist) rising through level, face-on |
+| **P4** top | where the **hands start down**: the lead wrist's speed climbing into the downswing, extended back along a straight line to zero speed |
+| **P5** lead arm parallel, down | the lead forearm falling through level |
 
-P1 is still 0.1 s before the takeaway. All four use only the wrists and elbows, which both models
-place: RTMPose moves the wrists but leaves MediaPipe's finger points where MediaPipe put them, so a
-rule on the fingers would behave differently per model. (The old P4 used the index fingers.)
+P1 is still 0.1 s before the takeaway. P3, P4 and P5 use only the wrists and elbows, which both
+models place: RTMPose moves the wrists but leaves MediaPipe's finger points where MediaPipe put
+them, so a rule on the fingers would behave differently per model.
 
-The tuned numbers are down to three, in `SwingPhases.TUNING`: `takeawayDegrees` 1 (i.e. any
-change), `topSpeedShares` [0.1, 0.4] and `topSmoothSeconds` 0.03. P3 and P5 have none: no angle
-offset, no window.
+The tuned numbers are three, in `SwingPhases.TUNING`: `takeawayDegrees` 1 (i.e. any change),
+`topSpeedShares` [0.1, 0.4] and `topSmoothSeconds` 0.03. The takeaway's extension back has no
+number of its own: the tracked angle moves in 2° steps, so the first step marks about 1° of turn
+and the next about 3°, and the line through them reaches 0° half the gap between them before the
+first. P3 and P5 have none.
 
 ## Before and after
 
 Each cell: median |error| / 90th percentile |error| / bias (mean; + = found late) in ms / share
-within one frame. "Leave one swing out" tunes on nine swings and scores the tenth, ten times over,
-so it says how the rules do on a swing they haven't seen; "all swings" is what the page shows with
-the tuning picked on all ten. Down the line is the face-on clip's positions carried across by the
-impact sync, as the page shows them, against the down-the-line labels.
+within one frame. "Before" is phases.js as it was (the takeaway at the first shaft step). "Leave
+one swing out" tunes on nineteen swings and scores the twentieth, twenty times over, so it says how
+the rules do on a swing they haven't seen; "all swings" is what the page shows with the tuning in
+phases.js. Down the line is the face-on clip's positions carried across by the impact sync, as the
+page shows them, against the down-the-line labels. Only the takeaway changed; P3, P4 and P5 are
+here for reference (identical before and after).
 
 #### RTMPose-m
 
-| Key position | Angle | n | Before | After, leave one swing out | After, all swings |
+| Key position | Angle | n | Before, leave one swing out | After, leave one swing out | After, all swings |
 |---|---|---|---|---|---|
-| Takeaway | face-on | 10 | 48 / 100 / +54 / 0% | 19 / 63 / +37 / 30% | 19 / 63 / +37 / 30% |
-| Takeaway | down the line | 7 | 46 / 100 / +63 / 0% | 17 / 111 / +48 / 14% | 17 / 111 / +48 / 14% |
-| P3 | face-on | 10 | 31 / 51 / +32 / 10% | 12 / 23 / -9 / 30% | 12 / 23 / -9 / 30% |
-| P3 | down the line | 6 | 23 / 42 / +23 / 17% | 27 / 35 / -15 / 17% | 27 / 35 / -15 / 17% |
-| P4 | face-on | 9 | 33 / 97 / +17 / 11% | 25 / 57 / +5 / 11% | 21 / 52 / +3 / 33% |
-| P4 | down the line | 6 | 19 / 71 / +14 / 17% | 31 / 48 / +20 / 0% | 31 / 54 / +22 / 0% |
-| P5 | face-on | 9 | 12 / 22 / -12 / 22% | 4 / 8 / +3 / 78% | 4 / 8 / +3 / 78% |
-| P5 | down the line | 6 | 6 / 33 / -1 / 50% | 6 / 33 / +13 / 50% | 6 / 33 / +13 / 50% |
+| Takeaway | face-on | 15 | 25 / 63 / +39 / 27% | 21 / 51 / +19 / 33% | 21 / 51 / +19 / 33% |
+| Takeaway | down the line | 13 | 12 / 64 / +35 / 23% | 21 / 39 / +15 / 0% | 21 / 39 / +15 / 0% |
+| P3 | face-on | 15 | 8 / 23 / -8 / 47% | 8 / 23 / -8 / 47% | 8 / 23 / -8 / 47% |
+| P3 | down the line | 13 | 12 / 29 / -14 / 23% | 12 / 29 / -14 / 23% | 12 / 29 / -14 / 23% |
+| P4 | face-on | 15 | 21 / 67 / -3 / 40% | 21 / 67 / -3 / 40% | 21 / 43 / +4 / 47% |
+| P4 | down the line | 13 | 29 / 67 / +0 / 15% | 29 / 67 / +0 / 15% | 25 / 47 / +8 / 15% |
+| P5 | face-on | 15 | 4 / 8 / +4 / 80% | 4 / 8 / +4 / 80% | 4 / 8 / +4 / 80% |
+| P5 | down the line | 13 | 4 / 8 / +4 / 77% | 4 / 8 / +4 / 77% | 4 / 8 / +4 / 77% |
 
 #### MediaPipe
 
-| Key position | Angle | n | Before | After, leave one swing out | After, all swings |
+| Key position | Angle | n | Before, leave one swing out | After, leave one swing out | After, all swings |
 |---|---|---|---|---|---|
-| Takeaway | face-on | 10 | 48 / 100 / +54 / 0% | 19 / 63 / +37 / 30% | 19 / 63 / +37 / 30% |
-| Takeaway | down the line | 7 | 46 / 100 / +63 / 0% | 17 / 108 / +48 / 14% | 17 / 108 / +48 / 14% |
-| P3 | face-on | 10 | 56 / 72 / +52 / 0% | 8 / 27 / -0 / 40% | 8 / 27 / -0 / 40% |
-| P3 | down the line | 6 | 35 / 69 / +42 / 0% | 23 / 37 / -11 / 17% | 23 / 37 / -11 / 17% |
-| P4 | face-on | 9 | 87 / 104 / +60 / 22% | 42 / 67 / +28 / 22% | 33 / 64 / -10 / 11% |
-| P4 | down the line | 6 | 75 / 121 / +68 / 0% | 52 / 75 / +52 / 0% | 46 / 94 / +14 / 0% |
-| P5 | face-on | 9 | 17 / 22 / -15 / 22% | 4 / 8 / +3 / 67% | 4 / 8 / +3 / 67% |
-| P5 | down the line | 6 | 17 / 33 / -5 / 33% | 6 / 33 / +13 / 50% | 6 / 33 / +13 / 50% |
+| Takeaway | face-on | 15 | 21 / 80 / +32 / 27% | 21 / 107 / +9 / 40% | 21 / 107 / +9 / 40% |
+| Takeaway | down the line | 13 | 12 / 67 / +27 / 31% | 21 / 109 / +3 / 8% | 21 / 109 / +3 / 8% |
+| P3 | face-on | 15 | 12 / 25 / -1 / 47% | 12 / 25 / -1 / 47% | 12 / 25 / -1 / 47% |
+| P3 | down the line | 13 | 17 / 28 / -4 / 23% | 17 / 28 / -4 / 23% | 17 / 28 / -4 / 23% |
+| P4 | face-on | 15 | 29 / 52 / +25 / 20% | 29 / 52 / +25 / 20% | 38 / 59 / +12 / 7% |
+| P4 | down the line | 13 | 29 / 58 / +29 / 0% | 29 / 58 / +29 / 0% | 46 / 62 / +13 / 8% |
+| P5 | face-on | 15 | 4 / 8 / +3 / 67% | 4 / 8 / +3 / 67% | 4 / 8 / +3 / 67% |
+| P5 | down the line | 13 | 4 / 12 / +5 / 62% | 4 / 12 / +5 / 62% | 4 / 12 / +5 / 62% |
 
-Everything face-on got better on both models, and MediaPipe got better everywhere. Two cells got
-worse: RTMPose's P3 and P4 **down the line** medians (23 to 27 ms, 19 to 31 ms; their 90th
-percentiles improved). That is the labels, not the rules: on the same swings the down-the-line
-labels sit away from the face-on ones by about as much (next section), and one swing's sync is off
-by 50 ms. A rule that matches the face-on labels better moves away from those. The takeaway's mean
-(+37) is pulled up by one swing (1790353497, +183 ms; +21 without it); its median error is 19 ms.
+With every label scored (`--all-labels`, leave one swing out), the takeaway goes from 48 / 100 / +54
+to 21 / 81 / +32 face-on and from 42 / 100 / +50 to 21 / 77 / +27 down the line on RTMPose-m;
+on MediaPipe from 48 / 100 / +49 to 21 / 102 / +24 and from 42 / 107 / +45 to 25 / 107 / +18.
+Nothing else moves.
 
-Leave-one-out picks the same takeaway setting every time; for the top it picks [0.1, 0.4] or
-[0.2, 0.5] and 0.02 or 0.03 s, and the scores barely move between them, so the rule isn't balanced
-on a knife edge. The regression test (`tests/test_fixtures.py`, `KeyPositionsTest`) holds each
-model, angle and key position to its saved median and 90th percentile (`key-positions.json`) within
-a frame (4.2 ms).
+What the takeaway change does, honestly: it moves the takeaway back by half the gap between the
+shaft's first two steps (17-25 ms on most swings). On RTMPose-m that pulls in the late swings (+50
+to +67 ms become +21 to +29) and halves the bias; the swings that were already on the label become
+~21 ms early. Mean |error| drops from 39 to 30 ms face-on and 36 to 31 ms down the line, and the
+90th percentile on both angles; the down-the-line median is worse (12 to 21 ms). On MediaPipe the
+bias drops to near zero but the 90th percentile gets worse, from one swing: on 1790371899
+MediaPipe's tracked shaft settles a step off its address angle 62 ms before your label and toggles
+there until the swing really starts, so the old rule was already 62 ms early and extending back
+doubles it (-125 ms). RTMPose-m's shaft doesn't do that on this swing.
+
+Leave-one-out picks the same tuning every time except `topSpeedShares`, where it picks [0.2, 0.5];
+that tuning fits the swings it was picked on better (P4 face-on 90th percentile 43 ms) but does
+worse on the swing left out (67 ms, on RTMPose-m), so phases.js keeps [0.1, 0.4]. The regression
+test (`tests/test_fixtures.py`, `KeyPositionsTest`) holds each model, angle and key position to its
+saved median and 90th percentile (`key-positions.json`) within a frame (4.2 ms).
 
 ## The evidence, per key position
 
-### Takeaway: the first shaft motion
+### Takeaway: why it got late, and the first thing that moves
 
-Your takeaway label is the first frame the clubhead visibly moves. At that frame the tracked shaft
-angle is still at its address value or one 2° step off, on all clips but one; it is 2° off about 25 ms
-later and 4° off about 50 ms later. The old rule waited for the shaft to leave a 2° band, which is
-why it was ~48 ms late on every clip. The first frame from which the shaft stays off its address
-angle at all is 19 ms late (median). Tried and dropped: a threshold of 3° or more (54 ms and up),
-and extending the shaft's early motion back to zero (21-32 ms, no better, and noisier).
+**The rule didn't change** since this doc was first written: `phases.js` is the same, and with the
+old fixtures it still scores 19 ms median face-on. **Your takeaway labels on the old swings didn't
+move either**: face-on none changed; down the line only the three this doc flagged as disagreeing
+with face-on (1790278981 +58 ms, 1790353476 -62, 1790353992 +54), which now agree with face-on to
+within a frame. (Other relabels on the old swings: P4 on 1790271726 face-on -25 ms and 1790271802
+face-on -42; P3 on 1790271802 face-on +12, 1790353476 down the line -21, 1790353497 down the
+line -29.) The rule's errors on the old ten swings are the same as before.
 
-It's about a frame and a half later than your eye because the shaft angle is measured in 2°
-steps: the clubhead moves ~1.5 cm per degree, which you see before the tracker's angle changes.
+**The new swings are what moved the numbers.** Five of them have the takeaway on exactly the
+labeling page's suggested P1 frame, which is 0.1 s before the rule's takeaway by construction: +100
+ms each, on 10 of the 37 labels (next section). The rest of the new swings: 1790354261 0 ms,
+1790354545 +25, 1790371899 +58, 1790354288 +58, 1790206507 +67.
+
+**What moves first at your label** (15 face-on swings, RTMPose-m, measured from the median over
+0.1-0.35 s before your label):
+
+- **The wrists: nothing.** The lead wrist is within 0.002 of the picture height of its address
+  place at your label and for 50 ms after it, the same as its jitter while standing still. The
+  hands move far less than the clubhead at the start (the club is a lever), so the body models
+  can't see them start.
+- **The shaft angle** is at its address value or one 2° step off at your label on every swing;
+  the first step comes a median 25 ms after it and the next (about 3° of turn) ~58 ms after.
+- **The clubhead from the club** (the hands plus the club's length along the shaft angle) is the
+  same measurement: with the hands still, it moves only when the shaft angle steps, ~1.5 cm per
+  degree for a 7 iron.
+
+So the shaft is the first tracked signal to move, and it moves in 2° steps. You see the clubhead
+start before the first step. On four swings the tracked shaft doesn't leave its address values
+(including the one-step flicker some swings have while standing still) until 46-67 ms after your
+label (1790206507, 1790354067, 1790354288, 1790371899): there the tracker sees nothing until well
+into the takeaway, and no rule on this data can do better. Extending the first two steps
+back to 0° is the one thing the steps themselves say about when the turn began. Tried and dropped:
+extending from the 3° and 5° steps (worse: 27 / 102 ms face-on on RTMPose-m) and a constant
+acceleration from rest (1.37 times the gap back instead of half: biased early, 32 / 66 ms).
+
+**1790353497 (PW)**: both of your labels (face-on and down the line agree) are 180 ms before the
+shaft angle changes at all. Either the clubhead really moves with the shaft keeping its angle (a
+one-piece takeaway: hands and club moving together), or both labels are early.
 
 ### P3 and P5: the lead forearm, not shoulder to hands
 
 At your P3 label, the line from the lead shoulder point to the lead wrist is 7-13° below level
-(face-on) on every swing; it reaches level 35-50 ms later (median). The forearm (elbow to wrist) is level
-right at your label: median error 8 ms (MediaPipe) and 12 ms (RTMPose), bias 0 and -9. The same at
-P5: the forearm is level within 4 ms of your label on both models. The reason the shoulder line
-reads steep: both models put the shoulder point at the top of the shoulder, above the joint the arm
+(face-on) on every swing; it reaches level 35-50 ms later (median). The forearm (elbow to wrist) is
+level right at your label: median error 8 ms (RTMPose-m) and 12 ms (MediaPipe). The same at P5:
+the forearm is level within 4 ms of your label on both models. The reason the shoulder line reads
+steep: both models put the shoulder point at the top of the shoulder, above the joint the arm
 swings from. An angle offset of ~10° on the shoulder line fits about as well, but it's a tuned
 constant; the forearm needs none. (The upper arm, shoulder to elbow, is the worst: 27-85 ms.)
 
-### P4: where the hands start down
+### P4: the last frame before the club starts down
 
-For each swing, around your P4 label: the hands' height stays within 1-2% of body height of their
-highest for 100-250 ms (a plateau), and down the line they only drop noticeably 75-150 ms after
-your label. So:
+Your new definition (the last frame before the club starts down) asks whether the club itself
+should find the top. The candidates, face-on, on the 15 swings scored:
 
-| Candidate for your "top" (face-on) | RTMPose median / 90th (ms) | MediaPipe median / 90th |
+| Candidate for P4 (face-on) | RTMPose-m median / 90th (ms) | MediaPipe median / 90th |
 |---|---|---|
-| hands highest (wrists) | 42 / 58 | 8 / 137 |
-| hands stop rising (old rule, wrists and fingers) | 33 / 97 | 87 / 104 |
-| lead arm stops (its highest angle) | 46 / 75 | 46 / 133 |
-| club changes direction (shaft angle turns back) | 50 / 158 | 25 / 87 |
-| lead wrist slowest | 17 / 79 | 21 / 196 |
-| **hands start down (new rule)** | **21 / 52** | **33 / 64** |
+| **hands start down (the rule)** | **21 / 43** | **38 / 59** |
+| club turns back: the last frame at the shaft angle's backswing peak | 12 / 145 | 25 / 102 |
+| club starts down: the shaft's turning speed extended back to zero (the hands rule's method on the shaft) | 21 / 69 | 23 / 81 |
 
-- **Where the hands stop rising**: the highest point can land anywhere on the plateau, and MediaPipe
-  loses the hands behind the head at the top on several swings (its wrist height jumps 10-15% of
-  body height), so it's the least stable on MediaPipe.
-- **Where the lead arm stops**: no; it turns round 30-75 ms before your label on six of nine swings,
-  20-55 ms after it on the rest.
-- **Where the club changes direction**: the face-on shaft angle at the top is the tracker's least
-  reliable (the shaft points at the camera), so this can't be told from the data either way.
-- **Where the hands turn round (start down)** fits best and is steady on both models: the
-  downswing's acceleration is measured on well-tracked hands moving fast, not on the plateau.
+(Scored on all 15 swings with phases.js's tuning; the club rules need none of their own.)
 
-So the rule your labels imply, for most swings: **the top is where the hands (and club) stop going
-back and the downswing starts**, the transition. Two swings are the exception (next section).
+- **The shaft's turn at the top** fits well on eight swings (within 12 ms), is 25-54 ms off on
+  two, and doesn't fit at all on five (79-167 ms early on 1790206444, 1790271665, 1790278981, 1790353497, 1790371899). Face-on at the
+  top the shaft points toward the camera and the tracker's angle wanders: only ~40% of frames within
+  50 ms of your label have a confident sighting (86% at address), and the angle jumps 20-40° between
+  frames on several swings. Using only the confident sightings doesn't help.
+- **Down the line** the shaft is side-on at the top, but the tracker has no confident sighting
+  within 50 ms of your P4 on 16 of 17 swings: the angle there is filled in between sightings, a
+  straight ramp. So the club can't be read at the top from either angle.
+- **The shaft's turning speed** in the downswing is well measured, like the hands', and extending it
+  back works about as well as the hands on the median but has a worse tail on RTMPose-m (90th
+  percentile 69 vs 43 ms).
+
+So P4 stays on the hands. It is the only candidate with a steady tail on RTMPose-m; a club-based
+top would need a club tracker that sees the shaft at the top (the YOLO backend in `club.py` might).
+
+**Swings with a pause at the top.** On seven swings the lead wrist stays under a tenth of its
+downswing peak speed for 75-117 ms at the top (1790206444, 1790206507, 1790271665, 1790271802,
+1790279635, 1790354261, 1790371899). The rule lands near the end of that stretch, where the hands
+leave, which is what "the last frame before the club starts down" means for a pause. It fits your
+label on four of them (within 21 ms) and is 33 ms early on 1790354261 (your label at the very end
+of the pause). On two your label sits in the middle of the pause and looks early by the new
+definition: **1790279635** (label 37 ms into a 100 ms pause; the hands leave 50 ms after your
+label, and the shaft's turn also comes 54 ms after it) and **1790271802** (label 62 ms into a
+117 ms pause, rule +29 ms). Worth a look. The other way round, **1790353993** (driver): the hands
+only leave 58 ms after your label, but the face-on shaft angle turns back 12 ms before it (on
+RTMPose-m's track; the face-on shaft at the top is the least reliable reading), so there your label
+may follow the club while the rule follows the hands.
 
 ## Where labels and rules still disagree
 
-### Labels that contradict each other (please look at these)
+### Labels taken from the suggested frames (please redo these)
+
+On five swings the takeaway label is on exactly the frame the labeling page suggests for P1 (the
+first "Suggested frames" chip, `[` / `]`), on both angles, and P2-P5 are mostly on the suggested
+frames too, to the frame:
+
+| Swing | Takeaway (ms from the rule, as it was) | P2-P5 on the suggested frame |
+|---|---|---|
+| 1790206528 (7 iron, face-on only) | +100 | P2, P3, P5 |
+| 1790271783 (7 iron) | +100 / +100 | all four, both angles |
+| 1790354525 (3 wood) | +100 / +100 | all four face-on, P4 and P5 down the line |
+| 1790372037 (GW) | +100 / +100 | P3-P5 face-on, all four down the line |
+| 1790372055 (GW) | +100 / +100 | all four, both angles |
+
+P1 is put 0.1 s before the takeaway the rule finds, where the club is by design still at rest; on
+these swings the tracked shaft doesn't move for the whole 100 ms after your label. A takeaway on
+exactly that frame on five swings, both angles, can't be a coincidence, so these labels were most
+likely confirmed on the suggested frames rather than stepped to. They're left out of the scoring
+(`labels-to-recheck.json`) because a label copied from the detector can only agree with it: they
+made the takeaway look 48 ms late, and they hold P4 exactly where the current rule is. Please
+relabel them stepping frame by frame, without the suggested frames, then take them out of that
+file and run `python tune_positions.py --baseline`.
+
+Three more swings have P4 exactly on the rule's frame: 1790354545 and 1790371899 on both angles,
+1790206507 face-on (no down-the-line labels). For the top, where the hands hang still for up to
+0.1 s, that's unlikely by chance. They're kept, since their takeaways and some other labels differ
+from the suggestions, but they're worth a second look.
+
+### Labels where the two angles disagree
 
 Face-on against down the line on the same swing, synced on your two impact labels (ms; + = the
-down-the-line label is later):
+down-the-line label is later), where they differ by more than 2 frames (8.3 ms):
 
-| Swing | Takeaway | P3 | P4 | P5 |
-|---|---|---|---|---|
-| 1790278981 (7 iron) | **-40** | | | |
-| 1790353476 (PW) | **+64** | **+21** | +13 | 0 |
-| 1790353993 (driver) | **-57** | +17 | -12 | +4 |
-| 1790353497 (PW) | -3 | **+30** | -16 | -17 |
-| 1790271726 (7 iron) | +5 | -4 | **-25** | 0 |
-| 1790271802 (7 iron) | +1 | +13 | **-37** | +4 |
-| 1790271665 (7 iron) | -3 | -4 | +9 | -8 |
+| Swing | Takeaway | P2 | P3 | P4 | P5 |
+|---|---|---|---|---|---|
+| 1790271665 (7 iron) | | | | +9 | |
+| 1790278981 (7 iron) | +14 | +13 | | | |
+| 1790353476 (PW) | | | | +13 | |
+| 1790353497 (PW) | | +13 | | -16 | -17 |
+| 1790353993 (driver) | | | +17 | -12 | |
+| 1790354067 (driver) | | | +9 | | |
+| 1790354261 (5 iron) | | | | -16 | |
+| 1790354288 (5 iron) | | +17 | +9 | | |
+| 1790354525 (3 wood) * | -20 | | | -16 | -17 |
+| 1790354545 (3 wood) | +9 | | | | +8 |
+| 1790372037 (GW) * | | +13 | | | |
 
-The same moment shouldn't differ by more than a frame or two between the angles. The bold ones are
-worth relabeling: the takeaway on 1790278981, 1790353476 and 1790353993; P3 on 1790353476 and
-1790353497; P4 on 1790271726 and 1790271802. A pattern: down the line, P3 is labeled 13-30 ms
-later than face-on on four of seven swings (lead arm parallel is harder to judge from behind), and
-P4 12-37 ms earlier on four of six.
-
-### Labels that don't fit the rule
-
-- **P4 on 1790279635 (7 iron) and 1790353993 (driver)**: your top is 50-58 ms before the hands start
-  down (RTMPose), and these two have long labeled downswings (291 and 313 ms; 221-283 on the
-  others, except 1790278981 at 321 ms, where the rule fits). Down the line on 1790353993 the hands arrive at the top right at your label and
-  sit there ~120 ms before starting down. A pause at the top: you labeled the arrival, the rule
-  finds the departure. If "top" should mean the arrival, say so: that rule ("the hands stop rising")
-  works on RTMPose (about 25 ms median) but not on MediaPipe, which loses the hands at the top.
-  1790271726 goes the other way (the rule is 50 ms early).
-- **Takeaway on 1790353497 (PW)**: both of your labels (face-on and down the line agree) are 180 ms
-  before the shaft angle changes at all. Either the clubhead really moves with the shaft keeping its
-  angle (a one-piece takeaway: hands and club moving together), or both labels are early. Also 46-50
-  ms late on 1790279635 and 1790354067.
+\* also on the list above. P6 and P8 agree within 2 frames on every swing. The same moment
+shouldn't differ by more than a frame or two between the angles; P4 (six swings, 9-16 ms) and P2
+(four swings, 13-17 ms) are the most common. These are much closer than before the relabel (the
+old list had differences up to 64 ms).
 
 ### Not the rules: one swing's sync
 
-On 1790353476, `pose.py` found the ball gone 50 ms after your impact label in the down-the-line
-clip (face-on it agrees with your label), so the page's sync puts every down-the-line position of that swing
-~50 ms off. That's most of the down-the-line P5 90th percentile (33 ms). Impact detection wasn't
-touched here.
+On 1790353476 the down-the-line clip's ball-gone frame used to be 50 ms after your impact label,
+which put that swing's down-the-line positions ~50 ms off. Since the sync uses a ball-gone frame
+only when it fits the heard strike (`summary.js` `syncOffset`), the down-the-line impact on this
+swing is on your label and P5 within a frame.
 
 ## Refreshing
 
 After labeling more swings and refreshing the fixtures (`fixtures_export.py`):
 
     python tune_positions.py              # before/after, leave one swing out, and the tuning to use
+    python tune_positions.py --all-labels # the same with the labels to recheck scored too
     python tune_positions.py --baseline   # once the numbers are better: save them for the test
 
-If the tuning it picks on all swings differs from `SwingPhases.TUNING`, put it there.
+If the tuning it picks on all swings differs from `SwingPhases.TUNING` and does better leave one
+swing out, put it there. After relabeling a swing listed in `labels-to-recheck.json`, take it out
+of that file.
