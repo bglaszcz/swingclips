@@ -115,7 +115,10 @@ MP_STRIDE_AFTER = 4
 #           full's (rounding, and clipping in the brightest colours).
 #   full:   the whole 1080p frame to RGB, then halved (as before). The body model's crop is made from
 #           the full-size picture either way, converted only on the frames it runs on.
-FRAME_CONVERTS = ("planes", "full")
+# full is the default: on the 37 labeled clips (bench_models.py --accuracy) planes moved the joints
+# 1.1 px (median) and the takeaway and face-on P4 by 4-8 ms; with full, everything else as set now
+# was within a frame.
+FRAME_CONVERTS = ("full", "planes")
 # SWINGCLIPS_POSE_SPLIT: where the clip is cut between the workers (always at keyframes).
 #   cost: so each worker gets about the same work, by what each frame costs (COST_MS): frames after
 #         the swing cost little (MediaPipe only, and only every MP_STRIDE_AFTER-th), so an even

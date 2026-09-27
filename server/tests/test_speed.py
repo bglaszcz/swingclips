@@ -189,7 +189,7 @@ class ExactTest(unittest.TestCase):
 class SettingsTest(unittest.TestCase):
     def test_defaults_and_values(self):
         with mock.patch.dict(os.environ, {k: "" for k in pose.SPEED_AS_BEFORE}):
-            self.assertEqual(pose.speed_settings(), {"mpStrideAfter": pose.MP_STRIDE_AFTER, "convert": "planes",
+            self.assertEqual(pose.speed_settings(), {"mpStrideAfter": pose.MP_STRIDE_AFTER, "convert": "full",
                                                      "split": "cost", "shaftStride": 1})
         with mock.patch.dict(os.environ, pose.SPEED_AS_BEFORE):
             self.assertEqual(pose.speed_settings(), pose.BEFORE)
@@ -217,7 +217,7 @@ class SettingsTest(unittest.TestCase):
             default = scorecard.pipeline_fingerprint()
         seen = {default}
         for key, value in (("SWINGCLIPS_MP_STRIDE_AFTER", "1"), ("SWINGCLIPS_MP_STRIDE_AFTER", "8"),
-                           ("SWINGCLIPS_FRAME_CONVERT", "full"), ("SWINGCLIPS_POSE_SPLIT", "even"),
+                           ("SWINGCLIPS_FRAME_CONVERT", "planes"), ("SWINGCLIPS_POSE_SPLIT", "even"),
                            ("SWINGCLIPS_SHAFT_STRIDE", "2")):
             with mock.patch.dict(os.environ, {**base, key: value}):
                 seen.add(scorecard.pipeline_fingerprint())
@@ -343,7 +343,7 @@ class PipelineTest(unittest.TestCase):
         """The defaults: close to before, and the pose file says how it was made."""
         got = self.run_it(**{k: "" for k in pose.SPEED_AS_BEFORE})
         before = self.run_it(**pose.SPEED_AS_BEFORE)
-        self.assertEqual(got["speed"], {"mpStrideAfter": 4, "convert": "planes", "split": "cost", "shaftStride": 1})
+        self.assertEqual(got["speed"], {"mpStrideAfter": 4, "convert": "full", "split": "cost", "shaftStride": 1})
         for f, b in zip(got["frames"], before["frames"]):
             self.assertLess(max(abs(x - y) for x, y in zip(f["lm"][:66:3], b["lm"][:66:3])), 0.02, f["t"])
 
