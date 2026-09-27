@@ -152,6 +152,10 @@ function showView(which) {
   if (which !== "trends") trendsKey = null;
   progressOpen = which === "progress";
   document.getElementById("progress-btn").classList.toggle("on", progressOpen);
+  // The tabs: a session's trends belong to Swings; Labels and the shutter test are under Tools.
+  document.getElementById("swings-btn").classList.toggle("on", which === "swing" || which === "trends");
+  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview");
+  document.body.dataset.view = which;
 }
 
 /** Called when a swing is opened: back to the swing view. */

@@ -44,19 +44,32 @@ Full setup, build, deploy and network details are in **[HOME-SETUP.md](HOME-SETU
 
 ## The review page
 
-- **Ready bar** (top): both phones, Square, framing and the server's queue at a glance, with Start
-  and Stop for both phones or each one.
-- **A swing**: both angles in sync. **Show ▾** picks the overlays (skeleton, angles, hand path,
-  head, plane). **Compare…** puts it side by side with another swing. **Label** is for the
-  scorecard. **⋯** has handedness, Leave out and Delete. Numbers that can't be trusted are greyed
-  with a **~** (hover for why), and a "vs my good shots" column shows where each number sat.
-- **Camera setup**: live pictures from both phones.
+Tabs along the top (along the bottom on a phone): **Swings**, **Progress**, **Practice**,
+**Cameras** and **Tools**. On a phone, "Add to Home screen" installs it like an app. **?** lists
+the keyboard shortcuts.
+
+- **Ready bar** (under the tabs): both phones, Square, framing and the server's queue at a glance,
+  with Start and Stop for both phones or each one.
+- **Swings**: the list by session (a club filter at the top, each swing with its club, carry and
+  analysis state) and the open swing: its club and carry with newer / older buttons (K / J), both
+  angles in sync, a scrubber with P1-P8 marked (or keys 1-8), play (Space), frame steps (← →),
+  speeds and full screen (F). **Show ▾** picks the overlays (skeleton, angles, hand path, head,
+  plane). **Compare…** puts it side by side with another swing. **Label** is for the scorecard.
+  **⋯** has handedness, Leave out and Delete. Square's numbers lead with carry, then key
+  positions and the swing numbers. Numbers that can't be trusted are greyed with a **~** (hover
+  for why), and a "vs my good shots" column shows where each number sat.
+- **Trends** (per session, in the list): body numbers against Square's numbers.
 - **Progress**: how your numbers and results change across sessions, your good-shot ranges, and
   which numbers separate good shots from the rest.
 - **Practice**: pick one number and a range, and after each swing the face-on phone says it.
-- **Tools ▾**: **Labels** (labeling progress, and a worklist of what to fix, with Go) and
+- **Cameras**: live pictures from both phones.
+- **Tools**: **Labels** (labeling progress, and a worklist of what to fix, with Go) and
   **Shutter test** (light, grain, flicker and sharpness by shutter setting).
-- **Trends** (per session, in the list): body numbers against Square's numbers.
+
+**Capture app (0.8)**: the camera fills the screen with which angle and mode it is and whether
+it's recording; below it the status, the server, one big Start / Stop, and the strike trigger
+(level bar and sensitivity). Everything else (angle, mode, shutter, server, voices, auto-start)
+is under **Settings**; the camera ones are locked while recording.
 
 ## Common commands
 

@@ -1,0 +1,12 @@
+{
+  "name": "SwingClips",
+  "short_name": "SwingClips",
+  "description": "Both angles of every swing, with Square's numbers, key positions and progress.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b100d",
+  "theme_color": "#0f1712",
+  "icons": [
+    { "src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

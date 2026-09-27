@@ -2,35 +2,55 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1712">
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon.svg">
 <title>SwingClips</title>
 <style>
   /* Browser-drawn parts (scrollbars, dropdowns) follow the theme too. */
   :root { color-scheme: light dark; }
   :root {
-    --bg: #f4f6f4; --panel: #ffffff; --text: #17201a; --muted: #5d6b62;
-    --line: #dde3de; --accent: #1f8a4c; --accent-text: #ffffff; --sel: #e3f3e9;
-    --warn: #b45309; --dot: #1f8a4c;
+    --bg: #f3f5f3; --panel: #ffffff; --panel-2: #f7f9f7; --text: #111a14; --muted: #5a685f;
+    --line: #e0e6e2; --line-strong: #cbd4ce; --accent: #16803f; --accent-2: #0f6a33; --accent-text: #ffffff;
+    --accent-soft: #e4f4ea; --sel: #e6f3ea; --warn: #b45309; --warn-soft: #fdf1e3; --bad: #dc2626;
+    --dot: #16803f; --shadow: 0 1px 2px rgba(16, 24, 18, 0.06), 0 1px 3px rgba(16, 24, 18, 0.08);
+    --shadow-lg: 0 12px 32px rgba(16, 24, 18, 0.18); --radius: 12px; --radius-sm: 8px;
+    --appbar-h: 56px; --tabbar-h: 0px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0f1411; --panel: #171e19; --text: #e6ece7; --muted: #93a197;
-      --line: #27312a; --accent: #3cb46e; --accent-text: #08120c; --sel: #1d3325;
-      --warn: #f59e0b; --dot: #34a865;
+      --bg: #0b100d; --panel: #131a16; --panel-2: #17201a; --text: #e7ede8; --muted: #8e9f95;
+      --line: #223029; --line-strong: #2f3f35; --accent: #34c26f; --accent-2: #4ad283; --accent-text: #04130a;
+      --accent-soft: #143322; --sel: #16291d; --warn: #f59e0b; --warn-soft: #2d2110; --bad: #f87171;
+      --dot: #34b86a; --shadow: 0 1px 2px rgba(0, 0, 0, 0.4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
     }
   }
   * { box-sizing: border-box; }
   /* The hidden attribute must win over the display: flex set on some of these elements. */
   [hidden] { display: none !important; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex;
-           align-items: baseline; gap: 12px; }
-  header h1 { margin: 0; font-size: 18px; }
-  header .count { color: var(--muted); font-size: 13px; flex: 1; }
+  body { margin: 0; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif; }
+  /* The app bar: brand, the sections as tabs (a bottom tab bar on phones), help. */
+  header.appbar { height: var(--appbar-h); padding: 0 16px; border-bottom: 1px solid var(--line); display: flex;
+           align-items: center; gap: 16px; background: var(--panel); position: sticky; top: 0; z-index: 20; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font-weight: 700;
+           font-size: 17px; letter-spacing: -0.01em; white-space: nowrap; }
+  .brand svg { width: 28px; height: 28px; flex: none; }
+  header .count { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .tabs { display: flex; gap: 2px; margin-left: auto; align-items: center; }
+  .tabs .tab { display: flex; align-items: center; gap: 7px; background: none; border: 0; border-radius: var(--radius-sm);
+               padding: 8px 12px; color: var(--muted); font-weight: 600; font-size: 14px; min-width: 0; }
+  .tabs .tab:hover { background: var(--panel-2); color: var(--text); }
+  .tabs .tab.on { background: var(--accent-soft); color: var(--accent); }
+  .tabs .tab svg { width: 18px; height: 18px; flex: none; }
+  .icon-btn { width: 36px; height: 36px; min-width: 36px; padding: 0; display: inline-grid; place-items: center;
+              border-radius: 50%; font-weight: 700; }
   main { display: grid; grid-template-columns: 1fr; }
   @media (min-width: 900px) {
-    main { grid-template-columns: 320px 1fr; height: calc(100vh - 49px); }
+    body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+    main { grid-template-columns: 340px 1fr; flex: 1; min-height: 0; }
     #side { overflow-y: auto; border-right: 1px solid var(--line); }
     #viewer, #trends, #progress, #setup, #shutter, #practice, #labelview, #compare { overflow-y: auto; }
   }
@@ -413,32 +433,258 @@
   .c-picktable tr.off:hover { background: none; }
   .c-picktable td:first-child { color: var(--text); }
   .c-picktable .c-status { color: var(--muted); font-size: 12px; text-align: left; }
+
+  /* ================= Design refresh: shared components ================= */
+  @media (min-width: 900px) { main { grid-template-rows: minmax(0, 1fr); } }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+  button { border-radius: var(--radius-sm); font-weight: 500; transition: background 0.12s, border-color 0.12s, color 0.12s; }
+  button:hover:not(:disabled) { border-color: var(--line-strong); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
+  button.icon { width: 40px; min-width: 40px; height: 38px; padding: 0; display: inline-grid; place-items: center; }
+  button.icon svg { width: 20px; height: 20px; }
+  button.small { border-radius: 7px; }
+  input, select { border-radius: var(--radius-sm); }
+  kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--line-strong); border-bottom-width: 2px;
+        border-radius: 5px; background: var(--panel-2); font: 600 12px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+        text-align: center; color: var(--text); }
+  .menu-pop { border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 6px; }
+  .menu-pop button { border: 0; background: none; padding: 8px 10px; }
+  .menu-pop button:hover { background: var(--panel-2); }
+  .menu-pop button.on { background: var(--accent-soft); color: var(--accent); }
+  .menu-pop kbd { border: 0; background: none; padding: 0; }
+  .tabs .menu-pop { min-width: 210px; }
+
+  /* Cards: the sections of a page. */
+  .card, .t-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; }
+  .card > strong, .t-card > strong, .pos-head strong { font-size: 15px; font-weight: 650; letter-spacing: -0.005em; }
+  .hint { color: var(--muted); font-size: 12px; }
+  details.explain > summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 4px 0; }
+  details.explain[open] > summary { margin-bottom: 6px; }
+  details.explain .note + .note { margin-top: 6px; }
+  details > summary { cursor: pointer; }
+
+  /* The views that aren't a swing: page title row. */
+  .t-head { align-items: center; }
+  .t-head strong { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .t-head > button.small { background: none; }
+  #trends, #progress, #setup, #shutter, #practice, #labelview, #compare { padding: 20px; gap: 16px; scroll-margin-top: var(--appbar-h); }
+
+  /* ---- Session list ---- */
+  #side { background: var(--panel); }
+  #listbar { background: var(--panel); padding: 10px 12px 10px 16px; }
+  #listbar select { padding: 5px 8px; font-size: 13px; max-width: 60%; }
+  .session { border-bottom: 1px solid var(--line); }
+  .shead { padding: 12px 12px 12px 14px; background: var(--panel-2); position: sticky; top: 53px; z-index: 1; }
+  @media (max-width: 899px) { .shead { position: static; } }
+  .shead .sname { font-size: 14px; }
+  .shead .ssub { margin-top: 1px; }
+  .shead button.small { padding: 4px 10px; }
+  .session li { padding: 9px 12px 9px 14px; gap: 12px; border-top: 1px solid var(--line); background: var(--panel); }
+  .session li.sel { background: var(--sel); box-shadow: inset 3px 0 var(--accent); }
+  .session li .when { font-weight: 600; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session li .when .big { font-size: 16px; font-variant-numeric: tabular-nums; }
+  .session li .when .club { color: var(--muted); font-weight: 500; font-size: 13px; }
+  .session li .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; font-weight: 700;
+           font-size: 13px; letter-spacing: -0.02em; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+  .badge[data-fam="wood"] { background: #e0ecff; color: #1d4ed8; border-color: #c7dafc; }
+  .badge[data-fam="hybrid"] { background: #efe6ff; color: #6d28d9; border-color: #ddd0fb; }
+  .badge[data-fam="iron"] { background: #e2f5e9; color: #15803d; border-color: #c6e9d3; }
+  .badge[data-fam="wedge"] { background: #fdf0dc; color: #b45309; border-color: #f7ddb5; }
+  @media (prefers-color-scheme: dark) {
+    .badge[data-fam="wood"] { background: #16233d; color: #93b4ff; border-color: #22345a; }
+    .badge[data-fam="hybrid"] { background: #241a3a; color: #c4a8ff; border-color: #33265a; }
+    .badge[data-fam="iron"] { background: #122a1c; color: #6fdc9a; border-color: #1c3d2a; }
+    .badge[data-fam="wedge"] { background: #2e2210; color: #fbbf5c; border-color: #463315; }
+  }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; font-size: 12px;
+          background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .pill.bad, .session li .pose.failed { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-soft); }
+  .session li .pose:empty { display: none; }
+  .session li .pose { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); font-size: 11px; }
+  .spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .session li .trash { border: 0; background: none; color: var(--muted); }
+  .session li .trash:hover { color: var(--warn); background: var(--warn-soft); }
+  /* With a mouse, delete buttons show on hover only: fewer targets to scan and fewer slips. */
+  @media (hover: hover) and (pointer: fine) {
+    .session li .trash, .shead .danger { opacity: 0; }
+    .session li:hover .trash, .shead:hover .danger, .session li .trash:focus-visible, .shead .danger:focus-visible { opacity: 1; }
+  }
+
+  /* ---- Swing header ---- */
+  #swinghead { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  #swinghead:empty { display: none; }
+  #swinghead .sh-text { flex: 1; min-width: 0; }
+  #swinghead .sh-title { font-size: 22px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.2; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  #swinghead .sh-title .muted { color: var(--muted); font-weight: 500; font-size: 15px; }
+  #swinghead .sh-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  #swinghead .sh-nav { display: flex; align-items: center; gap: 6px; }
+  #swinghead .sh-pos { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 52px; text-align: center; }
+  #swinghead .badge { width: 46px; height: 46px; font-size: 15px; border-radius: 12px; }
+
+  /* ---- Player ---- */
+  #viewer { padding: 20px; gap: 14px; }
+  video { border-radius: var(--radius); cursor: pointer; }
+  #stages { gap: 10px; }
+  .angle-tag { top: 10px; right: 10px; padding: 3px 10px; font-weight: 600; backdrop-filter: blur(4px); }
+  #stages:fullscreen { background: #000; display: grid; align-content: center; padding: 8px; }
+  #stages:fullscreen video { height: calc(100vh - 16px); border-radius: 0; }
+  .transport { display: flex; flex-direction: column; gap: 8px; background: var(--panel); border: 1px solid var(--line);
+               border-radius: var(--radius); padding: 10px 12px; box-shadow: var(--shadow); }
+  #scrub { position: relative; padding-top: 18px; }
+  #seek { -webkit-appearance: none; appearance: none; width: 100%; height: 22px; margin: 0; padding: 0; border: 0; background: transparent; cursor: pointer; display: block; }
+  #seek::-webkit-slider-runnable-track { height: 6px; border-radius: 3px;
+    background: linear-gradient(to right, var(--accent) var(--pct, 0%), var(--line) var(--pct, 0%)); }
+  #seek::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line); }
+  #seek::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--accent); }
+  #seek::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5px; border-radius: 50%;
+    background: var(--panel); border: 3px solid var(--accent); box-shadow: var(--shadow); }
+  #seek::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--panel); border: 3px solid var(--accent); }
+  #marks { position: absolute; left: 8px; right: 8px; top: 0; height: 40px; pointer-events: none; }
+  #marks .mark { position: absolute; top: 0; transform: translateX(-50%); pointer-events: auto; border: 0; background: none;
+                 padding: 0 2px; min-width: 0; font-size: 10px; font-weight: 700; color: var(--muted); line-height: 16px;
+                 display: flex; flex-direction: column; align-items: center; }
+  #marks .mark::after { content: ""; width: 2px; height: 12px; margin-top: 2px; background: var(--line-strong); border-radius: 1px; }
+  #marks .mark.nolabel span { visibility: hidden; }
+  #marks .mark:hover, #marks .mark.here { color: var(--accent); }
+  #marks .mark:hover::after, #marks .mark.here::after { background: var(--accent); }
+  .controls { gap: 6px; }
+  .controls .sep { height: 24px; margin: 0 4px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: var(--panel-2); }
+  .seg button { border: 0; border-radius: 0; background: none; min-width: 0; padding: 7px 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: var(--accent-text); }
+  #frame { margin-left: auto; }
+  #play svg { width: 18px; height: 18px; }
+
+  /* ---- Square's numbers: the result first ---- */
+  #shotdata { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+  .metric { border-radius: 10px; padding: 8px 12px; box-shadow: var(--shadow); min-width: 0; }
+  .metric b { font-size: 17px; font-weight: 650; }
+  .metric span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .metric.hero b { font-size: 24px; letter-spacing: -0.01em; }
+  .metric.hero.lead { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+  .metric.hero.lead b { color: var(--accent); }
+  .metric.club { grid-column: span 2; }
+  .metric.club select { font-size: 20px; }
+
+  /* ---- Key positions ---- */
+  #positions { gap: 10px; }
+  .pos-head { justify-content: flex-start; gap: 12px; align-items: baseline; }
+  #pos-list { gap: 10px; padding-bottom: 6px; scroll-snap-type: x proximity; }
+  .pos { border-radius: 10px; scroll-snap-align: start; transition: transform 0.12s, box-shadow 0.12s; }
+  .pos:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+  .pos.here { box-shadow: 0 0 0 2px var(--accent); }
+  .pos span { padding: 6px 8px; font-size: 12px; }
+
+  /* ---- Numbers table ---- */
+  #numbers table th, #numbers table td { padding: 6px 12px; }
+  #numbers tr:not(.group):hover td { background: var(--panel-2); }
+  #numbers tr.group th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-top: 14px; }
+  #tempo { font-size: 15px; font-weight: 600; }
+  #camcheck { border-radius: var(--radius); background: var(--warn-soft); padding: 10px 14px; }
+  #camcheck.info { background: var(--panel); }
+  #title { font-size: 11px; opacity: 0.7; }
+
+  /* ---- Toast and help ---- */
+  #toast { border-radius: 12px; padding: 12px 12px 12px 18px; box-shadow: var(--shadow-lg); bottom: calc(var(--tabbar-h) + 20px);
+           animation: rise 0.18s ease-out; }
+  @keyframes rise { from { transform: translate(-50%, 12px); opacity: 0; } }
+  dialog#help { border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text); padding: 0;
+                width: min(760px, calc(100vw - 32px)); box-shadow: var(--shadow-lg); }
+  dialog#help::backdrop { background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(2px); }
+  .help-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px 20px; border-bottom: 1px solid var(--line); }
+  .help-head strong { font-size: 18px; }
+  .help-cols { display: grid; grid-template-columns: 1fr 1.3fr; gap: 24px; padding: 16px 20px 20px; }
+  @media (max-width: 640px) { .help-cols { grid-template-columns: 1fr; } }
+  .help-sub { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
+  dl.keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0; align-items: center; font-size: 14px; }
+  dl.keys dt { white-space: nowrap; }
+  dl.keys dd, dl.where dd { margin: 0; }
+  dl.where { margin: 0; font-size: 13px; }
+  dl.where dt { font-weight: 650; margin-top: 10px; }
+  dl.where dt:first-child { margin-top: 0; }
+  dl.where dd { color: var(--muted); }
+
+  /* ---- Phones and small tablets ---- */
+  @media (max-width: 899px) {
+    body[data-view]:not([data-view="swing"]) #side { display: none; }
+    #viewer { padding: 12px; }
+    #swinghead .sh-title { font-size: 19px; }
+  }
+  @media (max-width: 719px) {
+    :root { --tabbar-h: 62px; }
+    body { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); }
+    header.appbar { gap: 10px; padding: 0 12px; }
+    .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+            padding: 4px 4px env(safe-area-inset-bottom); background: var(--panel); border-top: 1px solid var(--line);
+            justify-content: space-around; gap: 0; box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08); }
+    .tabs > .tab, .tabs > .menu { flex: 1; }
+    .tabs .menu > .tab { width: 100%; }
+    .tabs .tab { flex-direction: column; gap: 3px; font-size: 11px; padding: 6px 2px; height: 54px; justify-content: center; }
+    .tabs .tab svg { width: 22px; height: 22px; }
+    .tabs .tab.on { background: none; }
+    .tabs .tab.on svg { background: var(--accent-soft); border-radius: 12px; padding: 2px 10px; width: 44px; box-sizing: content-box; }
+    .tabs .menu-pop { top: auto; bottom: calc(100% + 8px); right: 8px; }
+    header .count { margin-left: auto; }
+    .controls #frame { display: none; }
+    #swinghead .sh-pos { display: none; }
+    #swinghead .badge { width: 40px; height: 40px; }
+    .metric.club { grid-column: span 2; }
+    #shotdata { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+    .metric.hero b { font-size: 20px; }
+    #help-btn { margin-left: auto; }
+    header .count { display: inline; margin-left: 0; }
+    .transport { padding: 8px; }
+    .controls { gap: 4px; }
+    .controls button { padding: 6px 9px; }
+    .controls button.icon { width: 36px; min-width: 36px; height: 34px; }
+    .seg button { padding: 6px 7px; }
+    #shotdata { gap: 6px; }
+    .metric { padding: 6px 8px; box-shadow: none; }
+    .metric b { font-size: 15px; }
+    .metric span { font-size: 10px; }
+    #swinghead { gap: 10px; }
+    #swinghead .sh-sub { font-size: 12px; }
+  }
 </style>
 </head>
-<body>
-<header><h1>SwingClips</h1><span class="count" id="count"></span>
-  <button id="setup-btn" class="small" title="Check both cameras before you start: live pictures from the phones">Camera setup</button>
-  <button id="progress-btn" class="small" title="How your swing and results are changing across sessions">Progress</button>
-  <button id="practice-btn" class="small" title="Pick one number and a range; the phone says it after each swing">Practice</button>
-  <span class="menu">
-    <button class="small menu-btn" id="tools-btn" title="Tools for testing the setup and the tracking">Tools ▾</button>
-    <span class="menu-pop right" hidden>
-      <button id="labels-btn" class="small" title="Hand labels for the scorecard: what's done, what to check, what to label next">Labels</button>
-      <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button>
+<body data-view="swing">
+<header class="appbar">
+  <a class="brand" href="#" id="brand" title="Back to the latest swing"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#16803f"/><path d="M11 25V7l10 4.5L11 16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="21" cy="23" r="3" fill="#fff"/></svg><span>SwingClips</span></a>
+  <span class="count" id="count"></span>
+  <nav class="tabs" aria-label="Sections">
+    <button id="swings-btn" class="tab on" title="Your swings, session by session"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg><span>Swings</span></button>
+    <button id="progress-btn" class="tab" title="How your swing and results are changing across sessions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18"/><path d="m4 15 5-5 4 4 7-8"/></svg><span>Progress</span></button>
+    <button id="practice-btn" class="tab" title="Pick one number and a range; the phone says it after each swing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg><span>Practice</span></button>
+    <button id="setup-btn" class="tab" title="Check both cameras before you start: live pictures from the phones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Cameras</span></button>
+    <span class="menu">
+      <button class="tab menu-btn" id="tools-btn" title="Tools for testing the setup and the tracking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>Tools</span></button>
+      <span class="menu-pop right" hidden>
+        <button id="labels-btn" class="small" title="Hand labels for the scorecard: what's done, what to check, what to label next">Labels</button>
+        <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button>
+        <button id="help-menu-btn" class="small" title="Keyboard shortcuts and what the page shows">Shortcuts &amp; help <kbd>?</kbd></button>
+      </span>
     </span>
-  </span></header>
+  </nav>
+  <button id="help-btn" class="icon-btn" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+</header>
 <div id="ready"></div>
 <main>
   <aside id="side">
     <div id="listbar"></div>
-    <div id="list"></div>
+    <div id="list"><div class="empty"><span class="spin"></span> Loading swings…</div></div>
   </aside>
   <section id="viewer" hidden>
+    <div id="swinghead"></div>
     <div id="camcheck" hidden></div>
     <div id="stages">
       <div class="stage">
         <span class="angle-tag">Face-on</span>
-        <video id="video" controls playsinline muted preload="auto"></video>
+        <video id="video" playsinline muted preload="auto" title="Play / pause (Space)"></video>
         <canvas id="overlay"></canvas>
       </div>
       <!-- The down-the-line clip of the same swing, when there is one; it follows the one above. -->
@@ -448,11 +694,13 @@
         <canvas id="overlay2"></canvas>
       </div>
     </div>
+    <div class="transport">
+      <div id="scrub"><div id="marks"></div><input type="range" id="seek" min="0" max="1000" step="1" value="0" aria-label="Position in the clip"></div>
     <div class="controls">
-      <button id="prev" title="Previous frame (←)">‹ Frame</button>
-      <button id="next" title="Next frame (→)">Frame ›</button>
-      <span class="sep"></span>
-      <span id="speeds"></span>
+      <button id="play" class="primary icon" title="Play / pause (Space)" aria-label="Play"></button>
+      <button id="prev" class="icon" title="Previous frame (←)" aria-label="Previous frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
+      <button id="next" class="icon" title="Next frame (→)" aria-label="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button>
+      <span id="speeds" class="seg" role="group" aria-label="Playback speed"></span>
       <span class="sep"></span>
       <span class="menu">
         <button class="menu-btn" id="show-btn" title="What to draw over the videos">Show ▾</button>
@@ -475,23 +723,26 @@
         </span>
       </span>
       <span id="frame"></span>
+      <button id="fs" class="icon" title="Full screen (F)" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
     </div>
     <div id="labelpanel" hidden></div>
     <div id="shotdata" hidden title="From the launch monitor, via the shot listener"></div>
-    <div id="positions" hidden>
+    <div id="positions" class="card" hidden>
       <div class="pos-head">
-        <strong>Key positions</strong>
+        <strong>Key positions</strong><span class="hint">Tap a position, or press 1–8</span>
       </div>
       <div id="pos-note"></div>
       <div id="pos-list"></div>
     </div>
-    <div id="numbers" hidden>
+    <div id="numbers" class="card" hidden>
       <strong>Swing numbers</strong>
       <div id="tempo"></div>
       <div id="good-tempo"></div>
       <div style="overflow-x: auto"><table id="num-table"></table></div>
       <div class="note" id="trust-note"></div>
       <div class="note" id="good-note"></div>
+      <details class="explain"><summary>How to read these numbers</summary>
       <div class="note" id="face-note">Face-on: turns are from how much narrower the hips and shoulders look than at address;
         inches are scaled from the body's estimated size. Both are estimates from one camera: best
         for comparing your own swings. Turn + = closed (going back), - = open; tilt + = lead side higher /
@@ -500,6 +751,7 @@
         at impact = early extension). Hand height is above the middle of the shoulders, hand depth behind
         them (away from the ball). The plane is the shaft's line at address: hands to plane + = above it;
         shaft to plane + = steeper than at address (-- where the shaft was a blur and couldn't be seen).</div>
+      </details>
     </div>
     <div id="panel3d" hidden></div>
     <div id="title"></div>
@@ -726,7 +978,37 @@
     </div>
   </section>
 </main>
-<div id="toast" hidden><span id="toast-text"></span><button id="toast-undo" class="small">Undo</button></div>
+<div id="toast" hidden role="status"><span id="toast-text"></span><button id="toast-undo" class="small">Undo</button></div>
+<dialog id="help" aria-labelledby="help-title">
+  <div class="help-head"><strong id="help-title">Shortcuts &amp; help</strong><button class="icon-btn" id="help-close" aria-label="Close">✕</button></div>
+  <div class="help-cols">
+    <div>
+      <div class="help-sub">Watching a swing</div>
+      <dl class="keys">
+        <dt><kbd>Space</kbd></dt><dd>Play / pause</dd>
+        <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>One frame back / on</dd>
+        <dt><kbd>1</kbd>–<kbd>8</kbd></dt><dd>Jump to P1–P8</dd>
+        <dt><kbd>J</kbd> <kbd>K</kbd></dt><dd>Older / newer swing</dd>
+        <dt><kbd>F</kbd></dt><dd>Full screen</dd>
+        <dt><kbd>S</kbd> <kbd>A</kbd> <kbd>H</kbd> <kbd>P</kbd></dt><dd>Skeleton, angles, hand path, plane</dd>
+        <dt><kbd>C</kbd></dt><dd>Compare with another swing</dd>
+        <dt><kbd>L</kbd></dt><dd>Label this swing</dd>
+        <dt><kbd>?</kbd></dt><dd>This help</dd>
+      </dl>
+    </div>
+    <div>
+      <div class="help-sub">Where things are</div>
+      <dl class="where">
+        <dt>Ready bar</dt><dd>Both phones, Square and the server at a glance. Start and stop both phones here.</dd>
+        <dt>Swings</dt><dd>Every swing by session: both angles in sync, Square's numbers, key positions and body numbers. <b>Trends</b> on a session plots body numbers against results.</dd>
+        <dt>Progress</dt><dd>How your numbers change across sessions, what sets your good shots apart, shot pattern and handicap.</dd>
+        <dt>Practice</dt><dd>Pick one number and a range; a phone says it after each swing.</dd>
+        <dt>Cameras</dt><dd>Live pictures from both phones, to check framing before you start.</dd>
+        <dt>Greyed ~</dt><dd>A shaky number: noise or the conditions could account for it. <b>--</b> = no reading. Hover for why.</dd>
+      </dl>
+    </div>
+  </div>
+</dialog>
 <script src="/static/phases.js"></script>
 <script src="/static/metrics.js"></script>
 <script src="/static/summary.js"></script>
@@ -1200,6 +1482,7 @@ function draw(t) {
   const ctx = freshCanvas(canvas), W = canvas.width, H = canvas.height;
   showFrameLabel(t);
   markPosition(t);
+  updateSeek(t);
   if (!pose || !pose.frames.length || !video.videoWidth) return;
   const i = frameIndexAt(t), frame = pose.frames[i], r = fitRect(W, H);
   const lineWidth = Math.max(1.5, 3 * r.w / 400);
@@ -1663,7 +1946,7 @@ async function buildPositions(name) {
   redraw();
   positionsBox.hidden = false;
   document.getElementById("pos-note").textContent = positions.length
-    ? "Tap one to jump there. ~ = estimated (the club couldn't be seen clearly then)."
+    ? "~ = estimated (the club couldn't be seen clearly then)."
     : "No swing found in this clip.";
 
   // With both angles analyzed, each card shows the position from both.
@@ -1680,6 +1963,7 @@ async function buildPositions(name) {
     return b;
   });
   posList.replaceChildren(...cards);
+  renderMarks();
   markPosition(video.currentTime);
 
   if (thumbVideo.src !== video.src) thumbVideo.src = video.src;
@@ -1861,6 +2145,78 @@ function markPosition(t) {
   if (!positions.length || !pose) return;
   const i = frameIndexAt(t);
   posList.querySelectorAll(".pos").forEach((b, k) => b.classList.toggle("here", positions[k].index === i));
+  marksBox.querySelectorAll(".mark").forEach((b, k) => b.classList.toggle("here", positions[k] && positions[k].index === i));
+}
+
+// ---- Transport: play, the scrubber and its key-position marks ----
+
+const playBtn = document.getElementById("play");
+const seek = document.getElementById("seek");
+const marksBox = document.getElementById("marks");
+const PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>';
+const PAUSE_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4.5" height="16" rx="1.2"/><rect x="13.5" y="4" width="4.5" height="16" rx="1.2"/></svg>';
+
+function showPlayState() {
+  playBtn.innerHTML = video.paused ? PLAY_ICON : PAUSE_ICON;
+  playBtn.setAttribute("aria-label", video.paused ? "Play" : "Pause");
+}
+function togglePlay() {
+  if (!video.src) return;
+  video.paused ? video.play().catch(() => {}) : video.pause();
+}
+video.addEventListener("play", showPlayState);
+video.addEventListener("pause", showPlayState);
+video.addEventListener("click", togglePlay);
+playBtn.onclick = togglePlay;
+showPlayState();
+
+function updateSeek(t) {
+  const d = video.duration;
+  const pct = d ? Math.max(0, Math.min(100, t / d * 100)) : 0;
+  if (document.activeElement !== seek || video.paused) seek.value = String(Math.round(pct * 10));
+  seek.style.setProperty("--pct", pct + "%");
+}
+seek.addEventListener("input", () => {
+  if (!video.duration) return;
+  video.pause();
+  video.currentTime = seek.value / 1000 * video.duration;
+  seek.style.setProperty("--pct", seek.value / 10 + "%");
+});
+
+/** The key positions as ticks over the scrubber; labels are left off where they'd crowd each other. */
+function renderMarks() {
+  const d = video.duration;
+  if (!positions.length || !d) { marksBox.replaceChildren(); return; }
+  const width = marksBox.clientWidth || 600;
+  let lastX = -Infinity;
+  marksBox.replaceChildren(...positions.map(p => {
+    const b = document.createElement("button");
+    const x = p.t / d;
+    b.className = "mark";
+    b.style.left = (x * 100) + "%";
+    b.innerHTML = "<span></span>";
+    b.firstChild.textContent = p.tag;
+    b.title = `${p.tag} ${p.label}${p.estimated ? " (estimated)" : ""}`;
+    if (x * width - lastX < 22) b.classList.add("nolabel"); else lastX = x * width;
+    b.onclick = () => jumpTo(p.index);
+    return b;
+  }));
+  markPosition(video.currentTime);
+}
+video.addEventListener("loadedmetadata", renderMarks);
+new ResizeObserver(() => renderMarks()).observe(marksBox);
+
+function toggleFullscreen() {
+  const st = document.getElementById("stages");
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else if (st.requestFullscreen) st.requestFullscreen().catch(() => {});
+}
+document.getElementById("fs").onclick = toggleFullscreen;
+
+/** Jumps to key position n (1-8) of the open swing. */
+function jumpToKey(n) {
+  const p = positions.find(q => q.key === "p" + n);
+  if (p && pose) jumpTo(p.index);
 }
 
 handBtn.onclick = () => {
@@ -1920,6 +2276,7 @@ function open(name) {
   lastCameraCheck = null;
   document.getElementById("numbers").hidden = true;
   posList.replaceChildren();
+  marksBox.replaceChildren();
   video.src = "/clips/" + encodeURIComponent(name);
   video.playbackRate = speed;
   setPartner(clips.find(c => c.name === name)?.partner ?? null);
@@ -1927,6 +2284,7 @@ function open(name) {
   history.replaceState(null, "", "#" + encodeURIComponent(name));
   showShot(clips.find(c => c.name === name));
   updateExcludeButton();
+  renderSwingHead();
   if (window.Labels) Labels.opened();
   loadPose(name);
 }
@@ -2001,9 +2359,10 @@ function showShot(c) {
   add(has(k.path), `${signed(k.path)}°`, "Path");
   add(has(k.faceToTarget), `${signed(k.faceToTarget)}°`, "Face");
   add(k.loft > 0, `${num(k.loft)}°`, "Dyn. loft");
+  const HERO = { "Carry yd": "hero lead", "Total yd": "hero", "Ball mph": "hero", "Club mph": "hero", "Smash": "hero" };
   box.replaceChildren(...items.map(([cls, value, label]) => {
     const el = document.createElement("div");
-    el.className = "metric " + cls;
+    el.className = "metric " + cls + (HERO[label] ? " " + HERO[label] : "");
     el.innerHTML = "<b></b><span></span>";
     el.querySelector("b").textContent = value;
     el.querySelector("span").textContent = label;
@@ -2061,6 +2420,40 @@ function modeOf(name) {
   return m ? `${m[3]} fps · ${Math.min(+m[1], +m[2])}p` : "";
 }
 
+// The list can show one club only (remembered); "none" = swings with no Square shot.
+let clubFilter = "";
+try { clubFilter = localStorage.getItem("clubFilter") || ""; } catch {}
+const clubKey = c => (c.shot && c.shot.club) || "none";
+
+/** The swings the list shows now: one per swing, of the picked club. */
+function filteredClips() {
+  const all = shownClips();
+  return clubFilter ? all.filter(c => clubKey(c) === clubFilter) : all;
+}
+
+/** Short club code for a badge: DR, 3w, 4h, 7i, PW… */
+function clubShort(code) {
+  if (!code) return "–";
+  const m = code.match(/^([WHI])(\d)$/);
+  return m ? m[2] + m[1].toLowerCase() : code;
+}
+function clubFamily(code) {
+  if (!code) return "";
+  if (code === "DR" || code[0] === "W") return "wood";
+  if (code[0] === "H") return "hybrid";
+  if (code[0] === "I") return "iron";
+  return /W$/.test(code) ? "wedge" : "";
+}
+function clubBadge(code) {
+  const b = document.createElement("span");
+  b.className = "badge";
+  b.textContent = clubShort(code);
+  const fam = clubFamily(code);
+  if (fam) b.dataset.fam = fam;
+  b.title = code ? clubName(code) : "No Square shot";
+  return b;
+}
+
 function renderListbar() {
   if (selecting) {
     listbar.innerHTML = `<span class="grow"></span><button class="small danger" id="del-sel">Delete</button>` +
@@ -2070,8 +2463,21 @@ function renderListbar() {
     listbar.querySelector("#del-sel").onclick = () => deleteClips([...selected]);
     listbar.querySelector("#cancel-sel").onclick = () => { selecting = false; selected.clear(); renderList(); };
   } else {
-    listbar.innerHTML = `<span class="grow"></span><button class="small" id="start-sel">Select</button>`;
-    listbar.querySelector(".grow").textContent = shownClips().length ? "" : "";
+    listbar.innerHTML = `<select id="club-filter" aria-label="Show one club"></select><span class="grow"></span><button class="small" id="start-sel">Select</button>`;
+    const counts = new Map();
+    for (const c of shownClips()) counts.set(clubKey(c), (counts.get(clubKey(c)) || 0) + 1);
+    if (clubFilter && !counts.has(clubFilter)) clubFilter = "";
+    const order = [...counts.keys()].sort((a, b) => (a === "none") - (b === "none") || CLUB_CODES.indexOf(a) - CLUB_CODES.indexOf(b));
+    const sel = listbar.querySelector("#club-filter");
+    sel.append(new Option(`All clubs (${shownClips().length})`, ""),
+               ...order.map(k => new Option(`${k === "none" ? "No shot" : clubName(k)} (${counts.get(k)})`, k)));
+    sel.value = clubFilter;
+    sel.hidden = counts.size < 2;
+    sel.onchange = () => {
+      clubFilter = sel.value;
+      try { localStorage.setItem("clubFilter", clubFilter); } catch {}
+      renderList();
+    };
     listbar.querySelector("#start-sel").disabled = !shownClips().length;
     listbar.querySelector("#start-sel").onclick = () => { selecting = true; renderList(); };
   }
@@ -2081,21 +2487,26 @@ function clipRow(c) {
   const li = document.createElement("li");
   li.dataset.name = c.name;
   li.classList.toggle("sel", c.name === current);
-  li.innerHTML = `<div class="info"><div class="when"></div><div class="meta"></div></div><span class="pose"></span>`;
-  li.querySelector(".when").textContent = new Date(c.recorded)
-    .toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
-  const shotText = !c.shot ? "" : c.shot.ball?.carry > 0
-    ? `${clubName(c.shot.club)} ${num(c.shot.ball.carry, 0)} yd`
-    : `${clubName(c.shot.club)} ${num(c.shot.ball?.speed)} mph`;
+  li.innerHTML = `<div class="info"><div class="when"><span class="big"></span><span class="club"></span></div><div class="meta"></div></div><span class="pose"></span>`;
+  li.prepend(clubBadge(c.shot && c.shot.club));
+  const time = new Date(c.recorded).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  const result = !c.shot ? "" : c.shot.ball?.carry > 0 ? `${num(c.shot.ball.carry, 0)} yd`
+    : c.shot.ball?.speed > 0 ? `${num(c.shot.ball.speed)} mph` : "";
+  li.querySelector(".big").textContent = result || time;
+  // The badge already says a wedge's name (GW); the full name only where it adds something (7i -> 7 iron).
+  const full = c.shot ? clubName(c.shot.club) : "No shot";
+  li.querySelector(".club").textContent = c.shot && full === clubShort(c.shot.club) ? "" : full;
   const other = c.partner && clips.find(x => x.name === c.partner);
-  const angles = other ? "2 angles" : c.angle === "dtl" ? "down the line" : "";
+  const angles = other ? "2 angles" : c.angle === "dtl" ? "down the line only" : "face-on only";
   const size = c.size + (other ? other.size : 0);
-  li.querySelector(".meta").textContent = [shotText, angles, c.excluded ? "left out of trends" : "", modeOf(c.name), fmtSize(size)]
+  li.querySelector(".meta").textContent = [result ? time : "", angles, c.excluded ? "left out of trends" : ""]
     .filter(Boolean).join(" · ");
+  li.title = [modeOf(c.name), fmtSize(size)].filter(Boolean).join(" · ");
   // The swing's analysis is as far along as its slower angle.
   const state = [c, other].filter(Boolean).map(x => x.pose).find(s => s !== "done") ?? "done";
   const p = li.querySelector(".pose");
   p.textContent = POSE_LABELS[state] || "";
+  if (state === "processing" || state === "queued") p.prepend(Object.assign(document.createElement("span"), { className: "spin" }));
   p.classList.toggle("failed", state === "failed");
   if (selecting) {
     const box = document.createElement("input");
@@ -2123,11 +2534,16 @@ function renderList() {
   document.getElementById("count").textContent = `${n} swing${n === 1 ? "" : "s"}`;
   for (const n of [...selected]) if (!clips.some(c => c.name === n)) selected.delete(n);
   renderListbar();
+  renderSwingHead();
   if (!shownClips().length) {
-    list.innerHTML = `<div class="empty">No clips yet. Swings from the SwingClips phone app show up here.</div>`;
+    list.innerHTML = `<div class="empty"><b>No swings yet.</b><br>Start both phones from the Ready bar and hit a ball: each swing shows up here within a few seconds.</div>`;
     return;
   }
-  const sessions = sessionsOf(shownClips());
+  if (!filteredClips().length) {
+    list.innerHTML = `<div class="empty">No swings with this club.</div>`;
+    return;
+  }
+  const sessions = sessionsOf(filteredClips());
   list.replaceChildren(...sessions.map((s, i) => {
     const el = document.createElement("section");
     el.className = "session";
@@ -2138,7 +2554,11 @@ function renderList() {
     head.className = "shead";
     head.innerHTML = `<span class="chev">▾</span><div class="stitle"><div class="sname"></div><div class="ssub"></div></div>`;
     head.querySelector(".sname").textContent = sessionTitle(s);
-    head.querySelector(".ssub").textContent = `${s.clips.length} swing${s.clips.length === 1 ? "" : "s"}`;
+    // "40 swings · 7i 22 · DR 12 · GW 6": the clubs hit most.
+    const byClub = new Map();
+    for (const c of s.clips) if (c.shot && c.shot.club) byClub.set(c.shot.club, (byClub.get(c.shot.club) || 0) + 1);
+    const top = [...byClub].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${clubShort(k)} ${n}`);
+    head.querySelector(".ssub").textContent = [`${s.clips.length} swing${s.clips.length === 1 ? "" : "s"}`, ...top].join(" · ");
     if (selecting) {
       const all = document.createElement("input");
       all.type = "checkbox";
@@ -2183,6 +2603,81 @@ function renderList() {
     return el;
   }));
 }
+
+// ---- Swing header: what this swing is, and newer / older ----
+
+/** Opens the swing `by` places down the list (+1 = older, -1 = newer), within the club filter. */
+function gotoSwing(by) {
+  const order = filteredClips().map(c => c.name);
+  const i = order.indexOf(current);
+  const next = order[i < 0 ? 0 : i + by];
+  if (next) open(next);
+}
+
+function renderSwingHead() {
+  const box = document.getElementById("swinghead");
+  const c = current && clipOf(current);
+  if (!c) { box.replaceChildren(); return; }
+  const order = filteredClips().map(x => x.name), i = order.indexOf(current);
+  const s = c.shot, b = (s && s.ball) || {};
+  const sig = JSON.stringify([current, s, c.excluded, c.pose, c.partner, i, order.length]);
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  const title = document.createElement("div");
+  title.className = "sh-title";
+  title.append(s ? clubName(s.club) : "Swing");
+  const res = b.carry > 0 ? `${num(b.carry, 0)} yd carry` : b.speed > 0 ? `${num(b.speed)} mph ball` : s ? "" : "no Square shot";
+  if (res) title.append(Object.assign(document.createElement("span"), { className: "muted", textContent: res }));
+  const sub = document.createElement("div");
+  sub.className = "sh-sub";
+  const partnerClip = c.partner && clipOf(c.partner);
+  sub.textContent = [fmtWhen(c.recorded), partnerClip ? "face-on + down the line" : c.angle === "dtl" ? "down the line only" : "face-on only",
+    modeOf(c.name), c.excluded ? "left out of trends" : ""].filter(Boolean).join(" · ");
+  const text = document.createElement("div");
+  text.className = "sh-text";
+  text.append(title, sub);
+  const nav = document.createElement("div");
+  nav.className = "sh-nav";
+  const btn = (label, by, path) => {
+    const x = document.createElement("button");
+    x.className = "icon";
+    x.title = label;
+    x.setAttribute("aria-label", label);
+    x.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`;
+    x.disabled = i < 0 || !order[i + by];
+    x.onclick = () => gotoSwing(by);
+    return x;
+  };
+  const where = Object.assign(document.createElement("span"), { className: "sh-pos",
+    textContent: i >= 0 ? `${i + 1} of ${order.length}` : "" });
+  nav.append(btn("Newer swing (K)", -1, "m6 15 6-6 6 6"), where, btn("Older swing (J)", 1, "m6 9 6 6 6-6"));
+  box.replaceChildren(clubBadge(s && s.club), text, nav);
+}
+
+const helpDlg = document.getElementById("help");
+function toggleHelp() {
+  if (helpDlg.open) helpDlg.close();
+  else if (helpDlg.showModal) helpDlg.showModal();
+}
+document.getElementById("help-btn").onclick = toggleHelp;
+document.getElementById("help-menu-btn").onclick = toggleHelp;
+document.getElementById("help-close").onclick = () => helpDlg.close();
+helpDlg.addEventListener("click", e => { if (e.target === helpDlg) helpDlg.close(); });
+
+// The Swings tab and the brand: back to the swing (the newest one if none is open).
+function goSwings() {
+  if (typeof closeTrendView === "function") closeTrendView();
+  if (window.Compare && Compare.open) Compare.close();
+  if (!current && filteredClips().length) open(filteredClips()[0].name);
+  window.scrollTo({ top: 0 });
+}
+document.getElementById("swings-btn").onclick = goSwings;
+document.getElementById("brand").onclick = e => {
+  e.preventDefault();
+  const first = filteredClips()[0];
+  goSwings();
+  if (first && current !== first.name) open(first.name);
+};
 
 // ---- Deleting ----
 
@@ -2249,6 +2744,7 @@ function closeViewer() {
 
 /** The Leave out button shows whether the open swing counts in the trends. */
 function updateExcludeButton() {
+  renderSwingHead();
   const c = clips.find(c => c.name === current), b = document.getElementById("exclude");
   b.classList.toggle("on", !!(c && c.excluded));
   b.textContent = c && c.excluded ? "Left out of trends (put back)" : "Leave out";
@@ -2339,6 +2835,19 @@ for (const key in overlays) {
 document.getElementById("prev").onclick = () => step(-1);
 document.getElementById("next").onclick = () => step(1);
 document.addEventListener("keydown", e => {
+  if (e.target.closest && e.target.closest("input:not([type=range]), select, textarea")) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "?") { e.preventDefault(); toggleHelp(); return; }
+  if (helpDlg.open) return;
+  const labeling = document.getElementById("stages").classList.contains("labeling");
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (!viewer.hidden && !labeling) {
+    if (k === " ") { e.preventDefault(); togglePlay(); return; }
+    if (/^[1-8]$/.test(k)) { e.preventDefault(); jumpToKey(Number(k)); return; }
+    if (k === "f") { toggleFullscreen(); return; }
+  }
+  if (!labeling && (k === "j" || k === "k")) { e.preventDefault(); gotoSwing(k === "j" ? 1 : -1); return; }
+  if (e.target === seek && (e.key === "ArrowLeft" || e.key === "ArrowRight")) e.preventDefault();
   if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
   if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
   if (e.key === "s" || e.key === "S") setSkeleton(!showSkeleton);

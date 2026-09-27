@@ -5,10 +5,13 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.os.BatteryManager
@@ -31,6 +34,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import java.io.File
 import java.net.HttpURLConnection
@@ -60,6 +64,13 @@ class MainActivity : Activity() {
     private lateinit var phoneLink: PhoneLink
     private lateinit var setupVoiceButton: Button
     private lateinit var autoStartButton: Button
+    /** Settings live in a sheet over the camera, so the main screen is only what a session needs. */
+    private lateinit var settingsSheet: FrameLayout
+    private lateinit var settingsButton: Button
+    private lateinit var lockNote: TextView
+    private lateinit var recChip: TextView
+    private lateinit var angleChip: TextView
+    private lateinit var modeChip: TextView
     private val autoStart = AutoStart()
     /** A settings dialog is open: the review page's Start is refused until it's closed. */
     @Volatile private var settingOpen = false
@@ -294,14 +305,19 @@ class MainActivity : Activity() {
             b.isEnabled = !armed
             b.alpha = if (armed) 0.4f else 1f
         }
+        lockNote.visibility = if (armed) View.VISIBLE else View.GONE
         if (armed) {
-            setStatus("Recording ${ANGLES.getValue(angle()).lowercase()}$count", Color.rgb(74, 222, 128))
-            startButton.text = "Stop"
-            startButton.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(185, 28, 28))
+            setStatus("Recording ${ANGLES.getValue(angle()).lowercase()}$count", GREEN_TEXT)
+            startButton.text = "Stop recording"
+            startButton.background = pressable(RED, 18)
+            recChip.text = "●  REC" + if (saved > 0) "  ·  $saved" else ""
+            recChip.background = rounded(Color.argb(220, 220, 38, 38), 999)
         } else {
-            setStatus("Not recording$count — tap Start when you're set up", Color.WHITE)
+            setStatus(if (saved > 0) "Stopped$count" else "Ready when you are", TEXT)
             startButton.text = "Start recording swings"
-            startButton.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(22, 128, 61))
+            startButton.background = pressable(GREEN, 18)
+            recChip.text = "Standby"
+            recChip.background = rounded(Color.argb(150, 0, 0, 0), 999)
         }
     }
 
@@ -418,6 +434,15 @@ class MainActivity : Activity() {
 
     private fun updateModeButton() {
         modeButton.text = mode?.label ?: "No camera"
+        updateChips()
+    }
+
+    /** The chips over the camera: which way this phone films, and how. */
+    private fun updateChips() {
+        if (!::angleChip.isInitialized) return
+        angleChip.text = ANGLES.getValue(angle())
+        modeChip.text = listOfNotNull(mode?.label, "Shutter ${Exposure.label(shutter())}".takeIf { shutter() != 0 }).joinToString("  ·  ")
+        modeChip.visibility = if (modeChip.text.isNullOrEmpty()) View.GONE else View.VISIBLE
     }
 
     /** Shutter as 1/n s, or 0 for Auto (the camera's own exposure, the default). */
@@ -450,7 +475,8 @@ class MainActivity : Activity() {
     }
 
     private fun updateShutterButton() {
-        shutterButton.text = "Shutter " + Exposure.label(shutter())
+        shutterButton.text = Exposure.label(shutter())
+        updateChips()
     }
 
     /** What this camera allows, before (and as well as) what it did with the setting. */
@@ -513,6 +539,7 @@ class MainActivity : Activity() {
 
     private fun updateAngleButton() {
         angleButton.text = ANGLES.getValue(angle())
+        updateChips()
     }
 
     private fun chooseServer() {
@@ -551,7 +578,7 @@ class MainActivity : Activity() {
     }
 
     private fun updatePracticeButton() {
-        practiceButton.text = if (practiceVoiceOn()) "Practice voice: on" else "Practice voice: off"
+        practiceButton.text = if (practiceVoiceOn()) "On" else "Off"
     }
 
     /**
@@ -568,7 +595,7 @@ class MainActivity : Activity() {
     }
 
     private fun updateSetupVoiceButton() {
-        setupVoiceButton.text = if (setupVoice() == PhoneControl.VOICE_OWN) "Setup voice: this phone" else "Setup voice: combined"
+        setupVoiceButton.text = if (setupVoice() == PhoneControl.VOICE_OWN) "This phone" else "Combined"
     }
 
     /** "Start recording when the camera check is good" (off unless turned on). */
@@ -581,7 +608,7 @@ class MainActivity : Activity() {
     }
 
     private fun updateAutoStartButton() {
-        autoStartButton.text = if (autoStartOn()) "Auto-start: on" else "Auto-start: off"
+        autoStartButton.text = if (autoStartOn()) "On" else "Off"
     }
 
     /** Says a sample result at the media volume (what speech uses), and shows that volume. */
@@ -645,27 +672,65 @@ class MainActivity : Activity() {
     }
 
     private fun showUpload(pending: Int, message: String) {
-        uploadView.text = message
-        uploadView.setTextColor(if (message.startsWith("Can't")) Color.rgb(245, 158, 11) else Color.rgb(160, 170, 165))
+        val bad = message.startsWith("Can't") || message.startsWith("Server answered") || message.startsWith("Server needs")
+        val connected = message == "Server connected"
+        uploadView.text = (if (bad || connected) "●  " else "↑  ") + message
+        uploadView.setTextColor(if (bad) AMBER else if (connected) GREEN_TEXT else MUTED)
+    }
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    private fun rounded(fill: Int, radiusDp: Int, stroke: Int? = null) = GradientDrawable().apply {
+        setColor(fill)
+        cornerRadius = dp(radiusDp).toFloat()
+        stroke?.let { setStroke(dp(1), it) }
+    }
+
+    /** A rounded background that ripples when pressed. */
+    private fun pressable(fill: Int, radiusDp: Int, stroke: Int? = null) =
+        RippleDrawable(ColorStateList.valueOf(Color.argb(70, 255, 255, 255)), rounded(fill, radiusDp, stroke), null)
+
+    private fun openSettings() {
+        settingsSheet.visibility = View.VISIBLE
+        settingsSheet.alpha = 0f
+        settingsSheet.animate().alpha(1f).setDuration(150).start()
+    }
+
+    private fun closeSettings() {
+        settingsSheet.animate().alpha(0f).setDuration(120).withEndAction { settingsSheet.visibility = View.GONE }.start()
+    }
+
+    @Deprecated("Still called with the targetSdk's default back handling")
+    override fun onBackPressed() {
+        if (::settingsSheet.isInitialized && settingsSheet.visibility == View.VISIBLE) closeSettings()
+        else @Suppress("DEPRECATION") super.onBackPressed()
     }
 
     private fun buildUi() {
-        val density = resources.displayMetrics.density
-        fun dp(v: Int) = (v * density).toInt()
+        val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
+        val match = ViewGroup.LayoutParams.MATCH_PARENT
         fun button(label: String, onClick: () -> Unit) = Button(this).apply {
-            text = label; isAllCaps = false; textSize = 16f; setOnClickListener { onClick() }
+            text = label; isAllCaps = false; textSize = 15f; setTextColor(TEXT); stateListAnimator = null
+            background = pressable(SURFACE_2, 14, LINE)
+            minHeight = dp(48); minimumHeight = dp(48); minWidth = 0; minimumWidth = 0
+            setPadding(dp(14), 0, dp(14), 0)
+            setOnClickListener { onClick() }
         }
         fun row(vararg views: View) = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            views.forEach { addView(it, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)) }
+            views.forEachIndexed { i, v ->
+                addView(v, LinearLayout.LayoutParams(0, wrap, 1f).apply { if (i > 0) marginStart = dp(8) })
+            }
+        }
+        fun chip() = TextView(this).apply {
+            textSize = 12f; setTypeface(null, Typeface.BOLD); setTextColor(Color.WHITE)
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+            background = rounded(Color.argb(150, 0, 0, 0), 999)
         }
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(15, 20, 17))
-        }
-        root.setOnApplyWindowInsetsListener { v, insets ->
+        val frame = FrameLayout(this).apply { setBackgroundColor(BG) }
+        frame.setOnApplyWindowInsetsListener { v, insets ->
             if (Build.VERSION.SDK_INT >= 30) {
                 val i = insets.getInsets(WindowInsets.Type.systemBars())
                 v.setPadding(i.left, i.top, i.right, i.bottom)
@@ -676,8 +741,11 @@ class MainActivity : Activity() {
             }
             insets
         }
-        setContentView(root)
+        setContentView(frame)
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        frame.addView(root, FrameLayout.LayoutParams(match, match))
 
+        // ---- The camera, with what matters over it ----
         previewBox = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         preview = SurfaceView(this)
         preview.holder.addCallback(object : SurfaceHolder.Callback {
@@ -693,90 +761,181 @@ class MainActivity : Activity() {
         })
         previewBox.addView(preview, FrameLayout.LayoutParams(1, 1, Gravity.CENTER))
         flash = View(this).apply { setBackgroundColor(Color.WHITE); alpha = 0f }
-        previewBox.addView(flash, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        previewBox.addView(flash, FrameLayout.LayoutParams(match, match))
         previewBox.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> layoutPreview() }
-        root.addView(previewBox, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
+        angleChip = chip()
+        modeChip = chip().apply { setTypeface(null, Typeface.NORMAL) }
+        recChip = chip()
+        val chips = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(12), dp(12), 0)
+            addView(angleChip)
+            addView(modeChip, LinearLayout.LayoutParams(wrap, wrap).apply { marginStart = dp(6) })
+            addView(View(this@MainActivity), LinearLayout.LayoutParams(0, 1, 1f))
+            addView(recChip)
+        }
+        previewBox.addView(chips, FrameLayout.LayoutParams(match, wrap, Gravity.TOP))
+        // What the server's camera check says (it's also spoken, for when this screen faces away).
+        setupView = TextView(this).apply {
+            textSize = 15f; setTextColor(MUTED); text = "Camera check: waiting for the server…"
+            gravity = Gravity.CENTER; setTypeface(null, Typeface.BOLD)
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            background = rounded(Color.argb(185, 0, 0, 0), 14)
+        }
+        previewBox.addView(setupView, FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM).apply {
+            setMargins(dp(12), 0, dp(12), dp(28))   // clear of the panel's rounded top, which overlaps
+        })
+        root.addView(previewBox, LinearLayout.LayoutParams(match, 0, 1f))
+
+        // ---- The session panel: state, the big button, the strike trigger ----
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setPadding(dp(16), dp(14), dp(16), dp(12))
+            background = GradientDrawable().apply {
+                setColor(SURFACE)
+                val r = dp(22).toFloat()
+                cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+            }
         }
-        root.addView(panel)
+        root.addView(panel, LinearLayout.LayoutParams(match, wrap).apply { topMargin = -dp(16) })
 
-        statusView = TextView(this).apply { textSize = 20f; setTypeface(null, Typeface.BOLD) }
+        statusView = TextView(this).apply { textSize = 20f; setTypeface(null, Typeface.BOLD); setTextColor(TEXT) }
+        uploadView = TextView(this).apply { textSize = 13f; setTextColor(MUTED); maxLines = 2 }
         panel.addView(statusView)
-        // What the server's camera check says (it's also spoken, for when this screen faces away).
-        setupView = TextView(this).apply { textSize = 15f; setTextColor(Color.rgb(160, 170, 165)); text = "Camera check: waiting for the server…" }
-        panel.addView(setupView)
+        panel.addView(uploadView, LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(2) })
 
-        startButton = button("") { setArmed(!armed) }.apply {
-            textSize = 20f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.WHITE)
+        startButton = Button(this).apply {
+            isAllCaps = false; textSize = 19f; setTypeface(null, Typeface.BOLD); setTextColor(Color.WHITE)
+            stateListAnimator = null
+            setOnClickListener { setArmed(!armed) }
         }
-        panel.addView(startButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64)).apply {
-            topMargin = dp(8)
-        })
+        panel.addView(startButton, LinearLayout.LayoutParams(match, dp(64)).apply { topMargin = dp(12) })
 
+        // Strike trigger: the level bar, and how loud a strike must be.
+        val trigLabel = TextView(this).apply {
+            text = "STRIKE TRIGGER"; textSize = 11f; setTypeface(null, Typeface.BOLD); setTextColor(MUTED)
+            letterSpacing = 0.08f
+        }
+        panel.addView(trigLabel, LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(14) })
         meter = MeterView(this)
-        panel.addView(meter, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(14)).apply {
-            topMargin = dp(10); bottomMargin = dp(4)
-        })
+        panel.addView(meter, LinearLayout.LayoutParams(match, dp(12)).apply { topMargin = dp(6); bottomMargin = dp(10) })
 
         sensitivityView = TextView(this).apply {
-            textSize = 22f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+            textSize = 20f; setTypeface(null, Typeface.BOLD); gravity = Gravity.CENTER; setTextColor(TEXT)
         }
         val sensLabel = TextView(this).apply {
-            text = "Sensitivity"; textSize = 12f; gravity = Gravity.CENTER; setTextColor(Color.rgb(74, 222, 128))
+            text = "Sensitivity"; textSize = 11f; gravity = Gravity.CENTER; setTextColor(MUTED)
         }
         val sensBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
             addView(sensitivityView)
             addView(sensLabel)
         }
-        minusButton = button("−") { setSensitivity(prefs.getInt("sensitivity", 100) - 10) }
-        plusButton = button("+") { setSensitivity(prefs.getInt("sensitivity", 100) + 10) }
-        panel.addView(row(
-            minusButton,
-            sensBox,
-            plusButton,
-            button("Save now") { if (recorder != null) { listener?.holdOff(); onImpact(System.nanoTime()) } },
-        ))
+        minusButton = button("−") { setSensitivity(prefs.getInt("sensitivity", 100) - 10) }.apply { textSize = 22f }
+        plusButton = button("+") { setSensitivity(prefs.getInt("sensitivity", 100) + 10) }.apply { textSize = 22f }
+        val saveNow = button("Save now") { if (recorder != null) { listener?.holdOff(); onImpact(System.nanoTime()) } }
+        panel.addView(row(minusButton, sensBox, plusButton, saveNow))
 
+        settingsButton = button("⚙  Settings") { openSettings() }
+        practiceView = TextView(this).apply { textSize = 12f; setTextColor(MUTED) }
+        panel.addView(settingsButton, LinearLayout.LayoutParams(match, dp(48)).apply { topMargin = dp(10) })
+        panel.addView(practiceView, LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(4) })
+
+        // ---- Settings sheet ----
         modeButton = button("") { chooseMode() }
         angleButton = button("") { chooseAngle() }
-        serverButton = button("") { chooseServer() }.apply { textSize = 13f; maxLines = 1 }
+        serverButton = button("") { chooseServer() }.apply { textSize = 13f; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.MIDDLE }
         shutterButton = button("") { chooseShutter() }
-        panel.addView(row(angleButton, modeButton))
-        panel.addView(row(shutterButton, serverButton))
-        // Practice mode: not a recording setting, so it stays usable while recording.
+        // Not recording settings, so they stay usable while recording.
         practiceButton = button("") { togglePracticeVoice() }
-        panel.addView(row(practiceButton, button("Voice check") { voiceCheck() }))
-        // Also not recording settings: who says the camera setup, and starting by itself once it's good.
-        setupVoiceButton = button("") { toggleSetupVoice() }.apply { textSize = 14f }
-        autoStartButton = button("") { toggleAutoStart() }.apply { textSize = 14f }
-        panel.addView(row(setupVoiceButton, autoStartButton))
-        practiceView = TextView(this).apply { textSize = 12f; setTextColor(Color.rgb(160, 170, 165)) }
-        panel.addView(practiceView)
-        exposureView = TextView(this).apply { textSize = 12f; setPadding(0, dp(4), 0, 0) }
-        panel.addView(exposureView)
+        setupVoiceButton = button("") { toggleSetupVoice() }
+        autoStartButton = button("") { toggleAutoStart() }
+        val voiceCheckButton = button("Test") { voiceCheck() }
+        exposureView = TextView(this).apply { textSize = 12f; setTextColor(MUTED) }
 
-        uploadView = TextView(this).apply { textSize = 14f; setPadding(0, dp(6), 0, 0) }
-        panel.addView(uploadView)
-
-        panel.addView(TextView(this).apply {
-            textSize = 12f
-            setTextColor(Color.rgb(120, 130, 125))
-            setPadding(0, dp(6), 0, 0)
-            text = "Each swing saves ${PRE_S.toInt()} s before and ${POST_S.toInt()} s after the strike and goes to the server by itself. " +
-                "Put the white line just above the room's noise; the bar should jump past it on a strike."
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(20))
+            isClickable = true   // taps inside don't close the sheet
+            background = GradientDrawable().apply {
+                setColor(SURFACE)
+                val r = dp(24).toFloat()
+                cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+            }
+        }
+        card.addView(View(this).apply { background = rounded(LINE, 999) },
+            LinearLayout.LayoutParams(dp(40), dp(4)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(10) })
+        val title = TextView(this).apply { text = "Settings"; textSize = 22f; setTypeface(null, Typeface.BOLD); setTextColor(TEXT) }
+        val done = button("Done") { closeSettings() }.apply { background = pressable(GREEN, 14); setTextColor(Color.WHITE) }
+        card.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(title, LinearLayout.LayoutParams(0, wrap, 1f))
+            addView(done)
         })
+        lockNote = TextView(this).apply {
+            text = "Recording: stop to change the camera settings."
+            textSize = 13f; setTextColor(AMBER); visibility = View.GONE
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = rounded(Color.argb(40, 245, 158, 11), 10)
+        }
+        card.addView(lockNote, LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(10) })
+
+        fun section(name: String) = card.addView(TextView(this).apply {
+            text = name.uppercase(); textSize = 11f; setTypeface(null, Typeface.BOLD); setTextColor(MUTED); letterSpacing = 0.08f
+        }, LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(18); bottomMargin = dp(2) })
+        fun setting(label: String, hint: String?, control: View) {
+            val text = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(this@MainActivity).apply { this.text = label; textSize = 16f; setTextColor(TEXT) })
+                hint?.let { h -> addView(TextView(this@MainActivity).apply { this.text = h; textSize = 12f; setTextColor(MUTED) }) }
+            }
+            card.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(8), 0, dp(8))
+                addView(text, LinearLayout.LayoutParams(0, wrap, 1f).apply { marginEnd = dp(12) })
+                addView(control, LinearLayout.LayoutParams(wrap, wrap).apply { width = if (control === serverButton) dp(190) else wrap })
+            })
+            card.addView(View(this).apply { setBackgroundColor(LINE) }, LinearLayout.LayoutParams(match, 1))
+        }
+        section("Camera")
+        setting("This phone films", "The server pairs the two angles of each swing", angleButton)
+        setting("Recording mode", "240 fps is slow-mo but darker", modeButton)
+        setting("Shutter", "Auto unless the light is bright and flicker-free", shutterButton)
+        card.addView(exposureView, LinearLayout.LayoutParams(match, wrap).apply { topMargin = dp(8) })
+        section("Home server")
+        setting("Address", null, serverButton)
+        section("Voice")
+        setting("Practice voice", "Says your practice number after each swing", practiceButton)
+        setting("Setup voice", "Who says the camera check", setupVoiceButton)
+        setting("Auto-start", "Start recording once the camera check is good", autoStartButton)
+        setting("Speaker", "Says a sample result at the media volume", voiceCheckButton)
+        card.addView(TextView(this).apply {
+            textSize = 12f
+            setTextColor(MUTED)
+            setPadding(0, dp(16), 0, 0)
+            text = "Each swing saves ${PRE_S.toInt()} s before and ${POST_S.toInt()} s after the strike and goes to the server by itself. " +
+                "Set the sensitivity so the white line sits just above the room's noise; the bar should jump past it on a strike."
+        })
+        val scroll = ScrollView(this).apply { addView(card) }
+        settingsSheet = FrameLayout(this).apply {
+            setBackgroundColor(Color.argb(150, 0, 0, 0))
+            visibility = View.GONE
+            setOnClickListener { closeSettings() }
+            addView(scroll, FrameLayout.LayoutParams(match, wrap, Gravity.BOTTOM))
+        }
+        frame.addView(settingsSheet, FrameLayout.LayoutParams(match, match))
 
         setSensitivity(prefs.getInt("sensitivity", 100))
         updateAngleButton()
         updatePracticeButton()
         updateSetupVoiceButton()
         updateAutoStartButton()
+        updateChips()
     }
 
     /** Fit the preview to the box with the recording's shape (portrait, so width and height swap). */
@@ -801,7 +960,7 @@ class MainActivity : Activity() {
             set(v) { field = v; invalidate() }
         var threshold = 10f
             set(v) { field = v; invalidate() }
-        private val track = Paint().apply { color = Color.argb(40, 255, 255, 255) }
+        private val track = Paint().apply { color = Color.argb(34, 255, 255, 255); isAntiAlias = true }
         private val fill = Paint().apply { color = Color.rgb(34, 197, 94) }
         private val over = Paint().apply { color = Color.rgb(250, 204, 21) }
         private val mark = Paint().apply { color = Color.WHITE }
@@ -825,5 +984,17 @@ class MainActivity : Activity() {
         // Camera angles, by the key that goes in clip names. With a phone at each, the server pairs
         // their clips of the same swing.
         private val ANGLES = linkedMapOf("face" to "Face-on", "dtl" to "Down the line")
+
+        // The palette (the review page's dark theme).
+        private val BG = Color.rgb(11, 16, 13)
+        private val SURFACE = Color.rgb(19, 26, 22)
+        private val SURFACE_2 = Color.rgb(27, 36, 30)
+        private val LINE = Color.rgb(38, 51, 43)
+        private val TEXT = Color.rgb(231, 237, 232)
+        private val MUTED = Color.rgb(142, 159, 149)
+        private val GREEN = Color.rgb(22, 163, 74)
+        private val GREEN_TEXT = Color.rgb(74, 222, 128)
+        private val RED = Color.rgb(220, 38, 38)
+        private val AMBER = Color.rgb(245, 158, 11)
     }
 }
