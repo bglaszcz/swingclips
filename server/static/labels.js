@@ -10,10 +10,14 @@
 // clips, positions, overlays, frameIndexAt, fitRect, jumpTo, partnerOffset, syncPartner, setSkeleton, setOverlay.
 (function () {
   const EVENTS = [
-    ["takeaway", "Takeaway", "T"], ["p2", "P2 shaft parallel back", "2"], ["p3", "P3 lead arm parallel back", "3"],
-    ["p4", "P4 top", "4"], ["p5", "P5 lead arm parallel down", "5"], ["p6", "P6 shaft parallel down", "6"],
-    ["impact", "P7 impact", "7"], ["p8", "P8 shaft parallel through", "8"],
+    ["takeaway", "Takeaway", "T", "Takeaway"], ["p2", "P2 shaft parallel back", "2", "Shaft back"],
+    ["p3", "P3 lead arm parallel back", "3", "Arm back"], ["p4", "P4 top", "4", "Top"],
+    ["p5", "P5 lead arm parallel down", "5", "Arm down"], ["p6", "P6 shaft parallel down", "6", "Shaft down"],
+    ["impact", "P7 impact", "7", "Impact"], ["p8", "P8 shaft parallel through", "8", "Through"],
   ];
+  // The points, grouped as they're shown (indices into POINTS, which keeps the clicking order).
+  const POINT_GROUPS = [["Golfer's left", [0, 1, 2, 6]], ["Golfer's right", [3, 4, 5, 7]], ["Club", [8, 9, 10]]];
+  const KEYS_OPEN = "labelKeysOpen";
   const EVENT_KEYS = { t: "takeaway", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6", 7: "impact", i: "impact", 8: "p8" };
   // What gets clicked on a frame, in order. Left and right are the golfer's own.
   const POINTS = [
@@ -400,6 +404,24 @@
       ctx.strokeStyle = CLUB_COLOR;
       ctx.lineWidth = 3;
       ctx.strokeRect(r.x + 1.5, r.y + 1.5, r.w - 3, r.h - 3);
+      // What to click next, where the eyes are: a pill at the top of the picture.
+      const next = ballArmed ? ["Ball", BALL_COLOR] : [POINTS[target][1], pointColor(POINTS[target][0])];
+      const done = POINTS.filter(([k]) => pts[k]).length;
+      const text = `Click: ${next[0]}   ${done}/${POINTS.length}`;
+      const fs = Math.max(12, Math.min(18, r.w / 22)), pad = fs * 0.6, dot = fs * 0.45;
+      ctx.font = `600 ${fs}px system-ui, sans-serif`;
+      const w = ctx.measureText(text).width + pad * 3 + dot * 2, h = fs * 1.9;
+      const x = r.x + (r.w - w) / 2, y = r.y + 10;
+      ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, h / 2);
+      ctx.fill();
+      ctx.fillStyle = next[1];
+      ctx.beginPath();
+      ctx.arc(x + pad + dot, y + h / 2, dot, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.fillText(text, x + pad * 2 + dot * 2, y + h * 0.68);
     }
     ctx.restore();
     if (which === active && frameKey(t) !== lastFrameKey) {
@@ -423,6 +445,31 @@
     return b;
   }
 
+  /** A segmented control: [label, isOn, onclick] per option. */
+  function seg(options, aria) {
+    const box = el("span", { className: "seg" });
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", aria);
+    box.append(...options.map(([text, isOn, onclick, title]) => {
+      const b = el("button", { className: isOn ? "on" : "", textContent: text, title: title || "" });
+      b.onclick = onclick;
+      return b;
+    }));
+    return box;
+  }
+
+  const kbd = k => el("kbd", { textContent: k });
+  const pointColor = key => key.startsWith("l_") ? LEFT_COLOR : key.startsWith("r_") ? RIGHT_COLOR : CLUB_COLOR;
+
+  /** "3 / 8" with a thin bar. */
+  function meter(label, n, of) {
+    const pct = of ? Math.round(n / of * 100) : 0;
+    const bar = el("span", { className: "lp-bar" }, el("i"));
+    bar.firstChild.style.width = pct + "%";
+    return el("div", { className: "lp-meter" + (of && n >= of ? " full" : "") },
+      el("span", { className: "lp-mlabel", textContent: label }), bar, el("b", { textContent: `${n}/${of}` }));
+  }
+
   function render() {
     if (!on) return;
     const a = activeClip();
@@ -431,22 +478,24 @@
     const t = frameTime();
     const kids = [];
 
-    const state = !e ? "" : { loading: "Loading…", ready: "", saving: "Saving…", saved: "Saved", error: "Not saved" }[e.state];
-    kids.push(el("div", { className: "lp-row" },
-      el("strong", { textContent: "Labeling" }),
-      el("span", { className: "lp-label", textContent: "Pass" }),
-      ...[1, 2].map(n => chip(String(n), { on: labelPass === n, onclick: () => setPass(n),
-        title: n === 2 ? "A second pass, days later, without looking at the first: measures your own consistency" : "" })),
-      partner ? el("span", { className: "lp-label", textContent: "Angle (D)" }) : null,
-      partner ? chip("Face-on", { on: active === "main", onclick: () => setActive("main") }) : null,
-      partner ? chip("Down the line", { on: active === "dtl", onclick: () => setActive("dtl") }) : null,
-      el("span", { className: "lp-state" + (e && e.state === "error" ? " bad" : ""), textContent: state }),
+    // ---- Header: pass, angle, save state, done ----
+    const state = !e ? null : {
+      loading: ["Loading…", ""], ready: null, saving: ["Saving…", ""], saved: ["✓ Saved", "ok"], error: ["Not saved", "bad"],
+    }[e.state];
+    kids.push(el("div", { className: "lp-head" },
+      el("strong", { className: "lp-title", textContent: "Labeling" }),
+      el("span", { className: "lp-group" }, el("span", { className: "lp-label", textContent: "Pass" }),
+        seg([1, 2].map(n => [String(n), labelPass === n, () => setPass(n),
+          n === 2 ? "A second pass, days later, without looking at the first: measures your own consistency" : "First pass"]), "Label pass")),
+      partner ? el("span", { className: "lp-group" }, el("span", { className: "lp-label" }, "Angle ", kbd("D")),
+        seg([["Face-on", active === "main", () => setActive("main")], ["Down the line", active === "dtl", () => setActive("dtl")]], "Angle to label")) : null,
+      state ? el("span", { className: "pill lp-save " + state[1], textContent: state[0] }) : null,
       el("span", { className: "grow" }),
-      labeledCount != null ? el("span", { className: "lp-label", textContent: `${labeledCount} clip(s) labeled in pass ${labelPass}` }) : null,
-      chip("Done (L)", { onclick: () => setOn(false) })));
+      labeledCount != null ? el("span", { className: "lp-label", textContent: `${labeledCount} clip${labeledCount === 1 ? "" : "s"} in pass ${labelPass}` }) : null,
+      (() => { const b = el("button", { className: "primary small", title: "Leave labeling (L or Esc)" }, "Done ", kbd("L")); b.onclick = () => setOn(false); return b; })()));
 
     if (!a.pose) {
-      kids.push(el("div", { className: "note", textContent: "This clip hasn't been analyzed yet: labels are tied to its analyzed frames, so wait for it." }));
+      kids.push(el("div", { className: "lp-empty", textContent: "This clip hasn't been analyzed yet. Labels are tied to its analyzed frames, so wait for it (a minute or so)." }));
       panel.replaceChildren(...kids);
       return;
     }
@@ -455,57 +504,130 @@
       return;
     }
 
-    kids.push(el("div", { className: "lp-row" },
-      el("span", { className: "lp-label", textContent: "Moments" }),
-      ...EVENTS.map(([k, label, key]) => {
-        const v = doc.events[k];
-        const i = v == null ? null : frameIndexAt(v, a.pose);
-        const flagged = (fixes.get(a.name) || []).some(f => f.event === k);
-        return chip(`${key}  ${v == null ? "–" : v.toFixed(3)}${flagged ? " !" : ""}`, {
-          on: v != null && v === t, done: v != null,
-          title: `${label} (key ${key}${k === "impact" ? " or I" : ""})${flagged ? ": the Labels page says to check this one" : ""}`,
-          onclick: i == null ? () => setEvent(k) : () => showFrame(i),
-        });
-      })));
-
+    const sugg = suggestions();
+    const here = frameIndexAt(a.video.currentTime, a.pose);
     const pts = t == null ? {} : doc.frames[frameKey(t)] || {};
-    kids.push(el("div", { className: "lp-row" },
-      el("span", { className: "lp-label", textContent: "This frame" }),
-      ...POINTS.map(([k, label, tag], j) => {
-        const q = pts[k];
-        const text = tag + (q ? q.hidden ? " ✕" : q.blur ? " ~" : " ✓" : "");
-        return chip(text, { on: j === target && !ballArmed, done: !!q, title: label, onclick: () => { target = j; ballArmed = false; render(); } });
-      }),
-      chip(doc.ball ? "Ball ✓" : "Ball", { on: ballArmed, done: !!doc.ball, title: "B, then click the ball's middle (at address)",
-        onclick: () => { ballArmed = !ballArmed; render(); } })));
+    const moments = EVENTS.filter(([k]) => doc.events[k] != null).length;
+    const framesDone = sugg.filter(i => frameDone(doc, a.pose.frames[i].t)).length;
+    const pointsHere = POINTS.filter(([k]) => pts[k]).length;
+
+    // ---- Progress for this angle of the swing ----
+    kids.push(el("div", { className: "lp-progress" },
+      el("span", { className: "lp-angle", textContent: active === "dtl" ? "Down the line" : partner ? "Face-on" : "This clip" }),
+      meter("Moments", moments, EVENTS.length),
+      meter("Suggested frames", framesDone, sugg.length),
+      el("div", { className: "lp-meter" + (doc.ball ? " full" : "") }, el("span", { className: "lp-mlabel", textContent: "Ball" }),
+        el("b", { textContent: doc.ball ? "✓" : "–" }))));
+
+    // ---- To fix (from the Labels page's checks) ----
     const fixHere = t == null ? [] : fixesAt(a.name, t);
     const all = swingFixes();
     if (all.length || fixHere.length) {
-      kids.push(el("div", { className: "lp-row lp-fix" },
-        el("span", { className: "lp-label", textContent: fixHere.length ? "To fix here" : "To fix in this swing" }),
-        ...(fixHere.length ? [...new Set(fixHere.map(f => f.text))].map(text => el("span", { className: "lp-fixtext", textContent: text }))
-          : [el("span", { className: "lp-label", textContent: `${all.length} frame(s) on the Labels page's worklist` })]),
-        el("span", { className: "grow" }),
-        all.length ? chip(`Next fix › (${all.length})`, { onclick: nextFix, title: "The next frame to fix in this swing (N)" }) : null));
+      const next = all.length ? el("button", { className: "small", title: "The next frame to fix in this swing (N)" }, `Next fix (${all.length}) `, kbd("N")) : null;
+      if (next) next.onclick = nextFix;
+      kids.push(el("div", { className: "lp-fix" },
+        el("span", { className: "lp-fixicon", textContent: "!" }),
+        el("div", { className: "lp-fixbody" },
+          el("b", { textContent: fixHere.length ? "To fix on this frame" : `${all.length} frame${all.length === 1 ? "" : "s"} to fix in this swing` }),
+          ...(fixHere.length ? [...new Set(fixHere.map(f => f.text))].map(text => el("div", { className: "lp-fixtext", textContent: text }))
+            : [el("div", { className: "lp-fixtext", textContent: "Red rings mark the points to check." })])),
+        next));
     }
-    const next = ballArmed ? "the ball's middle" : POINTS[target][1];
-    kids.push(el("div", { className: "lp-prompt" }, "Click: ", el("b", { textContent: next })));
 
-    const sugg = suggestions();
-    const here = frameIndexAt(a.video.currentTime, a.pose);
-    kids.push(el("div", { className: "lp-row" },
-      el("span", { className: "lp-label", textContent: "Suggested frames ([ ])" }),
-      ...sugg.map((i, k) => chip(String(k + 1), { on: i === here, done: frameDone(doc, a.pose.frames[i].t),
-        title: `Frame ${i + 1} at ${a.pose.frames[i].t.toFixed(3)} s`, onclick: () => showFrame(i) }))));
+    // ---- Moments ----
+    const tiles = EVENTS.map(([k, label, key, short]) => {
+      const v = doc.events[k];
+      const i = v == null ? null : frameIndexAt(v, a.pose);
+      const flagged = (fixes.get(a.name) || []).some(f => f.event === k);
+      const b = el("button", {
+        className: "lp-moment" + (v != null ? " set" : "") + (v != null && v === t ? " here" : "") + (flagged ? " flag" : ""),
+        title: `${label} (key ${key}${k === "impact" ? " or I" : ""})` + (v == null ? ": press the key on its frame, or click to mark this frame"
+          : ": click to go there; press the key again on that frame to clear") + (flagged ? ". The Labels page says to check this one" : ""),
+      }, el("span", { className: "lp-mkey", textContent: key }), el("span", { className: "lp-mname", textContent: short }),
+         el("span", { className: "lp-mtime", textContent: v == null ? "not set" : `${v.toFixed(3)} s` }));
+      b.onclick = i == null ? () => setEvent(k) : () => showFrame(i);
+      return b;
+    });
+    kids.push(el("div", { className: "lp-section" },
+      el("div", { className: "lp-shead" }, el("b", { textContent: "Key moments" }),
+        el("span", { className: "lp-label" }, "Go to the frame, then press ", kbd("T"), " ", kbd("2"), "–", kbd("8"), " (", kbd("I"), " = impact)")),
+      el("div", { className: "lp-moments" }, ...tiles)));
 
-    kids.push(el("div", { className: "note" },
-      "Keys: T, 2-8 (7 or I = impact) mark the moment on the frame on screen (again to clear) · click a point · ",
-      "Shift+click if it's a blur · X = can't see it · Tab = skip · Backspace = undo · B = ball · [ ] = suggested frames · ",
-      "← → = frame" + (partner ? " (of the angle being labeled) · D = switch angle" : "") + ". ",
-      "The tracker's skeleton and numbers are hidden while you label, so they don't sway you; they come back when you're done. ",
-      "Left and right are the golfer's own: face-on, the golfer's left is on the picture's right. ",
-      "Takeaway = the first frame the club moves; in a blurred frame put the clubhead in the middle of the streak."));
+    // ---- Points on this frame ----
+    const nextText = ballArmed ? "the ball's middle (at address)" : POINTS[target][1];
+    const nextColor = ballArmed ? BALL_COLOR : pointColor(POINTS[target][0]);
+    const prompt = el("div", { className: "lp-prompt" },
+      el("span", { className: "lp-dot" }), el("span", { textContent: "Click " }), el("b", { textContent: nextText }),
+      el("span", { className: "lp-label", textContent: ` · ${pointsHere} of ${POINTS.length} on this frame` }));
+    prompt.querySelector(".lp-dot").style.background = nextColor;
+    const pointBtn = j => {
+      const [k, label, tag] = POINTS[j];
+      const q = pts[k];
+      const mark = q ? q.hidden ? "✕" : q.blur ? "~" : "✓" : "";
+      const b = el("button", { className: "lp-point" + (j === target && !ballArmed ? " on" : "") + (q ? " done" : ""),
+        title: label + (q ? q.hidden ? " (can't see it)" : q.blur ? " (a blur)" : "" : "") },
+        el("span", { className: "lp-dot" }), el("span", { textContent: tag }), mark ? el("span", { className: "lp-mark", textContent: mark }) : null);
+      b.querySelector(".lp-dot").style.background = pointColor(k);
+      b.onclick = () => { target = j; ballArmed = false; render(); };
+      return b;
+    };
+    const ball = el("button", { className: "lp-point" + (ballArmed ? " on" : "") + (doc.ball ? " done" : ""),
+      title: "B, then click the ball's middle (at address)" }, el("span", { className: "lp-dot" }), el("span", { textContent: "Ball" }),
+      doc.ball ? el("span", { className: "lp-mark", textContent: "✓" }) : null);
+    ball.querySelector(".lp-dot").style.background = BALL_COLOR;
+    ball.onclick = () => { ballArmed = !ballArmed; render(); };
+    kids.push(el("div", { className: "lp-section" },
+      el("div", { className: "lp-shead" }, el("b", { textContent: "Points on this frame" }),
+        el("span", { className: "lp-label" }, kbd("Shift"), "+click = a blur · ", kbd("X"), " can't see it · ", kbd("Tab"), " skip · ", kbd("⌫"), " undo")),
+      prompt,
+      el("div", { className: "lp-points" },
+        ...POINT_GROUPS.map(([name, idx]) => el("div", { className: "lp-pgroup" },
+          el("span", { className: "lp-label", textContent: name }), ...idx.map(pointBtn))),
+        el("div", { className: "lp-pgroup" }, el("span", { className: "lp-label", textContent: "Ball" }), ball))));
+
+    // ---- Suggested frames ----
+    const prevI = [...sugg].reverse().find(i => i < here), nextI = sugg.find(i => i > here);
+    const nav = (text, i, title) => { const b = el("button", { className: "small", title }, text); b.disabled = i == null; b.onclick = () => showFrame(i); return b; };
+    kids.push(el("div", { className: "lp-section" },
+      el("div", { className: "lp-shead" }, el("b", { textContent: "Suggested frames" }),
+        el("span", { className: "lp-label", textContent: "About a dozen through the swing, most in the downswing. Green = all points done." })),
+      el("div", { className: "lp-frames" },
+        nav("‹ ", prevI, "Previous suggested frame ([)"),
+        ...sugg.map((i, k) => {
+          const b = el("button", { className: "lp-frame" + (i === here ? " on" : "") + (frameDone(doc, a.pose.frames[i].t) ? " done" : ""),
+            textContent: String(k + 1), title: `Frame ${i + 1} at ${a.pose.frames[i].t.toFixed(3)} s` });
+          b.onclick = () => showFrame(i);
+          return b;
+        }),
+        nav(" ›", nextI, "Next suggested frame (])"))));
+    const frames = kids[kids.length - 1].querySelector(".lp-frames");
+    frames.firstChild.append(kbd("["));
+    frames.lastChild.prepend(kbd("]"));
+
     if (message) kids.push(el("div", { className: "lp-msg", textContent: message }));
+
+    // ---- Keys and tips, folded ----
+    const tips = el("details", { className: "explain lp-tips" },
+      el("summary", { textContent: "All keys and labeling tips" }),
+      el("dl", { className: "keys" },
+        el("dt", {}, kbd("T"), " ", kbd("2"), "–", kbd("8")), el("dd", { textContent: "Mark the moment on this frame (again to clear); 7 or I = impact" }),
+        el("dt", {}, kbd("←"), " ", kbd("→")), el("dd", { textContent: "One frame back / on" + (partner ? " (of the angle being labeled)" : "") }),
+        el("dt", {}, kbd("["), " ", kbd("]")), el("dd", { textContent: "Previous / next suggested frame" }),
+        el("dt", {}, kbd("Tab")), el("dd", { textContent: "Skip to the next point (Shift+Tab back)" }),
+        el("dt", {}, kbd("X")), el("dd", { textContent: "Can't see this point" }),
+        el("dt", {}, kbd("⌫")), el("dd", { textContent: "Undo the last point" }),
+        el("dt", {}, kbd("B")), el("dd", { textContent: "Place the ball" }),
+        partner ? el("dt", {}, kbd("D")) : null, partner ? el("dd", { textContent: "Switch angle" }) : null,
+        el("dt", {}, kbd("N")), el("dd", { textContent: "Next frame to fix" }),
+        el("dt", {}, kbd("J"), " ", kbd("K")), el("dd", { textContent: "Older / newer swing (stays in labeling)" }),
+        el("dt", {}, kbd("L"), " ", kbd("Esc")), el("dd", { textContent: "Done" })),
+      el("ul", { className: "lp-tipl" },
+        el("li", { textContent: "Left and right are the golfer's own: face-on, the golfer's left is on the picture's right." }),
+        el("li", { textContent: "Takeaway is the first frame the club moves. In a blurred frame, put the clubhead in the middle of the streak." }),
+        el("li", { textContent: "The tracker's skeleton and numbers are hidden while you label, so they don't sway you; they come back when you're done." })));
+    try { tips.open = localStorage.getItem(KEYS_OPEN) === "1"; } catch {}
+    tips.addEventListener("toggle", () => { try { localStorage.setItem(KEYS_OPEN, tips.open ? "1" : "0"); } catch {} });
+    kids.push(tips);
     panel.replaceChildren(...kids);
   }
 
