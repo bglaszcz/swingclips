@@ -79,6 +79,14 @@ class SentenceTest(unittest.TestCase):
         self.assertEqual(practice.judge(m, 3.44, 2.8, 3.4), "in")
         self.assertEqual(practice.judge(m, 3.46, 2.8, 3.4), "high")
 
+    def test_cue_after_a_miss_only(self):
+        """My focus's swing thought: said after a swing out of range, not after one in range."""
+        m = BY_KEY["handsPlaneP6"]
+        cue = "Hands drop to the trail pocket."
+        self.assertEqual(practice.sentence(m, 2.44, "high", cue=cue), f"Hands at P6 2.4, too far over. {cue}")
+        self.assertEqual(practice.sentence(m, 0.3, "in", cue=cue), "Hands at P6 0.3, in range")
+        self.assertEqual(practice.sentence(m, None, "none", cue=cue), "Hands at P6, no reading")
+
     def test_streak_and_no_reading(self):
         m = BY_KEY["tempo"]
         self.assertEqual(practice.sentence(m, 3.1, "in", streak=2), "Tempo 3.1, in range")
@@ -267,9 +275,17 @@ class PracticeTest(unittest.TestCase):
 
     def test_bad_targets_refused(self):
         for bad in ({"metric": "nope", "min": 0, "max": 1}, {"metric": "tempo", "min": 3, "max": 2},
-                    {"metric": "tempo", "min": None, "max": 2}, {"metric": "tempo", "min": "x", "max": 2}):
+                    {"metric": "tempo", "min": None, "max": 2}, {"metric": "tempo", "min": "x", "max": 2},
+                    {"metric": "tempo", "min": 2, "max": 3, "cue": "x" * 121}, {"metric": "tempo", "min": 2, "max": 3, "cue": 5}):
             with self.assertRaises(ValueError):
                 self.p.set_config(bad)
+
+    def test_cue_spoken_after_a_miss(self):
+        self.turn_on(lo=2.8, hi=3.0, cue="  Smooth back,   go through. ")
+        self.assertEqual(self.p.config["cue"], "Smooth back, go through.")
+        self.clock.t = T0 + 40
+        [e] = self.p.step([swing(1, T0)], {"swing_face_1.mp4": record()})
+        self.assertEqual(e["text"], "Tempo 3.2, too high. Smooth back, go through.")
 
 
 @unittest.skipIf(MiniRacer is None, "needs mini-racer")
@@ -390,6 +406,31 @@ class EndpointsTest(unittest.TestCase):
         [e] = app.practice_tick()
         self.assertEqual(e["status"], "in", e)
         self.assertEqual(e["text"], f"Tempo {practice.spoken_number(BY_KEY['tempo'], rec['body']['tempo'])}, in range")
+
+    def test_6_focus(self):
+        """My focus in the journal: set, replaced (the old one to the history), ended; bad ones refused."""
+        from unittest import mock
+        d = Path(tempfile.mkdtemp(prefix="swingclips-journal-"))
+        with mock.patch.object(self.app, "JOURNAL_FILE", d / "journal.json"):
+            c = self.client
+            self.assertIsNone(c.get("/api/journal").json()["focus"])
+            f = {"move": "handsPlaneP6", "aim": "less", "club": "I7", "results": ["path"], "since": "2026-09-28"}
+            self.assertEqual(c.post("/api/journal/focus", json=f).status_code, 200)
+            self.assertEqual(c.get("/api/journal").json()["focus"], f)
+            c.post("/api/journal/focus", json={**f, "move": "earlyExt"})
+            j = c.get("/api/journal").json()
+            self.assertEqual(j["focus"]["move"], "earlyExt")
+            self.assertEqual([x["move"] for x in j["focuses"]], ["handsPlaneP6"])
+            self.assertIn("until", j["focuses"][0])
+            c.post("/api/journal/focus", json={"move": None})
+            j = c.get("/api/journal").json()
+            self.assertIsNone(j["focus"])
+            self.assertEqual(len(j["focuses"]), 2)
+            for bad in ({**f, "aim": "sideways"}, {**f, "move": "../x"}, {**f, "club": "seven iron"},
+                        {**f, "since": "yesterday"}, {**f, "results": ["x"] * 9}):
+                self.assertEqual(c.post("/api/journal/focus", json=bad).status_code, 400, bad)
+            # The handicap log and notes are untouched by it.
+            self.assertEqual(j["handicap"], [])
 
     def test_5_voice_check(self):
         last = self.client.get("/api/practice/latest").json()["last"]

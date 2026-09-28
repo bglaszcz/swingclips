@@ -165,14 +165,16 @@ def judge(metric: dict, value: float | None, lo: float, hi: float) -> str:
     return "low" if v < lo else "high" if v > hi else "in"
 
 
-def sentence(metric: dict, value: float | None, status: str, streak: int = 0, why: str | None = None) -> str:
+def sentence(metric: dict, value: float | None, status: str, streak: int = 0, why: str | None = None,
+             cue: str = "") -> str:
+    """What the phone says. `cue`: a swing thought said after a swing out of range (My focus)."""
     name = metric["say"]
     if status == "none":
         return f"{name}, no shot" if why == "no shot" else f"{name}, no reading"
     number = spoken_number(metric, value)
     if status == "in":
         return f"{name} {number}, in range" + (f", {streak} in a row" if streak >= STREAK_FROM else "")
-    return f"{name} {number}, {metric['low' if status == 'low' else 'high']}"
+    return f"{name} {number}, {metric['low' if status == 'low' else 'high']}" + (f". {cue}" if cue else "")
 
 
 def fmt_range(metric: dict, lo: float, hi: float) -> str:
@@ -182,7 +184,9 @@ def fmt_range(metric: dict, lo: float, hi: float) -> str:
 
 def default_config() -> dict:
     # speaking comes from the phones' own setting; `since`: only swings struck after this speak.
-    return {"on": False, "metric": "tempo", "min": 2.8, "max": 3.4, "club": None, "streak": True, "since": 0.0}
+    # cue: a swing thought said after a swing out of range ("" = none).
+    return {"on": False, "metric": "tempo", "min": 2.8, "max": 3.4, "club": None, "streak": True, "since": 0.0,
+            "cue": ""}
 
 
 def check_config(c: dict) -> dict:
@@ -196,8 +200,12 @@ def check_config(c: dict) -> dict:
     if lo > hi:
         raise ValueError("The low end is above the high end")
     club = c.get("club")
+    cue = c.get("cue") or ""
+    if not isinstance(cue, str) or len(cue) > 120:
+        raise ValueError("The cue is a short swing thought (120 characters at most)")
     out.update(on=bool(c.get("on")), metric=c["metric"], min=float(lo), max=float(hi),
-               club=club if isinstance(club, str) and len(club) <= 4 else None, streak=bool(c.get("streak", True)))
+               club=club if isinstance(club, str) and len(club) <= 4 else None, streak=bool(c.get("streak", True)),
+               cue=" ".join(cue.split()))
     return out
 
 
@@ -289,7 +297,7 @@ class Practice:
                      "made": now, "metric": metric["key"], "min": c["min"], "max": c["max"],
                      "value": None if value is None else rounded(metric, value), "status": status,
                      "why": why, "streak": streak, "club": (s.get("shot") or {}).get("club"),
-                     "text": sentence(metric, value, status, streak if c["streak"] else 0, why)}
+                     "text": sentence(metric, value, status, streak if c["streak"] else 0, why, c.get("cue") or "")}
                 self.log.append(e)
                 done_names.add(s["name"])
                 done_times.append(t)

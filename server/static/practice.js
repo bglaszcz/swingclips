@@ -34,7 +34,7 @@ async function loadPractice() {
   if (!prForm) {
     const c = prState.config;
     // club: "" = any club; never chosen (null) = the most-hit one.
-    prForm = { metric: c.metric, club: c.club ?? undefined, min: c.min, max: c.max, streak: c.streak };
+    prForm = { metric: c.metric, club: c.club ?? undefined, min: c.min, max: c.max, streak: c.streak, cue: c.cue || "" };
   }
   renderPracticeForm();
   renderPracticeLog();
@@ -135,12 +135,13 @@ function renderPracticeForm() {
   if (m.noisy) prEl("pr-suggest").textContent += ` Noisy: ${m.noisy}.`;
 
   const changed = prForm.metric !== c.metric || prForm.min !== c.min || prForm.max !== c.max
-    || prForm.streak !== c.streak || (prForm.club || null) !== (c.club || null);
+    || prForm.streak !== c.streak || (prForm.club || null) !== (c.club || null) || (prForm.cue || "") !== (c.cue || "");
   const state = prEl("pr-state");
   const cm = prMetric(c.metric);
   state.classList.toggle("on", c.on);
   state.textContent = c.on
     ? `On: ${cm.label} ${prFmt(cm, c.min)} to ${prFmt(cm, c.max)}${cm.unit && cm.unit !== ":1" ? " " + cm.unit : ""}`
+      + (c.cue ? ` · after a miss: “${c.cue}”` : "")
     : "Off: nothing is spoken.";
   const toggle = prEl("pr-toggle");
   toggle.textContent = c.on ? "Stop practice" : "Start practice";
@@ -185,6 +186,7 @@ async function savePractice(on) {
 
 prEl("pr-metric").onchange = e => {
   prForm.metric = e.target.value;
+  prForm.cue = "";   // a focus's swing thought goes with its own number
   usePracticeSuggestion(true);
 };
 prEl("pr-club").onchange = e => {
@@ -216,6 +218,19 @@ prEl("pr-test").onclick = async () => {
 };
 prEl("pr-close").onclick = () => closeTrendView();
 prEl("practice-btn").onclick = () => practiceBox.hidden ? openPractice() : closeTrendView();
+
+/**
+ * Starts practice on a focus (trends.js, My focus): {metric, club, min, max, cue}. Opens the practice
+ * view with it saved and on. Returns false when the move can't be practiced (the face-on turns).
+ */
+async function practiceFromFocus(f) {
+  if (!prState) await loadPractice();
+  if (!prState || !prMetric(f.metric)) return false;
+  prForm = { ...(prForm || {}), ...f, streak: true };
+  await openPractice();
+  await savePractice(true);
+  return true;
+}
 
 /** Sets the range to the suggestion; on a new number with no suggestion, clears it to be typed in. */
 function usePracticeSuggestion(newMetric) {

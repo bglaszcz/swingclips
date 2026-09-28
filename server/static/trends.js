@@ -614,6 +614,7 @@ function renderProgress() {
   renderSessionTable(sessions);
   renderGoodShots(club);
   renderHelps(club, sessions);
+  renderFocus();
 }
 
 for (const [id, key] of [["p-club", "club"], ["p-period", "period"], ["p-metric", "metric"]]) {
@@ -1126,6 +1127,12 @@ function renderHelps(club, sessions) {
       const drill = el("div"); drill.append(el("b", null, "Drill: "), fix.drill);
       const thought = el("div"); thought.append(el("b", null, "Swing thought: "), `\u201c${fix.thought}\u201d`);
       item.append(drill, thought);
+      const cur = journal.focus;
+      const isFocus = cur && cur.move === m.move && cur.aim === first.c.aim && cur.club === club;
+      const make = el("button", "small", isFocus ? "✓ My focus" : "Make this my focus");
+      make.disabled = !!isFocus;
+      make.onclick = () => setFocus({ move: m.move, aim: first.c.aim, club, results: [...new Set(m.items.map(x => x.l.result))] });
+      item.append(make);
       if (first.l.label !== "confirmed") item.append(el("div", "muted", "Emerging, not confirmed yet: try it for a session or two and see whether the numbers follow."));
     }
     plan.append(item);
@@ -1166,6 +1173,101 @@ function renderHelps(club, sessions) {
     list.append(card);
   }
   box.replaceChildren(plan, list);
+}
+
+// ---- Progress: my focus (focus.js) ----
+
+async function setFocus(body) {
+  try {
+    const res = await fetch("/api/journal/focus", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error((await res.json()).detail || res.status);
+  } catch (e) {
+    alert(`Couldn't save the focus: ${e.message}`);
+    return;
+  }
+  await loadTrendData();
+  renderTrendView();
+  if (body.move) document.getElementById("p-focus").scrollIntoView({ block: "nearest" });
+}
+
+/** A number as the focus table shows it: a body move by its field, a result by helps.js's unit. */
+function focusFmt(key, v) {
+  if (v == null) return "–";
+  const b = SwingSummary.BODY.find(f => f.key === key);
+  if (b) return fmtField(field(key), v) + (b.unit && b.unit !== ":1" ? (b.unit === "°" ? "°" : " " + b.unit) : "");
+  const r = SwingHelps.RESULTS.find(x => x.key === key);
+  const dec = r && (r.unit === "rpm" ? 0 : r.unit === "" ? 2 : 1);
+  return v.toFixed(dec ?? 1) + (r && r.unit ? (r.unit === "°" ? "°" : " " + r.unit) : "");
+}
+const focusLabel = key => (SwingSummary.BODY.find(f => f.key === key) || SwingHelps.RESULTS.find(r => r.key === key) || { label: key }).label;
+
+/** The range that means "better than my usual" for the move: from the median of the latest swings toward the aim. */
+function focusPracticeRange(f) {
+  const vals = progressSessions(f.club).flatMap(s => s.rows).reverse().map(r => r[f.move]).filter(v => v != null).slice(0, PR_SUGGEST_N);
+  if (vals.length < 5) return null;
+  vals.sort((a, b) => a - b);
+  const med = quantile(vals, 0.5), spread = quantile(vals, 0.9) - quantile(vals, 0.1);
+  const dec = DECIMALS[field(f.move).unit] ?? 1, round = v => Number(v.toFixed(dec));
+  return f.aim === "more" ? { min: round(med), max: round(med + 2 * spread) } : { min: round(med - 2 * spread), max: round(med) };
+}
+
+function renderFocus() {
+  const box = document.getElementById("p-focus-body");
+  const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
+  const f = journal.focus;
+  if (!f) {
+    box.replaceChildren(el("div", "muted", "No focus set. Pick one from the practice plan in “What helps, what hurts” below."));
+    return;
+  }
+  const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim];
+  const kids = [el("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`),
+    el("div", "muted", `With the ${clubName(f.club).toLowerCase()}, since ${new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}`)];
+  if (fix) {
+    const drill = el("div"); drill.append(el("b", null, "Drill: "), fix.drill);
+    const thought = el("div"); thought.append(el("b", null, "Swing thought: "), `“${fix.thought}”`);
+    kids.push(drill, thought);
+  }
+  const cmp = SwingFocus.compare(progressSessions(f.club), f);
+  if (!cmp.after) {
+    kids.push(el("div", "muted", `No sessions with the ${clubName(f.club).toLowerCase()} since it started yet: hit some balls with the drill, then look here.`));
+  } else {
+    kids.push(el("div", "muted", `${cmp.after} session${cmp.after === 1 ? "" : "s"} since, against ${cmp.before} before.`));
+    if (cmp.cameraMoved) kids.push(el("div", "p-focus-warn", "A camera moved since it started: the move's numbers either side may not compare."));
+    const table = el("table", "p-focus-table");
+    const head = el("tr");
+    for (const t of ["", "Before", "Since", "Change", ""]) head.append(el("th", null, t));
+    table.append(head);
+    for (const x of [cmp.move, ...cmp.results]) {
+      const tr = el("tr");
+      const v = SwingFocus.verdict(x);
+      const cls = x.level === "clear" || x.level === "maybe" ? (x.good === true ? "good" : x.good === false ? "bad" : "") : "muted";
+      tr.append(el("td", null, (x === cmp.move ? "The move: " : "") + focusLabel(x.key)),
+        el("td", null, focusFmt(x.key, x.before)), el("td", null, focusFmt(x.key, x.after)),
+        el("td", null, x.change == null ? "–" : (t => x.change > 0 && !t.startsWith("+") ? "+" + t : t)(focusFmt(x.key, x.change))),
+        el("td", cls, v));
+      table.append(tr);
+    }
+    const wrap = el("div"); wrap.style.overflowX = "auto"; wrap.append(table);
+    kids.push(wrap);
+  }
+  const buttons = el("div", "t-filters");
+  const practiceBtn = el("button", "small", "Practice this");
+  const range = focusPracticeRange(f);
+  practiceBtn.disabled = !range;
+  practiceBtn.title = range ? `In range = ${f.aim === "more" ? "more" : "less"} than your usual (${range.min} to ${range.max})` : "Not enough recent swings with this move to set a range";
+  practiceBtn.onclick = async () => {
+    const ok = await practiceFromFocus({ metric: f.move, club: f.club, min: range.min, max: range.max, cue: fix ? fix.thought : "" });
+    if (!ok) alert("Practice mode can't speak this move (the face-on turns aren't reliable enough one swing at a time).");
+  };
+  const end = el("button", "small", "End this focus");
+  end.onclick = () => { if (confirm("End this focus? It stays in the history.")) setFocus({ move: null }); };
+  buttons.append(practiceBtn, end);
+  kids.push(buttons);
+  const past = (journal.focuses || []).slice(-3).reverse();
+  if (past.length) {
+    kids.push(el("div", "muted", "Before: " + past.map(p => `${(SwingCoach.MOVES[p.move] || {})[p.aim]?.name || p.move} (${p.since} to ${p.until})`).join("; ")));
+  }
+  box.replaceChildren(...kids);
 }
 
 // Charts are drawn to their width.

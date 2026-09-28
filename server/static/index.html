@@ -343,6 +343,14 @@
   .p-plan-item { display: flex; flex-direction: column; gap: 3px; }
   .p-plan-name { font-weight: 600; color: var(--accent); }
   .p-links { display: flex; flex-direction: column; gap: 8px; }
+  #p-focus-body { display: flex; flex-direction: column; gap: 6px; font-size: 13px; margin-top: 6px; }
+  .p-focus-name { font-weight: 600; color: var(--accent); font-size: 15px; }
+  .p-focus-table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .p-focus-table th, .p-focus-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+  .p-focus-table th { color: var(--muted); font-weight: 600; }
+  .p-focus-table .good { color: var(--accent); font-weight: 600; }
+  .p-focus-table .bad { color: var(--bad); font-weight: 600; }
+  .p-focus-warn { color: var(--warn); }
   .p-link { border-bottom: 1px solid var(--line); padding: 6px 0 8px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
   .p-link-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-weight: 600; }
   .p-link .sub { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -979,6 +987,15 @@
       </select></label>
       <label title="Shaky numbers: tracking noise or the conditions could account for them. Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
     </div>
+    <div class="t-card" id="p-focus">
+      <strong>My focus</strong>
+      <div id="p-focus-body"></div>
+      <div class="note">One move to work on, from the practice plan below ("Make this my focus"). Since the day it
+        started, each session's median against the 6 sessions before, measured against how much it wobbles from
+        session to session anyway: "clearly" = 2 wobbles or more, "maybe" = 1.5 or more. "Practice this" turns on
+        practice mode for the move (in range = better than your usual), and the phone says the swing thought after
+        a swing out of range.</div>
+    </div>
     <div class="t-card">
       <strong>Latest session</strong>
       <div id="p-tiles"></div>
@@ -1092,6 +1109,7 @@
 <script src="/static/goodshots.js"></script>
 <script src="/static/helps.js"></script>
 <script src="/static/coach.js"></script>
+<script src="/static/focus.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script>

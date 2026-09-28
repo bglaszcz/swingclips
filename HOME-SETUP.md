@@ -417,6 +417,27 @@ drawn by `renderHelps` in `trends.js`):
   helps one result one way and another the other way is a trade-off, not a drill. General
   instruction for a right-hander: a coach watching the swing trumps it. Tests:
   `node --test tests/coach.test.js`.
+
+### My focus
+On **Progress**, first card (`static/focus.js`, drawn by `renderFocus` in `trends.js`):
+- **Make this my focus** on a practice-plan move saves it in the journal (`journal.json` `focus`:
+  move, which way, club, the results it's for, the day it started; `POST /api/journal/focus`, with
+  `{"move": null}` to end it; the one before goes to `focuses` with the day it ended).
+- The card: what to work on, the drill and the swing thought, then for the move and each result:
+  the median of the session medians before (the latest 6 sessions with the club) and since, the
+  change, and a verdict against the session-to-session wobble (the larger of the spread of the
+  session medians before, with 3+ sessions of 3+ swings, and what the swing counts alone allow):
+  "clearly" at 2 wobbles or more, "maybe" from 1.5, else "no change yet". Which way is right: the
+  move's aim; a result's better way or toward its target (path, face, curve toward 0; attack toward
+  the club's). With no real change, 200 simulated tries said "maybe" 12% of the time and "clearly"
+  4%. A camera the move is measured from moving since is flagged.
+- **Practice this**: practice mode on the move with the club, in range = better than your usual
+  (from the median of your latest 30 swings with it toward the aim), and the swing thought as a
+  **cue** the phone says after a swing out of range ("Hands at P6 2.4, too far over. Hands drop to
+  the trail pocket."). The cue shows in the practice panel and is dropped when you pick another
+  number there.
+- Tests: `node --test tests/focus.test.js`, `python -m unittest tests.test_practice` (the cue, the
+  focus endpoint).
 - First look on the live data (2026-09-27, 50 seven-iron swings in 4 sessions): 5 emerging, none
   confirmed, all about the same pattern: hands further out at P6 and losing forward bend at impact
   going with a more out-to-in path and more face open to the path. It takes 5-10 sessions of 20+
@@ -1132,10 +1153,8 @@ Toward a single-digit handicap (16.4 in Sept 2026): see how the swing changes an
 help. Done so far: swing numbers on the server, Progress, Leave out, handicap log and notes,
 practice mode (one number, spoken after each swing), what helps / what hurts.
 
-1. **What helps, what hurts**: done (Progress; see "What helps, what hurts" above). Next with it,
-   once links are confirmed: tie them to Focus tracking below.
-2. **Focus tracking**: set a focus (a move, which way, optional target, start date) and see how the
-   move and the results changed since, against the usual session-to-session variation.
+1. **What helps, what hurts**: done (Progress; see "What helps, what hurts" above).
+2. **Focus tracking**: done (Progress, "My focus"; see "My focus" above).
 3. **Compare two swings**: a reference swing (a good one, or one from before a focus) next to the
    current one, synced on impact, key-position cards lined up (the two-angle sync code carries
    over).

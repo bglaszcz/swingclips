@@ -1048,7 +1048,8 @@ def load_journal() -> dict:
         j = json.loads(JOURNAL_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         j = {}
-    return {"handicap": j.get("handicap", []), "notes": j.get("notes", {})}
+    return {"handicap": j.get("handicap", []), "notes": j.get("notes", {}), "focus": j.get("focus"),
+            "focuses": j.get("focuses", [])}
 
 
 def save_journal(j: dict) -> None:
@@ -1098,6 +1099,43 @@ def set_note(body: SessionNote):
             j["notes"].pop(body.key, None)
         save_journal(j)
     return {"ok": True}
+
+
+class Focus(BaseModel):
+    """What I'm working on (Progress, "My focus"): a body move (summary.js BODY key) and which way
+    (coach.js), with a club, the results it's for, and the day it started. move None ends it."""
+    move: str | None = None
+    aim: str | None = None       # "more" | "less"
+    club: str | None = None
+    results: list[str] = []
+    since: str | None = None     # YYYY-MM-DD; default today
+
+
+@app.post("/api/journal/focus")
+def set_focus(body: Focus):
+    key = re.compile(r"^[A-Za-z0-9]{1,32}$")
+    today = datetime.now().strftime("%Y-%m-%d")
+    if body.move is not None:
+        if not key.match(body.move) or body.aim not in ("more", "less"):
+            raise HTTPException(400, "A focus needs a move and which way (more or less)")
+        if body.club is not None and not re.match(r"^[A-Z0-9]{1,4}$", body.club):
+            raise HTTPException(400, "Unknown club")
+        if len(body.results) > 8 or not all(key.match(r) for r in body.results):
+            raise HTTPException(400, "Bad results")
+        since = body.since or today
+        try:
+            datetime.strptime(since, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(400, "since is a date: YYYY-MM-DD")
+    with files_lock:
+        j = load_journal()
+        old = j.get("focus")
+        if old:
+            j["focuses"] = (j.get("focuses") or []) + [{**old, "until": today}]
+        j["focus"] = None if body.move is None else {"move": body.move, "aim": body.aim, "club": body.club,
+                                                     "results": body.results, "since": since}
+        save_journal(j)
+    return {"ok": True, "focus": j["focus"]}
 
 
 # ---- Practice mode: one number and a range, spoken after each swing (see practice.py) ----
