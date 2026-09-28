@@ -5,12 +5,14 @@
 (function (root) {
   const Coach = root.SwingCoach || (typeof require !== "undefined" && require("./coach.js"));
 
-  // Starting thresholds: named on roughly the worst quarter of swings or fewer (tuned at merge).
+  // Thresholds: named on roughly the owner's worst quarter of swings or fewer (on his 178 swings to
+  // Sep 28: early extension 23%, standing up 24%, over the top 16%, the rest under 10%). Textbook
+  // limits would name nearly every swing from these 2D numbers, which says nothing.
   const FAULTS = [
-    // Early extension: hips toward the ball at impact (in) > 2.5
-    { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more", threshold: 2.5, test: v => v > 2.5 },
-    // Standing up: forward bend vs address at impact (deg; negative = lost) < -8
-    { key: "bendLoss", name: "standing up", move: "bendLoss", dir: "less", threshold: -8, test: v => v < -8 },
+    // Early extension: hips toward the ball at impact (in) > 3 (2.5 named 45% of swings)
+    { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more", threshold: 3, test: v => v > 3 },
+    // Standing up: forward bend vs address at impact (deg; negative = lost) < -10 (-8 named 43%)
+    { key: "bendLoss", name: "standing up", move: "bendLoss", dir: "less", threshold: -10, test: v => v < -10 },
     // Over the top: hands above the address shaft plane at P6 (in) > 5
     { key: "handsPlaneP6", name: "over the top", move: "handsPlaneP6", dir: "more", threshold: 5, test: v => v > 5 },
     // Head toward the ball: head moves toward the ball at impact (in) > 1

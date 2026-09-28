@@ -44,21 +44,21 @@ test("names, drills and swing thoughts come from coach.js", () => {
 });
 
 test("each threshold's edge: just inside vs just past", () => {
-  // Early extension: earlyExt > 2.5
-  assert.equal(Faults.faultsOf({ earlyExt: 2.5 }).length, 0);
-  assert.equal(Faults.faultsOf({ earlyExt: 2.49 }).length, 0);
-  const ee = Faults.faultsOf({ earlyExt: 2.51 });
+  // Early extension: earlyExt > 3
+  assert.equal(Faults.faultsOf({ earlyExt: 3 }).length, 0);
+  assert.equal(Faults.faultsOf({ earlyExt: 2.99 }).length, 0);
+  const ee = Faults.faultsOf({ earlyExt: 3.01 });
   assert.equal(ee.length, 1);
   assert.equal(ee[0].name, "early extension");
-  assert.equal(ee[0].value, 2.51);
+  assert.equal(ee[0].value, 3.01);
 
-  // Standing up: bendLoss < -8
-  assert.equal(Faults.faultsOf({ bendLoss: -8.0 }).length, 0);
-  assert.equal(Faults.faultsOf({ bendLoss: -7.99 }).length, 0);
-  const su = Faults.faultsOf({ bendLoss: -8.01 });
+  // Standing up: bendLoss < -10
+  assert.equal(Faults.faultsOf({ bendLoss: -10.0 }).length, 0);
+  assert.equal(Faults.faultsOf({ bendLoss: -9.99 }).length, 0);
+  const su = Faults.faultsOf({ bendLoss: -10.01 });
   assert.equal(su.length, 1);
   assert.equal(su[0].name, "standing up");
-  assert.equal(su[0].value, -8.01);
+  assert.equal(su[0].value, -10.01);
 
   // Over the top: handsPlaneP6 > 5
   assert.equal(Faults.faultsOf({ handsPlaneP6: 5.0 }).length, 0);
@@ -136,7 +136,7 @@ test("shaky and missing numbers are never named", () => {
   assert.deepEqual(Faults.faultsOf(noReadRow), []);
 
   // Shaky via callback
-  const faultRow = { earlyExt: 3.5, bendLoss: -10 };
+  const faultRow = { earlyExt: 3.5, bendLoss: -11 };
   const shakyAll = () => true;
   assert.deepEqual(Faults.faultsOf(faultRow, shakyAll), []);
 
@@ -174,7 +174,7 @@ test("shaky and missing numbers are never named", () => {
 test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () => {
   // Exactly 3 swings out of 12 (25%) -> top
   const rows12 = [];
-  for (let i = 0; i < 3; i++) rows12.push({ earlyExt: 3.0 });
+  for (let i = 0; i < 3; i++) rows12.push({ earlyExt: 3.5 });
   for (let i = 0; i < 9; i++) rows12.push({ earlyExt: 1.0 });
   const sf12 = Faults.sessionFaults(rows12);
   const ee12 = sf12.find(f => f.name === "early extension");
@@ -184,7 +184,7 @@ test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () =>
   assert.equal(ee12.top, true);
 
   // 2 swings out of 4 (50%) -> share >= 25%, but count < 3 -> not top
-  const rows4 = [{ earlyExt: 3.0 }, { earlyExt: 3.0 }, { earlyExt: 1.0 }, { earlyExt: 1.0 }];
+  const rows4 = [{ earlyExt: 3.5 }, { earlyExt: 3.5 }, { earlyExt: 1.0 }, { earlyExt: 1.0 }];
   const sf4 = Faults.sessionFaults(rows4);
   const ee4 = sf4.find(f => f.name === "early extension");
   assert.equal(ee4.count, 2);
@@ -194,7 +194,7 @@ test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () =>
 
   // 3 swings out of 13 (23.08%) -> count >= 3, but share < 25% -> not top
   const rows13 = [];
-  for (let i = 0; i < 3; i++) rows13.push({ earlyExt: 3.0 });
+  for (let i = 0; i < 3; i++) rows13.push({ earlyExt: 3.5 });
   for (let i = 0; i < 10; i++) rows13.push({ earlyExt: 1.0 });
   const sf13 = Faults.sessionFaults(rows13);
   const ee13 = sf13.find(f => f.name === "early extension");
@@ -206,7 +206,7 @@ test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () =>
   // Sorted by share descending
   const mixedRows = [];
   // 12 of 21 early extension (57.1%)
-  for (let i = 0; i < 12; i++) mixedRows.push({ earlyExt: 3.0, bendLoss: -9 });
+  for (let i = 0; i < 12; i++) mixedRows.push({ earlyExt: 3.5, bendLoss: -11 });
   // 9 of 21 standing up (42.9%)
   // remaining 9 swings have no standing up
   for (let i = 0; i < 9; i++) mixedRows.push({ earlyExt: 1.0, bendLoss: 0 });
