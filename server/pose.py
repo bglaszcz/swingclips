@@ -18,6 +18,7 @@ Keeping up during a session (a swing, two clips, every ~20 s): the settings unde
 below trade work for time. speed_settings() lists the ones that can change the result, for eval.py's
 cache fingerprint; SPEED_AS_BEFORE sets them all back to how clips were analyzed before them.
 """
+import math
 import os
 from pathlib import Path
 import re
@@ -39,7 +40,7 @@ MODEL = os.environ.get("SWINGCLIPS_POSE_MODEL", os.path.join(
 VERSION = 6
 # The ball search's own version: when only it changes, the server finds the ball again in each
 # analyzed clip (find_ball_again, a few seconds a clip) instead of analyzing it all over.
-BALL_VERSION = 3
+BALL_VERSION = 4
 # Saved results from a ball search older than this have the impact timed again, not just checked
 # (3: face-on counts the ball as gone once it starts to move, BALL_STILL).
 BALL_TIMING_VERSION = 3
@@ -91,6 +92,10 @@ BALL_RADIUS = (0.010, 0.030)
 # picture): face-on the camera looks down on it, 0.16-0.36 below; down the line it's farther away,
 # 0.02-0.15 above. Clips of unknown angle get the whole range.
 BALL_ROWS = {"face": (0.0, 0.6), "dtl": (-0.3, 0.1), None: (-0.3, 0.6)}
+# Nor on a foot: the ball is at least this far from every ankle, heel and toe point, in nose-to-feet
+# heights. Real balls sit 0.14+ away face-on and 0.30+ down the line; a shoe's bright rivet (Crocs,
+# Sep 28: 28 of 70 down-the-line clips) sat 0.01-0.08 away and "left" as the lead heel rolled.
+BALL_OFF_FEET = 0.11
 CLIP_NAME = re.compile(r"^swing_(?:(face|dtl)_)?\d+x\d+_\d+fps_\d+(?:_(\d+)ms)?")
 
 
@@ -791,6 +796,8 @@ def ball_candidates(path, rotation, frames, first, angle=None, last=None):
         cx, cy = cx + x0, cy + y0
         if not (BALL_RADIUS[0] <= r / height <= BALL_RADIUS[1] and rows[0] <= (cy - foot_y) / height <= rows[1]):
             continue
+        if min(math.hypot(cx - fx, cy - fy) for fx, fy in feet) < BALL_OFF_FEET * height:
+            continue
         k = int(r * 2.1) + 1
         if cx - k < 0 or cy - k < 0 or cx + k >= w or cy + k >= h:
             continue
@@ -1178,9 +1185,15 @@ def ball_fits(path, doc) -> bool:
     if height <= 0:
         return False
     rows = BALL_ROWS.get(angle, BALL_ROWS[None])
+    # Distances across the picture in heights of it: x scaled by its width / height.
+    m = re.search(r"_(\d+)x(\d+)_", os.path.basename(str(path)))
+    w, h = (int(m.group(1)), int(m.group(2))) if m else (16, 9)
+    aspect = h / w if doc.get("rotation") in (90, 270) else w / h
+    off_feet = min(math.hypot((ball["x"] - lm[i * 3]) * aspect, ball["y"] - lm[i * 3 + 1]) for i in FEET) / height
     return ((strike is None or STRIKE_WINDOW[0] <= impact - strike <= STRIKE_WINDOW[1])
             and BALL_RADIUS[0] <= ball["r"] / height <= BALL_RADIUS[1]
-            and rows[0] <= (ball["y"] - foot_y) / height <= rows[1])
+            and rows[0] <= (ball["y"] - foot_y) / height <= rows[1]
+            and off_feet >= BALL_OFF_FEET)
 
 
 def find_ball_again(path, doc, pool: ProcessPoolExecutor, workers: int) -> dict:

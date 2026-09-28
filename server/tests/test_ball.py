@@ -44,6 +44,8 @@ class BallTest(unittest.TestCase):
         dtl = {"x": 0.6, "y": 0.88 - 0.08 * 0.33, "r": 0.015 * 0.33}
         self.assertTrue(pose.ball_fits(DTL, doc_with(dtl, 2.016)))
         self.assertFalse(pose.ball_fits(DTL, doc_with(dict(dtl, r=0.032 * 0.33), 2.016)))   # too big
+        # A shoe's rivet: the right size and row, but on a foot (Sep 28, Crocs down the line).
+        self.assertFalse(pose.ball_fits(DTL, doc_with(dict(dtl, x=0.505), 2.016)))
 
     def test_the_ball_starting_to_move_is_gone_face_on(self):
         # A real face-on clip: the ball sits (0.957), then one frame shows it as a streak leaving its

@@ -709,7 +709,7 @@
     const m = motionFor(a);
     const sec = el("div", { className: "lp-section" },
       el("div", { className: "lp-shead" }, el("b", { textContent: "Clubhead motion" }),
-        el("span", { className: "lp-label", textContent: "Takeaway = the first frame of the rise: flat while the clubhead sits behind the ball. Click to go there." })));
+        el("span", { className: "lp-label", textContent: "Takeaway = the first frame of the rise: flat while the clubhead sits behind the ball. Click to go there; the green line is where the camera sees the rise start." })));
     if (!m) { sec.append(el("div", { className: "lp-label", textContent: "No takeaway found in this clip to look around." })); return sec; }
     if (m.state !== "ready") {
       sec.append(el("div", { className: "lp-label", textContent: m.state === "loading" ? "Working out the clubhead's motion (a few seconds)…" : `No trace: ${m.why}` }));
@@ -718,6 +718,32 @@
     const canvas = el("canvas", { className: "lp-motion", height: 80 });
     sec.append(canvas);
     requestAnimationFrame(() => drawMotion(canvas, m.data, t, doc.events.takeaway));
+    // Where the camera sees the rise start: the takeaway to use when in doubt (it lines the two
+    // angles up with the ball within a frame; the pose tracker's shaft rule can be off by a few).
+    const onset = m.data.onset;
+    if (onset != null) {
+      const i = frameIndexAt(onset, a.pose), at = a.pose.frames[i].t, lab = doc.events.takeaway;
+      const row = el("div", { className: "lp-onset" });
+      const diff = lab == null ? null : Math.round((lab - at) * 1000);
+      row.append(el("span", { textContent: `Rise starts at ${at.toFixed(3)} s` + (diff == null ? "" : diff === 0 ? " · your takeaway is on it"
+        : ` · your takeaway is ${Math.abs(diff)} ms ${diff > 0 ? "after" : "before"}`) }));
+      if (lab !== at) {
+        const use = el("button", { className: "small", textContent: "Use it as the takeaway" });
+        use.onclick = () => {
+          const e = activeDoc();
+          if (!e) return;
+          showFrame(i);
+          e.doc.events.takeaway = at;
+          message = `Takeaway at ${at.toFixed(3)} s (where the rise starts).`;
+          changed(e);
+        };
+        row.append(use);
+      }
+      const go = el("button", { className: "small", textContent: "Go there" });
+      go.onclick = () => showFrame(i);
+      row.append(go);
+      sec.append(row);
+    }
     canvas.onclick = ev => {
       const r = canvas.getBoundingClientRect(), d = m.data;
       const at = d.t[0] + (ev.clientX - r.left) / r.width * (d.t[d.t.length - 1] - d.t[0]);
@@ -727,6 +753,7 @@
   }
 
   function drawMotion(canvas, d, now, label) {
+    // The rise's start, green; the label, yellow dashed; the frame on screen, the accent.
     const w = canvas.clientWidth || 300, h = canvas.height;
     canvas.width = w;
     const ctx = canvas.getContext("2d");
@@ -753,6 +780,7 @@
       ctx.stroke();
       ctx.setLineDash([]);
     };
+    mark(d.onset, "#22c55e", [2, 2]);
     mark(label, CLUB_COLOR, [4, 3]);
     mark(now, color("--accent"), []);
   }

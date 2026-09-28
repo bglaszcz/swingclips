@@ -87,6 +87,8 @@ def analyze(module, path, timing=None, **kw) -> dict:
         out = module.analyze(str(path), fakes.Pool(), 2, *([timing] if timing is not None else []), **kw)
     out.pop("seconds")
     out.pop("msPerFrame", None)
+    # The ball search's version stamp moves on by itself (BALL_VERSION); the ball it finds is compared.
+    out.pop("ballVersion", None)
     return out
 
 
