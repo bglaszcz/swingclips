@@ -164,6 +164,9 @@
   .pos i { color: var(--warn); font-style: normal; }
   #numbers { display: flex; flex-direction: column; gap: 8px; }
   #tempo { font-variant-numeric: tabular-nums; }
+  #num-faults:empty { display: none; }
+  #num-faults { font-size: 13px; }
+  #num-faults span[title] { cursor: help; }
   #numbers table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
   #numbers th, #numbers td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
   #numbers th:first-child, #numbers td:first-child { text-align: left; color: var(--muted); }
@@ -370,6 +373,7 @@
   .p-headline { font-size: 15px; line-height: 1.45; }
   .p-headline .better { color: var(--accent); font-weight: 600; }
   .p-headline .worse { color: var(--warn); font-weight: 600; }
+  .p-headline .p-faults { margin-top: 4px; }
   .p-tiles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-top: 8px; }
   details.p-more > summary { color: var(--accent); font-size: 13px; font-weight: 600; padding: 4px 0; }
   details.p-more[open] > summary { margin-bottom: 6px; }
@@ -855,6 +859,7 @@
       <strong>Swing numbers</strong>
       <div id="tempo"></div>
       <div id="good-tempo"></div>
+      <div id="num-faults"></div>
       <div style="overflow-x: auto"><table id="num-table"></table></div>
       <div class="note" id="trust-note"></div>
       <div class="note" id="good-note"></div>
@@ -1196,6 +1201,7 @@
 <script src="/static/focus.js"></script>
 <script src="/static/gapping.js"></script>
 <script src="/static/wedges.js"></script>
+<script src="/static/faults.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script>
@@ -2256,6 +2262,31 @@ function showNumbers() {
                     " (from takeaway), downswing ", part("downswing", `${tp.down.toFixed(2)} s`));
   }
   const good = openGoodRanges(tp, facts);
+  const faultsEl = document.getElementById("num-faults");
+  faultsEl.replaceChildren();
+  if (lastCameraCheck) {
+    const body = SwingSummary.bodyNumbers(lastCameraCheck[0]);
+    const trust = {};
+    for (const b of SwingSummary.BODY) {
+      const j = facts && SwingTrust.judge(SwingTrust.numberOf(b.key), facts, body[b.key], noiseTable);
+      trust[b.key] = j;
+      if (j && j.level === "none") body[b.key] = null;
+    }
+    const openRow = { ...body, trust };
+    const faults = typeof SwingFaults !== "undefined"
+      ? SwingFaults.faultsOf(openRow, (r, k) => r.trust && r.trust[k] && r.trust[k].level === "shaky")
+      : [];
+    if (faults.length) {
+      faultsEl.append("Faults on this swing: ");
+      faults.forEach((f, i) => {
+        if (i > 0) faultsEl.append(", ");
+        const span = document.createElement("span");
+        span.textContent = f.name;
+        if (f.thought) span.title = f.thought;
+        faultsEl.append(span);
+      });
+    }
+  }
   const table = document.getElementById("num-table");
   const head = document.createElement("tr");
   head.innerHTML = "<th></th>";

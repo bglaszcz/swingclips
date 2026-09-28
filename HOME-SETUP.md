@@ -366,8 +366,10 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
 - **Swing page**: a column **vs my good shots (club)** in the numbers table, and a faint band on the
   number itself: green inside the middle 50%, amber outside ("outside: 4° more than usual", and
   "inside the 80% range" when it's between the two). The tempo line gets the same under it. Numbers
-  with no reading get no band. The ranges come from the trends' data (`/api/swings`), loaded when the
-  first swing is opened and again when it's over a minute old.
+  with no reading get no band. Named swing faults (early extension, standing up, etc.) appear in a line
+  above the numbers with each fault's swing thought as its tooltip, only when present. The ranges come
+  from the trends' data (`/api/swings`), loaded when the first swing is opened and again when it's over a
+  minute old.
 - **Compare**: a **My good shots** table with each number's middle 50% and 80% for the open swing's
   club, and where this swing and the reference sit against them.
 - **Progress**, **What sets my good shots apart** (for the club picked there): how many shots were
@@ -634,7 +636,8 @@ review page starts them and one of them does the talking.
   speed against that wedge's full-swing speed (the 90th percentile of its club speeds): full 92%+, 3/4 80-92%,
   half 65-80%; and the biggest carry hole between them (`static/wedges.js`).
   The page reads top to bottom as three steps (how did the last session go, what to work on, is it
-  working: the chart opens on the focus move); shot pattern, sessions, good-shot rules, gapping,
+  working: the chart opens on the focus move); step 1 also highlights the session's top faults under
+  the headline sentence; shot pattern, sessions, good-shot rules, gapping,
   the wedge matrix and handicap are folded cards underneath.
 - **Compare** (Compare… or C on a swing; `static/compare.js`): this swing against another one,
   usually one of your own better ones. The picker lists every other swing with its date, club and

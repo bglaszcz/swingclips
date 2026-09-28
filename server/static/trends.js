@@ -112,7 +112,10 @@ function swingRow(c) {
 }
 
 /** Whether row r's number for field f is shaky (a body number, trust.js). */
-const isShaky = (r, f) => !!(r.trust && r.trust[f.key] && r.trust[f.key].level === "shaky");
+const isShaky = (r, f) => {
+  const k = typeof f === "string" ? f : f?.key;
+  return !!(r.trust && r.trust[k] && r.trust[k].level === "shaky");
+};
 
 // ---- Good shots: personal ranges (goodshots.js) ----
 
@@ -750,6 +753,14 @@ function renderTiles(sessions, club) {
     + "smaller ones are \"normal variation\". Spreads are the standard deviation of the session's shots. Tap a number to chart it below.";
   const heads = HEAD_TILES.map(k => tileModel(sessions, k));
   head.replaceChildren(...headline(heads));
+  const top = (typeof SwingFaults !== "undefined" ? SwingFaults.sessionFaults(latest.rows, isShaky) : [])
+    .filter(f => f.top).slice(0, 3);
+  if (top.length) {
+    const line = document.createElement("div");
+    line.className = "p-faults";
+    line.textContent = "Top faults: " + top.map(f => `${f.name} (${f.count} of ${f.total} swings)`).join(", ") + ".";
+    head.append(line);
+  }
   box.replaceChildren(...heads.map(tileEl));
   // The body numbers and the other spreads, only when asked for.
   more.replaceChildren(...(foldOpen("tiles-more") ? TILES.filter(k => !HEAD_TILES.includes(k)).map(k => tileEl(tileModel(sessions, k))) : []));
