@@ -46,7 +46,8 @@ function renderGames() {
       Object.assign(document.createElement("div"), { className: "gm-target",
         textContent: `${g.name}: next target ${targetText}` }),
       Object.assign(document.createElement("div"), { className: "note",
-        textContent: !s.shots ? "No shots yet." : `${s.shots} shots, ${s.greens} on the green, ${gmSg(s.sgPerShot)} strokes a shot against tour` +
+        textContent: !s.shots ? "No shots yet." : `${s.shots} shots, ${s.greens} ${g.hitWord || "on the green"}` +
+          (g.id === "shaping" ? "" : `, ${gmSg(s.sgPerShot)} strokes a shot against tour`) +
           (s.mishits ? `, ${s.mishits} mishit${s.mishits > 1 ? "s" : ""}` : "") }),
       ...(g.results.length ? [gmResultsTable([...g.results].reverse())] : []));
   }
@@ -82,7 +83,7 @@ function gmResultsTable(results) {
   for (const x of results.slice(0, 30)) {
     const r = t.insertRow();
     r.append(gmCell(gmTargetText(x.target)), gmCell(x.club ? clubName(x.club) : "–"), gmCell(gmYd(x.carry)),
-      gmCell(x.sg == null ? "mishit" : gmYd(x.dist) + (x.onGreen ? ", on the green" : "")), gmCell(gmSg(x.sg)));
+      gmCell(x.verdict || (x.sg == null ? "mishit" : gmYd(x.dist) + (x.onGreen ? ", on the green" : ""))), gmCell(gmSg(x.sg)));
   }
   return t;
 }

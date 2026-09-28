@@ -94,14 +94,8 @@ def shot_of(shot: dict | None) -> dict:
     }
 
 
-def say_yards(*args) -> str:
-    if len(args) == 3 and isinstance(args[0], Rules):
-        return args[0].call("sayTarget", args[1], args[2])
-    if len(args) >= 2 and isinstance(args[-1], Rules):
-        return args[-1].call("sayTarget", args[0], args[1])
-    if len(args) == 1 and isinstance(args[0], (int, float)):
-        return f"{int(args[0])} yards"
-    return f"{args[0]} yards" if args else ""
+# What a game's "green" is, for the summary: a fairway, or the shape that was called.
+HIT_WORDS = {"driving": "in the fairway", "shaping": "shaped as called"}
 
 
 class Games:
@@ -177,7 +171,7 @@ class Games:
                      "carry": _finite((shot.get("ball") or {}).get("carry")),
                      "offline": _finite((shot.get("ball") or {}).get("side")),
                      "sg": scored["sg"] if scored else None, "dist": scored["dist"] if scored else None,
-                     "onGreen": bool(scored and scored["onGreen"])}
+                     "onGreen": bool(scored and scored["onGreen"]), "verdict": scored["verdict"] if scored else "mishit"}
                 g["results"].append(r)
                 done_times.append(t)
                 made.append(r)
@@ -208,6 +202,7 @@ class Games:
             g = dict(self.game) if self.game else None
             if g:
                 g["summary"] = self.rules.call("summarize", g["results"])
+                g["hitWord"] = HIT_WORDS.get(g["id"], "on the green")
                 if g.get("target") is not None:
                     g["sayTarget"] = self.say_target(g["id"], g["target"])
             return {"game": g, "games": self.catalog(), "log": self._log()[-log_limit:]}
@@ -223,8 +218,10 @@ class Games:
         g = self.game
         summary = self.rules.call("summarize", g["results"])
         per = summary.get("sgPerShot")
-        spoken = (f"{summary['shots']} shots, {summary['greens']} on the green"
-                  + (f", {abs(per):.2f} strokes a shot {'better' if per >= 0 else 'worse'} than tour" if per is not None else "")
+        hit = HIT_WORDS.get(g["id"])
+        spoken = (f"{summary['shots']} shots, {summary['greens']} {hit or 'on the green'}"
+                  + (f", {abs(per):.2f} strokes a shot {'better' if per >= 0 else 'worse'} than tour"
+                     if per is not None and g["id"] != "shaping" else "")
                   + ".")
         done = {**g, "ended": self.clock(), "how": how, "summary": summary, "spoken": spoken,
                 "day": datetime.fromtimestamp(g["started"]).isoformat(timespec="seconds")}
