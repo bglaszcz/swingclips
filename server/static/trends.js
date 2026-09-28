@@ -1093,25 +1093,67 @@ function renderHelps(club, sessions) {
        counts.length ? counts.map(([k, n]) => `${n} ${k}`).join(", ") : "none stands out from chance yet",
        a.sessions < 5 ? "it takes 5 to 10 sessions of 20+ swings to say much" : ""].filter(Boolean).join(" · ");
   if (!shown.length) { box.replaceChildren(); return; }
-  const table = document.createElement("table");
-  table.className = "p-helps-table";
-  const head = document.createElement("tr");
-  for (const t of ["", "What goes with what", "Sessions", "r", "q", "Between sessions"]) head.append(Object.assign(document.createElement("th"), { textContent: t }));
-  const tbody = document.createElement("tbody");
-  for (const l of shown) {
-    const tr = document.createElement("tr");
-    const tag = Object.assign(document.createElement("span"), { className: `tag ${l.label}`, textContent: l.label });
-    const what = Object.assign(document.createElement("td"), { textContent: SwingHelps.sentence(l) });
-    if (l.helps != null) what.prepend(Object.assign(document.createElement("span"), { className: l.helps ? "helps" : "hurts", textContent: l.helps ? "Helps " : "Hurts " }));
-    if (l.shaky) { what.classList.add("shaky"); what.title = "Shaky: most of the move's numbers are (trust.js)"; }
-    const between = !l.between ? "–" : `${fmtR(l.between.r)}${l.between.clear ? " (clear)" : ""}, ${l.between.n} sessions`;
-    tr.append(Object.assign(document.createElement("td"), {}), what,
-      Object.assign(document.createElement("td"), { textContent: SwingHelps.support(l) }),
-      Object.assign(document.createElement("td"), { textContent: fmtR(l.r), title: `${l.n} swings, within sessions` }),
-      Object.assign(document.createElement("td"), { textContent: l.q < 0.001 ? "<0.001" : l.q.toFixed(3) }),
-      Object.assign(document.createElement("td"), { textContent: between, className: "sub" }));
-    tr.firstChild.append(tag);
-    tr.onclick = () => {
+  const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
+  const coached = shown.map(l => ({ l, c: SwingCoach.coach(l, club) })).filter(x => x.c);
+
+  // The practice plan: each move to work on once, with the results it goes with; a move pulled both
+  // ways by different results is a trade-off, not a drill.
+  const byMove = new Map();
+  for (const x of coached) {
+    if (!x.c.aim) continue;
+    const m = byMove.get(x.l.move) || { move: x.l.move, aims: new Set(), items: [] };
+    m.aims.add(x.c.aim);
+    m.items.push(x);
+    byMove.set(x.l.move, m);
+  }
+  const plan = el("div", "p-plan");
+  plan.append(el("strong", null, `Practice plan with the ${name}`));
+  const moves = [...byMove.values()].slice(0, 3);
+  if (!moves.length) plan.append(el("div", "muted", "Nothing to work on yet: the links below only explain your swing-to-swing spread."));
+  for (const m of moves) {
+    const item = el("div", "p-plan-item");
+    const first = m.items[0];
+    if (m.aims.size > 1) {
+      item.append(el("div", "p-plan-name", `Trade-off: ${SwingCoach.MOVES[m.move].what}`),
+        el("div", "muted", "It goes with a better result one way and a worse one the other: "
+          + m.items.map(x => `${x.c.aim === "more" ? "more" : "less"} for ${SwingHelps.RESULTS.find(r => r.key === x.l.result).label.toLowerCase()}`).join(", ")
+          + ". Keep it where it is for now."));
+    } else {
+      const fix = first.c.fix;
+      const goals = [...new Set(m.items.map(x => x.c.goal))];
+      item.append(el("div", "p-plan-name", `Work on ${fix.name}`),
+        el("div", null, `For ${goals.join("; ")}. ${fix.how}`));
+      const drill = el("div"); drill.append(el("b", null, "Drill: "), fix.drill);
+      const thought = el("div"); thought.append(el("b", null, "Swing thought: "), `\u201c${fix.thought}\u201d`);
+      item.append(drill, thought);
+      if (first.l.label !== "confirmed") item.append(el("div", "muted", "Emerging, not confirmed yet: try it for a session or two and see whether the numbers follow."));
+    }
+    plan.append(item);
+  }
+
+  // Every link, in golf terms, with its numbers.
+  const list = el("div", "p-links");
+  for (const { l, c } of coached) {
+    const card = el("div", "p-link");
+    const head = el("div", "p-link-head");
+    head.append(el("span", `tag ${l.label}`, l.label));
+    if (l.helps != null) head.append(el("span", l.helps ? "helps" : "hurts", l.helps ? "Helps" : "Hurts"));
+    head.append(el("span", null, `${c.when[0].toUpperCase() + c.when.slice(1)} \u2192 ${c.then}`));
+    if (l.shaky) { head.classList.add("shaky"); head.title = "Shaky: most of the move's numbers are (trust.js)"; }
+    card.append(head);
+    card.append(el("div", "sub", `${SwingHelps.sentence(l)} · ${SwingHelps.support(l)} · r ${fmtR(l.r)}, q ${l.q < 0.001 ? "<0.001" : l.q.toFixed(3)}`
+      + (l.between ? ` · between sessions r ${fmtR(l.between.r)} over ${l.between.n}` : "")));
+    if (c.fix) {
+      const fix = el("div", "p-link-fix");
+      fix.append(el("b", null, `Aim for ${c.fix.name}, for ${c.goal}. `), c.fix.how, " ");
+      fix.append(el("b", null, "Drill: "), c.fix.drill, " ");
+      fix.append(el("b", null, "Thought: "), `\u201c${c.fix.thought}\u201d`);
+      card.append(fix);
+    } else if (c.why) {
+      card.append(el("div", "muted", c.why[0].toUpperCase() + c.why.slice(1) + "."));
+    }
+    const see = el("button", "small", "See it in Trends");
+    see.onclick = () => {
       const latest = sessions[sessions.length - 1];
       if (!latest) return;
       trendPick.x = l.move;
@@ -1120,10 +1162,10 @@ function renderHelps(club, sessions) {
       savePicks();
       openTrends(latest.key);
     };
-    tbody.append(tr);
+    card.append(see);
+    list.append(card);
   }
-  table.append(head, tbody);
-  box.replaceChildren(table);
+  box.replaceChildren(plan, list);
 }
 
 // Charts are drawn to their width.

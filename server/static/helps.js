@@ -136,7 +136,7 @@
   /**
    * One move against one result, within sessions.
    * @param sessions [[{x, y, shaky}]] (both numbers present)
-   * @returns {n, sessions, slope, r, t, df, p, agree, counted, between, shaky, sdX, sdY}
+   * @returns {n, sessions, slope, r, t, df, p, agree, counted, between, shaky, sdX, sdY, median (of y)}
    */
   function link(sessions) {
     let sxx = 0, syy = 0, sxy = 0, n = 0, used = 0, shaky = 0, agree = 0, against = 0;
@@ -168,6 +168,9 @@
     out.counted = agree + against;
     out.agree = r > 0 ? agree : against;
     // Between sessions: session means (only ones with enough swings), Pearson.
+    // The result's usual value over every swing (which way is "toward neutral", coach.js).
+    const ys = sessions.filter(pts => pts.length >= MIN_IN_SESSION).flatMap(pts => pts.map(p => p.y)).sort((a, b) => a - b);
+    out.median = ys.length ? (ys[(ys.length - 1) >> 1] + ys[ys.length >> 1]) / 2 : null;
     const m = means.filter(q => q[2] >= MIN_SESSION);
     if (m.length >= MIN_BETWEEN) {
       const c = Summary.correlation(m.map(q => q[0]), m.map(q => q[1]));
