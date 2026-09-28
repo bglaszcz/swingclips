@@ -88,6 +88,22 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(kinds["hips"]["points"], ["l_hip", "r_hip"])
         self.assertEqual((kinds["impact"]["t"], kinds["impact"]["event"]), (1.95, "impact"))
 
+    def test_marked_correct_until_the_label_moves(self):
+        wide = dict(RIGHT, l_hip={"x": 0.60, "y": 0.55}, r_hip={"x": 0.40, "y": 0.55})
+        doc = label({"1.000000": wide}, {"impact": 1.95}, ball=(0.5, 0.5))
+        r = labelcheck.check(doc, pose_with(TRACKED))
+        keys = {f["kind"]: f["key"] for f in r["fixes"]}
+        self.assertEqual(keys["impact"], "impact@1.9500")
+        doc["accepted"] = [keys["impact"], keys["hips"], keys["ball"]]
+        r = labelcheck.check(doc, pose_with(TRACKED))
+        self.assertEqual(r["fixes"], [])
+        self.assertEqual(r["issues"], [])
+        self.assertEqual(r["accepted"], 3)
+        # Impact moved to another frame: its check is back.
+        doc["events"]["impact"] = 1.94
+        r = labelcheck.check(doc, pose_with(TRACKED))
+        self.assertEqual([f["kind"] for f in r["fixes"]], ["impact"])
+
     def test_angles_disagree(self):
         face = label(events={"p4": 1.80, "impact": 2.05})
         dtl = label(events={"p4": 1.83, "impact": 2.05})                  # 30 ms later down the line

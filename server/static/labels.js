@@ -129,7 +129,10 @@
   function loadFixes() {
     fetch("/api/labels/summary", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => {
       if (!d) return;
-      fixes = new Map((d.clips || []).filter(c => c.pass === labelPass && c.clip).map(c => [c.clip, c.fixes || []]));
+      // Marked correct here but not yet saved (or the server's checks are older): left out all the same.
+      const accepted = name => new Set((docs.get(`${name}|${labelPass}`)?.doc?.accepted) || []);
+      fixes = new Map((d.clips || []).filter(c => c.pass === labelPass && c.clip)
+        .map(c => [c.clip, (c.fixes || []).filter(f => !accepted(c.clip).has(f.key))]));
       render();
       redraw();
     }).catch(() => {});
@@ -138,6 +141,27 @@
   /** The fixes on the frame at time t of clip `name`. */
   function fixesAt(name, t) {
     return (fixes.get(name) || []).filter(f => f.t != null && Math.abs(f.t - t) < 0.0008);
+  }
+
+  /**
+   * "It's correct": the label is right and the check is wrong (the tracker is what's being measured).
+   * Kept in the label file (labelcheck.py skips it) until the label it's about moves.
+   */
+  function acceptFix(name, f) {
+    const e = entry(name);
+    if (!e || !e.doc || !f.key) return;
+    e.doc.accepted = [...new Set([...(e.doc.accepted || []), f.key])];
+    fixes.set(name, (fixes.get(name) || []).filter(x => x.key !== f.key));
+    message = "Marked correct: it won't be flagged again unless that label changes.";
+    changed(e);
+  }
+
+  function unacceptAll(name) {
+    const e = entry(name);
+    if (!e || !e.doc) return;
+    delete e.doc.accepted;
+    message = "The checks you marked correct are back.";
+    changed(e);
   }
 
   /** This swing's fixes with a frame to go to, in order: face-on first, then down the line. */
@@ -529,9 +553,24 @@
         el("span", { className: "lp-fixicon", textContent: "!" }),
         el("div", { className: "lp-fixbody" },
           el("b", { textContent: fixHere.length ? "To fix on this frame" : `${all.length} frame${all.length === 1 ? "" : "s"} to fix in this swing` }),
-          ...(fixHere.length ? [...new Set(fixHere.map(f => f.text))].map(text => el("div", { className: "lp-fixtext", textContent: text }))
-            : [el("div", { className: "lp-fixtext", textContent: "Red rings mark the points to check." })])),
+          ...(fixHere.length ? [...new Map(fixHere.map(f => [f.text, f])).values()].map(f => {
+            const row = el("div", { className: "lp-fixtext", textContent: f.text + " " });
+            if (f.key) {
+              const okBtn = el("button", { className: "small lp-fixok", textContent: "It's correct",
+                title: "The label is right: stop flagging this (it comes back if you move this label)" });
+              okBtn.onclick = () => acceptFix(a.name, f);
+              row.append(okBtn);
+            }
+            return row;
+          }) : [el("div", { className: "lp-fixtext", textContent: "Red rings mark the points to check." })])),
         next));
+    }
+    const nAccepted = (doc.accepted || []).length;
+    if (nAccepted) {
+      const back = el("button", { className: "small", textContent: "Bring back" });
+      back.onclick = () => unacceptAll(a.name);
+      kids.push(el("div", { className: "lp-accepted" },
+        el("span", { textContent: `${nAccepted} check${nAccepted === 1 ? "" : "s"} marked correct on this angle` }), back));
     }
 
     // ---- Moments ----

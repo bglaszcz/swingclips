@@ -4,7 +4,9 @@ A label file (labeling mode, static/labels.js) is checked on its own (key moment
 order, frames with points, the ball, joints all marked blurry) and against the tracker's pose file
 for the clip: left and right swapped on a frame, the ball far from where the tracker found it, and
 impact away from the frame the ball disappears. Disagreeing with the tracker isn't always a slip
-(the tracker is what's being measured), so the view words these as things to look at.
+(the tracker is what's being measured), so the view words these as things to look at, and a check
+the labeler marks correct ("It's correct" in labeling mode) is kept in the label file's "accepted"
+list (fix_key) and not raised again, until the label it was about changes.
 """
 import bisect
 import gzip
@@ -55,13 +57,23 @@ def aspect_of(name: str, rotation: int) -> float:
     return h / w if rotation in (90, 270) else w / h
 
 
+def fix_key(kind: str, t: float | None, ball: dict | None = None) -> str:
+    """What a check is about, as stored when it's marked correct: the kind and the frame (the ball's
+    place for the ball), so moving the label brings the check back."""
+    if kind == "ball":
+        return f"ball@{ball['x']:.4f},{ball['y']:.4f}" if ball and ball.get("x") is not None else "ball"
+    return kind if t is None else f"{kind}@{t:.4f}"
+
+
 def check(doc: dict, pose: dict | None) -> dict:
     """One label file: what it has, a list of possible slips (plain sentences), and the same as fixes
     to work through: {kind, t (the clip's frame time to go to, or None), points (label keys to ring),
-    event (a key moment's key), text}."""
+    event (a key moment's key), text, key (fix_key)}. Checks marked correct aren't listed."""
     events = doc.get("events") or {}
     frames = doc.get("frames") or {}
     issues, fixes = [], []
+    accepted = set(doc.get("accepted") or [])
+    ok = lambda kind, t, ball=None: fix_key(kind, t, ball) in accepted
     first_t = min((float(k) for k in frames), default=None)
 
     have = [k for k in EVENTS if isinstance(events.get(k), (int, float))]
@@ -70,7 +82,7 @@ def check(doc: dict, pose: dict | None) -> dict:
         order = [k for k in sorted(have, key=lambda k: events[k])]
         issues.append("Key moments are out of order: " + " → ".join(k.upper() if k != "takeaway" else "T" for k in order))
         for a, b in zip(have, have[1:]):
-            if events[b] <= events[a]:
+            if events[b] <= events[a] and not ok("order", events[b]):
                 fixes.append({"kind": "order", "t": events[b], "event": b, "points": [],
                               "text": f"{_name(b)} is marked before {_name(a)}: one of them is on the wrong frame"})
 
@@ -79,7 +91,7 @@ def check(doc: dict, pose: dict | None) -> dict:
         if sum(1 for k in POINTS if pts.get(k)) >= FRAME_DONE:
             point_frames += 1
         seen = [k for k in BODY if pts.get(k) and not pts[k].get("hidden")]
-        if len(seen) >= 4 and all(pts[k].get("blur") for k in seen):
+        if len(seen) >= 4 and all(pts[k].get("blur") for k in seen) and not ok("blur", float(key)):
             all_blur += 1
             fixes.append({"kind": "blur", "t": float(key), "points": seen,
                           "text": "Joints marked blurry: redo them with a normal click (Shift only for a motion streak)"})
@@ -117,7 +129,7 @@ def check(doc: dict, pose: dict | None) -> dict:
                 straight = math.dist(la, ta) + math.dist(lb, tb)
                 if math.dist(la, tb) + math.dist(lb, ta) < 0.5 * straight:
                     crossed.append(what)
-            if len(crossed) >= SWAP_PAIRS:
+            if len(crossed) >= SWAP_PAIRS and not ok("swap", t):
                 swapped.append((t, crossed))
                 fixes.append({"kind": "swap", "t": t,
                               "text": f"Left and right look swapped ({', '.join(crossed)}): left is the lead side",
@@ -125,7 +137,7 @@ def check(doc: dict, pose: dict | None) -> dict:
             elif face_on and all(pts.get(k) and pts[k].get("x") is not None and not pts[k].get("hidden")
                                  for k in ("l_hip", "r_hip")):
                 wider = abs(pts["l_hip"]["x"] - pts["r_hip"]["x"]) * aspect - math.dist(tracked("l_hip"), tracked("r_hip"))
-                if wider > HIP_WIDE * height:
+                if wider > HIP_WIDE * height and not ok("hips", t):
                     wide_hips += 1
                     fixes.append({"kind": "hips", "t": t, "points": ["l_hip", "r_hip"],
                                   "text": "Hips at the outer edge: click the hip joint centres, well inside the outline"})
@@ -140,13 +152,13 @@ def check(doc: dict, pose: dict | None) -> dict:
         if ball and tball and ball.get("x") is not None:
             height = _address_height(pf)
             d = math.dist((ball["x"] * aspect, ball["y"]), (tball["x"] * aspect, tball["y"]))
-            if height and d > BALL_OFF * height:
+            if height and d > BALL_OFF * height and not ok("ball", None, ball):
                 issues.append("The ball is far from where the tracker found it: check B was clicked on the ball.")
                 fixes.append({"kind": "ball", "t": events.get("takeaway", first_t), "points": ["ball"],
                               "text": "The ball is far from where the tracker found it: press B and click the ball"})
 
         imp, timp = events.get("impact"), pose.get("impact")
-        if isinstance(imp, (int, float)) and isinstance(timp, (int, float)) and abs(imp - timp) > IMPACT_OFF:
+        if isinstance(imp, (int, float)) and isinstance(timp, (int, float)) and abs(imp - timp) > IMPACT_OFF                 and not ok("impact", imp):
             ms = round((imp - timp) * 1000)
             issues.append(f"Impact is {abs(ms)} ms {'after' if ms > 0 else 'before'} the frame the tracker saw the ball "
                           "go. Impact is the first frame the ball is gone (either could be off).")
@@ -161,7 +173,9 @@ def check(doc: dict, pose: dict | None) -> dict:
         "frames": len(frames),
         "ball": bool(doc.get("ball")),
         "issues": issues,
-        "fixes": sorted(fixes, key=lambda f: (f["t"] is None, f["t"] or 0)),
+        "fixes": sorted(({**f, "key": fix_key(f["kind"], f["t"] if f["kind"] != "ball" else None, doc.get("ball"))} for f in fixes),
+                        key=lambda f: (f["t"] is None, f["t"] or 0)),
+        "accepted": len(accepted),
     }
 
 
