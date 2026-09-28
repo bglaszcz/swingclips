@@ -2437,31 +2437,33 @@ function showShot(c) {
   const b = s.ball || {}, k = s.clubData || {};
   const has = v => v !== null && v !== undefined && !isNaN(v);
   // Only what this shot's source reported: Square's app gives carry, club speed and more; its GSPro
-  // connector doesn't.
+  // connector doesn't, so the server works out carry and the rest from the ball (marked "calc.").
   const items = [["club", "", s.squareClub ? "Club (changed)" : "Club"]];
-  const add = (ok, value, label) => { if (ok) items.push(["", value, label]); };
-  add(b.carry > 0, `${num(b.carry, 0)}`, "Carry yd");
-  add(b.total > 0, `${num(b.total, 0)}`, "Total yd");
+  const calc = new Set(b.computed || []);
+  const add = (ok, value, label, key) => { if (ok) items.push(["", value, label, calc.has(key)]); };
+  add(b.carry > 0, `${num(b.carry, 0)}`, "Carry yd", "carry");
+  add(b.total > 0, `${num(b.total, 0)}`, "Total yd", "total");
   add(has(b.speed), num(b.speed), "Ball mph");
   add(k.speed > 0, num(k.speed), "Club mph");
   add(k.smash > 0, num(k.smash, 2), "Smash");
   add(has(b.vla), `${num(b.vla)}°`, "Launch");
   add(has(b.hla), side(b.hla), "Direction");
-  add(has(b.side), side(b.side).replace("°", " yd"), "Offline");
+  add(has(b.side), side(b.side).replace("°", " yd"), "Offline", "side");
   add(has(b.totalSpin), num(b.totalSpin, 0), "Spin rpm");
   add(has(b.spinAxis), side(b.spinAxis), "Spin axis");
-  add(b.apexFt > 0, num(b.apexFt, 0), "Apex ft");
+  add(b.apexFt > 0, num(b.apexFt, 0), "Apex ft", "apexFt");
   add(has(k.angleOfAttack), `${signed(k.angleOfAttack)}°`, "Attack");
   add(has(k.path), `${signed(k.path)}°`, "Path");
   add(has(k.faceToTarget), `${signed(k.faceToTarget)}°`, "Face");
   add(k.loft > 0, `${num(k.loft)}°`, "Dyn. loft");
   const HERO = { "Carry yd": "hero lead", "Total yd": "hero", "Ball mph": "hero", "Club mph": "hero", "Smash": "hero" };
-  box.replaceChildren(...items.map(([cls, value, label]) => {
+  box.replaceChildren(...items.map(([cls, value, label, calculated]) => {
     const el = document.createElement("div");
     el.className = "metric " + cls + (HERO[label] ? " " + HERO[label] : "");
     el.innerHTML = "<b></b><span></span>";
     el.querySelector("b").textContent = value;
-    el.querySelector("span").textContent = label;
+    el.querySelector("span").textContent = label + (calculated ? " (calc.)" : "");
+    if (calculated) el.title = "Worked out from ball speed, launch and spin (the GSPro connector doesn't send it): within about 2 yd of Square's own carry";
     if (cls === "club") {
       const sel = clubSelect(s.club, s.squareClub || s.club);
       sel.title = s.squareClub ? `Square said ${clubName(s.squareClub)}` : "Change it if Square had the wrong club";

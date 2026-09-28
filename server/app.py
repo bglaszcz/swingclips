@@ -41,6 +41,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import ballflight
 import calib
 import goodshots
 import labelcheck
@@ -863,15 +864,18 @@ async def upload(name: str, request: Request, shutter: str | None = Query(None, 
 
 
 # ---- Launch monitor shots ----
-# The shot listener on the sim laptop posts each shot here as the launch monitor reports it. Shots
-# are paired with clips by time: the capture app names each clip after the second it heard the
-# strike, and the launch monitor's report arrives a moment later.
+# The sim laptop posts each shot here: the Square watcher (source "square-app", from Square's app's
+# saved shots) or the shot listener (source "gspro-connect", from Square's GSPro connector; chosen by
+# relay/start-golf.ps1 -Source). Shots are paired with clips by time: the capture app names each
+# clip after the second it heard the strike, and the launch monitor's report arrives a moment later.
+# What a source doesn't measure (the connector: carry, club speed) is filled in or left out as the
+# shot comes in (ballflight.fill).
 SHOTS_FILE = Path(os.environ.get("SWINGCLIPS_SHOTS", CLIPS_DIR.parent / "shots.jsonl"))
 # Typical seconds from strike to report, per source. Square's own app saves a shot ~14 s after the
 # strike (measured 13.6-14.2 s over a real session; its ball-flight animation plays first, or the
 # laptop clock runs ahead); the GSPro connector reports within about a second. A shot pairs with
 # the clip whose gap is closest to its source's delay, within SHOT_SLACK_S of it.
-SHOT_DELAY_S = {"square-app": 14.0}
+SHOT_DELAY_S = {"square-app": 14.0, "gspro-connect": 1.0}
 DEFAULT_SHOT_DELAY_S = 1.0
 SHOT_SLACK_S = 5.0
 
@@ -888,11 +892,13 @@ async def add_shot(request: Request):
     skew = datetime.now().astimezone().timestamp() - sent.timestamp()
     if abs(skew) > 3:
         print(f"Shot: sender's clock is {-skew:+.1f} s off from this server's", flush=True)
+    ballflight.fill(shot)
     SHOTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with files_lock, open(SHOTS_FILE, "a", encoding="utf-8") as f:
         f.write(json.dumps(shot, separators=(",", ":")) + "\n")
     last_shot_at = time.time()
-    print(f"Shot: {shot.get('club')} ball {shot['ball'].get('speed')} mph", flush=True)
+    calc = " (calculated)" if shot["ball"].get("computed") else ""
+    print(f"Shot: {shot.get('club')} ball {shot['ball'].get('speed')} mph, carry {shot['ball'].get('carry')} yd{calc}", flush=True)
     return {"ok": True}
 
 

@@ -132,6 +132,22 @@ It finds Square's app in the Start menu's app list (Microsoft Store apps too); i
 path of its shortcut or .exe, or its app ID, in `square-app.txt` next to `Start golf.cmd`. What it
 did each time is in `start-golf-log.txt` there. `Square watcher.cmd` still runs the watcher alone.
 
+**Shots through Square's GSPro connector (optional).** Instead of Square's app, Square's official
+SQG GSPro Connect can send each shot about a second after the strike (instead of ~14 s):
+
+```bat
+:: Close Square Golf's app first: the Omni takes one Bluetooth connection.
+"%USERPROFILE%\Dropbox\SwingClips\Start golf (GSPro).cmd"
+```
+
+It starts the shot listener (which stands in for GSPro; type a club code such as `I7` in its window
+and press Enter to change club) and opens the connector. The connector sends no carry or club
+speed: the server works out carry, total, offline and apex from the ball (within ~2 yd of Square's
+carry, marked "calc." on the review page), and club speed and smash stay empty. `Start golf.cmd`
+is still the usual setup; to make the connector the default, put `gspro` in `shot-source.txt` next
+to it. Copy `Start golf (GSPro).cmd`, `Shot listener.cmd` and `shot-listener.ps1` to
+`Dropbox\SwingClips` along with the updated `start-golf.ps1`.
+
 ### Dev PC
 
 ```bash
@@ -161,7 +177,7 @@ node --test tests/compare.test.js tests/trust.test.js tests/goodshots.test.js
 | --- | --- | --- |
 | `capture/` | Android phones (9+) | Kotlin/Camera2 app. Keeps the last few seconds of video in memory and cuts a clip 2 s either side of each strike (240/120/30 fps; shutter Auto or fixed). Each phone is face-on or down the line. Uploads each clip, reports in to the server (start/stop from the review page), speaks camera setup, first-swing and practice results. |
 | `server/` | Home server (Windows) | Python/FastAPI. Stores clips; runs pose on every frame (MediaPipe, or RTMPose through ONNX, on the CPU or a GPU), finds the ball, impact and club shaft; works out key positions P1-P8 and swing numbers from both angles; clip quality; trust per number; good-shot ranges; practice mode; the labeling mode and scorecard (`eval.py`); two-camera 3D (off until calibrated). Serves the review page. |
-| `relay/` | Sim laptop | `square-watcher.ps1` reads new shots from Square Golf's local shot database and posts them to the server, which pairs each with its swing by time; `Start golf.cmd` starts Square's app and the watcher. `shot-listener.ps1` is an unused alternative that stands in for GSPro. |
+| `relay/` | Sim laptop | `square-watcher.ps1` reads new shots from Square Golf's local shot database and posts them to the server, which pairs each with its swing by time; `Start golf.cmd` starts Square's app and the watcher. `Start golf (GSPro).cmd` uses `shot-listener.ps1` instead, which stands in for GSPro so Square's GSPro connector sends shots (optional; carry worked out by `server/ballflight.py`). |
 | `train/` | Gaming PC (GPU) | Trains the club keypoint model (YOLO-pose) from labeled frames. |
 | `docs/` | | Reports, such as how the key positions are defined against the labels. |
 | `src/` | Phone browser | The original web app (Next.js), plus this fork's pose overlay and key-position stills. |

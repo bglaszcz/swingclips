@@ -104,6 +104,33 @@ class HeartbeatTest(unittest.TestCase):
         self.clock.t += status.RELAY_GONE_S + 1
         self.assertIn("watcher stopped", row()["text"])
 
+    def test_shot_listener_rows(self):
+        row = lambda: next(r for r in self.s.snapshot({}, {}, T0 - 30)["rows"] if r["key"] == "square")
+        beat = lambda **kw: self.s.relay_heartbeat({"source": "shot-listener", "version": "2", **kw})
+        beat(monitorConnected=False, squareRunning=True)
+        self.assertEqual((row()["level"], row()["label"]), ("bad", "Square (GSPro connector)"))
+        self.assertIn("close Square Golf's app", row()["text"])
+        beat(monitorConnected=False, squareRunning=False)
+        self.assertIn("open SQG GSPro Connect", row()["text"])
+        beat(monitorConnected=True, monitorReady=False)
+        self.assertEqual(row()["level"], "ok")
+        self.assertIn("waiting for a ball", row()["text"])
+        beat(monitorConnected=True, monitorReady=True)
+        self.assertIn("ball ready", row()["text"])
+        self.clock.t += status.RELAY_GONE_S + 1
+        self.assertIn("shot listener stopped", row()["text"])
+
+    def test_watcher_and_listener_both_running(self):
+        row = lambda: next(r for r in self.s.snapshot({}, {}, None)["rows"] if r["key"] == "square")
+        self.s.relay_heartbeat({"source": "square-watcher", "squareRunning": True})
+        self.s.relay_heartbeat({"source": "shot-listener", "monitorConnected": False})
+        self.assertEqual(row()["label"], "Square")                      # the connector isn't in use
+        self.s.relay_heartbeat({"source": "shot-listener", "monitorConnected": True})
+        self.assertEqual(row()["label"], "Square (GSPro connector)")
+        self.clock.t += 10
+        self.s.relay_heartbeat({"source": "square-watcher", "squareRunning": True})
+        self.assertEqual(row()["label"], "Square (GSPro connector)")    # a later watcher beat doesn't flip it
+
     def test_pose_queue(self):
         row = lambda q: next(r for r in self.s.snapshot({}, {"queued": q}, None)["rows"] if r["key"] == "server")
         self.assertEqual(row(0)["level"], "ok")
@@ -325,6 +352,16 @@ class HealthTest(unittest.TestCase):
         self.s.heartbeat("dtl", hb(recording=True))
         said = self.s.health_step([swing(1, t, shot=False)])
         self.assertEqual(said, ["First swing. No Square shot: the Square watcher isn't running."])
+
+    def test_shot_listener_down(self):
+        t = self.start + 10
+        self.clock.t = t
+        self.s.relay_heartbeat({"source": "shot-listener", "monitorConnected": True})
+        self.clock.t = t + status.RELAY_GONE_S + 5
+        self.s.heartbeat("face", hb(practiceVoice=True, recording=True))
+        self.s.heartbeat("dtl", hb(recording=True))
+        said = self.s.health_step([swing(1, t, shot=False)])
+        self.assertEqual(said, ["First swing. No Square shot: the shot listener isn't running."])
 
     def test_after_the_first_only_lasting_problems_once(self):
         t = self.start + 10

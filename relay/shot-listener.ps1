@@ -1,5 +1,10 @@
 # Stands in for GSPro: listens where GSPro Connect would (127.0.0.1:921), answers every message
-# the way GSPro does, and logs each one with the time it arrived. Run via "Shot listener.cmd".
+# the way GSPro does, and logs each one with the time it arrived. Run via "Shot listener.cmd", or
+# "Start golf (GSPro).cmd", which uses this in place of Square's app and the Square watcher.
+#
+# Shots go to the home server tagged source "gspro-connect". The connector sends no carry and no
+# club speed (it sends 0): those are left out, and the server works out carry, total, offline and
+# apex from the ball numbers (server/ballflight.py). Smash needs club speed, so it stays missing.
 #
 # Every message is saved to shots-<date>.jsonl next to this script, one JSON object per line,
 # with the arrival time added. Type a club code (DR, W3, H4, I7, PW, SW, PT, ...) and press Enter
@@ -97,16 +102,20 @@ $pending = $null
 $unsent = New-Object System.Collections.Generic.List[object]
 $lastRetry = Get-Date
 
+# A reading of 0 (or less) is what the connector sends for a number it doesn't have.
+function Pos($v) { if ($null -ne $v -and [double]$v -gt 0) { return $v } return $null }
+
 function New-Shot($msg, [datetime]$received) {
     $b = $msg.BallData
     [ordered]@{
         received = $received.ToString("o")
+        source = "gspro-connect"
         device = $msg.DeviceID
         shotNumber = $msg.ShotNumber
         club = $script:Club
         ball = [ordered]@{
             speed = $b.Speed; vla = $b.VLA; hla = $b.HLA; totalSpin = $b.TotalSpin
-            backSpin = $b.BackSpin; sideSpin = $b.SideSpin; spinAxis = $b.SpinAxis; carry = $b.CarryDistance
+            backSpin = $b.BackSpin; sideSpin = $b.SideSpin; spinAxis = $b.SpinAxis; carry = (Pos $b.CarryDistance)
         }
         clubData = $null
     }
@@ -115,9 +124,13 @@ function New-Shot($msg, [datetime]$received) {
 function Add-ClubData($shot, $msg) {
     $c = $msg.ClubData
     $shot.clubData = [ordered]@{
-        speed = $c.Speed; angleOfAttack = $c.AngleOfAttack; faceToTarget = $c.FaceToTarget
-        path = $c.Path; loft = $c.Loft; lie = $c.Lie
+        speed = (Pos $c.Speed); angleOfAttack = $c.AngleOfAttack; faceToTarget = $c.FaceToTarget
+        path = $c.Path; loft = (Pos $c.Loft); lie = (Pos $c.Lie)
         faceImpactH = $c.HorizontalFaceImpact; faceImpactV = $c.VerticalFaceImpact
+    }
+    # Both exactly 0 is "not measured", not a dead-centre strike (the good-shot rules check the strike).
+    if ([double]$c.HorizontalFaceImpact -eq 0 -and [double]$c.VerticalFaceImpact -eq 0) {
+        $shot.clubData.faceImpactH = $null; $shot.clubData.faceImpactV = $null
     }
 }
 
@@ -136,14 +149,40 @@ function Send-Shot($shot) {
 
 function Flush-Pending([bool]$force) {
     if ($script:pending -and ($force -or ((Get-Date) - [datetime]$script:pending.received).TotalSeconds -gt 2.5)) {
+        $script:lastShotAt = $script:pending.received
         Send-Shot $script:pending
         $script:pending = $null
     }
+    Send-Heartbeat
     if ($unsent.Count -gt 0 -and ((Get-Date) - $script:lastRetry).TotalSeconds -gt 15) {
         $script:lastRetry = Get-Date
         $retry = @($unsent); $unsent.Clear()
         foreach ($s in $retry) { Send-Shot $s }
     }
+}
+
+# Every ~20 s: tell the server the listener is alive, whether the launch monitor is connected and
+# ready, and whether Square's own app is open (it holds the Omni's one Bluetooth connection, so the
+# connector can't reach it). The review page's Ready panel shows it. Quiet if the server doesn't answer.
+$monitorConnected = $false
+$monitorReady = $false
+$lastShotAt = $null
+$lastBeat = [datetime]::MinValue
+function Test-SquareAppRunning {
+    [bool](Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.MainWindowTitle -like "*Square Golf*" -or $_.ProcessName -like "Square*Golf*" })
+}
+function Send-Heartbeat([bool]$force = $false) {
+    if (-not $Server) { return }
+    if (-not $force -and ((Get-Date) - $script:lastBeat).TotalSeconds -lt 20) { return }
+    $script:lastBeat = Get-Date
+    $beat = [ordered]@{ source = "shot-listener"; monitorConnected = $script:monitorConnected
+                        monitorReady = $script:monitorReady; squareRunning = (Test-SquareAppRunning)
+                        lastShotAt = $script:lastShotAt; version = "2" }
+    try {
+        Invoke-RestMethod -Uri ($Server.TrimEnd('/') + "/api/relay/heartbeat") -Method Post -ContentType "application/json" `
+            -Body ($beat | ConvertTo-Json -Compress) -TimeoutSec 3 | Out-Null
+    } catch {}
 }
 
 function Send-Json($stream, [string]$json) {
@@ -248,6 +287,8 @@ while ($true) {
                     Send-PlayerInfo $stream
                     Send-Json $stream '{"Code":202,"Message":"GSPro ready"}'
                     $greeted = $true
+                    $monitorConnected = $true
+                    Send-Heartbeat $true
                 }
                 $logFile = Join-Path $LogDir ("shots-" + $received.ToString("yyyy-MM-dd") + ".jsonl")
                 try {
@@ -271,6 +312,7 @@ while ($true) {
                             else { Say "$($received.ToString('HH:mm:ss.fff'))  launch monitor waiting for a ball" "DarkYellow" }
                         }
                         $lastReady = $ready
+                        if ([bool]$ready -ne $monitorReady) { $monitorReady = [bool]$ready; Send-Heartbeat $true }
                     }
                 } catch {
                     $line = @{ received = $received.ToString("o"); unparsed = $json } | ConvertTo-Json -Compress
@@ -283,6 +325,10 @@ while ($true) {
         Say "Connection error: $($_.Exception.Message)" "Yellow"
     } finally {
         $client.Close()
-        if (-not $isSelfTest) { Say "Launch monitor disconnected" "Cyan" }
+        if (-not $isSelfTest) {
+            Say "Launch monitor disconnected" "Cyan"
+            $monitorConnected = $false; $monitorReady = $false
+            Send-Heartbeat $true
+        }
     }
 }

@@ -6,7 +6,8 @@ phones, one phone speaks for camera setup, and the first swing of each session g
   poll) until it has a command or something to say for that phone, so the same request carries
   commands back. The phone answers a command (an ack) on its next poll. A phone that hasn't asked
   for PHONE_GONE_S is gone.
-- The Square watcher on the sim laptop posts POST /api/relay/heartbeat.
+- The Square watcher (or, with Square's GSPro connector, the shot listener) on the sim laptop posts
+  POST /api/relay/heartbeat.
 - Camera setup, one voice: each phone's setup verdict (setup.py) is combined here and said by one
   phone, only when it changes: "Both cameras look good", "Face-on good. Down the line: tilt the
   phone up." (CombinedVoice).
@@ -28,7 +29,7 @@ NAMES = {"face": "Face-on", "dtl": "Down the line"}
 PHONE_GONE_S = 30
 # The longest a phone's poll is held open (its read timeout is longer).
 POLL_WAIT_MAX_S = 15
-# The Square watcher's heartbeat: gone after this long.
+# The Square watcher's (or shot listener's) heartbeat: gone after this long.
 RELAY_GONE_S = 90
 # A phone seen this recently is expected in the session (Ready needs it recording).
 EXPECTED_S = 12 * 3600
@@ -83,7 +84,14 @@ PHONE_FIELDS = {
     "practiceVoice": bool, "setupVoice": str, "autoStart": bool, "busy": str, "cameraError": str,
     "saved": int, "closing": bool,
 }
-RELAY_FIELDS = {"source": str, "squareRunning": bool, "lastShotAt": str, "version": str}
+RELAY_FIELDS = {"source": str, "squareRunning": bool, "lastShotAt": str, "version": str,
+                "monitorConnected": bool, "monitorReady": bool}
+# The shot listener's heartbeat source (relay/shot-listener.ps1): shots from Square's GSPro connector.
+LISTENER = "shot-listener"
+
+
+def relay_name(hb: dict | None) -> str:
+    return "the shot listener" if hb and hb.get("source") == LISTENER else "the Square watcher"
 
 
 def clean(body: dict, fields: dict) -> dict:
@@ -172,7 +180,7 @@ def camera_problems(angle: str, codes: list | None, quality: dict | None) -> lis
     return said
 
 
-def swing_findings(s: dict, expect_dtl: bool, relay_ok: bool) -> dict:
+def swing_findings(s: dict, expect_dtl: bool, relay_ok: bool, relay: str = "the Square watcher") -> dict:
     """What's wrong with one checked swing: {"cameras": {angle: [problems] or None when fine},
     "clip": angles with no clip, "square": None or the problem}. `s` as Health.step takes it."""
     rec = s.get("record") or {}
@@ -200,7 +208,7 @@ def swing_findings(s: dict, expect_dtl: bool, relay_ok: bool) -> dict:
         found = camera_problems(a, codes.get(a), (s.get("quality") or {}).get(a))
         out["cameras"][a] = found or None
     if not s.get("shot"):
-        out["square"] = "No Square shot" + ("" if relay_ok else ": the Square watcher isn't running")
+        out["square"] = "No Square shot" + ("" if relay_ok else f": {relay} isn't running")
     return out
 
 
@@ -251,7 +259,8 @@ class Health:
                     return False
         return True
 
-    def step(self, swings: list[dict], now: float, expect_dtl: bool, relay_ok: bool) -> list[str]:
+    def step(self, swings: list[dict], now: float, expect_dtl: bool, relay_ok: bool,
+             relay: str = "the Square watcher") -> list[str]:
         """The session's swings (the listed one of each: {name, t, angle, partner, pose, partnerPose,
         shot, record, quality: {angle: quality record}}). Returns what to say."""
         if self.start is None:
@@ -266,7 +275,7 @@ class Health:
                 break  # in order: a later swing waits for this one
             self.checked.add(s["name"])
             self.checked_times.append(s["t"])
-            f = swing_findings(s, expect_dtl, relay_ok)
+            f = swing_findings(s, expect_dtl, relay_ok, relay)
             self.last = {"clip": s["name"], "t": s["t"], **f}
             if self.first is None:
                 text = first_swing_sentence(f)
@@ -318,7 +327,7 @@ class Status:
         self.clock = clock
         self.lock = threading.Lock()
         self.phones: dict[str, dict] = {}    # angle -> {"hb": fields, "seen": t}
-        self.relay: dict | None = None       # {"hb": fields, "seen": t}
+        self.relays: dict[str, dict] = {}   # by source: {"hb": fields, "seen": t}
         self.commands: list[dict] = []
         self.outbox: dict[str, list[dict]] = {a: [] for a in ANGLES}
         self.voice = CombinedVoice()
@@ -447,12 +456,26 @@ class Status:
             if c["state"] in ("queued", "sent") and now - c["made"] > COMMAND_TIMEOUT_S:
                 c.update(state="failed", error="no answer from the phone")
 
-    # ---- The Square watcher ----
+    # ---- The Square watcher, or the shot listener ----
 
     def relay_heartbeat(self, body: dict) -> dict:
         with self.lock:
-            self.relay = {"hb": clean(body, RELAY_FIELDS), "seen": self.clock()}
-            return dict(self.relay["hb"])
+            hb = clean(body, RELAY_FIELDS)
+            self.relays[hb.get("source", "")] = {"hb": hb, "seen": self.clock()}
+            return dict(hb)
+
+    @property
+    def relay(self) -> dict | None:
+        """The laptop's relay in use: normally only one runs. If both do, the shot listener while
+        the connector is connected to it, else the Square watcher; if none is heard from, the latest."""
+        if not self.relays:
+            return None
+        now = self.clock()
+        live = [r for r in self.relays.values() if now - r["seen"] <= RELAY_GONE_S]
+        if not live:
+            return max(self.relays.values(), key=lambda r: r["seen"])
+        return max(live, key=lambda r: (r["hb"].get("source") == LISTENER and bool(r["hb"].get("monitorConnected")),
+                                        r["hb"].get("source") != LISTENER, r["seen"]))
 
     def relay_ok(self, now: float) -> bool:
         return self.relay is not None and now - self.relay["seen"] <= RELAY_GONE_S
@@ -497,7 +520,8 @@ class Status:
         with self.lock:
             recording = self._recording(now)
             expect_dtl = "dtl" in recording
-            said = self.health.step(swings, now, expect_dtl, self.relay_ok(now))
+            relay = self.relay
+            said = self.health.step(swings, now, expect_dtl, self.relay_ok(now), relay_name(relay and relay["hb"]))
             said += self._phone_problems(now)
             to = self.speaker(now)
             for text in said:
@@ -576,7 +600,7 @@ class Status:
                 "level": level,
                 "headline": "Ready" if level == "ok" else f"{first_bad['label']}: {first_bad.get('problem') or first_bad['text']}",
                 "rows": rows, "phones": phones, "speaker": speaker,
-                "relay": self.relay and {**self.relay["hb"], "age": round(now - self.relay["seen"], 1)},
+                "relay": (relay := self.relay) and {**relay["hb"], "age": round(now - relay["seen"], 1)},
                 "combined": self.combined and {**self.combined, "age": round(now - self.combined["t"], 1)},
                 "session": {"start": self.health.start, "first": self.health.first, "last": self.health.last,
                             "spoken": [{**s, "age": round(now - s["t"], 1)} for s in self.spoken]},
@@ -628,15 +652,26 @@ class Status:
 
     def _square_row(self, now: float, last_shot: float | None) -> dict:
         row = {"key": "square", "label": "Square"}
-        if not last_shot and self.relay and self.relay["hb"].get("lastShotAt"):
+        relay = self.relay
+        if not last_shot and relay and relay["hb"].get("lastShotAt"):
             try:   # the watcher's own record of it (Square's app, before the server got any)
-                last_shot = datetime.fromisoformat(self.relay["hb"]["lastShotAt"]).timestamp()
+                last_shot = datetime.fromisoformat(relay["hb"]["lastShotAt"]).timestamp()
             except ValueError:
                 pass
         shot = f"last shot {ago(now - last_shot)}" if last_shot else "no shots yet"
-        if self.relay is None:
+        if relay is None:
             return {**row, "level": "warn", "text": f"no heartbeat from the laptop yet · {shot}"}
-        hb, age = self.relay["hb"], now - self.relay["seen"]
+        hb, age = relay["hb"], now - relay["seen"]
+        if hb.get("source") == LISTENER:
+            row["label"] = "Square (GSPro connector)"
+            if age > RELAY_GONE_S:
+                return {**row, "level": "bad", "text": f"shot listener stopped (last heard {ago(age)}) · {shot}"}
+            if not hb.get("monitorConnected"):
+                why = ": close Square Golf's app" if hb.get("squareRunning") else ": open SQG GSPro Connect"
+                return {**row, "level": "bad", "text": f"listener running, connector not connected{why} · {shot}",
+                        "problem": f"connector not connected{why}"}
+            ball = "ball ready" if hb.get("monitorReady") else "waiting for a ball"
+            return {**row, "level": "ok", "text": f"listener and connector running, {ball} · {shot}"}
         if age > RELAY_GONE_S:
             return {**row, "level": "bad", "text": f"watcher stopped (last heard {ago(age)}) · {shot}"}
         if hb.get("squareRunning") is False:
