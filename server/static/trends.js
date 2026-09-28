@@ -598,52 +598,162 @@ function renderProgress() {
   const since = days ? Date.now() - days * 86400000 : -Infinity;
   const sessions = progressSessions(club).filter(s => s.start >= since);
   const pending = allRows.filter(r => !r.body && swingPending(r.c)).length;
-  document.getElementById("p-status").textContent = !clubs.length ? "No swings with launch monitor numbers yet."
-    : [`${sessions.length} session${sessions.length === 1 ? "" : "s"} with the ${clubName(club).toLowerCase()}`,
-       unseenNote(sessions.flatMap(s => s.rows)),
-       pending ? `${pending} swing${pending === 1 ? "" : "s"} still being worked out on the server` : ""].filter(Boolean).join(" · ");
+  // The count up front; the caveats behind the ⓘ.
+  const status = document.getElementById("p-status");
+  const swings = sessions.reduce((n, s) => n + s.rows.length, 0);
+  const caveats = [unseenNote(sessions.flatMap(s => s.rows)),
+    pending ? `${pending} swing${pending === 1 ? "" : "s"} still being worked out on the server` : ""].filter(Boolean);
+  status.textContent = !clubs.length ? "No swings with launch monitor numbers yet."
+    : `${sessions.length} session${sessions.length === 1 ? "" : "s"} · ${swings} swings with the ${clubName(club).toLowerCase()}`
+      + (caveats.length ? " ⓘ" : "");
+  status.title = caveats.join("\n");
 
+  const focusHere = journal.focus && journal.focus.club === club ? journal.focus : null;
+  // Until a number is picked, the chart shows the focus move.
+  if (!progressMetricPicked && focusHere) progressPick.metric = focusHere.move;
   const metricSel = document.getElementById("p-metric");
   fillSelect(metricSel, [["Consistency", SPREADS], ...byGroup(["Launch monitor", "Face-on", "Down the line"])], progressPick.metric);
-  if (metricSel.value !== progressPick.metric) { progressPick.metric = "carry"; metricSel.value = "carry"; }
+  if (metricSel.value !== progressPick.metric) { progressPick.metric = "carrySpread"; metricSel.value = "carrySpread"; }
 
-  renderTiles(sessions);
-  drawOverTime(sessions, field(progressPick.metric));
-  drawPattern(sessions);
-  renderHandicap();
-  renderSessionTable(sessions);
+  const helps = helpsModel(club, sessions);
+  renderTiles(sessions, club);
+  renderCoach(club, helps);
+  renderHelpsEvidence(club, sessions, helps);
   renderGoodShots(club);
-  renderHelps(club, sessions);
-  renderFocus();
+  renderChips(focusHere);
+  drawOverTime(sessions, field(progressPick.metric), focusHere);
+  if (foldOpen("pattern")) drawPattern(sessions);
+  if (foldOpen("hcp")) renderHandicap();
+  renderSessionTable(sessions);
   renderGapping();
+  const latestHcp = journal.handicap[journal.handicap.length - 1];
+  document.getElementById("p-hcp-now").textContent = latestHcp ? `${latestHcp.index.toFixed(1)} on ${dayOf(new Date(latestHcp.date + "T12:00"))}` : "";
+}
+
+// Set once a number is picked for the chart (the tiles, the chips or the list): then it stays.
+let progressMetricPicked = false;
+function pickMetric(key) {
+  progressPick.metric = key;
+  progressMetricPicked = true;
+  savePicks();
+  renderProgress();
 }
 
 for (const [id, key] of [["p-club", "club"], ["p-period", "period"], ["p-metric", "metric"]]) {
   document.getElementById(id).onchange = e => {
+    if (key === "metric") return pickMetric(e.target.value);
     progressPick[key] = e.target.value;
     savePicks();
     renderProgress();
   };
 }
 
-/** The latest session's number against the median of the sessions before it (since the camera last moved). */
-function renderTiles(sessions) {
-  const box = document.getElementById("p-tiles");
+// The folded cards (and "All numbers"): open or shut as last left, per browser.
+const foldOpen = name => progressBox.querySelector(`details[data-fold="${name}"]`)?.open;
+for (const d of progressBox.querySelectorAll("details[data-fold]")) {
+  try { d.open = localStorage.getItem("fold-" + d.dataset.fold) === "open"; } catch {}
+  d.addEventListener("toggle", () => {
+    try { localStorage.setItem("fold-" + d.dataset.fold, d.open ? "open" : "shut"); } catch {}
+    // Charts are drawn to their width, which a shut card doesn't have.
+    if (d.open && progressOpen) renderProgress();
+  });
+}
+
+/** Quick picks for the chart: the focus move and the results it's meant to change, then the usual consistency numbers. */
+function renderChips(focus) {
+  const keys = [];
+  if (focus) keys.push(focus.move, ...(focus.results || []).map(k => HELPS_TREND_FIELD[k] || k));
+  keys.push("carrySpread", "offlineSpread", "carry");
+  const seen = new Set();
+  const chips = keys.filter(k => FIELDS.some(f => f.key === k) || SPREADS.some(f => f.key === k))
+    .filter(k => !seen.has(k) && seen.add(k)).map((k, i) => {
+      const b = Object.assign(document.createElement("button"), { className: "small", type: "button",
+        textContent: (focus && i === 0 ? "Focus: " : "") + field(k).label });
+      b.classList.toggle("on", k === progressPick.metric);
+      b.onclick = () => pickMetric(k);
+      return b;
+    });
+  document.getElementById("p-chips").replaceChildren(...chips);
+}
+
+/**
+ * A tile's numbers: the latest session's against the median of the sessions before it (since the
+ * camera last moved), and whether the change is more than the usual session-to-session difference.
+ */
+function tileModel(sessions, key) {
+  const f = field(key), cam = cameraOf(f), latest = sessions[sessions.length - 1];
+  // Body numbers only compare since the camera that measures them last moved.
+  let from = 0;
+  if (cam) sessions.forEach((s, i) => { if (s.moved[cam]) from = i; });
+  const series = sessions.slice(from).map(s => sessionValue(s.rows, f)?.med ?? null);
+  const now = series[series.length - 1];
+  const before = series.slice(0, -1).filter(v => v != null);
+  const base = before.length ? quantile([...before].sort((a, b) => a - b), 0.5) : null;
+  const d = now != null && base != null ? now - base : null;
+  // Typical session-to-session difference, with enough sessions to know it.
+  const noise = before.length >= 3 ? sd(before, 3) : null;
+  const known = noise != null;
+  const normal = d != null && known && Math.abs(d) < noise;
+  const bw = d != null && known && !normal ? betterWorse(f, base, now) : null;
+  return { key, f, cam, from, series, now, base, d, known, normal, bw, nBefore: before.length, shaky: tileShaky(f, latest.rows) };
+}
+
+// The results that open Progress: how far, how straight, how solid.
+const HEAD_TILES = ["carry", "carrySpread", "offlineSpread", "smash"];
+
+const lowerFirst = t => t.replace(/^./, c => c.toLowerCase());
+const andList = xs => xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+
+/** One sentence on the latest session: what got better or worse than usual, the rest "as usual". */
+function headline(models) {
+  const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, { textContent: text });
+  const name = m => lowerFirst(m.f.label);
+  const said = m => `${name(m)} ${fmtTile(m.f, m.now)} vs ${fmtTile(m.f, m.base)}`;
+  const cap = t => t.replace(/^./, c => c.toUpperCase());
+  const moved = w => models.filter(m => m.bw === w);
+  const usual = models.filter(m => m.d != null && m.known && !m.bw);
+  const early = models.filter(m => m.d != null && !m.known);
+  const out = [];
+  const list = ms => andList(ms.map(said));
+  if (!models.some(m => m.base != null)) {
+    out.push("The first session in this period: nothing to compare it with yet.");
+  } else {
+    const better = moved("better"), worse = moved("worse");
+    if (better.length) out.push(el("span", "better", "Better than usual: "), list(better) + ". ");
+    if (worse.length) out.push(el("span", "worse", "Worse than usual: "), list(worse) + ". ");
+    if (usual.length) out.push(`${usual.length === models.length ? "Everything" : cap(andList(usual.map(name)))} about as usual. `);
+    // Not enough sessions to know the usual wobble: say so rather than colour it.
+    if (early.length) {
+      const n = Math.max(...early.map(m => m.nBefore));
+      out.push(`Only ${n} earlier session${n === 1 ? "" : "s"} to compare with, too few to tell a real change from normal wobble: ${list(early)}.`);
+    }
+  }
+  return out;
+}
+
+function renderTiles(sessions, club) {
+  const box = document.getElementById("p-tiles"), more = document.getElementById("p-tiles-more");
   const latest = sessions[sessions.length - 1];
   const note = document.getElementById("p-tiles-note");
-  if (!latest) { box.replaceChildren(); note.textContent = ""; return; }
-  note.textContent = `${dayOf(latest.start)} (${latest.rows.length} swings) against the sessions before it in this period. `
-    + "Changes smaller than the usual session-to-session difference are marked \"normal variation\".";
-  box.replaceChildren(...TILES.map(key => {
-    const f = field(key), cam = cameraOf(f);
-    // Body numbers only compare since the camera that measures them last moved.
-    let from = 0;
-    if (cam) sessions.forEach((s, i) => { if (s.moved[cam]) from = i; });
-    const series = sessions.slice(from).map(s => sessionValue(s.rows, f)?.med ?? null);
-    const now = series[series.length - 1];
-    const shaky = tileShaky(f, latest.rows);
-    const before = series.slice(0, -1).filter(v => v != null);
-    const base = before.length ? quantile([...before].sort((a, b) => a - b), 0.5) : null;
+  const title = document.getElementById("p-today-title");
+  const head = document.getElementById("p-headline");
+  if (!latest) {
+    box.replaceChildren(); more.replaceChildren(); note.textContent = "";
+    title.textContent = "How did the last session go?";
+    head.textContent = club ? `No sessions with the ${clubName(club).toLowerCase()} in this period.` : "";
+    return;
+  }
+  title.textContent = `How did ${dayOf(latest.start)} go?`;
+  note.textContent = `${dayOf(latest.start)} (${latest.rows.length} swings with the ${clubName(club).toLowerCase()}) against the median of the sessions before it in this period. `
+    + "A change counts as better or worse only when it's bigger than the usual session-to-session difference (it takes 4 sessions to know that); "
+    + "smaller ones are \"normal variation\". Spreads are the standard deviation of the session's shots. Tap a number to chart it below.";
+  const heads = HEAD_TILES.map(k => tileModel(sessions, k));
+  head.replaceChildren(...headline(heads));
+  box.replaceChildren(...heads.map(tileEl));
+  // The body numbers and the other spreads, only when asked for.
+  more.replaceChildren(...(foldOpen("tiles-more") ? TILES.filter(k => !HEAD_TILES.includes(k)).map(k => tileEl(tileModel(sessions, k))) : []));
+
+  function tileEl({ key, f, cam, from, series, now, base, d, known, normal, bw, shaky }) {
     const tile = document.createElement("div");
     tile.className = "p-tile";
     const label = Object.assign(document.createElement("span"), { className: "p-label", textContent: f.label });
@@ -656,22 +766,19 @@ function renderTiles(sessions) {
       else if (whys.length && leaveOutShaky && whys.every(j => j.level !== "ok")) value.title = "Every swing's number was shaky (left out)";
     }
     const delta = Object.assign(document.createElement("span"), { className: "p-delta" });
-    if (now != null && base != null) {
-      const d = now - base, bw = betterWorse(f, base, now);
-      // Typical session-to-session difference, with enough sessions to know it.
-      const noise = before.length >= 3 ? sd(before, 3) : null;
-      const normal = noise != null && Math.abs(d) < noise;
+    if (d != null) {
       delta.textContent = `${d >= 0 ? "+" : "−"}${fmtTile(f, Math.abs(d)).replace(" : 1", "")} vs ${fmtTile(f, base)}`;
-      if (bw && !normal) delta.append(" · ", Object.assign(document.createElement("em"), { className: bw, textContent: bw }));
+      if (bw) delta.append(" · ", Object.assign(document.createElement("em"), { className: bw, textContent: bw }));
       else if (normal) delta.append(" · normal variation");
+      else if (!known) delta.append(" · too early to judge");
     } else {
       delta.textContent = now == null ? "not enough swings" : cam && from > 0 ? "camera moved: no baseline yet" : "no earlier sessions";
     }
     tile.append(label, value, delta, sparkline(series));
     if (!shaky) tile.title = `${fieldName(f)}${f.spread ? " (standard deviation of the session's shots)" : " (session median)"}. Click to chart it.`;
-    tile.onclick = () => { progressPick.metric = key; savePicks(); renderProgress(); document.getElementById("p-chart").scrollIntoView({ block: "nearest" }); };
+    tile.onclick = () => { pickMetric(key); document.getElementById("p-chart").scrollIntoView({ block: "nearest" }); };
     return tile;
-  }));
+  }
 }
 
 /**
@@ -705,8 +812,8 @@ function sparkline(series) {
   return svg;
 }
 
-/** One column per session: its swings as faint dots, the median (and middle half) in color, joined up. */
-function drawOverTime(sessions, f) {
+/** One column per session: its swings as faint dots, the median (and middle half) in color, joined up; and where the focus started. */
+function drawOverTime(sessions, f, focus) {
   const svg = document.querySelector("#p-chart svg");
   const W = Math.max(280, svg.clientWidth || 600), H = 300, m = { l: 52, r: 16, t: 24, b: 44 };
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -738,6 +845,16 @@ function drawOverTime(sessions, f) {
       svgEl("text", { x: x + 4, y: m.t + 10, class: "t-axis" }, svg).textContent = "camera moved";
     }
   });
+  // The focus started before the first session on or after its day.
+  if (focus) {
+    const since = new Date(focus.since + "T00:00:00").getTime();
+    const i = sessions.findIndex(s => s.start >= since);
+    if (i >= 0) {
+      const x = sx(i) - step / 2 + 2;
+      svgEl("line", { x1: x, x2: x, y1: m.t, y2: H - m.b, class: "p-focus-line" }, svg);
+      svgEl("text", { x: x + 4, y: m.t + 22, class: "p-focus-label" }, svg).textContent = "focus started";
+    }
+  }
   if (!sessions.length) return;
   const jitter = k => ((k * 0.618) % 1 - 0.5) * Math.min(step * 0.5, 24);
   cols.forEach((c, i) => c.swings.forEach((x, k) =>
@@ -965,7 +1082,10 @@ function renderSeparation(c, minCount, name) {
   const head = document.createElement("tr");
   for (const t of ["Number", "Good shots vs the rest", "Effect size (95% CI)", ""]) head.append(Object.assign(document.createElement("th"), { textContent: t }));
   table.append(head);
-  for (const x of shown) {
+  // The ones that could be luck only when asked for.
+  const strong = shown.filter(x => x.clear), luck = shown.length - strong.length;
+  const all = separationAll;
+  for (const x of all ? shown : strong) {
     const f = field(x.key);
     const tr = document.createElement("tr");
     const nameTd = Object.assign(document.createElement("td"), { textContent: f.label });
@@ -977,14 +1097,23 @@ function renderSeparation(c, minCount, name) {
       title: "Hedges' g: the difference in means in standard deviations. Around 0.2 is small, 0.5 medium, 0.8 large." });
     const bar = document.createElement("td");
     bar.append(ciBar(x.lo, x.g, x.hi));
-    const verdict = Object.assign(document.createElement("em"), { textContent: x.clear ? "clear" : "could be chance" });
+    const verdict = Object.assign(document.createElement("em"), { textContent: x.clear ? "strong" : "maybe luck" });
     verdict.className = x.clear ? "better" : "muted";
     bar.append(" ", verdict);
     tr.append(nameTd, Object.assign(document.createElement("td"), { textContent: desc }), gTd, bar);
     table.append(tr);
   }
-  box.replaceChildren(table);
+  const kids = strong.length || all ? [table] : [Object.assign(document.createElement("div"), { className: "muted",
+    textContent: "No body number clearly sets the good shots apart yet." })];
+  if (luck) {
+    const more = Object.assign(document.createElement("button"), { className: "small", type: "button",
+      textContent: all ? "Hide the ones that could be luck" : `Show ${luck} more that could be luck` });
+    more.onclick = () => { separationAll = !all; renderSeparation(c, minCount, name); };
+    kids.push(more);
+  }
+  box.replaceChildren(...kids);
 }
+let separationAll = false;
 
 /** A confidence interval on a -2..2 scale, with 0 marked. */
 function ciBar(lo, g, hi) {
@@ -1073,33 +1202,25 @@ async function saveGoodSettings(s) {
 
 // ---- Progress: what helps, what hurts (helps.js) ----
 
-// Links listed at most (confirmed first, then emerging).
+// Links listed at most (strong first, then worth trying).
 const HELPS_TOP = 15;
 // Results worked out in helps.js, shown in Trends as the number they come from.
 const HELPS_TREND_FIELD = { absOffline: "offline", absFaceToPath: "faceToPath" };
+// How sure, in plain words (helps.js's labels).
+const EVIDENCE = { confirmed: "Strong evidence", emerging: "Worth trying" };
+const pEl = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
 
-/** The card: each move against each result, within the period's sessions with the club. */
-function renderHelps(club, sessions) {
-  const status = document.getElementById("p-helps-status"), box = document.getElementById("p-helps-list");
-  const name = club ? clubName(club).toLowerCase() : "club";
+/**
+ * Each move against each result, within the period's sessions with the club, in golf terms, and the
+ * practice plan from them: each move to work on once, with the results it goes with. A move pulled
+ * both ways by different results is a trade-off, not a drill.
+ */
+function helpsModel(club, sessions) {
   const input = sessions.map(s => ({ key: s.key, rows: s.rows.map(r => ({ ...r,
     shaky: Object.fromEntries(SwingSummary.BODY.map(f => [f.key, isShaky(r, f)])) })) }));
   const a = SwingHelps.analyze(input);
   const listed = a.links.filter(l => l.label !== "chance");
-  const shown = listed.slice(0, HELPS_TOP);
-  const counts = ["confirmed", "emerging"].map(k => [k, listed.filter(l => l.label === k).length]).filter(x => x[1]);
-  status.textContent = !a.tested
-    ? `Not enough swings with body numbers yet: ${a.swings} with the ${name}; a link needs ${SwingHelps.MIN_PAIRS} in sessions of ${SwingHelps.MIN_IN_SESSION} or more.`
-    : [`${a.swings} swings in ${a.sessions} session${a.sessions === 1 ? "" : "s"} with the ${name}`,
-       `${a.tested} links tested`,
-       counts.length ? counts.map(([k, n]) => `${n} ${k}`).join(", ") : "none stands out from chance yet",
-       a.sessions < 5 ? "it takes 5 to 10 sessions of 20+ swings to say much" : ""].filter(Boolean).join(" · ");
-  if (!shown.length) { box.replaceChildren(); return; }
-  const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
-  const coached = shown.map(l => ({ l, c: SwingCoach.coach(l, club) })).filter(x => x.c);
-
-  // The practice plan: each move to work on once, with the results it goes with; a move pulled both
-  // ways by different results is a trade-off, not a drill.
+  const coached = listed.slice(0, HELPS_TOP).map(l => ({ l, c: SwingCoach.coach(l, club) })).filter(x => x.c);
   const byMove = new Map();
   for (const x of coached) {
     if (!x.c.aim) continue;
@@ -1108,59 +1229,38 @@ function renderHelps(club, sessions) {
     m.items.push(x);
     byMove.set(x.l.move, m);
   }
-  const plan = el("div", "p-plan");
-  plan.append(el("strong", null, `Practice plan with the ${name}`));
-  const moves = [...byMove.values()].slice(0, 3);
-  if (!moves.length) plan.append(el("div", "muted", "Nothing to work on yet: the links below only explain your swing-to-swing spread."));
-  for (const m of moves) {
-    const item = el("div", "p-plan-item");
-    const first = m.items[0];
-    if (m.aims.size > 1) {
-      item.append(el("div", "p-plan-name", `Trade-off: ${SwingCoach.MOVES[m.move].what}`),
-        el("div", "muted", "It goes with a better result one way and a worse one the other: "
-          + m.items.map(x => `${x.c.aim === "more" ? "more" : "less"} for ${SwingHelps.RESULTS.find(r => r.key === x.l.result).label.toLowerCase()}`).join(", ")
-          + ". Keep it where it is for now."));
-    } else {
-      const fix = first.c.fix;
-      const goals = [...new Set(m.items.map(x => x.c.goal))];
-      item.append(el("div", "p-plan-name", `Work on ${fix.name}`),
-        el("div", null, `For ${goals.join("; ")}. ${fix.how}`));
-      const drill = el("div"); drill.append(el("b", null, "Drill: "), fix.drill);
-      const thought = el("div"); thought.append(el("b", null, "Swing thought: "), `\u201c${fix.thought}\u201d`);
-      item.append(drill, thought);
-      const cur = journal.focus;
-      const isFocus = cur && cur.move === m.move && cur.aim === first.c.aim && cur.club === club;
-      const make = el("button", "small", isFocus ? "✓ My focus" : "Make this my focus");
-      make.disabled = !!isFocus;
-      make.onclick = () => setFocus({ move: m.move, aim: first.c.aim, club, results: [...new Set(m.items.map(x => x.l.result))] });
-      item.append(make);
-      if (first.l.label !== "confirmed") item.append(el("div", "muted", "Emerging, not confirmed yet: try it for a session or two and see whether the numbers follow."));
-    }
-    plan.append(item);
-  }
+  const moves = [...byMove.values()].slice(0, 3).map(m => ({ ...m, tradeOff: m.aims.size > 1, aim: m.items[0].c.aim,
+    fix: m.items[0].c.fix, goals: [...new Set(m.items.map(x => x.c.goal))],
+    label: m.items.some(x => x.l.label === "confirmed") ? "confirmed" : "emerging" }));
+  return { a, listed, coached, moves };
+}
 
-  // Every link, in golf terms, with its numbers.
-  const list = el("div", "p-links");
+/** The evidence under "Why this?": every link, in golf terms, strongest first. */
+function renderHelpsEvidence(club, sessions, h) {
+  const status = document.getElementById("p-helps-status"), box = document.getElementById("p-helps-list");
+  const name = club ? clubName(club).toLowerCase() : "club";
+  const { a, listed, coached } = h;
+  const counts = ["confirmed", "emerging"].map(k => [EVIDENCE[k].toLowerCase(), listed.filter(l => l.label === k).length]).filter(x => x[1]);
+  status.textContent = !a.tested
+    ? `not enough swings with body numbers yet: ${a.swings} with the ${name}; a link needs ${SwingHelps.MIN_PAIRS} in sessions of ${SwingHelps.MIN_IN_SESSION} or more.`
+    : [`${a.swings} swings in ${a.sessions} session${a.sessions === 1 ? "" : "s"}`,
+       counts.length ? counts.map(([k, n]) => `${n} ${k}`).join(", ") : "nothing stands out from chance yet",
+       a.sessions < 5 ? "it takes 5 to 10 sessions of 20+ swings to say much" : ""].filter(Boolean).join(" · ");
+  const list = pEl("div", "p-links");
   for (const { l, c } of coached) {
-    const card = el("div", "p-link");
-    const head = el("div", "p-link-head");
-    head.append(el("span", `tag ${l.label}`, l.label));
-    if (l.helps != null) head.append(el("span", l.helps ? "helps" : "hurts", l.helps ? "Helps" : "Hurts"));
-    head.append(el("span", null, `${c.when[0].toUpperCase() + c.when.slice(1)} \u2192 ${c.then}`));
+    const card = pEl("div", "p-link");
+    const head = pEl("div", "p-link-head");
+    head.append(pEl("span", `tag ${l.label}`, EVIDENCE[l.label] || l.label));
+    if (l.helps != null) head.append(pEl("span", l.helps ? "helps" : "hurts", l.helps ? "Helps" : "Hurts"));
+    head.append(pEl("span", null, `${c.when[0].toUpperCase() + c.when.slice(1)} → ${c.then}`));
     if (l.shaky) { head.classList.add("shaky"); head.title = "Shaky: most of the move's numbers are (trust.js)"; }
     card.append(head);
-    card.append(el("div", "sub", `${SwingHelps.sentence(l)} · ${SwingHelps.support(l)} · r ${fmtR(l.r)}, q ${l.q < 0.001 ? "<0.001" : l.q.toFixed(3)}`
-      + (l.between ? ` · between sessions r ${fmtR(l.between.r)} over ${l.between.n}` : "")));
-    if (c.fix) {
-      const fix = el("div", "p-link-fix");
-      fix.append(el("b", null, `Aim for ${c.fix.name}, for ${c.goal}. `), c.fix.how, " ");
-      fix.append(el("b", null, "Drill: "), c.fix.drill, " ");
-      fix.append(el("b", null, "Thought: "), `\u201c${c.fix.thought}\u201d`);
-      card.append(fix);
-    } else if (c.why) {
-      card.append(el("div", "muted", c.why[0].toUpperCase() + c.why.slice(1) + "."));
-    }
-    const see = el("button", "small", "See it in Trends");
+    const sub = pEl("div", "sub", `${SwingHelps.sentence(l)} · ${SwingHelps.support(l)}`);
+    sub.title = `r ${fmtR(l.r)}, q ${l.q < 0.001 ? "<0.001" : l.q.toFixed(3)}`
+      + (l.between ? ` · between sessions r ${fmtR(l.between.r)} over ${l.between.n}` : "");
+    card.append(sub);
+    if (!c.fix && c.why) card.append(pEl("div", "muted", c.why[0].toUpperCase() + c.why.slice(1) + "."));
+    const see = pEl("button", "small", "See it in Trends");
     see.onclick = () => {
       const latest = sessions[sessions.length - 1];
       if (!latest) return;
@@ -1173,7 +1273,7 @@ function renderHelps(club, sessions) {
     card.append(see);
     list.append(card);
   }
-  box.replaceChildren(plan, list);
+  box.replaceChildren(...(coached.length ? [list] : []));
 }
 
 // ---- Progress: my focus (focus.js) ----
@@ -1212,63 +1312,173 @@ function focusPracticeRange(f) {
   return f.aim === "more" ? { min: round(med), max: round(med + 2 * spread) } : { min: round(med - 2 * spread), max: round(med) };
 }
 
-function renderFocus() {
+/**
+ * What the club's good shots say about a move, when they say it clearly: {agree, way} where agree
+ * is whether the good shots had more of the move when the aim is more (or less when less).
+ */
+function goodShotsSay(club, move, aim) {
+  const data = goodShotData(), c = club ? data.clubs[club] : null;
+  if (!c) return null;
+  const minCount = SwingGoodShots.withDefaults(data.settings).minCount;
+  const x = SwingGoodShots.separation(c, minCount).find(i => i.key === move && i.enough && i.clear);
+  if (!x) return null;
+  return { agree: (x.diff > 0) === (aim === "more"), way: x.diff > 0 ? "higher" : "lower", label: lowerFirst(field(move).label) };
+}
+
+/** A note when the good shots agree with the move to work on, or point the other way. */
+function goodShotsNote(club, move, aim) {
+  const g = goodShotsSay(club, move, aim);
+  if (!g) return null;
+  return g.agree
+    ? pEl("div", "p-focus-note agree", `Your good shots agree: they had the ${g.label} ${g.way} than the rest.`)
+    : pEl("div", "p-focus-note", `Heads-up: your good shots point the other way (their ${g.label} was ${g.way} than the rest). `
+      + "Give it a session or two with the drill and see which way the results go before trusting either.");
+}
+
+function badge(label, text) {
+  return pEl("span", `p-badge ${label}`, text || EVIDENCE[label] || "");
+}
+
+function drillAndThought(fix) {
+  const drill = pEl("div"); drill.append(pEl("b", null, "Drill: "), fix.drill);
+  const thought = pEl("div"); thought.append(pEl("b", null, "Swing thought: "), `“${fix.thought}”`);
+  return [drill, thought];
+}
+
+function focusButton(m, club, text) {
+  const b = pEl("button", "small", text || "Make this my focus");
+  b.onclick = () => setFocus({ move: m.move, aim: m.aim, club, results: [...new Set(m.items.map(x => x.l.result))] });
+  return b;
+}
+
+/**
+ * The card: one thing to work on. The focus when there is one (with how it's going), else the plan's
+ * first move; the plan's other moves as alternatives; the evidence folded under "Why this?".
+ */
+function renderCoach(club, h) {
   const box = document.getElementById("p-focus-body");
-  const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
+  const name = club ? clubName(club).toLowerCase() : "club";
   const f = journal.focus;
-  if (!f) {
-    box.replaceChildren(el("div", "muted", "No focus set. Pick one from the practice plan in “What helps, what hurts” below."));
-    return;
+  const plan = h.moves.filter(m => !m.tradeOff);
+  const kids = [];
+  let main = null;   // the plan move shown as the main thing, if any
+  if (f && f.club !== club) {
+    // The focus is with another club: a pointer to it, then this club's own suggestion.
+    const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim], fname = clubName(f.club).toLowerCase();
+    const row = pEl("div", "p-alt");
+    const go = pEl("button", "small", `Show the ${fname}`);
+    go.onclick = () => { progressPick.club = f.club; savePicks(); renderProgress(); };
+    row.append(pEl("span", "muted", `Your focus is with the ${fname}: ${fix ? fix.name : focusLabel(f.move)}.`), go);
+    kids.push(row);
   }
-  const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim];
-  const kids = [el("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`),
-    el("div", "muted", `With the ${clubName(f.club).toLowerCase()}, since ${new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}`)];
-  if (fix) {
-    const drill = el("div"); drill.append(el("b", null, "Drill: "), fix.drill);
-    const thought = el("div"); thought.append(el("b", null, "Swing thought: "), `“${fix.thought}”`);
-    kids.push(drill, thought);
-  }
-  const cmp = SwingFocus.compare(progressSessions(f.club), f);
-  if (!cmp.after) {
-    kids.push(el("div", "muted", `No sessions with the ${clubName(f.club).toLowerCase()} since it started yet: hit some balls with the drill, then look here.`));
+  if (f && f.club === club) {
+    kids.push(...focusBlock(f, club, h));
+  } else if (plan.length) {
+    main = plan[0];
+    const nameEl = pEl("div", "p-focus-name", `Work on ${main.fix.name}`);
+    nameEl.append(badge(main.label));
+    kids.push(pEl("div", "p-focus-kicker", `Suggested for the ${name}`), nameEl,
+      pEl("div", null, `For ${main.goals.join("; ")}. ${main.fix.how}`), ...drillAndThought(main.fix));
+    const note = goodShotsNote(club, main.move, main.aim);
+    if (note) kids.push(note);
+    if (main.label !== "confirmed") kids.push(pEl("div", "muted", "Not proven yet: try it for a session or two and see whether the numbers follow."));
+    const buttons = pEl("div", "t-filters");
+    buttons.append(focusButton(main, club));
+    kids.push(buttons);
   } else {
-    kids.push(el("div", "muted", `${cmp.after} session${cmp.after === 1 ? "" : "s"} since, against ${cmp.before} before.`));
-    if (cmp.cameraMoved) kids.push(el("div", "p-focus-warn", "A camera moved since it started: the move's numbers either side may not compare."));
-    const table = el("table", "p-focus-table");
-    const head = el("tr");
-    for (const t of ["", "Before", "Since", "Change", ""]) head.append(el("th", null, t));
+    kids.push(pEl("div", "p-focus-name", "Nothing to work on yet"),
+      pEl("div", "muted", h.a.tested
+        ? `No move stands out from chance with the ${name} yet. Keep hitting balls: it takes 5 to 10 sessions of 20+ swings to say much.`
+        : `Not enough swings with body numbers with the ${name} yet.`));
+  }
+  // The plan's other moves.
+  const isFocus = m => f && f.move === m.move && f.aim === m.aim && f.club === club;
+  const others = plan.filter(m => m !== main && !isFocus(m));
+  if (others.length) {
+    kids.push(pEl("div", "p-why-sub", main ? "Or" : "The numbers also point to"));
+    for (const m of others) {
+      const row = pEl("div", "p-alt");
+      row.append(pEl("span", null, `Work on ${m.fix.name}`), badge(m.label), focusButton(m, club, f ? "Switch focus to this" : "Make this my focus"));
+      kids.push(row);
+    }
+  }
+  const trades = h.moves.filter(m => m.tradeOff);
+  if (trades.length) {
+    kids.push(pEl("div", "muted", "Keep steady: " + trades.map(m => SwingCoach.MOVES[m.move].what).join("; ")
+      + " (it helps one result and hurts another)."));
+  }
+  box.replaceChildren(...kids);
+}
+
+/** The focus: the move, drill and thought, how it's going since it started, and what to do next. */
+function focusBlock(f, club, h) {
+  const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim];
+  const fname = clubName(f.club).toLowerCase();
+  const kids = [pEl("div", "p-focus-kicker", `Your focus · ${fname} · since ${new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}`)];
+  const nameEl = pEl("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`);
+  const m = h.moves.find(x => x.move === f.move && !x.tradeOff && x.aim === f.aim);
+  nameEl.append(m ? badge(m.label) : badge("none", "Not in the latest numbers"));
+  kids.push(nameEl);
+  if (fix) kids.push(...drillAndThought(fix));
+
+  // How it's going, in a sentence; the numbers behind it folded.
+  const cmp = SwingFocus.compare(progressSessions(f.club), f);
+  const so = pEl("div", "p-focus-so");
+  if (!cmp.after) {
+    so.textContent = `No sessions with the ${fname} since it started yet: hit some balls with the drill, then look here.`;
+    kids.push(so);
+  } else {
+    so.append(pEl("b", null, `So far (${cmp.after} session${cmp.after === 1 ? "" : "s"}): `));
+    const parts = [cmp.move, ...cmp.results].map((x, i) => {
+      const span = pEl("span", null, `${i === 0 ? "the move itself" : lowerFirst(focusLabel(x.key))}: ${SwingFocus.verdict(x)}`);
+      if ((x.level === "clear" || x.level === "maybe") && x.good != null) span.className = x.good ? "better" : "worse";
+      return span;
+    });
+    parts.forEach((p, i) => so.append(...(i ? ["; ", p] : [p])));
+    so.append(".");
+    kids.push(so);
+    if (cmp.cameraMoved) kids.push(pEl("div", "p-focus-warn", "A camera moved since it started: the move's numbers either side may not compare."));
+    const table = pEl("table", "p-focus-table");
+    const head = pEl("tr");
+    for (const t of ["", "Before", "Since", "Change", ""]) head.append(pEl("th", null, t));
     table.append(head);
     for (const x of [cmp.move, ...cmp.results]) {
-      const tr = el("tr");
-      const v = SwingFocus.verdict(x);
+      const tr = pEl("tr");
       const cls = x.level === "clear" || x.level === "maybe" ? (x.good === true ? "good" : x.good === false ? "bad" : "") : "muted";
-      tr.append(el("td", null, (x === cmp.move ? "The move: " : "") + focusLabel(x.key)),
-        el("td", null, focusFmt(x.key, x.before)), el("td", null, focusFmt(x.key, x.after)),
-        el("td", null, x.change == null ? "–" : (t => x.change > 0 && !t.startsWith("+") ? "+" + t : t)(focusFmt(x.key, x.change))),
-        el("td", cls, v));
+      tr.append(pEl("td", null, (x === cmp.move ? "The move: " : "") + focusLabel(x.key)),
+        pEl("td", null, focusFmt(x.key, x.before)), pEl("td", null, focusFmt(x.key, x.after)),
+        pEl("td", null, x.change == null ? "–" : (t => x.change > 0 && !t.startsWith("+") ? "+" + t : t)(focusFmt(x.key, x.change))),
+        pEl("td", cls, SwingFocus.verdict(x)));
       table.append(tr);
     }
-    const wrap = el("div"); wrap.style.overflowX = "auto"; wrap.append(table);
-    kids.push(wrap);
+    const nums = pEl("details", "explain");
+    nums.append(pEl("summary", null, `The numbers: ${cmp.after} session${cmp.after === 1 ? "" : "s"} since, against ${cmp.before} before`));
+    const wrap = pEl("div"); wrap.style.overflowX = "auto"; wrap.append(table);
+    nums.append(wrap);
+    kids.push(nums);
   }
-  const buttons = el("div", "t-filters");
-  const practiceBtn = el("button", "small", "Practice this");
+  const note = goodShotsNote(f.club, f.move, f.aim);
+  if (note) kids.push(note);
+
+  const buttons = pEl("div", "t-filters");
+  const practiceBtn = pEl("button", "small", "Practice this");
   const range = focusPracticeRange(f);
   practiceBtn.disabled = !range;
-  practiceBtn.title = range ? `In range = ${f.aim === "more" ? "more" : "less"} than your usual (${range.min} to ${range.max})` : "Not enough recent swings with this move to set a range";
+  practiceBtn.title = range ? `In range = ${f.aim === "more" ? "more" : "less"} than your usual (${range.min} to ${range.max}); the phone says the swing thought after a swing out of range`
+    : "Not enough recent swings with this move to set a range";
   practiceBtn.onclick = async () => {
     const ok = await practiceFromFocus({ metric: f.move, club: f.club, min: range.min, max: range.max, cue: fix ? fix.thought : "" });
     if (!ok) alert("Practice mode can't speak this move (the face-on turns aren't reliable enough one swing at a time).");
   };
-  const end = el("button", "small", "End this focus");
+  const end = pEl("button", "small", "End this focus");
   end.onclick = () => { if (confirm("End this focus? It stays in the history.")) setFocus({ move: null }); };
   buttons.append(practiceBtn, end);
   kids.push(buttons);
   const past = (journal.focuses || []).slice(-3).reverse();
   if (past.length) {
-    kids.push(el("div", "muted", "Before: " + past.map(p => `${(SwingCoach.MOVES[p.move] || {})[p.aim]?.name || p.move} (${p.since} to ${p.until})`).join("; ")));
+    kids.push(pEl("div", "muted", "Before: " + past.map(p => `${(SwingCoach.MOVES[p.move] || {})[p.aim]?.name || p.move} (${p.since} to ${p.until})`).join("; ")));
   }
-  box.replaceChildren(...kids);
+  return kids;
 }
 
 /** The card: bag mapping across all clubs hit in the period. */

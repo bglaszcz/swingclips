@@ -252,7 +252,7 @@
   .q-table td.best { color: var(--accent); font-weight: 600; }
   .q-table td.bad { color: var(--warn); }
   #p-status { color: var(--muted); font-size: 13px; flex: 1; }
-  #p-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  #p-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
   .p-tile { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line);
             border-radius: 6px; cursor: pointer; min-width: 0; }
   .p-tile:hover { background: var(--sel); }
@@ -355,6 +355,39 @@
   .p-focus-table .good { color: var(--accent); font-weight: 600; }
   .p-focus-table .bad { color: var(--bad); font-weight: 600; }
   .p-focus-warn { color: var(--warn); }
+  /* Progress as three questions, in order, then the extras folded away. */
+  .p-step { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 650; margin: 8px 0 -4px; }
+  .p-step-n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+              background: var(--accent); color: var(--panel); font-size: 12px; font-weight: 700; }
+  .p-step-more { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 16px; }
+  .p-step-more .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .p-headline { font-size: 15px; line-height: 1.45; }
+  .p-headline .better { color: var(--accent); font-weight: 600; }
+  .p-headline .worse { color: var(--warn); font-weight: 600; }
+  .p-tiles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-top: 8px; }
+  details.p-more > summary { color: var(--accent); font-size: 13px; font-weight: 600; padding: 4px 0; }
+  details.p-more[open] > summary { margin-bottom: 6px; }
+  .p-why-sub { font-weight: 600; font-size: 13px; margin-top: 10px; }
+  .p-why-sub .note { font-weight: 400; margin-left: 6px; }
+  details.p-fold { display: block; }
+  details.p-fold > summary { list-style-position: inside; }
+  details.p-fold[open] > summary { margin-bottom: 8px; }
+  details.p-fold > :not(summary) + :not(summary) { margin-top: 8px; }
+  .p-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 8px; white-space: nowrap; vertical-align: 2px; margin-left: 6px; }
+  .p-badge.confirmed { background: var(--accent-soft); color: var(--accent); }
+  .p-badge.emerging { background: var(--warn-soft); color: var(--warn); }
+  .p-badge.none { background: var(--panel-2); color: var(--muted); }
+  .p-focus-kicker { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .p-focus-so { padding: 8px 10px; border-radius: 8px; background: var(--panel-2); }
+  .p-focus-so .better { color: var(--accent); font-weight: 600; }
+  .p-focus-so .worse { color: var(--warn); font-weight: 600; }
+  .p-focus-note { padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); }
+  .p-focus-note.agree { background: var(--accent-soft); }
+  .p-alt { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+  .p-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .p-chips button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .p-focus-line { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .p-focus-label { fill: var(--accent); font-size: 11px; }
   .p-link { border-bottom: 1px solid var(--line); padding: 6px 0 8px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
   .p-link-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-weight: 600; }
   .p-link .sub { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -991,30 +1024,82 @@
       </select></label>
       <label title="Shaky numbers: tracking noise or the conditions could account for them. Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
     </div>
-    <div class="t-card" id="p-focus">
-      <strong>My focus</strong>
-      <div id="p-focus-body"></div>
-      <div class="note">One move to work on, from the practice plan below ("Make this my focus"). Since the day it
-        started, each session's median against the 6 sessions before, measured against how much it wobbles from
-        session to session anyway: "clearly" = 2 wobbles or more, "maybe" = 1.5 or more. "Practice this" turns on
-        practice mode for the move (in range = better than your usual), and the phone says the swing thought after
-        a swing out of range.</div>
-    </div>
-    <div class="t-card">
-      <strong>Latest session</strong>
+
+    <div class="p-step"><span class="p-step-n">1</span><span id="p-today-title">How did the last session go?</span></div>
+    <div class="t-card" id="p-today">
+      <div id="p-headline" class="p-headline"></div>
       <div id="p-tiles"></div>
-      <div class="note" id="p-tiles-note"></div>
+      <details class="p-more" data-fold="tiles-more">
+        <summary>All numbers from this session</summary>
+        <div id="p-tiles-more" class="p-tiles-grid"></div>
+      </details>
+      <details class="explain">
+        <summary>How it's worked out</summary>
+        <div class="note" id="p-tiles-note"></div>
+      </details>
     </div>
-    <div class="t-card" id="p-good">
-      <strong>What sets my good shots apart</strong>
-      <div id="p-good-status" class="note"></div>
-      <div style="overflow-x: auto" id="p-good-sep"></div>
-      <div class="note">The body numbers that differ most between this club's good shots and the rest: the difference in
-        means, and the effect size (Hedges' g, in standard deviations) with its 95% confidence interval. "Clear" = the
-        interval leaves out 0. This describes your shots; it doesn't say a number causes good shots (it may be the other
-        way round, or both may follow from something else), and with 18 numbers about one in twenty looks clear by chance.
-        Numbers with no reading are left out; greyed ~ = mostly shaky.</div>
-      <details>
+
+    <div class="p-step"><span class="p-step-n">2</span>What should I work on?</div>
+    <div class="t-card" id="p-focus">
+      <div id="p-focus-body"></div>
+      <details class="p-more" id="p-why" data-fold="why">
+        <summary>Why this? The evidence</summary>
+        <div class="p-why-sub">Moves that go with your results <span id="p-helps-status" class="note"></span></div>
+        <div id="p-helps-list"></div>
+        <div class="p-why-sub">What sets my good shots apart <span id="p-good-status" class="note"></span></div>
+        <div style="overflow-x: auto" id="p-good-sep"></div>
+        <details class="explain">
+          <summary>How it's worked out</summary>
+          <div class="note">Moves and results: each move against each result with this club, within sessions (every swing
+            against that session's own usual, so warm-up, tiredness and where the cameras stood cancel out), pooled over
+            the sessions in the period. With 18 moves and 16 results some links look strong by luck, so each one's chance
+            is corrected for how many were tested (q). <b>Strong evidence</b>: q under 0.05 and the same way in at least
+            3 sessions. <b>Worth trying</b>: q under 0.2, not yet proven. The aim: for carry, smash and distance offline
+            the way that helps; for path, face, curve, strike and attack angle, the way that brings your usual number
+            toward neutral (irons: attack -4°). It describes your swings; it doesn't prove the move causes the result.</div>
+          <div class="note">Good shots: the body numbers that differ most between this club's good shots and the rest.
+            <b>Strong</b> = the 95% confidence interval of the effect size (Hedges' g) leaves out 0; with 18 numbers about
+            one in twenty looks strong by chance. It may be the other way round (a good shot doesn't need the move).</div>
+          <div class="note">The focus's progress: since the day it started, each session's median against the 6 sessions
+            before, measured against how much it wobbles from session to session anyway: "clearly" = 2 wobbles or more,
+            "maybe" = 1.5 or more. "Practice this" turns on practice mode for the move, and the phone says the swing
+            thought after a swing out of range.</div>
+          <div class="note">The drills and thoughts are general instruction for a right-hander; a coach watching you trumps
+            them. Greyed ~ = mostly shaky numbers.</div>
+        </details>
+      </details>
+    </div>
+
+    <div class="p-step"><span class="p-step-n">3</span>Is it working?</div>
+    <div class="t-card" id="p-chart">
+      <div class="p-chips" id="p-chips"></div>
+      <svg role="img"></svg>
+      <div id="p-tip" class="tip" hidden></div>
+      <div class="t-filters"><label>Any number <select id="p-metric" aria-label="Number to chart"></select></label></div>
+      <details class="explain">
+        <summary>How to read it</summary>
+        <div class="note">One column per session with this club. Faint dots are single swings; the colored dot is the
+          session's median, the bar its middle half. Spread numbers are the standard deviation of the session's shots:
+          lower is more consistent. "Camera moved" marks where a phone was moved, so body numbers either side don't
+          compare; "focus" marks the day your focus started. Tap a session to open its trends.</div>
+      </details>
+    </div>
+
+    <div class="p-step p-step-more">More with this club</div>
+    <details class="t-card p-fold" data-fold="pattern">
+      <summary><strong>Shot pattern</strong></summary>
+      <svg id="p-pattern" role="img" aria-label="Where shots finished: carry against offline"></svg>
+      <div class="p-legend" id="p-pattern-legend"><span><i class="p-key p-latest"></i>Latest session</span>
+        <span><i class="p-key p-before"></i>Sessions before it</span></div>
+      <div class="note">The rings hold about two shots in three: a smaller ring is a tighter pattern.</div>
+    </details>
+    <details class="t-card p-fold" data-fold="sessions">
+      <summary><strong>Sessions</strong></summary>
+      <div style="overflow-x: auto"><table id="p-sessions"></table></div>
+    </details>
+    <details class="t-card p-fold" id="p-good" data-fold="good">
+      <summary><strong>Good shots: ranges and rules</strong></summary>
+      <details open>
         <summary id="p-good-ranges-title">Ranges on good shots</summary>
         <div style="overflow-x: auto"><table id="p-good-ranges"></table></div>
         <div class="note">Middle 50% and 80% of the good shots' numbers (the swing page and Compare show them too).
@@ -1027,46 +1112,16 @@
           not, once there are 5. A rule Square gives no number for (the driver's smash or strike, sometimes) is
           skipped. Swings left out of the trends don't count.</div>
       </details>
-    </div>
-    <div class="t-card" id="p-helps">
-      <strong>What helps, what hurts</strong>
-      <div id="p-helps-status" class="note"></div>
-      <div style="overflow-x: auto" id="p-helps-list"></div>
-      <div class="note">How it's worked out: each move against each result with this club, within sessions (every
-        swing against that session's own usual, so warm-up, tiredness and where the cameras stood cancel out), pooled
-        over the sessions in the period. With 18 moves and 16 results some links look strong by luck, so each one's
-        chance is corrected for how many were tested (q). <b>Confirmed</b>: q under 0.05 and the same way in at least 3
-        sessions. <b>Emerging</b>: q under 0.2; worth a try, not yet proven. The aim: for carry, smash and distance
-        offline the way that helps; for path, face, curve, strike and attack angle, the way that brings your usual
-        number toward neutral (irons: attack -4°). The drills and thoughts are general instruction for a right-hander;
-        a coach watching you trumps them. It describes your swings; it doesn't prove the move causes the result.
-        Greyed ~ = mostly shaky.</div>
-    </div>
-    <div class="t-card" id="p-chart">
-      <div class="p-chart-head"><strong>Over time</strong><select id="p-metric" aria-label="Number to chart"></select></div>
-      <svg role="img"></svg>
-      <div id="p-tip" class="tip" hidden></div>
-      <div class="note">One column per session with this club. Faint dots are single swings; the colored dot is the
-        session's median, the bar its middle half. Consistency numbers are the spread (standard deviation)
-        of the session's shots: lower is more consistent. "Camera moved" marks where a phone was moved, so
-        body numbers either side don't compare. Tap a session to open its trends.</div>
-    </div>
-    <div class="t-card">
-      <strong>Shot pattern</strong>
-      <svg id="p-pattern" role="img" aria-label="Where shots finished: carry against offline"></svg>
-      <div class="p-legend" id="p-pattern-legend"><span><i class="p-key p-latest"></i>Latest session</span>
-        <span><i class="p-key p-before"></i>Sessions before it</span></div>
-      <div class="note">The rings hold about two shots in three: a smaller ring is a tighter pattern.</div>
-    </div>
-    <div class="t-card" id="p-gapping">
-      <div class="t-head">
-        <strong>Gapping</strong><span id="p-gapping-status" class="note"></span>
-      </div>
+    </details>
+
+    <div class="p-step p-step-more">My bag &amp; game <span class="note">all clubs</span></div>
+    <details class="t-card p-fold" id="p-gapping" data-fold="gapping">
+      <summary><strong>Gapping</strong> <span id="p-gapping-status" class="note"></span></summary>
       <div style="overflow-x: auto" id="p-gapping-chart"></div>
       <div class="note">Each club's median carry and middle 50% spread in this period, and the gap in median carry between neighbouring clubs. Gaps under 7 yd (overlap) or over 20 yd (big gap) are flagged. Mishits and clubs with fewer than 5 shots are left out.</div>
-    </div>
-    <div class="t-card">
-      <strong>Handicap index</strong>
+    </details>
+    <details class="t-card p-fold" data-fold="hcp">
+      <summary><strong>Handicap index</strong> <span id="p-hcp-now" class="note"></span></summary>
       <svg id="p-hcp" role="img" aria-label="Handicap index over time"></svg>
       <form id="p-hcp-form" class="t-filters">
         <input type="date" id="p-hcp-date" aria-label="Date">
@@ -1075,11 +1130,7 @@
       </form>
       <div id="p-hcp-list"></div>
       <div class="note">Typed in from the GHIN app when it changes (GHIN has no way for this page to read it).</div>
-    </div>
-    <div class="t-card">
-      <strong>Sessions</strong>
-      <div style="overflow-x: auto"><table id="p-sessions"></table></div>
-    </div>
+    </details>
   </section>
 </main>
 <div id="toast" hidden role="status"><span id="toast-text"></span><button id="toast-undo" class="small">Undo</button></div>
@@ -1105,7 +1156,7 @@
       <dl class="where">
         <dt>Ready bar</dt><dd>Both phones, Square and the server at a glance. Start and stop both phones here.</dd>
         <dt>Swings</dt><dd>Every swing by session: both angles in sync, Square's numbers, key positions and body numbers. <b>Trends</b> on a session plots body numbers against results.</dd>
-        <dt>Progress</dt><dd>How your numbers change across sessions, what sets your good shots apart, shot pattern and handicap.</dd>
+        <dt>Progress</dt><dd>Three questions in order: how the last session went, what to work on, and whether it's working. Shot pattern, sessions, gapping and handicap are folded underneath.</dd>
         <dt>Practice</dt><dd>Pick one number and a range; a phone says it after each swing.</dd>
         <dt>Cameras</dt><dd>Live pictures from both phones, to check framing before you start.</dd>
         <dt>Greyed ~</dt><dd>A shaky number: noise or the conditions could account for it. <b>--</b> = no reading. Hover for why.</dd>
