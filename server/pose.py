@@ -225,6 +225,77 @@ def upright_gray(frame, rotation):
     return cv2.rotate(g, ROTATE_CW[rotation]) if rotation in ROTATE_CW else g
 
 
+# ---- The clubhead leaving the ball (the takeaway, as the labels mark it) ----
+# The box watched: around the ball, CLUBHEAD_BOX ball radii either side and from CLUBHEAD_ROWS[0]
+# above its middle to CLUBHEAD_ROWS[1] below: the clubhead behind the ball at address, not the
+# shaft above it (which moves a little earlier, with the hands). Each crop is taken to zero mean and
+# unit spread, so the lights' 120 Hz flicker doesn't count.
+CLUBHEAD_BOX = 6
+CLUBHEAD_ROWS = (2, 4)
+# Where the change leaves the noise: K spreads over the level 0.2-0.08 s before it crosses half way
+# to its peak (the keyframes, every 0.25 s, shift the level over longer stretches).
+CLUBHEAD_K = 5
+CLUBHEAD_LOCAL = (0.2, 0.08)
+
+
+def clubhead_crops(path, rotation, ball, t0, t1):
+    """[(t, crop)] for frames t0 <= t < t1: the clubhead box, upright gray, normalized. `ball`: the
+    pose file's {x, y, r} (shares of the upright picture's width, height, height)."""
+    out = []
+    with av.open(path) as c:
+        s = c.streams.video[0]
+        tb = float(s.time_base)
+        for f in decode_range(c, int(max(0.0, t0) / tb), int(t1 / tb)):
+            g = upright_gray(f, rotation)
+            h, w = g.shape
+            r = max(ball.get("r") or 0.0, 0.004) * h
+            cx, cy = ball["x"] * w, ball["y"] * h
+            x0, x1 = int(max(0, cx - CLUBHEAD_BOX * r)), int(min(w, cx + CLUBHEAD_BOX * r))
+            y0, y1 = int(max(0, cy - CLUBHEAD_ROWS[0] * r)), int(min(h, cy + CLUBHEAD_ROWS[1] * r))
+            crop = g[y0:y1, x0:x1].astype(np.float32)
+            crop -= crop.mean()
+            out.append((f.pts * tb, crop / (crop.std() + 1e-6)))
+    return out
+
+
+def clubhead_motion(crops, quiet_until):
+    """How far the clubhead box is from its look while still (the median of the crops before
+    `quiet_until`), per frame, and where that change starts: {"t": [...], "v": [...], "onset": t |
+    None}. None when there's no still stretch to compare with."""
+    ts = np.array([t for t, _ in crops])
+    q = ts < quiet_until
+    if q.sum() < 20:
+        return None
+    cs = np.stack([c for _, c in crops])
+    d = np.abs(cs - np.median(cs[q], axis=0)).mean(axis=(1, 2))
+    out = {"t": [round(float(t), 6) for t in ts], "v": [round(float(v), 4) for v in d], "onset": None}
+    med = np.median(d[q])
+    mad = np.median(np.abs(d[q] - med)) * 1.4826 + 1e-6
+    if (~q).any() and d[~q].max() - med >= 10 * mad:
+        half = med + 0.5 * (d[~q].max() - med)
+        after = np.where(~q & (d > half))[0]
+        i = int(after[0])
+        # Walk back to the level just before; then again from there, since a slow start puts the
+        # first bit of the rise in that stretch and lifts the level (until it stops moving).
+        found = False
+        for _ in range(5):
+            loc = (ts > ts[i] - CLUBHEAD_LOCAL[0]) & (ts < ts[i] - CLUBHEAD_LOCAL[1])
+            if loc.sum() < 10:
+                break
+            found = True
+            b = np.median(d[loc])
+            s = np.median(np.abs(d[loc] - b)) * 1.4826 + 1e-6
+            j = i
+            while j > 0 and d[j - 1] > b + CLUBHEAD_K * s:
+                j -= 1
+            if j == i:
+                break
+            i = j
+        if found:
+            out["onset"] = round(float(ts[i]), 6)
+    return out
+
+
 def decode_range(container, start_pts, end_pts):
     s = container.streams.video[0]
     container.seek(start_pts, stream=s, backward=True, any_frame=False)

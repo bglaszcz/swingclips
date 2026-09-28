@@ -553,6 +553,9 @@
         el("span", { className: "lp-label" }, "Go to the frame, then press ", kbd("T"), " ", kbd("2"), "–", kbd("8"), " (", kbd("I"), " = impact)")),
       el("div", { className: "lp-moments" }, ...tiles)));
 
+    // ---- Clubhead motion, for the takeaway ----
+    kids.push(motionSection(a, doc, t));
+
     // ---- Points on this frame ----
     const nextText = ballArmed ? "the ball's middle (at address)" : POINTS[target][1];
     const nextColor = ballArmed ? BALL_COLOR : pointColor(POINTS[target][0]);
@@ -623,12 +626,96 @@
         el("dt", {}, kbd("L"), " ", kbd("Esc")), el("dd", { textContent: "Done" })),
       el("ul", { className: "lp-tipl" },
         el("li", { textContent: "Left and right are the golfer's own: face-on, the golfer's left is on the picture's right." }),
-        el("li", { textContent: "Takeaway is the first frame the club moves. In a blurred frame, put the clubhead in the middle of the streak." }),
+        el("li", { textContent: "Takeaway is the first frame the clubhead leaves the ball (not the hands or a forward press): step until it moves; the Clubhead motion trace shows where it starts to rise. In a blurred frame, put the clubhead in the middle of the streak." }),
         el("li", { textContent: "The tracker's skeleton and numbers are hidden while you label, so they don't sway you; they come back when you're done." })));
     try { tips.open = localStorage.getItem(KEYS_OPEN) === "1"; } catch {}
     tips.addEventListener("toggle", () => { try { localStorage.setItem(KEYS_OPEN, tips.open ? "1" : "0"); } catch {} });
     kids.push(tips);
     panel.replaceChildren(...kids);
+  }
+
+  // ---- Clubhead motion (the takeaway) ----
+  // How the box round the clubhead at address changes, frame by frame (/api/clubmotion: pose.py
+  // clubhead_motion), from 0.65 s before the takeaway the key positions found to 0.35 s after: flat
+  // while the club is still, rising as it leaves the ball. It marks the frame on screen and your
+  // takeaway label, not a suggestion: step to the frame where the rise starts yourself.
+  const motions = new Map();   // `${clip}|${quiet}` -> {state: "loading" | "ready" | "error", data, why}
+
+  /** The detected takeaway in the active clip's time, or null. */
+  function detectedTakeaway(a) {
+    const tk = positions && positions.takeaway ? positions.takeaway.t : null;
+    if (tk == null) return null;
+    return a.video === video ? tk : tk + partnerOffset();
+  }
+
+  function motionFor(a) {
+    const tk = detectedTakeaway(a);
+    if (tk == null) return null;
+    const quiet = Math.max(0.36, tk - 0.3), until = tk + 0.35;
+    const key = `${a.name}|${quiet.toFixed(3)}`;
+    let m = motions.get(key);
+    if (!m) {
+      m = { state: "loading" };
+      motions.set(key, m);
+      fetch(`/api/clubmotion/${encodeURIComponent(a.name)}?quiet=${quiet.toFixed(3)}&until=${until.toFixed(3)}`)
+        .then(async res => res.ok ? res.json() : Promise.reject(new Error((await res.json().catch(() => ({}))).detail || res.statusText)))
+        .then(data => { m.state = "ready"; m.data = data; })
+        .catch(err => { m.state = "error"; m.why = err.message; })
+        .finally(() => render());
+    }
+    return m;
+  }
+
+  function motionSection(a, doc, t) {
+    const m = motionFor(a);
+    const sec = el("div", { className: "lp-section" },
+      el("div", { className: "lp-shead" }, el("b", { textContent: "Clubhead motion" }),
+        el("span", { className: "lp-label", textContent: "Takeaway = the first frame of the rise: flat while the clubhead sits behind the ball. Click to go there." })));
+    if (!m) { sec.append(el("div", { className: "lp-label", textContent: "No takeaway found in this clip to look around." })); return sec; }
+    if (m.state !== "ready") {
+      sec.append(el("div", { className: "lp-label", textContent: m.state === "loading" ? "Working out the clubhead's motion (a few seconds)…" : `No trace: ${m.why}` }));
+      return sec;
+    }
+    const canvas = el("canvas", { className: "lp-motion", height: 80 });
+    sec.append(canvas);
+    requestAnimationFrame(() => drawMotion(canvas, m.data, t, doc.events.takeaway));
+    canvas.onclick = ev => {
+      const r = canvas.getBoundingClientRect(), d = m.data;
+      const at = d.t[0] + (ev.clientX - r.left) / r.width * (d.t[d.t.length - 1] - d.t[0]);
+      showFrame(frameIndexAt(at, a.pose));
+    };
+    return sec;
+  }
+
+  function drawMotion(canvas, d, now, label) {
+    const w = canvas.clientWidth || 300, h = canvas.height;
+    canvas.width = w;
+    const ctx = canvas.getContext("2d");
+    const css = getComputedStyle(document.documentElement);
+    const color = name => css.getPropertyValue(name).trim() || "#888";
+    const t0 = d.t[0], t1 = d.t[d.t.length - 1];
+    const lo = Math.min(...d.v), hi = Math.max(...d.v);
+    const x = t => (t - t0) / (t1 - t0) * w, y = v => h - 4 - (v - lo) / Math.max(1e-6, hi - lo) * (h - 8);
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = color("--line");
+    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    ctx.strokeStyle = color("--text");
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    d.t.forEach((t, i) => (i ? ctx.lineTo(x(t), y(d.v[i])) : ctx.moveTo(x(t), y(d.v[i]))));
+    ctx.stroke();
+    const mark = (t, col, dash) => {
+      if (t == null || t < t0 || t > t1) return;
+      ctx.strokeStyle = col;
+      ctx.setLineDash(dash);
+      ctx.beginPath();
+      ctx.moveTo(x(t) + 0.5, 0);
+      ctx.lineTo(x(t) + 0.5, h);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    mark(label, CLUB_COLOR, [4, 3]);
+    mark(now, color("--accent"), []);
   }
 
   // ---- Keys and clicks ----

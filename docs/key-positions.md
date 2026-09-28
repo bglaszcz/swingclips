@@ -186,6 +186,30 @@ only leave 58 ms after your label, but the face-on shaft angle turns back 12 ms 
 RTMPose-m's track; the face-on shaft at the top is the least reliable reading), so there your label
 may follow the club while the rule follows the hands.
 
+### Takeaway from the camera: the clubhead leaving the ball (2026-09-28)
+
+The takeaway label means the first frame the clubhead leaves the ball (confirmed by the owner). The
+tracked shaft sees that in 2° steps and the wrists not at all, so a second, independent measure:
+the pixels round the clubhead at address (`pose.clubhead_motion`: a box round the ball, 6 ball radii
+either side, from 2 above its middle to 4 below so the shaft stays out; each frame taken to zero
+mean and unit spread against the lights' flicker; compared with the box while still; the change's
+start walked back from half way up to 5 spreads over the level just before it).
+
+On the 47 labels not listed for recheck, RTMPose-m (median / p90 / bias, ms):
+
+| Labels | Shaft rule | Camera |
+|---|---|---|
+| Sep 23-24 swings (22) | 19 / 83 / +10 | 21 / 97 / -4 |
+| Sep 25 swings (25) | 71 / 102 / +71 | 50 / 117 / +42 |
+
+On the Sep 25 swings both measures put the clubhead leaving the ball 40-140 ms after the label, and
+the frames agree (on 1790371549 the clubhead is still behind the ball 100 ms after it): those labels
+are early, not the rule late. Their takeaways (9 swings) are in `labels-to-recheck.json`; without
+them the takeaway scores 21 ms face-on and 17 ms down the line (leave one swing out). The camera
+doesn't beat the rule on the older labels, so phases.js is unchanged; it's on the Labels page as
+the **Clubhead motion** trace (flat while still, rising as the clubhead leaves), to label against.
+Once those swings are relabeled with it, score the camera against the rule again.
+
 ## Where labels and rules still disagree
 
 ### Labels taken from the suggested frames (please redo these)

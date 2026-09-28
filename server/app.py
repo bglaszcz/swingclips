@@ -1479,6 +1479,37 @@ def get_pose(name: str):
     return FileResponse(pose_file(name), media_type="application/json", headers={"Content-Encoding": "gzip"})
 
 
+# The clubhead-motion trace for labeling the takeaway (labels.js): crops kept for the last few clips,
+# since decoding the window takes a few seconds.
+_clubhead_cache: dict[tuple, list] = {}
+CLUBHEAD_CACHE = 4
+
+
+@app.get("/api/clubmotion/{name}")
+def get_clubmotion(name: str, quiet: float, until: float):
+    """How the box round the clubhead at address changes, frame by frame (pose.clubhead_motion):
+    against its look while still before `quiet` (s), from 0.35 s before that to `until`."""
+    clip = checked_clip(name)
+    if pose_state(name) != "done":
+        raise HTTPException(404, "Not analyzed yet")
+    doc = json.loads(gzip.decompress(pose_file(name).read_bytes()))
+    if not doc.get("ball"):
+        raise HTTPException(404, "No ball found in this clip: the trace watches the clubhead behind it")
+    if not 0 <= quiet < until <= quiet + 2.5:
+        raise HTTPException(400, "quiet must come before until, at most 2.5 s apart")
+    key = (name, round(quiet, 3), round(until, 3), pose_file(name).stat().st_mtime)
+    crops = _clubhead_cache.get(key)
+    if crops is None:
+        crops = pose.clubhead_crops(str(clip), doc.get("rotation", 0), doc["ball"], quiet - 0.35, until)
+        while len(_clubhead_cache) >= CLUBHEAD_CACHE:
+            _clubhead_cache.pop(next(iter(_clubhead_cache)))
+        _clubhead_cache[key] = crops
+    got = pose.clubhead_motion(crops, quiet)
+    if got is None:
+        raise HTTPException(404, "Too little of the clip before the takeaway to compare with")
+    return got
+
+
 @app.get("/")
 def index():
     return FileResponse(STATIC_DIR / "index.html")
