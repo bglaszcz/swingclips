@@ -110,6 +110,8 @@
     ["headSway", "Head sway at impact", "in", "face", "p7", "headSway"],
     ["headRise", "Head rise at impact", "in", "face", "p7", "headRise"],
     ["spineTiltImpact", "Spine tilt at impact", "°", "face", "p7", "spineTilt"],
+    ["lagP5", "Wrist hinge at P5", "°", "face", "p5", "lag"],
+    ["releaseArm", "Release point", "°", "face"],
     ["earlyExt", "Hips to ball at impact", "in", "dtl", "p7", "hipDepth"],
     ["bendLoss", "Bend vs address at impact", "°", "dtl", "p7", "bendChange"],
     ["headToBall", "Head to ball at impact", "in", "dtl", "p7", "headDepth"],
@@ -143,6 +145,8 @@
     out.tempo = tp ? tp.ratio : null;
     out.backswing = tp ? tp.back : null;
     out.downswing = tp ? tp.down : null;
+    const rel = a.metrics && a.metrics.release;
+    out.releaseArm = rel ? finite(rel.arm) : null;
     for (const f of BODY) {
       if (!f.pos) continue;
       let v = null;

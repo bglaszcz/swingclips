@@ -7,7 +7,7 @@ const Coach = require("../static/coach.js");
 const Faults = require("../static/faults.js");
 
 test("names, drills and swing thoughts come from coach.js", () => {
-  assert.equal(Faults.FAULTS.length, 7);
+  assert.equal(Faults.FAULTS.length, 8);
 
   const expected = [
     { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more" },
@@ -16,6 +16,7 @@ test("names, drills and swing thoughts come from coach.js", () => {
     { key: "headToBall", name: "head toward the ball", move: "headToBall", dir: "more" },
     { key: "hipSway", name: "hip slide", move: "hipSway", dir: "less" },
     { key: "headRise", name: "head dip", move: "headRise", dir: "less" },
+    { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more" },
     { key: "headRise", name: "head lift", move: "headRise", dir: "more" },
   ];
 
@@ -169,6 +170,15 @@ test("shaky and missing numbers are never named", () => {
   assert.equal(ee.readable, 4);
   assert.equal(ee.share, 3 / 4);
   assert.equal(ee.top, true);
+});
+
+test("casting: the release point above -22 deg", () => {
+  assert.equal(Faults.faultsOf({ releaseArm: -22 }).length, 0);
+  assert.equal(Faults.faultsOf({ releaseArm: -30 }).length, 0);
+  const c = Faults.faultsOf({ releaseArm: -21.9 });
+  assert.equal(c.length, 1);
+  assert.equal(c[0].name, "casting");
+  assert.ok(c[0].drill && c[0].thought);
 });
 
 test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () => {

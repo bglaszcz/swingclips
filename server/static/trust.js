@@ -25,8 +25,8 @@
   const IMPACT_CODES = ["noball", "impact"];
   // Key positions placed from impact (phases.js), and the timings that end at it.
   const FROM_IMPACT = ["p5", "p6", "p7", "p8"];
-  const TIMING = ["tempo", "backswing", "downswing"];
-  const IMPACT_TIMED = ["tempo", "downswing"];
+  const TIMING = ["tempo", "backswing", "downswing", "releaseArm"];
+  const IMPACT_TIMED = ["tempo", "downswing", "releaseArm"];
   // Noise floor: shaky when the typical spread while standing still at address is more than this
   // share of the typical swing-to-swing spread in a session.
   const NOISE_SHARE = 0.5;

@@ -72,6 +72,14 @@
       // Shaft above (+) or below (-) horizontal: pointing straight down at address is -90.
       out.club = Math.asin(-Math.sin(f.club[0] / DEG)) * DEG;
       out.clubSeen = f.club[1] >= 0.35;
+      // Wrist hinge (lag): the angle between the lead arm (shoulder to wrist) and the shaft (hands
+      // to clubhead; f.club[0] is its direction, 0 = right, 90 = down), 0 = one straight line,
+      // 90 = an L. Casting loses it early in the downswing.
+      if (out.clubSeen) {
+        const arm = Math.atan2(lwr.y - lsh.y, lwr.x - lsh.x) * DEG;
+        const d = Math.abs(((f.club[0] - arm) % 360 + 540) % 360 - 180);
+        out.lagRaw = d;
+      }
     }
 
     const ears = [I.NOSE, I.L_EAR, I.R_EAR].map(px);
@@ -93,6 +101,25 @@
     const anW = mid(at(f.w, I.L_ANKLE), at(f.w, I.R_ANKLE));
     const p = d2(shP, anP);
     return p > 0 ? d3(shW, anW) / p : null;
+  }
+
+  // Wrist hinge per frame: the median of the frames within LAG_FRAMES either side where the shaft
+  // was seen (at least LAG_MIN of them), since one frame's shaft can be a few degrees off.
+  const LAG_FRAMES = 2, LAG_MIN = 2;
+  // The release: the first frame after the top where the hinge is under this (an L is 90). How
+  // high the lead arm still is then says how early the club was let go (casting: early, arm high).
+  const RELEASE_LAG = 70;
+  function smoothLag(raw) {
+    return raw.map((_, i) => {
+      const near = [];
+      for (let j = Math.max(0, i - LAG_FRAMES); j <= Math.min(raw.length - 1, i + LAG_FRAMES); j++) {
+        if (raw[j] && raw[j].lagRaw != null) near.push(raw[j].lagRaw);
+      }
+      if (near.length < LAG_MIN) return null;
+      near.sort((a, b) => a - b);
+      const k = near.length >> 1;
+      return near.length % 2 ? near[k] : (near[k - 1] + near[k]) / 2;
+    });
   }
 
   /**
@@ -137,12 +164,13 @@
     const scale = scaleAt(frames[ai], aspect);
     const top = p4 ? p4.index : null;
     const pelvisTurn = ai >= 0 ? turns(raw.map(v => v && v.hipWidth), ai, top) : [];
+    const lag = smoothLag(raw);
     const shoulderTurn = ai >= 0 ? turns(raw.map(v => v && v.shoulderWidth), ai, top) : [];
 
     // Turns and drift relative to address.
     const values = raw.map((v, i) => {
       if (!v || !base) return v;
-      const r = { ...v, pelvisTurn: pelvisTurn[i], shoulderTurn: shoulderTurn[i] };
+      const r = { ...v, pelvisTurn: pelvisTurn[i], shoulderTurn: shoulderTurn[i], lag: lag[i] };
       if (r.pelvisTurn != null && r.shoulderTurn != null) r.separation = r.shoulderTurn - r.pelvisTurn;
       // The 3D estimate's depth only holds up while the shoulders face the camera.
       if (r.shoulderTurn == null || Math.abs(r.shoulderTurn) > FORWARD_MAX_TURN) r.spineForward = null;
@@ -164,7 +192,20 @@
       tempo = { back, down, ratio: back / down };
     }
 
-    return { values, address: ai, scale, tempo };
+    // The release: where the hinge first drops under RELEASE_LAG coming down, and the lead arm then
+    // (degrees above horizontal, so the less negative, the earlier). Not before the top.
+    let release = null;
+    if (top != null && p7 && p7.index > top) {
+      for (let i = top + 1; i <= p7.index; i++) {
+        const v = values[i];
+        if (v && v.lag != null && v.lag < RELEASE_LAG) {
+          release = { index: i, t: frames[i].t, arm: v.leadArm };
+          break;
+        }
+      }
+    }
+
+    return { values, address: ai, scale, tempo, release };
   }
 
   /**

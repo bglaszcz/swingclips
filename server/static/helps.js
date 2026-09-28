@@ -3,7 +3,7 @@
 // Within sessions first: each swing's move and result are taken against that session's own mean,
 // which cancels what changes from day to day (warm-up, fatigue, where the cameras stood). The
 // deviations are pooled over the club's sessions into one slope (the within-session regression) and
-// its correlation, tested with a t test on n - sessions - 1 degrees of freedom. With ~18 moves x ~14
+// its correlation, tested with a t test on n - sessions - 1 degrees of freedom. With ~20 moves x ~14
 // results, some links look strong by luck, so the p values get a false-discovery correction
 // (Benjamini-Hochberg, over every pair tested with the club). Then each link gets a label:
 //   confirmed: q < 0.05, and the same direction in at least 3 sessions and 3 in 4 of those with

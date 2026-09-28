@@ -1067,13 +1067,13 @@
           <summary>How it's worked out</summary>
           <div class="note">Moves and results: each move against each result with this club, within sessions (every swing
             against that session's own usual, so warm-up, tiredness and where the cameras stood cancel out), pooled over
-            the sessions in the period. With 18 moves and 16 results some links look strong by luck, so each one's chance
+            the sessions in the period. With 20 moves and 16 results some links look strong by luck, so each one's chance
             is corrected for how many were tested (q). <b>Strong evidence</b>: q under 0.05 and the same way in at least
             3 sessions. <b>Worth trying</b>: q under 0.2, not yet proven. The aim: for carry, smash and distance offline
             the way that helps; for path, face, curve, strike and attack angle, the way that brings your usual number
             toward neutral (irons: attack -4°). It describes your swings; it doesn't prove the move causes the result.</div>
           <div class="note">Good shots: the body numbers that differ most between this club's good shots and the rest.
-            <b>Strong</b> = the 95% confidence interval of the effect size (Hedges' g) leaves out 0; with 18 numbers about
+            <b>Strong</b> = the 95% confidence interval of the effect size (Hedges' g) leaves out 0; with 20 numbers about
             one in twenty looks strong by chance. It may be the other way round (a good shot doesn't need the move).</div>
           <div class="note">The focus's progress: since the day it started, each session's median against the 6 sessions
             before, measured against how much it wobbles from session to session anyway: "clearly" = 2 wobbles or more,
@@ -1435,6 +1435,7 @@ const READOUT = [
   ["Spine tilt", "spineTilt", "°"], ["Forward bend", "spineForward", "°"],
   ["Hip tilt", "pelvisTilt", "°"], ["Shoulder tilt", "shoulderTilt", "°"],
   ["Head sway", "headSway", "in"], ["Head rise", "headRise", "in"], ["Hip sway", "hipSway", "in"],
+  ["Wrist hinge", "lag", "°"],
 ];
 // The same from down the line (SwingMetrics.computeDTL).
 const DTL_READOUT = [

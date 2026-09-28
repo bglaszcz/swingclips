@@ -21,6 +21,9 @@
     { key: "hipSway", name: "hip slide", move: "hipSway", dir: "less", threshold: 5.5, test: v => v > 5.5 },
     // Head dip: head height drops at impact vs address (in; negative = dropped) < -1.5
     { key: "headRise", name: "head dip", move: "headRise", dir: "less", threshold: -1.5, test: v => v < -1.5 },
+    // Casting: the wrist hinge goes with the lead arm still less than 22 deg below horizontal (release
+    // point, face-on; 22% of swings, more with the short irons)
+    { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more", threshold: -22, test: v => v > -22 },
     // Head lift: head height rises at impact vs address (in) > 1.0
     { key: "headRise", name: "head lift", move: "headRise", dir: "more", threshold: 1.0, test: v => v > 1.0 },
   ];

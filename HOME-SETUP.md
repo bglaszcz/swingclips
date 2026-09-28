@@ -367,7 +367,11 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   number itself: green inside the middle 50%, amber outside ("outside: 4° more than usual", and
   "inside the 80% range" when it's between the two). The tempo line gets the same under it. Numbers
   with no reading get no band. Named swing faults (early extension, standing up, etc.) appear in a line
-  above the numbers with each fault's swing thought as its tooltip, only when present. The ranges come
+  above the numbers with each fault's swing thought as its tooltip, only when present.
+  Casting comes from two face-on numbers (`metrics.js`): **Wrist hinge at P5**, the angle between the
+  lead arm and the shaft (90 = an L) with the lead arm parallel coming down, and **Release point**,
+  the lead arm's angle to horizontal when that hinge first drops under 70 degrees coming down (higher
+  = an earlier release). Named casting when the release point is above -22 degrees. The ranges come
   from the trends' data (`/api/swings`), loaded when the first swing is opened and again when it's over a
   minute old.
 - **Compare**: a **My good shots** table with each number's middle 50% and 80% for the open swing's
@@ -378,7 +382,7 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   in standard deviations) with its 95% confidence interval, largest first ("clear" when the interval
   leaves out 0, "could be chance" otherwise). It needs 8 swings on each side (the same minimum as a
   range) and says "Not enough swings yet" until then. It describes your shots and says nothing about
-  causes: a number can go with good shots because of something else, and with 18 numbers about one
+  causes: a number can go with good shots because of something else, and with 20 numbers about one
   in twenty looks clear by chance. Below it, the ranges table, and the rules.
 - **Practice mode**: **Use my good-shot range** (next to **Use middle half**) sets the range to the
   middle 50% of your good shots for the number, and the club to the one they're from (the club
@@ -396,7 +400,7 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
 ### What helps, what hurts
 On **Progress**, below the good shots, for the club and period picked there (`static/helps.js`,
 drawn by `renderHelps` in `trends.js`):
-- Every body move (the 18 numbers) against every result: Square's numbers, plus distance offline
+- Every body move (the 20 numbers) against every result: Square's numbers, plus distance offline
   and face to path either way (curve), where smaller is better. **Within sessions**: each swing's
   move and result are taken against that session's own mean, so warm-up, tiredness and where the
   cameras stood cancel out; the deviations are pooled over the sessions into one slope and a
