@@ -700,10 +700,11 @@ def recorded_at(path: Path) -> float:
 
 
 @app.get("/api/clips")
-def list_clips():
+def list_clips(since: float | None = None):
+    """The clips (newest first); only those recorded since `since` (unix seconds), if given (the Start page)."""
     if not CLIPS_DIR.is_dir():
         raise HTTPException(503, f"Clips folder not found: {CLIPS_DIR}")
-    return listed_clips()
+    return listed_clips(since=since)
 
 
 def listed_clips(with_shots: bool = True, since: float | None = None) -> list[dict]:
@@ -871,13 +872,14 @@ async def upload(name: str, request: Request, shutter: str | None = Query(None, 
 # What a source doesn't measure (the connector: carry, club speed) is filled in or left out as the
 # shot comes in (ballflight.fill).
 SHOTS_FILE = Path(os.environ.get("SWINGCLIPS_SHOTS", CLIPS_DIR.parent / "shots.jsonl"))
-# Typical seconds from strike to report, per source. Square's own app saves a shot ~14 s after the
-# strike (measured 13.6-14.2 s over a real session; its ball-flight animation plays first, or the
-# laptop clock runs ahead); the GSPro connector reports within about a second. A shot pairs with
-# the clip whose gap is closest to its source's delay, within SHOT_SLACK_S of it.
-SHOT_DELAY_S = {"square-app": 14.0, "gspro-connect": 1.0}
+# Typical seconds from strike to report, per source. Square's own app saves a shot 6-16 s after the
+# strike (10.4-15.5 s over the first sessions, 9-13 s on 2026-09-28 with some wedges at 6.0-6.9 s;
+# its ball-flight animation plays first, or the laptop clock drifts); the GSPro connector reports
+# within about a second. A shot pairs with the clip whose gap is closest to its source's delay,
+# within SHOT_SLACK_S of it. Swings are ~20 s apart, so the window can't reach the wrong one.
+SHOT_DELAY_S = {"square-app": 11.0, "gspro-connect": 1.0}
 DEFAULT_SHOT_DELAY_S = 1.0
-SHOT_SLACK_S = 5.0
+SHOT_SLACK_S = 6.0
 
 
 @app.post("/api/shots")
@@ -1557,6 +1559,12 @@ def get_clubmotion(name: str, quiet: float, until: float):
 @app.get("/")
 def index():
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/start")
+def start_page():
+    """The session start page for the sim laptop: checks, both cameras' pictures, Start/Stop, the last swings."""
+    return FileResponse(STATIC_DIR / "start.html")
 
 
 class QuietPolling(logging.Filter):

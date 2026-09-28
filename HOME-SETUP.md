@@ -29,9 +29,13 @@ monitor's numbers for that shot.
    the last shot came, which the Ready bar shows.
    **Or, with Square's GSPro connector:** close Square's app and double-click
    `Start golf (GSPro).cmd` instead (see "Shots through Square's GSPro connector" below).
-4. **Start** - on the review page (`http://homeserver:8000` on a PC, `http://192.168.86.250:8000` on
-   a phone), the **Ready** bar at the top: **Start both**. Each phone says "Recording". (Or turn
-   on **Auto-start** on the phones: each starts once its own camera check is good.)
+4. **Start** - `Start golf.cmd` then opens the **Start page** in the laptop's browser
+   (`http://192.168.86.250:8000/start`): a check per part (both phones, Square, server), both
+   cameras' live pictures with the skeleton and what to fix, a big **Start recording** button, and
+   a list of the swings so far with their Square shot ("no shot" once 25 s pass without one). Each
+   phone says "Recording"; then switch to Square's app. (Or: **Start both** in the review page's
+   **Ready** bar, **Auto-start** on the phones, or `Start golf.cmd -StartCameras` to start both
+   phones as soon as they connect, without the page.)
 5. **Hit balls** once Ready is green. After the first analyzed swing (about a minute) the speaking
    phone says "First swing: both cameras saw you, Square paired", or what's wrong ("Down the line:
    ball not found", "No Square shot"). After that it only speaks up about problems.
@@ -648,7 +652,7 @@ review page starts them and one of them does the talking.
 - Pose files are named by version (`<clip>.v6.json.gz`); when `pose.py` changes enough to bump
   `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
-  ~14 s, GSPro connector ~1 s); each match records its gap.
+  ~11 s, 6-16 s seen; GSPro connector ~1 s); each match records its gap.
 - Deploy on the server: `git -C D:\SwingClips\app pull`, then `Stop server.cmd` and
   `Start server.cmd` (Stop also finds the background copy the auto-start task runs).
 

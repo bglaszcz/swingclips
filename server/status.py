@@ -50,7 +50,7 @@ PENDING_WARN = 3
 # Swings waiting for pose: amber from this many.
 POSE_BEHIND = 3
 
-# Health check timing, as practice.py's: a Square shot comes ~14 s after the strike (given up at
+# Health check timing, as practice.py's: a Square shot comes 6-16 s after the strike (given up at
 # 25 s), a down-the-line clip is waited on for 90 s, and a swing that still isn't analyzed after 4
 # minutes is checked as it is. The clip quality record (quality.py) is waited on for 2 minutes.
 SHOT_GIVE_UP_S = 25.0

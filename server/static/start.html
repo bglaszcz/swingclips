@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1712">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<title>SwingClips Start</title>
+<!-- The session start page, for the sim laptop (Start golf opens it): is everything connected, what
+     both cameras see, Start/Stop both phones, and whether each swing got its Square shot.
+     Everything comes from /api/status, /api/setup and /api/clips?since=, polled. -->
+<style>
+  :root { color-scheme: light dark; }
+  :root {
+    --bg: #f3f5f3; --panel: #ffffff; --panel-2: #f7f9f7; --text: #111a14; --muted: #5a685f;
+    --line: #e0e6e2; --accent: #16803f; --accent-text: #ffffff; --accent-soft: #e4f4ea;
+    --warn: #b45309; --warn-soft: #fdf1e3; --bad: #dc2626; --bad-soft: #fde8e8; --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b100d; --panel: #131a16; --panel-2: #17201a; --text: #e7ede8; --muted: #8e9f95;
+      --line: #223029; --accent: #34c26f; --accent-text: #04130a; --accent-soft: #143322;
+      --warn: #f59e0b; --warn-soft: #2d2110; --bad: #f87171; --bad-soft: #2d1414;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--panel);
+           border-bottom: 1px solid var(--line); }
+  header strong { font-size: 18px; }
+  header a { margin-left: auto; color: var(--accent); font-weight: 600; text-decoration: none; }
+  main { max-width: 1200px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  h2 { margin: 0 0 12px; font-size: 16px; display: flex; align-items: center; gap: 10px; }
+  h2 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; flex: none;
+          background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; }
+  h2 .n.ok { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .hint { color: var(--muted); font-size: 13px; margin: -6px 0 12px; }
+  .checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+  .check { display: flex; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2);
+           border: 1px solid var(--line); min-width: 0; }
+  .check b { display: block; }
+  .check span { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+  .check.bad { border-color: var(--bad); background: var(--bad-soft); }
+  .check.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--muted); }
+  .dot.ok { background: var(--accent); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+  .cams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .cams { grid-template-columns: 1fr; } }
+  .cam { border: 2px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel-2); }
+  .cam.ok { border-color: var(--accent); } .cam.bad { border-color: var(--warn); }
+  .cam .top { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; }
+  .cam .top span { color: var(--muted); font-size: 13px; }
+  .cam .verdict { padding: 0 10px 8px; font-weight: 600; min-height: 1.45em; }
+  .cam.ok .verdict { color: var(--accent); } .cam.bad .verdict { color: var(--warn); }
+  .pic { position: relative; background: #000; aspect-ratio: 16 / 9; display: grid; place-items: center; }
+  .pic img { max-width: 100%; max-height: 100%; display: block; }
+  .pic canvas { position: absolute; pointer-events: none; }
+  .pic .empty { color: #9aa; font-size: 14px; padding: 16px; text-align: center; }
+  .pic.stale img { opacity: 0.45; }
+  .go { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .go button { font: inherit; font-size: 18px; font-weight: 700; padding: 14px 28px; border-radius: 10px; cursor: pointer;
+               border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  .go button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .go button:disabled { opacity: 0.5; cursor: default; }
+  .go .state { font-size: 16px; font-weight: 600; }
+  .go .note { flex: 0 0 100%; color: var(--muted); font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-top: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; border-top: 0; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .tag.ok { background: var(--accent-soft); color: var(--accent); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .tag.bad { background: var(--bad-soft); color: var(--bad); }
+  .tag.wait { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+  .sum { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <img src="/static/icon.svg" alt="" width="28" height="28">
+  <strong>Start a session</strong>
+  <a href="/">Review page →</a>
+</header>
+<main>
+  <section>
+    <h2><span class="n" id="n1">1</span>Everything connected</h2>
+    <p class="hint">Open SwingClips on both phones. Start golf opens Square's app and the Square watcher on this laptop.</p>
+    <div class="checks" id="checks"></div>
+  </section>
+
+  <section>
+    <h2><span class="n" id="n2">2</span>Check the cameras</h2>
+    <p class="hint">Stand at the ball as if to hit. Each phone sends a picture about once a second until it starts recording.</p>
+    <div class="cams">
+      <div class="cam" id="cam-face"><div class="top"><strong>Face-on</strong><span></span></div>
+        <div class="verdict"></div><div class="pic"><div class="empty"></div><img alt="Face-on camera" hidden><canvas></canvas></div></div>
+      <div class="cam" id="cam-dtl"><div class="top"><strong>Down the line</strong><span></span></div>
+        <div class="verdict"></div><div class="pic"><div class="empty"></div><img alt="Down-the-line camera" hidden><canvas></canvas></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n" id="n3">3</span>Record</h2>
+    <div class="go">
+      <button class="primary" id="start">Start recording</button>
+      <button id="stop">Stop</button>
+      <span class="state" id="state"></span>
+      <span class="note" id="go-note"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">4</span>Swings and Square shots</h2>
+    <p class="hint">Hit in Square's driving range as usual. Each swing gets its Square numbers 6-16 s after the strike.</p>
+    <div class="sum" id="sum"></div>
+    <table><thead><tr><th>Time</th><th class="hide-sm">Cameras</th><th>Square</th><th>Club</th><th class="num">Ball mph</th><th class="num">Carry yd</th></tr></thead>
+      <tbody id="swings"></tbody></table>
+  </section>
+</main>
+<script>
+const NAMES = { face: "Face-on", dtl: "Down the line" };
+// A still older than this: the phone stopped sending (recording, closed, off the network).
+const STALE_S = 5;
+// Square numbers come 6-16 s after the strike (app.py SHOT_DELAY_S); after this it's "no shot".
+const SHOT_GIVE_UP_S = 25;
+// Swings shown: this session's, from up to this long ago.
+const SWINGS_SINCE_S = 3 * 3600;
+const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24],
+               [23, 25], [25, 27], [24, 26], [26, 28], [0, 11], [0, 12]];
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+let status = null, note = "";
+
+// ---- 1. Checks ----
+function phoneCheck(a, s) {
+  const p = s.phones[a] || {}, row = s.rows.find(r => r.key === a) || {};
+  if (!p.connected) return { level: "bad", title: NAMES[a], text: row.text || "not seen: open SwingClips on this phone" };
+  // Not recording yet is fine here: that's what step 3 is for.
+  const problems = (row.problem || "").split(", ").filter(x => x && x !== "not recording");
+  const level = row.level === "bad" && !problems.length ? "ok" : row.level;
+  return { level, title: NAMES[a] + (p.recording ? " · recording" : " · connected"), text: row.text };
+}
+
+function renderChecks(s) {
+  if (!s) {
+    $("checks").innerHTML = `<div class="check bad"><span class="dot bad"></span><div><b>Server</b><span>Not answering. Is the home server on?</span></div></div>`;
+    $("n1").className = "n";
+    return;
+  }
+  const square = s.rows.find(r => r.key === "square") || { level: "warn", label: "Square", text: "" };
+  const server = s.rows.find(r => r.key === "server") || { level: "ok", text: "" };
+  const items = [phoneCheck("face", s), phoneCheck("dtl", s),
+                 { level: square.level, title: square.label, text: square.text },
+                 { level: server.level, title: "Server", text: server.text }];
+  $("checks").innerHTML = items.map(i => `<div class="check ${i.level}"><span class="dot ${i.level}"></span>
+    <div><b>${esc(i.title)}</b><span>${esc(i.text)}</span></div></div>`).join("");
+  $("n1").className = "n" + (items.every(i => i.level === "ok") ? " ok" : "");
+}
+
+// ---- 2. Cameras ----
+function renderCam(a, v, recording) {
+  const card = $("cam-" + a), img = card.querySelector("img"), canvas = card.querySelector("canvas");
+  const pic = card.querySelector(".pic"), empty = card.querySelector(".empty");
+  const live = v && v.age <= STALE_S;
+  card.classList.toggle("ok", !!(live && v.ok));
+  card.classList.toggle("bad", !!(live && !v.ok));
+  pic.classList.toggle("stale", !!v && !live);
+  card.querySelector(".top span").textContent = !v ? "" : live ? "live" : `picture from ${Math.round(v.age)} s ago`;
+  card.querySelector(".verdict").textContent = !v ? "" : live ? (v.ok ? "✓ " : "✗ ") + v.text
+    : recording ? "Recording (pictures pause while recording)" : "No new pictures: is SwingClips open on this phone?";
+  empty.hidden = !!v;
+  empty.textContent = "No picture yet. Open SwingClips on this phone (not recording).";
+  img.hidden = !v;
+  if (!v) { canvas.width = 0; return v; }
+  if (img.dataset.t !== String(v.time)) {
+    img.dataset.t = String(v.time);
+    img.onload = () => drawSkeleton(canvas, img, v.lm, v.ok);
+    img.src = `/api/setup/${a}.jpg?t=${v.time}`;
+  }
+  return live && v.ok;
+}
+
+function drawSkeleton(canvas, img, lm, ok) {
+  const dpr = window.devicePixelRatio || 1, w = img.clientWidth, h = img.clientHeight;
+  canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+  canvas.style.width = w + "px"; canvas.style.height = h + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  if (!lm) return;
+  ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.strokeStyle = ok ? "#22c55e" : "#f59e0b";
+  for (const [p, q] of BONES) {
+    ctx.beginPath();
+    ctx.moveTo(lm[p * 3] * w, lm[p * 3 + 1] * h);
+    ctx.lineTo(lm[q * 3] * w, lm[q * 3 + 1] * h);
+    ctx.stroke();
+  }
+}
+addEventListener("resize", () => { for (const a of ["face", "dtl"]) { const img = $("cam-" + a).querySelector("img"); if (img.onload) img.onload(); } });
+
+// ---- 3. Record ----
+function renderGo(s) {
+  const phones = s ? ["face", "dtl"].map(a => s.phones[a] || {}) : [];
+  const rec = phones.filter(p => p.recording).length, up = phones.filter(p => p.connected).length;
+  const cmds = phones.map(p => p.command).filter(c => c && c.age < 30);
+  const busy = cmds.some(c => c.state === "queued" || c.state === "sent");
+  $("start").disabled = !s || busy || rec === 2 || up === 0;
+  $("stop").disabled = !s || busy || rec === 0;
+  $("state").textContent = !s ? "" : busy ? "Sending to the phones…" : rec === 2 ? "● Recording on both phones"
+    : rec === 1 ? "● Recording on one phone only" : up === 2 ? "Not recording" : `${up} of 2 phones connected`;
+  $("state").style.color = rec === 2 ? "var(--accent)" : rec === 1 ? "var(--warn)" : "";
+  $("n3").className = "n" + (rec === 2 ? " ok" : "");
+  const failed = cmds.filter(c => c.state === "failed").map((c, i) => c.error).filter(Boolean);
+  const first = s && s.rows.find(r => r.key === "first");
+  const bits = [];
+  if (note) bits.push(note);
+  if (failed.length) bits.push("Couldn't: " + failed.join(" · "));
+  if (rec === 2) bits.push("Now switch to Square's app and hit balls. You can leave this page open to watch the shots pair.");
+  if (first && rec) bits.push("First swing: " + first.text);
+  $("go-note").textContent = bits.join(" ");
+}
+
+async function command(action) {
+  note = "";
+  $("start").disabled = $("stop").disabled = true;
+  try {
+    const res = await fetch("/api/phones/command", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({ action, angle: "both" }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) note = body.detail || `The server said ${res.status}`;
+    else note = (body.results || []).filter(r => r.state === "failed").map(r => `${NAMES[r.angle]}: ${r.error}`).join(" · ");
+  } catch { note = "Can't reach the server"; }
+  pollStatus();
+}
+$("start").onclick = () => command("start");
+$("stop").onclick = () => command("stop");
+
+// ---- 4. Swings ----
+function renderSwings(clips) {
+  if (!clips) return;
+  const now = Date.now() / 1000;
+  // One row per swing, by its face-on clip when both angles came (as the review page lists them).
+  const swings = clips.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+  let paired = 0, missed = 0;
+  const rows = swings.slice(0, 12).map(c => {
+    const t = new Date(c.recorded).getTime() / 1000 + (c.strike || 0);
+    const cams = c.partner ? "both" : NAMES[c.angle] + " only";
+    const s = c.shot, b = (s && s.ball) || {};
+    const tag = s ? `<span class="tag ok">✓ ${s.gap != null ? s.gap + " s" : "paired"}</span>`
+      : now - t < SHOT_GIVE_UP_S ? `<span class="tag wait">waiting…</span>` : `<span class="tag bad">no shot</span>`;
+    return `<tr><td>${esc(c.recorded.slice(11, 19))}</td><td class="hide-sm">${c.partner ? `<span class="tag ok">both</span>` : `<span class="tag warn">${esc(cams)}</span>`}</td>
+      <td>${tag}</td><td>${esc(s ? s.club : "")}</td><td class="num">${b.speed != null ? Math.round(b.speed) : ""}</td>
+      <td class="num">${b.carry != null ? Math.round(b.carry) : ""}</td></tr>`;
+  });
+  for (const c of swings) {
+    const t = new Date(c.recorded).getTime() / 1000 + (c.strike || 0);
+    if (c.shot) paired++; else if (now - t >= SHOT_GIVE_UP_S) missed++;
+  }
+  $("swings").innerHTML = rows.join("") || `<tr><td colspan="6" style="color: var(--muted)">No swings yet in the last 3 hours.</td></tr>`;
+  $("sum").textContent = swings.length ? `${swings.length} swing${swings.length === 1 ? "" : "s"}: ${paired} with Square numbers` +
+    (missed ? `, ${missed} without (a practice swing, a miss Square didn't read, or Square's app not recording)` : "") : "";
+}
+
+// ---- Polling ----
+async function getJson(url) {
+  try { const r = await fetch(url, { cache: "no-store" }); return r.ok ? await r.json() : null; } catch { return null; }
+}
+let statusTimer = 0, swingTimer = 0;
+async function pollStatus() {
+  clearTimeout(statusTimer);
+  const [s, setup] = await Promise.all([getJson("/api/status"), getJson("/api/setup")]);
+  status = s;
+  renderChecks(s);
+  const good = ["face", "dtl"].map(a => renderCam(a, setup && setup[a], s && s.phones[a] && s.phones[a].recording));
+  $("n2").className = "n" + (good.every(Boolean) ? " ok" : "");
+  renderGo(s);
+  statusTimer = setTimeout(pollStatus, document.hidden ? 10000 : 1000);
+}
+async function pollSwings() {
+  clearTimeout(swingTimer);
+  renderSwings(await getJson(`/api/clips?since=${Math.floor(Date.now() / 1000 - SWINGS_SINCE_S)}`));
+  swingTimer = setTimeout(pollSwings, document.hidden ? 20000 : 4000);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollStatus(); pollSwings(); } });
+pollStatus();
+pollSwings();
+</script>
+</body>
+</html>

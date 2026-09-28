@@ -33,11 +33,12 @@ Full setup, build, deploy and network details are in **[HOME-SETUP.md](HOME-SETU
 
 1. **Phones**: open **SwingClips** on both and leave them on their stands. Stand at the ball: one
    phone says how both cameras see you ("Both cameras look good", or what to fix).
-2. **Laptop**: `Start golf.cmd` (if it didn't start with Windows). It opens Square Golf's app and
-   the watcher, then starts both phones once they're connected (each says "Recording"); pick the
-   driving range. `-NoCameras` leaves the phones to the review page.
-3. **Review page** (or skip it if the laptop started the phones): **Start both** in the Ready bar.
-   Hit balls once the bar is green. About a minute after the first swing, a phone says "First
+2. **Laptop**: `Start golf.cmd` (if it didn't start with Windows). It opens Square Golf's app, the
+   watcher, and the **Start page** (`/start`) in the browser: checks, both cameras' pictures, and
+   **Start recording** (each phone says "Recording"). `-StartCameras` starts the phones as soon as
+   they connect instead (the old way).
+3. **Square's app**: pick the driving range and hit balls. The Start page lists each swing and
+   whether its Square shot paired. About a minute after the first swing, a phone says "First
    swing: both cameras saw you, Square paired", or what's wrong. After that it only speaks up about
    problems.
 4. **Done**: **Stop both**.
@@ -133,7 +134,7 @@ path of its shortcut or .exe, or its app ID, in `square-app.txt` next to `Start 
 did each time is in `start-golf-log.txt` there. `Square watcher.cmd` still runs the watcher alone.
 
 **Shots through Square's GSPro connector (optional).** Instead of Square's app, Square's official
-SQG GSPro Connect can send each shot about a second after the strike (instead of ~14 s):
+SQG GSPro Connect can send each shot about a second after the strike (instead of ~11 s):
 
 ```bat
 :: Close Square Golf's app first: the Omni takes one Bluetooth connection.

@@ -105,5 +105,22 @@ class Api(unittest.TestCase):
         self.assertIn("carry", last["ball"]["computed"])
 
 
+class Pairing(unittest.TestCase):
+    def test_square_gaps_seen_pair(self):
+        """Square's app gaps from real sessions (6.0 s wedges on 2026-09-28 up to 15.5 s) all pair."""
+        import app
+        t0 = 1_790_000_000.0
+        gaps = [6.0, 6.9, 9.0, 11.2, 13.0, 15.5]
+        clips = {f"c{i}": t0 + 22 * i for i in range(len(gaps))}
+        shots = [{"_t": t0 + 22 * i + g, "source": "square-app", "received": ""} for i, g in enumerate(gaps)]
+        orig = app.load_shots
+        app.load_shots = lambda: shots
+        try:
+            got = app.match_shots(clips)
+        finally:
+            app.load_shots = orig
+        self.assertEqual({k: v["gap"] for k, v in got.items()}, {f"c{i}": g for i, g in enumerate(gaps)})
+
+
 if __name__ == "__main__":
     unittest.main()

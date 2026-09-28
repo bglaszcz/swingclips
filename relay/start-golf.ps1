@@ -1,7 +1,8 @@
 # One click on the sim laptop: opens Square Golf's app (if it isn't open), the Square watcher in its
-# own minimized window (if it isn't running), and then starts both phones recording once they're
-# connected to the server (open SwingClips on them first). Run with -Startup to also start this at
-# every Windows sign-in, and with -NoCameras to leave the phones alone.
+# own minimized window (if it isn't running), and then the server's Start page in the browser, where
+# you check both cameras' pictures and press Start recording. Run with -Startup to also start this at
+# every Windows sign-in, with -StartCameras to start both phones recording as soon as they're
+# connected (no page, the old way), and with -NoCameras to leave the phones and the page alone.
 #
 # Square's app is found from the Start menu's app list (which covers Microsoft Store apps too) or a
 # shortcut; if yours isn't found, put the full path of its shortcut or .exe, or its Start menu app
@@ -10,7 +11,7 @@
 # Where shots come from (-Source, or the first line of shot-source.txt next to this file; square
 # when neither says):
 #   square  Square Golf's app and its driving range, with the Square watcher reading the shots it
-#           saves (~14 s after the strike). The usual setup.
+#           saves (6-16 s after the strike). The usual setup.
 #   gspro   Square's GSPro connector (SQG GSPro Connect) instead of Square's app: the shot listener
 #           stands in for GSPro and sends each shot about a second after the strike. Square's app
 #           must be closed (the Omni takes one Bluetooth connection). The connector sends no carry
@@ -18,7 +19,7 @@
 #           (GSPro).cmd" runs this. The connector is found like Square's app; if it isn't, put its
 #           shortcut, .exe or Start menu app ID in connector-app.txt next to this file.
 
-param([switch]$Startup, [switch]$NoCameras, [string]$Server = "http://192.168.86.250:8000",
+param([switch]$Startup, [switch]$NoCameras, [switch]$StartCameras, [string]$Server = "http://192.168.86.250:8000",
       [ValidateSet("", "square", "gspro")] [string]$Source = "")
 
 $ErrorActionPreference = "Continue"
@@ -169,6 +170,13 @@ if ($Source -eq "gspro") {
 # ---- The phones ----
 if ($NoCameras) {
     Say "Ready: start the phones from the review page ($Server)." "Green"
+    exit 0
+}
+if (-not $StartCameras) {
+    # The Start page: checks, both cameras' pictures, Start recording, and each swing's Square shot.
+    $page = $Server.TrimEnd('/') + "/start"
+    Say "Opening the Start page ($page): check the cameras there, then press Start recording." "Green"
+    Start-Process $page
     exit 0
 }
 Say "Waiting for both phones (open SwingClips on them) ..."

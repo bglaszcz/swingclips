@@ -3,7 +3,7 @@ whether it was in range ("Tempo 3.2, in range", "Club path minus 4, too far left
 
 The review page sets the target (practice.json). A worker in app.py calls Practice.step about once a
 second with the recent swings; once a swing's number is known (its body numbers worked out, or its
-Square shot paired, ~14 s after the strike) the sentence is made here, kept in practice-log.jsonl, and
+Square shot paired, ~11 s after the strike) the sentence is made here, kept in practice-log.jsonl, and
 handed to the phone that speaks it (GET /api/practice/latest, long-polled).
 
 Only numbers that can be trusted are spoken: which ones is the review page's rule set (static/trust.js,
@@ -21,7 +21,7 @@ from pathlib import Path
 from swings import Summarizer
 
 # Square numbers: a swing with no shot this long after the strike is spoken without one. Square's
-# app reports ~14 s after the strike, and a shot pairs within 5 s of that (app.py SHOT_SLACK_S).
+# app reports 6-16 s after the strike (~11 s typical; app.py SHOT_DELAY_S, SHOT_SLACK_S).
 SHOT_GIVE_UP_S = 25.0
 # Body numbers: a swing whose numbers haven't been worked out by then (pose stuck, or failed on a
 # clip the list doesn't show as failed yet) gets "no reading". Pose waits 15 s for the upload to
