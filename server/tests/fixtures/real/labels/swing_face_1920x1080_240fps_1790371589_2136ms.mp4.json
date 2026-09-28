@@ -1,0 +1,20 @@
+{
+ "schema": 1,
+ "clip": {
+  "name": "swing_face_1920x1080_240fps_1790371589_2136ms.mp4",
+  "angle": "face",
+  "strike": 2.136
+ },
+ "partner": {
+  "name": "swing_dtl_1920x1080_240fps_1790371589_2042ms.mp4",
+  "angle": "dtl",
+  "strike": 2.042
+ },
+ "events": {
+  "takeaway": 0.828711
+ },
+ "ball": null,
+ "frames": {},
+ "pass": 1,
+ "updated": "2026-09-28T17:59:58"
+}

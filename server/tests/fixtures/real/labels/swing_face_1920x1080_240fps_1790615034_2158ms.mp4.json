@@ -1,0 +1,27 @@
+{
+ "schema": 1,
+ "clip": {
+  "name": "swing_face_1920x1080_240fps_1790615034_2158ms.mp4",
+  "angle": "face",
+  "strike": 2.158
+ },
+ "partner": {
+  "name": "swing_dtl_1920x1080_240fps_1790615034_2199ms.mp4",
+  "angle": "dtl",
+  "strike": 2.199
+ },
+ "events": {
+  "takeaway": 0.524711,
+  "p2": 1.045256,
+  "p3": 1.382556,
+  "p4": 1.853133,
+  "p5": 2.053011,
+  "p6": 2.094667,
+  "impact": 2.144633,
+  "p8": 2.223756
+ },
+ "ball": null,
+ "frames": {},
+ "pass": 1,
+ "updated": "2026-09-28T16:25:43"
+}

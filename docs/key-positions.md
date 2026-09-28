@@ -94,6 +94,25 @@ saved median and 90th percentile (`key-positions.json`) within a frame (4.2 ms).
 
 ## The evidence, per key position
 
+### Takeaway: the camera's clubhead onset beats the shaft rule (2026-09-28)
+
+After the takeaway was redefined as "the clubhead leaves the ball" and the nine swings with early
+labels were relabeled against the Labels page's Clubhead motion trace (15 of the 17 labels moved
+29-141 ms later), 76 labels on 41 swings, RTMPose-m, recheck list left out:
+
+| | face-on (36) median / p90 / bias / within 1 frame | down the line (28) |
+|---|---|---|
+| shaft rule (phases.js) | 31 / 100 / +21 ms / 11% | 33 / 129 / +15 ms / 14% |
+| camera onset (`pose.clubhead_motion`) | 15 / 54 / -4 ms / 36% | 12.5 / 104 / +2 ms / 25% |
+
+The camera halves the typical error and has almost no bias; the tuner still keeps phases.js as it
+is (nothing it can tune helps). Three swings have the camera 80-133 ms later than the label on both
+angles, the same pattern as the nine that were relabeled: 1790353567, 1790354222, 1790371527 (Sep
+25), likely early labels. The camera onset isn't in the pose files yet (it runs on video crops
+behind the ball), so using it for the takeaway means computing it during analysis and letting
+phases.js take it when present. Scored with the server's `/api/clubmotion`, quiet from 0.35 s
+before the label.
+
 ### Takeaway: why it got late, and the first thing that moves
 
 **The rule didn't change** since this doc was first written: `phases.js` is the same, and with the

@@ -63,58 +63,6 @@
    "p3",
    "p4",
    "p5"
-  ],
-  "swing_1920x1080_240fps_1790206487.mp4": [
-   "takeaway"
-  ],
-  "swing_dtl_1920x1080_240fps_1790353497_2055ms.mp4": [
-   "takeaway"
-  ],
-  "swing_dtl_1920x1080_240fps_1790353587_2014ms.mp4": [
-   "takeaway"
-  ],
-  "swing_dtl_1920x1080_240fps_1790371549_2218ms.mp4": [
-   "takeaway"
-  ],
-  "swing_dtl_1920x1080_240fps_1790371836_2017ms.mp4": [
-   "takeaway"
-  ],
-  "swing_dtl_1920x1080_240fps_1790371859_2042ms.mp4": [
-   "takeaway"
-  ],
-  "swing_dtl_1920x1080_240fps_1790371998_2059ms.mp4": [
-   "takeaway"
-  ],
-  "swing_dtl_1920x1080_240fps_1790372156_2052ms.mp4": [
-   "takeaway"
-  ],
-  "swing_dtl_1920x1080_240fps_1790372180_2133ms.mp4": [
-   "takeaway"
-  ],
-  "swing_face_1920x1080_240fps_1790353497_2195ms.mp4": [
-   "takeaway"
-  ],
-  "swing_face_1920x1080_240fps_1790353587_2179ms.mp4": [
-   "takeaway"
-  ],
-  "swing_face_1920x1080_240fps_1790371549_2009ms.mp4": [
-   "takeaway"
-  ],
-  "swing_face_1920x1080_240fps_1790371836_2058ms.mp4": [
-   "takeaway"
-  ],
-  "swing_face_1920x1080_240fps_1790371859_2183ms.mp4": [
-   "takeaway"
-  ],
-  "swing_face_1920x1080_240fps_1790371998_2118ms.mp4": [
-   "takeaway"
-  ],
-  "swing_face_1920x1080_240fps_1790372156_2063ms.mp4": [
-   "takeaway"
-  ],
-  "swing_face_1920x1080_240fps_1790372180_2086ms.mp4": [
-   "takeaway"
   ]
- },
- "takeawayNote": "2026-09-28: takeaway labels on these swings (1790206487, 1790353497, 1790353587, 1790371549, 1790371836, 1790371859, 1790371998, 1790372156, 1790372180) are 40-140 ms before the clubhead leaves the ball by both the shaft rule and the camera (pose.clubhead_motion, the Labels page's Clubhead motion trace). Relabel them stepping frame by frame with the trace, then take them out of here."
+ }
 }
