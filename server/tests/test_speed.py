@@ -81,10 +81,10 @@ def fake_models() -> dict:
     return {"SWINGCLIPS_MODELS": str(MODELS), "SWINGCLIPS_POSE_BACKEND": "rtmpose-m"}
 
 
-def analyze(module, path, timing=None) -> dict:
+def analyze(module, path, timing=None, **kw) -> dict:
     """module.analyze on a clip in this process, with the fake MediaPipe; without the time it took."""
     with fakes.mediapipe(), mock.patch("builtins.print"), contextlib.redirect_stderr(io.StringIO()):
-        out = module.analyze(str(path), fakes.Pool(), 2, *([timing] if timing is not None else []))
+        out = module.analyze(str(path), fakes.Pool(), 2, *([timing] if timing is not None else []), **kw)
     out.pop("seconds")
     out.pop("msPerFrame", None)
     return out
@@ -218,10 +218,13 @@ class SettingsTest(unittest.TestCase):
         seen = {default}
         for key, value in (("SWINGCLIPS_MP_STRIDE_AFTER", "1"), ("SWINGCLIPS_MP_STRIDE_AFTER", "8"),
                            ("SWINGCLIPS_FRAME_CONVERT", "planes"), ("SWINGCLIPS_POSE_SPLIT", "even"),
-                           ("SWINGCLIPS_SHAFT_STRIDE", "2")):
+                           ("SWINGCLIPS_POSE_SPLIT", "frames"), ("SWINGCLIPS_SHAFT_STRIDE", "2")):
             with mock.patch.dict(os.environ, {**base, key: value}):
                 seen.add(scorecard.pipeline_fingerprint())
-        self.assertEqual(len(seen), 6)
+        # The quick pass (eval.py --quick) too.
+        with mock.patch.dict(os.environ, {**base, "SWINGCLIPS_QUICK": "", "SWINGCLIPS_QUICK_MP_STRIDE": ""}),                 mock.patch.object(scorecard, "QUICK", True),                 mock.patch.object(pose, "deep_profile", return_value={"bodyStride": 1, "clubModel": None}):
+            seen.add(scorecard.pipeline_fingerprint())
+        self.assertEqual(len(seen), 8)
         # Set to what it is by default: the same cache.
         with mock.patch.dict(os.environ, {**base, "SWINGCLIPS_SHAFT_STRIDE": "1", "SWINGCLIPS_POSE_SPLIT": "cost"}):
             self.assertEqual(scorecard.pipeline_fingerprint(), default)
@@ -253,7 +256,58 @@ class FillTest(unittest.TestCase):
         self.assertEqual(out[3][1], None)
 
 
+class QuickProfileTest(unittest.TestCase):
+    def test_only_when_a_deep_pass_follows(self):
+        deep = {"bodyStride": 1, "clubModel": None, "rayTakeaway": True}
+        with mock.patch.object(pose, "deep_profile", return_value=deep):
+            with mock.patch.dict(os.environ, {"SWINGCLIPS_QUICK": "", "SWINGCLIPS_QUICK_MP_STRIDE": ""}):
+                self.assertEqual(pose.quick_profile(), {"mpStrideSwing": 2})
+            with mock.patch.dict(os.environ, {"SWINGCLIPS_QUICK": "off", "SWINGCLIPS_QUICK_MP_STRIDE": ""}):
+                self.assertIsNone(pose.quick_profile())
+            with mock.patch.dict(os.environ, {"SWINGCLIPS_QUICK": "", "SWINGCLIPS_QUICK_MP_STRIDE": "1"}):
+                self.assertIsNone(pose.quick_profile())
+            with mock.patch.dict(os.environ, {"SWINGCLIPS_QUICK": "", "SWINGCLIPS_QUICK_MP_STRIDE": "3"}):
+                self.assertEqual(pose.quick_profile(), {"mpStrideSwing": 3})
+        with mock.patch.object(pose, "deep_profile", return_value=None), \
+                mock.patch.dict(os.environ, {"SWINGCLIPS_QUICK": "", "SWINGCLIPS_QUICK_MP_STRIDE": ""}):
+            self.assertIsNone(pose.quick_profile())
+
+
 class SplitTest(unittest.TestCase):
+    @staticmethod
+    def spent(runs, pts, costs, keys, lead):
+        """Each run's cost, with the frames it decodes and drops from the keyframe before its start."""
+        out = []
+        for a, b in runs:
+            k = max(x for x in keys if x <= a)
+            dropped = sum(1 for p in pts if k <= p < a)
+            out.append(dropped * lead + sum(c for p, c in zip(pts, costs) if a <= p and (b is None or p < b)))
+        return out
+
+    def test_frames_cut_between_keyframes(self):
+        """SWINGCLIPS_POSE_SPLIT=frames: cut at any frame, so the runs come out closer than keyframes allow."""
+        keys = list(range(0, 100, 10))
+        pts = list(range(100))
+        costs = [4.0] * 60 + [1.0] * 40            # 280 in all: 70 a run for 4 workers
+        runs = pose.split_frames(keys, pts, costs, 4, lead=0.5)
+        self.assertEqual(len(runs), 4)
+        self.assertEqual(runs[0][0], 0)
+        self.assertIsNone(runs[-1][1])
+        for (_, end), (start, _) in zip(runs, runs[1:]):
+            self.assertEqual(end, start)
+        got = self.spent(runs, pts, costs, keys, 0.5)
+        self.assertLessEqual(max(got), 74)
+        self.assertLess(max(got), max(self.spent(pose.split_jobs(keys, pts, costs, 4), pts, costs, keys, 0.5)))
+
+    def test_frames_dropping_counts(self):
+        """When dropping frames costs more than it evens out, the cuts stay on keyframes."""
+        keys = [0, 10, 20, 30]
+        pts = list(range(40))
+        self.assertEqual(pose.split_frames(keys, pts, [1.0] * 40, 4, lead=100), [(0, 10), (10, 20), (20, 30), (30, None)])
+        self.assertEqual(pose.split_frames(keys, pts, [1.0] * 40, 1), [(0, None)])
+        # Fewer frames than workers: a frame each at most.
+        self.assertEqual(len(pose.split_frames([0], [0, 1, 2], [1.0] * 3, 8, lead=0)), 3)
+
     def test_even_costs(self):
         keys = [0, 10, 20, 30]
         pts = list(range(40))
@@ -346,6 +400,30 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(got["speed"], {"mpStrideAfter": 4, "convert": "full", "split": "cost", "shaftStride": 1})
         for f, b in zip(got["frames"], before["frames"]):
             self.assertLess(max(abs(x - y) for x, y in zip(f["lm"][:66:3], b["lm"][:66:3])), 0.02, f["t"])
+
+    def test_quick_pass(self):
+        """The quick pass (during a session): MediaPipe and the shaft on every other frame in the swing,
+        the rest filled in; every frame still has the golfer, near where every frame put them."""
+        ran = []
+        real = fakes._Landmarker.detect_for_video
+        with mock.patch.dict(os.environ, NO_MODELS), mock.patch.object(pose, "BODY_AFTER_STRIKE", AFTER), \
+                mock.patch.object(fakes._Landmarker, "detect_for_video",
+                                  lambda self, image, ms: ran.append(ms) or real(self, image, ms)):
+            got = analyze(pose, self.path, quick={"mpStrideSwing": 2})
+        full = self.run_it()
+        until = 0.2 + AFTER
+        in_swing = [f["t"] for f in got["frames"] if f["t"] <= until]
+        self.assertEqual(got["pass"], "quick")
+        self.assertEqual(got["quick"], {"mpStrideSwing": 2})
+        self.assertLess(len([ms for ms in ran if ms <= until * 1000]), len(in_swing) * 0.6)
+        for f, b in zip(got["frames"], full["frames"]):
+            self.assertIsNotNone(f["lm"], f["t"])
+            err = max(abs(x - y) for x, y in zip(f["lm"][:66:3], b["lm"][:66:3]))
+            self.assertLess(err, 0.02, f["t"])
+        # With the deep pass, no quick.
+        with mock.patch.dict(os.environ, NO_MODELS):
+            deep = analyze(pose, self.path, deep={"bodyStride": 1, "clubModel": None}, quick={"mpStrideSwing": 2})
+        self.assertEqual(deep["pass"], "deep")
 
     def test_decode_threads_change_nothing(self):
         one = self.run_it(SWINGCLIPS_DECODE_THREADS="1")
@@ -441,6 +519,19 @@ class BenchTest(unittest.TestCase):
         self.assertIn("): no, best 11.2 s (CPU, every 2 frames, as set now, 8 workers)", lines)
         self.assertIn("Fastest: as set now, 8 workers", lines)
         self.assertIn("Floor, no body model at all: 8.8 s", lines)
+
+    def test_verdict_quick(self):
+        """The quick pass (during a session) gets its own line, and isn't offered for settings.cmd."""
+        result = {"clip": "c.mp4", "workers": 8, "backend": "rtmpose-m", "providers": ["cpu"], "gpus": {},
+                  "models": {}, "diffs": {}, "clip_diffs": {}, "floor": 8.8, "clip_runs": [],
+                  "speed_runs": [self.run_result("as before", 17.4),
+                                 self.run_result("as set now", 13.6, mpStrideAfter=4, split="cost"),
+                                 self.run_result(bench_models.QUICK_LABEL, 9.1, mpStrideAfter=4, split="cost")]}
+        lines = "\n".join(bench_models.verdict(result))
+        self.assertIn("During a session (the quick pass; the deep pass redoes each clip after it): 9.1 s a clip, "
+                      "keeps up", lines)
+        self.assertIn("): yes, best 9.1 s", lines)
+        self.assertNotIn("Fastest:", lines)
 
     def scorecard(self, key_ms, joint, found, club_deg, pred_shift=0.0):
         events = [{"angle": "face", "event": e, "labeled": 10, "missed": 0, "median": key_ms}

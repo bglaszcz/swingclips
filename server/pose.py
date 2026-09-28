@@ -120,14 +120,22 @@ MP_STRIDE_AFTER = 4
 # 1.1 px (median) and the takeaway and face-on P4 by 4-8 ms; with full, everything else as set now
 # was within a frame.
 FRAME_CONVERTS = ("full", "planes")
-# SWINGCLIPS_POSE_SPLIT: where the clip is cut between the workers (always at keyframes).
-#   cost: so each worker gets about the same work, by what each frame costs (COST_MS): frames after
-#         the swing cost little (MediaPipe only, and only every MP_STRIDE_AFTER-th), so an even
-#         split left the last worker idle while the others were still in the downswing.
-#   even: the same number of keyframes each (as before).
-POSE_SPLITS = ("cost", "even")
-# What a frame costs, roughly (ms in one worker on the i5-12400; only the proportions matter).
-COST_MS = {"decode": 9, "mediapipe": 21, "shaft": 8, "body": 47, "club": 50}
+# SWINGCLIPS_POSE_SPLIT: where the clip is cut between the workers.
+#   cost:   so each worker gets about the same work, by what each frame costs (COST_MS), cut only
+#           at keyframes.
+#   frames: the same, cut at any frame: a worker starting between keyframes decodes from the
+#           keyframe before and drops the frames up to its start (their decoding counted in its
+#           cost). The phones put a keyframe every 0.25 s, ~6 s of work in the swing, so cost leaves
+#           workers idle up to 40% of the clip (8 workers busy 6.3-10.8 s); frames evens them out
+#           (9.7-10.1 s) but the dropped frames' decoding eats most of it: 12.6 -> 11.9 s a clip on
+#           the dev PC, and nothing with the quick pass (9.1 vs 9.3 s). Try it with the benchmark.
+#   even:   the same number of keyframes each (as before).
+# Frames after the swing cost little (MediaPipe only, and only every MP_STRIDE_AFTER-th), so an even
+# split left the last worker idle while the others were still in the downswing.
+POSE_SPLITS = ("cost", "frames", "even")
+# What a frame costs, roughly (ms in one worker on the i5-12400, bench_models.py 2026-09-27; only
+# the proportions matter). mediapipe includes making its picture (convert, ~9 ms).
+COST_MS = {"decode": 9, "mediapipe": 30, "shaft": 20, "body": 50, "club": 50}
 # SWINGCLIPS_SHAFT_STRIDE: the club shaft searched on every n-th frame of the swing, with club.track
 # filling the frames between as it does blurred ones. 1 (every frame) is the default.
 # SWINGCLIPS_DECODE_THREADS: threads FFmpeg decodes each worker's frames with (frame and slice
@@ -255,7 +263,7 @@ def run_chunk(args):
     # When the body model stops (clip seconds, or None for the whole clip) and how often it runs.
     body_until, stride = args[7] if len(args) > 7 else (None, 1)
     opts = {**RUN_DEFAULTS, **(args[8] if len(args) > 8 else {})}
-    mp_after, shaft_every = opts["mp_after"], opts["shaft_stride"]
+    mp_after, shaft_every, mp_swing = opts["mp_after"], opts["shaft_stride"], opts["mp_swing"]
     # With a club model: also the ray-cast shaft (the deep pass, for address and the takeaway), in
     # timing["ray"], one per frame.
     ray_too = bool(clubm) and opts["ray_too"]
@@ -291,8 +299,9 @@ def run_chunk(args):
                 t = f.pts * tb
                 k = len(out)
                 in_swing = body_until is None or t <= body_until
-                if not in_swing and k % mp_after:
-                    # After the swing, MediaPipe only on every mp_after-th frame: filled in later.
+                if k % (mp_swing if in_swing else mp_after):
+                    # After the swing, MediaPipe only on every mp_after-th frame (and in the quick pass,
+                    # every mp_swing-th in it, the shaft search with it): filled in later.
                     out.append((t, None, None, None, None))
                     ran.append(False)
                     mp_ran.append(False)
@@ -379,7 +388,7 @@ def run_chunk(args):
 
 
 # run_chunk's speed settings when a job doesn't give them: everything as before them.
-RUN_DEFAULTS = {"mp_after": 1, "convert": "full", "shaft_stride": 1, "threads": None, "ray_too": False}
+RUN_DEFAULTS = {"mp_after": 1, "convert": "full", "shaft_stride": 1, "threads": None, "ray_too": False, "mp_swing": 1}
 
 # OpenCV's BT.601 YUV -> RGB (studio range, as its I420 conversion: the same constants, / 2^20),
 # as a matrix on (Y, U, V, 1).
@@ -460,14 +469,14 @@ def fill_skipped(frames, mp_ran, most):
     return out
 
 
-def job_costs(pts, tb, body_until, mp_after, body_stride_, shaft_every, body, clubm, raycast):
+def job_costs(pts, tb, body_until, mp_after, body_stride_, shaft_every, body, clubm, raycast, mp_swing=1):
     """What each frame costs (COST_MS, only the proportions matter), for split_jobs."""
     out = []
     for k, p in enumerate(pts):
         t = p * tb
         in_swing = body_until is None or t <= body_until
         c = COST_MS["decode"]
-        if in_swing or k % mp_after == 0:
+        if k % (mp_swing if in_swing else mp_after) == 0:
             c += COST_MS["mediapipe"]
             if clubm:
                 c += COST_MS["club"]
@@ -505,6 +514,58 @@ def split_jobs(keys, pts, costs, workers):
         i = cut[j][i]
     bounds.reverse()
     return [(keys[a], keys[b] if b < n else None) for a, b in bounds]
+
+
+def split_frames(keys, pts, costs, workers, lead=COST_MS["decode"]):
+    """The clip cut into at most `workers` runs (start pts, end pts | None) that each cost about the
+    same, cut at any frame: a run starting between keyframes also costs `lead` for each frame it
+    decodes and drops from the keyframe before. The smallest largest run, by bisection on it."""
+    keys, n = sorted(keys), len(pts)
+    first = keys[0] if keys else (pts[0] if n else 0)
+    if n == 0 or workers <= 1:
+        return [(first, None)]
+    # Frames decoded and dropped before a run starting at each frame.
+    before = np.searchsorted(pts, keys, side="left")
+    kf = np.clip(np.searchsorted(keys, pts, side="right") - 1, 0, len(keys) - 1) if keys else np.zeros(n, int)
+    drop = np.array([i - before[k] if keys else 0 for i, k in enumerate(kf)], float)
+    pre = np.concatenate([[0.0], np.cumsum(costs)])
+
+    def levels(limit):
+        """Where a run can start after k runs (a boolean per frame, for each k) until the end can be
+        reached, and reach[a]: the furthest end of a run from frame a within `limit`. None if it can't."""
+        reach = np.minimum(np.searchsorted(pre, limit + pre[:n] - drop * lead, side="right") - 1, n)
+        now = np.zeros(n + 1, bool)
+        now[0] = True
+        out = []
+        for _ in range(workers):
+            out.append(now)
+            starts = np.flatnonzero(now[:n] & (reach > np.arange(n)))
+            if starts.size and reach[starts].max() >= n:
+                return out, reach
+            mark = np.zeros(n + 2, int)
+            np.add.at(mark, starts + 1, 1)
+            np.add.at(mark, reach[starts] + 1, -1)
+            now = np.cumsum(mark)[:n + 1] > 0
+            if not now.any():
+                return None
+        return None
+
+    lo, hi = 0.0, float(pre[-1] + n * lead)
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        if levels(mid) is not None:
+            hi = mid
+        else:
+            lo = mid
+    out, reach = levels(hi)
+    # Back from the end: each run's start, the first in its interval that reaches the next start.
+    cuts, b = [], n
+    for can in reversed(out):
+        a = next(a for a in np.flatnonzero(can[:b]) if reach[a] >= b)
+        cuts.append(int(a))
+        b = a
+    cuts.reverse()
+    return [(pts[a] if a else first, pts[b] if b < n else None) for a, b in zip(cuts, cuts[1:] + [n])]
 
 
 def shaft_scores(frame, rotation, landmarks, person, bg):
@@ -848,13 +909,40 @@ def deep_profile() -> dict | None:
             "rayTakeaway": True}
 
 
-def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None = None, deep: dict | None = None):
+# The quick pass, during a session (app.py), when a deep pass follows it: inside the swing, MediaPipe
+# and the shaft search only on every QUICK_MP_STRIDE-th frame (SWINGCLIPS_QUICK_MP_STRIDE), the ones
+# the body model runs on at its CPU stride, with the frames between filled in from their neighbours
+# (fill_skipped, and club.track as for blurred frames). Enough for the spoken checks and practice
+# numbers; the deep pass after the session analyzes every clip again the careful way.
+QUICK_MP_STRIDE = 2
+
+
+def quick_profile() -> dict | None:
+    """The quick pass's settings, as analyze's `quick`: {"mpStrideSwing": n}. None when it's off
+    (SWINGCLIPS_QUICK=off, or SWINGCLIPS_QUICK_MP_STRIDE=1), or when no deep pass follows to redo the
+    clips (deep_profile() is None)."""
+    if os.environ.get("SWINGCLIPS_QUICK", "on").strip().lower() == "off":
+        return None
+    n = _count("SWINGCLIPS_QUICK_MP_STRIDE", QUICK_MP_STRIDE)
+    if n <= 1 or deep_profile() is None:
+        return None
+    return {"mpStrideSwing": n}
+
+
+def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None = None, deep: dict | None = None,
+            quick: dict | None = None):
     """Pose for every frame of the clip, plus the ball, impact and club shaft, as a JSON-ready dict.
     `timing`, if given, gets where the time went (parts(), and the steps in this process).
 
     `deep`, the server's after-session pass (app.py, deep_profile()): {"bodyStride": n, "clubModel":
     .onnx path or None} in place of SWINGCLIPS_BODY_STRIDE and SWINGCLIPS_CLUB_BACKEND/_MODEL, and the
-    result says so ("pass": "deep")."""
+    result says so ("pass": "deep").
+
+    `quick`, the server's pass during a session (quick_profile()): {"mpStrideSwing": n}; the result
+    says so ("pass": "quick"). Not with `deep`."""
+    if deep is not None:
+        quick = None
+    mp_swing = quick["mpStrideSwing"] if quick else 1
     started = time.perf_counter()
     backend = models.backend()
     body = None
@@ -882,16 +970,16 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
     _, strike = clip_facts(path)
     body_until = strike + BODY_AFTER_STRIKE if strike is not None else None
     stride = (deep["bodyStride"] if deep is not None else body_stride()) if body else 1
-    if speed["split"] == "cost" and pts:
+    if speed["split"] in ("frames", "cost") and pts:
         costs = job_costs(pts, tb, body_until, speed["mpStrideAfter"], stride, speed["shaftStride"], body, clubm,
-                          bg is not None)
-        runs = split_jobs(keys, pts, costs, workers)
+                          bg is not None, mp_swing)
+        runs = (split_frames if speed["split"] == "frames" else split_jobs)(keys, pts, costs, workers)
     else:
         groups = np.array_split(np.arange(len(keys)), min(workers, len(keys)))
         runs = [(keys[g[0]], keys[g[-1] + 1] if g[-1] + 1 < len(keys) else None) for g in groups]
     jobs = [(path, start, end, rotation) for start, end in runs]
     opts = {"mp_after": speed["mpStrideAfter"], "convert": speed["convert"], "shaft_stride": speed["shaftStride"],
-            "threads": decode_threads()}
+            "threads": decode_threads(), "mp_swing": mp_swing}
     if deep is not None and clubm and deep.get("rayTakeaway"):
         opts["ray_too"] = True
     clock = time.perf_counter()
@@ -904,8 +992,8 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
                   key=lambda x: x[0][0])
     frames = [fr for fr, _, _, _ in rows]
     rays = [y for _, _, _, y in rows] if opts.get("ray_too") else None
-    if speed["mpStrideAfter"] > 1:
-        frames = fill_skipped(frames, [m for _, _, m, _ in rows], speed["mpStrideAfter"])
+    if speed["mpStrideAfter"] > 1 or mp_swing > 1:
+        frames = fill_skipped(frames, [m for _, _, m, _ in rows], max(speed["mpStrideAfter"], mp_swing))
     if body and stride > 1:
         frames = fill_body(frames, [r for _, r, _, _ in rows], models.SPECS[backend].layout, body_until)
     timings = [tm for _, tm in chunks]
@@ -986,6 +1074,8 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
     if deep is not None:
         # Near the start, where the server reads what made a pose file (app.py, _pose_stamp).
         out = {"version": VERSION, "pass": "deep", **out}
+    elif quick:
+        out = {"version": VERSION, "pass": "quick", "quick": quick, **out}
     return out
 
 

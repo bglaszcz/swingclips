@@ -40,6 +40,9 @@ MIN_VISIBLE = 0.25
 MAX_TURN = 3600
 # A frame's best ray counts as a sighting at this share of a clear sighting's score or more.
 CONFIDENT = 0.35
+# The most frames in a row the shaft may go unsearched (not seen blurred: not looked for) and still
+# count as sighted from the frames either side (track).
+UNSEARCHED_GAP = 3
 
 # The club model: the grip -> clubhead direction scores a bump this wide (sd, degrees) at the
 # model's confidence. Where it's surer of the hands than of the grip end (under the hands, often),
@@ -279,6 +282,17 @@ def track(times, frame_scores):
         path[i - 1] = back[i][path[i]]
 
     conf = e[np.arange(n), path]
+    # Frames the shaft wasn't searched on (the quick pass, SWINGCLIPS_SHAFT_STRIDE), in a short gap
+    # between frames it was: as sure as the less sure of the two, rather than unseen.
+    for i in np.where(~np.asarray(have))[0]:
+        a = i - 1
+        while a >= 0 and not have[a] and i - a <= UNSEARCHED_GAP:
+            a -= 1
+        b = i + 1
+        while b < n and not have[b] and b - i <= UNSEARCHED_GAP:
+            b += 1
+        if a >= 0 and b < n and have[a] and have[b] and b - a - 1 <= UNSEARCHED_GAP:
+            conf[i] = min(conf[a], conf[b])
     keep = np.where(conf >= CONFIDENT)[0]
     if len(keep) < 2:
         return [None] * n

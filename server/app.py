@@ -283,18 +283,18 @@ def find_ball_again(clip: Path, pool: ProcessPoolExecutor) -> ProcessPoolExecuto
 
 
 def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False,
-                 deep: dict | None = None) -> ProcessPoolExecutor:
-    """Runs pose on one clip and saves the result (the deep pass's way with `deep`, deep_profile());
-    returns the pool (a fresh one if a worker died)."""
+                 deep: dict | None = None, quick: dict | None = None) -> ProcessPoolExecutor:
+    """Runs pose on one clip and saves the result (the deep pass's way with `deep`, deep_profile(); the
+    quick pass's with `quick`, pose.quick_profile()); returns the pool (a fresh one if a worker died)."""
     global pose_busy
     with files_lock:
         if not clip.exists() or clip.name in pending_trash:
             return pool
         pose_busy = clip.name
-    how = (" deep" if deep else "") + (" again, with " + body_model() if again else "")
+    how = (" deep" if deep else " quick" if quick else "") + (" again, with " + body_model() if again else "")
     print(f"Pose: {clip.name} ...{how}", flush=True)
     try:
-        result = pose.analyze(str(clip), pool, POSE_WORKERS, deep=deep)
+        result = pose.analyze(str(clip), pool, POSE_WORKERS, deep=deep, quick=quick)
         tmp = pose_file(clip.name).with_suffix(".tmp")
         tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
         tmp.replace(pose_file(clip.name))
@@ -339,13 +339,16 @@ def pose_worker(stop: threading.Event):
             busy = session_on()
             waiting = busy and DURING_SESSION == "wait"
             deep = None if busy else deep_profile()
+            # During a session, new clips the quick way (when a deep pass will redo them after it).
+            quick = pose.quick_profile() if busy else None
             pose_deep_left = 0 if deep is None else sum(
                 1 for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done" and not is_deep(p.name))
             if todo and not waiting:
                 # Face-on clips first: the phones' spoken checks and practice numbers mostly need them, and
                 # during a session the down-the-line ones catch up between sets. After a session a new
                 # clip goes straight to the deep pass.
-                pool = analyze_clip(max(todo, key=lambda p: ("_face_" in p.name, recorded_at(p))), pool, deep=deep)
+                pool = analyze_clip(max(todo, key=lambda p: ("_face_" in p.name, recorded_at(p))), pool, deep=deep,
+                                    quick=quick)
                 continue
             if not busy:
                 # Analyze again, newest first, a clip whose pose came from another body model (after

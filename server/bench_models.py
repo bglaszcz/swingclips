@@ -184,10 +184,10 @@ def difference(a: list, b: list, min_conf: float = models.LOST) -> dict | None:
 # ---- The whole clip ----
 
 def whole_clip(clip: Path, where: str, stride: int, workers: int, backend: str, runs: int,
-               env: dict | None = None) -> dict:
+               env: dict | None = None, quick: dict | None = None) -> dict:
     """pose.analyze on the clip with the models on `where` and the body model every `stride` frames
-    (and `env` set meanwhile, e.g. pose.SPEED_AS_BEFORE): seconds (the last run), the per-frame
-    split, where the time went (pose.analyze's timing) and the landmarks."""
+    (and `env` set meanwhile, e.g. pose.SPEED_AS_BEFORE; the quick pass with `quick`): seconds (the
+    last run), the per-frame split, where the time went (pose.analyze's timing) and the landmarks."""
     os.environ["SWINGCLIPS_ORT_PROVIDER"] = where
     os.environ["SWINGCLIPS_POSE_BACKEND"] = backend
     saved_env = {k: os.environ.get(k) for k in env or {}}
@@ -204,7 +204,7 @@ def whole_clip(clip: Path, where: str, stride: int, workers: int, backend: str, 
             for _ in range(runs):
                 started = time.perf_counter()
                 timing = {}
-                out = pose.analyze(str(clip), pool, workers, timing)
+                out = pose.analyze(str(clip), pool, workers, timing, quick=quick)
                 seconds.append(time.perf_counter() - started)
         finally:
             pool.shutdown(cancel_futures=True)
@@ -223,11 +223,16 @@ def whole_clip(clip: Path, where: str, stride: int, workers: int, backend: str, 
             "timing": timing, "speed": speed, "threads": threads, "workers": workers, "stride": stride}
 
 
+SPLIT_WORDS = {"cost": "cost", "frames": "cost at any frame", "even": "keyframes"}
+# The quick pass's run (during a session, pose.quick_profile), as speed_runs labels it.
+QUICK_LABEL = "as set now, the quick pass (during a session)"
+
+
 def speed_label(speed: dict, threads=None) -> str:
     """pose.speed_settings() (and the decode threads) in words."""
     decoding = "FFmpeg's own threads" if threads is None else f"{threads} thread(s)"
     return (f"MediaPipe after the swing {every(speed['mpStrideAfter'])}, picture {speed['convert']}, "
-            f"split by {'cost' if speed['split'] == 'cost' else 'keyframes'}, shaft {every(speed['shaftStride'])}, "
+            f"split by {SPLIT_WORDS.get(speed['split'], speed['split'])}, shaft {every(speed['shaftStride'])}, "
             f"decoding {decoding}")
 
 
@@ -271,12 +276,16 @@ def speed_runs(result: dict, clip: Path, workers: int, backend: str, runs: int, 
             todo.append(("as set now, and SWINGCLIPS_SHAFT_STRIDE=2", {"SWINGCLIPS_SHAFT_STRIDE": "2"}, workers))
         if backend != models.DEFAULT and stride < 3:
             todo.append(("as set now, and SWINGCLIPS_BODY_STRIDE=3", {"body stride": 3}, workers))
+    # What a session actually runs, when a deep pass follows it (app.py).
+    quick = pose.quick_profile()
+    if quick is not None:
+        todo.append((QUICK_LABEL, {"quick": quick}, workers))
     todo += [(f"as set now, {n} workers", {}, n) for n in more_workers if n != workers]
     out = None
     for label, env, n in todo:
         print(f"Whole clip on the CPU, {body}, the speed settings {label} ...", flush=True)
         env = dict(env)
-        r = whole_clip(clip, "cpu", env.pop("body stride", stride), n, backend, runs, env=env)
+        r = whole_clip(clip, "cpu", env.pop("body stride", stride), n, backend, runs, env=env, quick=env.pop("quick", None))
         print(f"  {r['seconds']:.1f} s (first run, starting the workers: {r['first']:.1f} s)", flush=True)
         for line in where_it_went(r):
             print(f"  {line}", flush=True)
@@ -399,7 +408,12 @@ def verdict(result: dict) -> list[str]:
                      + ("yes" if keeps else "no") + f", best {best['seconds']:.1f} s "
                      f"({models.PROVIDER_NAMES[best['where']]}, {every(best['stride'])}"
                      + (f", {best['label']}" if best.get("label") else "") + ")")
-        if best.get("label") and best is not now:
+        quick = next((r for r in speed_runs if r["label"] == QUICK_LABEL), None)
+        if quick:
+            lines.append(f"  During a session (the quick pass; the deep pass redoes each clip after it): "
+                         f"{quick['seconds']:.1f} s a clip, " + ("keeps up" if quick["seconds"] <= KEEP_UP_SECONDS
+                                                                else "doesn't keep up"))
+        if best.get("label") and best is not now and best is not quick:
             lines.append(f"  Fastest: {best['label']} (settings.cmd; see HOME-SETUP.md, \"Keeping up during a "
                          "session\"), then bench_models.py --accuracy with it set")
         if best["where"] != "cpu":

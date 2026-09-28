@@ -95,8 +95,10 @@ def saved_pose(name: str) -> Path | None:
     return None
 
 
-# --deep: reruns as the server's deep pass (pose.deep_profile) instead of the quick analysis.
+# --deep: reruns as the server's deep pass (pose.deep_profile) instead of the usual analysis; --quick
+# as its quick pass during a session (pose.quick_profile).
 DEEP = False
+QUICK = False
 
 
 def pipeline_fingerprint() -> str:
@@ -118,6 +120,8 @@ def pipeline_fingerprint() -> str:
         club_file = d and d["clubModel"]
         h.update(f"deep:{d and d['bodyStride']}:{club_file and models.club_stamp(str(club_file))}".encode())
         h.update((here / "models.py").read_bytes())
+    elif QUICK:
+        h.update(f"quick:{json.dumps(pose.quick_profile(), sort_keys=True)}".encode())
     backend = models.backend()
     if backend != models.DEFAULT:
         body = models.model_path(backend)
@@ -163,7 +167,8 @@ def rerun_pose(name: str, cache: Path, pool: ProcessPoolExecutor, workers: int) 
     if clip is None:
         return None
     print(f"  analyzing {name} ...", flush=True)
-    result = pose.analyze(str(clip), pool, workers, deep=pose.deep_profile() if DEEP else None)
+    result = pose.analyze(str(clip), pool, workers, deep=pose.deep_profile() if DEEP else None,
+                          quick=pose.quick_profile() if QUICK else None)
     cache.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".tmp")
     tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
@@ -710,7 +715,10 @@ def main(argv=None) -> int:
     ap.add_argument("--rerun", action="store_true", help="analyze the labeled clips again with pose.py as it is now")
     ap.add_argument("--deep", action="store_true",
                     help="with --rerun: the server's deep pass (pose.deep_profile: SWINGCLIPS_DEEP_BODY_STRIDE, "
-                         "SWINGCLIPS_DEEP_CLUB_MODEL) instead of the quick one")
+                         "SWINGCLIPS_DEEP_CLUB_MODEL) instead of the usual one")
+    ap.add_argument("--quick", action="store_true",
+                    help="with --rerun: the server's quick pass during a session (pose.quick_profile: "
+                         "SWINGCLIPS_QUICK_MP_STRIDE)")
     ap.add_argument("--no-noise", action="store_true", help="skip the noise floor")
     ap.add_argument("--no-quality", action="store_true",
                     help="skip clip quality (light, grain, flicker and sharpness by shutter)")
@@ -723,8 +731,13 @@ def main(argv=None) -> int:
     ap.add_argument("--provider", choices=["auto", *models.PROVIDERS],
                     help="where --rerun runs the body and club models (default: SWINGCLIPS_ORT_PROVIDER, else cpu)")
     args = ap.parse_args(argv)
-    global DEEP
+    global DEEP, QUICK
     DEEP = args.deep
+    QUICK = args.quick and not args.deep
+    if QUICK and pose.quick_profile() is None:
+        print("--quick: the quick pass is off (SWINGCLIPS_QUICK=off, SWINGCLIPS_QUICK_MP_STRIDE=1, or no deep pass "
+              "to follow it: no body model and no club-deep.onnx)")
+        return 1
     if args.provider:
         # Before the worker processes start: they read it when they load the models.
         os.environ["SWINGCLIPS_ORT_PROVIDER"] = args.provider

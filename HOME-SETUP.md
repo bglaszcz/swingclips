@@ -405,6 +405,18 @@ drawn by `renderHelps` in `trends.js`):
   doesn't count toward the label, since body numbers either side of a camera move don't compare.
   Tapping a link opens the latest session's Trends on that move and result.
 - "Leave out shaky" applies; a link is greyed ~ when most of its move's numbers are shaky.
+- **Coaching** (`static/coach.js`): each link in golf terms ("Hands higher and further out at P6 (over
+  the top) → a more out-to-in path (pulls, fades, slices)"), and which way to take the move: for
+  carry, smash, ball speed and distance offline the way that helps; for path, face, face to path,
+  offline, strike and attack angle (irons -4°, woods 0°, driver +2°) the way that brings your usual
+  number (the median) toward neutral, or nothing when it's already close (the link then only
+  explains your spread). Each move has a golf name, what it means in the swing, a drill and a swing
+  thought, both ways. Faults are never offered as a fix even when the numbers point that way (over
+  the top, early extension, the head diving, standing up): the link then says so. On top, a
+  **practice plan**: up to 3 moves to work on, each once with the results it goes with; a move that
+  helps one result one way and another the other way is a trade-off, not a drill. General
+  instruction for a right-hander: a coach watching the swing trumps it. Tests:
+  `node --test tests/coach.test.js`.
 - First look on the live data (2026-09-27, 50 seven-iron swings in 4 sessions): 5 emerging, none
   confirmed, all about the same pattern: hands further out at P6 and losing forward bend at impact
   going with a more out-to-in path and more face open to the path. It takes 5-10 sessions of 20+
@@ -702,6 +714,20 @@ During a session the server's first job is taking the clips in; the careful anal
   from the deep result (their pose stamp ends in `+deep`). The Ready panel shows "deep pass: n clips
   to go". A session starting stops it between clips; it carries on after. `SWINGCLIPS_DEEP=off` turns
   it off.
+- **The quick pass** (during a session, only when a deep pass will follow it): inside the swing,
+  MediaPipe and the shaft search run only on every other frame (`SWINGCLIPS_QUICK_MP_STRIDE`, default
+  2): the frames the body model runs on anyway at its CPU stride. The frames between get their
+  landmarks in a straight line from their neighbours (4 ms apart) and the shaft from its tracking, as
+  blurred frames do (a frame not searched, between searched ones, counts as sighted from them:
+  `club.UNSEARCHED_GAP`). About a quarter less work a clip; the deep pass redoes every clip after
+  the session. Its pose files say `"pass": "quick"`.
+  Measured 2026-09-27 on the dev PC (Ryzen 5800X3D, 8 workers, RTMPose-m): 12.6-13.0 s -> 9.0-9.4 s
+  a clip. On the 57 labeled clips (`eval.py --rerun --quick` against `--rerun`): every key position
+  within half a frame of the full pass or better (takeaway 71 -> 50 ms, P8 face-on 17 -> 8 ms),
+  impact and the ball the same, joints within 0.2% of height, the shaft found on 41% / 58% of frames
+  (face-on / down the line) against 44% / 61%, its face-on angle 4.7° off against 3.5°. Check it on
+  the server with `bench_models.py` (its verdict has a "During a session" line).
+  `SWINGCLIPS_QUICK=off` analyzes during a session as before; `eval.py --rerun --quick` scores it.
 
 #### Keeping up during a session
 A clip took ~35 s with RTMPose (a swing, two clips, comes every ~20 s), so a 40-swing session left
@@ -732,7 +758,7 @@ frame, the club shaft search and turning each 1080p frame into pictures. What ch
 |---|---|---|---|
 | `SWINGCLIPS_MP_STRIDE_AFTER` | 4 | 1 | MediaPipe on every 4th frame after the swing (later than 0.9 s after the heard strike: ~1.1 s of each 4 s clip), the frames between filled in. Nothing is measured there: on the 37 labeled swings every number summary.js works out is the same with it (`tests/test_speed.py`). |
 | `SWINGCLIPS_FRAME_CONVERT` | `full` | `full` | `planes`: MediaPipe's half-size picture straight from the decoded frame's brightness and colour planes, instead of converting the whole 1080p frame and halving it: ~2.5x less work, within ~1 level. Off by default: on the 37 labeled clips it moved the joints 1.1 px and the takeaway and face-on P4 by 4-8 ms (`--accuracy`). |
-| `SWINGCLIPS_POSE_SPLIT` | `cost` | `even` | The clip is cut between the workers by what each part costs, not by the number of keyframes: the end of the clip (MediaPipe only, every 4th frame) is cheap, and an even cut left one worker idle while the others were still in the downswing. |
+| `SWINGCLIPS_POSE_SPLIT` | `cost` | `even` | The clip is cut between the workers by what each part costs, not by the number of keyframes: the end of the clip (MediaPipe only, every 4th frame) is cheap, and an even cut left one worker idle while the others were still in the downswing. `frames` cuts at any frame, not only at keyframes (every 0.25 s, ~6 s of work in the swing, so `cost` still leaves workers idle up to 40% of the clip): the workers come out even, but each one decoding from the keyframe before its start eats most of it (12.6 -> 11.9 s a clip on the dev PC; nothing with the quick pass). |
 | `SWINGCLIPS_SHAFT_STRIDE` | 1 | 1 | The shaft searched on every n-th frame of the swing, the tracking filling the rest as it does blurred frames. 2 halves the search; off by default, since the takeaway, P2, P6 and P8 come from the shaft. Try it with the check below. |
 | `SWINGCLIPS_DECODE_THREADS` | FFmpeg's own | | Threads each worker decodes with. Doesn't change the numbers; FFmpeg's own choice was as fast as 1 or 2 in the cloud, so try it only with the benchmark. |
 
