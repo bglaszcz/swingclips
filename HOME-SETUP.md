@@ -630,6 +630,12 @@ review page starts them and one of them does the talking.
   "camera moved" and the tiles only compare that camera's numbers since then.
   A **Gapping** card maps your bag in the chosen period: each club's median carry and middle-50%
   spread, and the gaps between neighbouring clubs (flagging overlaps under 7 yd and big gaps over 20 yd).
+  A **Wedge matrix** card shows each wedge's median carry with a half, 3/4 and full swing, sized by club
+  speed against that wedge's full-swing speed (the 90th percentile of its club speeds): full 92%+, 3/4 80-92%,
+  half 65-80%; and the biggest carry hole between them (`static/wedges.js`).
+  The page reads top to bottom as three steps (how did the last session go, what to work on, is it
+  working: the chart opens on the focus move); shot pattern, sessions, good-shot rules, gapping,
+  the wedge matrix and handicap are folded cards underneath.
 - **Compare** (Compare… or C on a swing; `static/compare.js`): this swing against another one,
   usually one of your own better ones. The picker lists every other swing with its date, club and
   Square numbers, filtered to this club and the last 90 days by default, sorted by carry (or ball

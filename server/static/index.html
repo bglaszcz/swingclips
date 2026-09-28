@@ -360,6 +360,12 @@
   .p-step-n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
               background: var(--accent); color: var(--panel); font-size: 12px; font-weight: 700; }
   .p-step-more { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 16px; }
+  .p-wedges { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; width: 100%; }
+  .p-wedges th, .p-wedges td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .p-wedges thead th, .p-wedges tr:first-child th { color: var(--muted); font-weight: 600; }
+  .p-wedges b { font-size: 15px; }
+  .p-wedge-sub { font-size: 11px; color: var(--muted); }
+  .p-wedge-hole { font-size: 13px; margin-top: 8px; }
   .p-step-more .note { text-transform: none; letter-spacing: 0; font-weight: 400; }
   .p-headline { font-size: 15px; line-height: 1.45; }
   .p-headline .better { color: var(--accent); font-weight: 600; }
@@ -1124,6 +1130,18 @@
       <div style="overflow-x: auto" id="p-gapping-chart"></div>
       <div class="note">Each club's median carry and middle 50% spread in this period, and the gap in median carry between neighbouring clubs. Gaps under 7 yd (overlap) or over 20 yd (big gap) are flagged. Mishits and clubs with fewer than 5 shots are left out.</div>
     </details>
+    <details class="t-card p-fold" id="p-wedges" data-fold="wedges">
+      <summary><strong>Wedge matrix</strong> <span id="p-wedges-status" class="note"></span></summary>
+      <div style="overflow-x: auto" id="p-wedges-table"></div>
+      <details class="explain">
+        <summary>How it's worked out</summary>
+        <div class="note">Swing size is the shot's club speed against that wedge's full-swing speed (the 90th percentile
+          of all its club speeds, once there are 10): <b>Full</b> 92% or more, <b>3/4</b> 80-92%, <b>Half</b> 65-80%;
+          slower is a chip, left out. Each cell is the median carry in this period, with the middle 50% and the
+          number of shots; it takes 3. Mishits (no carry, or marked invalid by Square) are left out. The biggest
+          hole is the widest carry gap between the cells: a distance with no stock shot yet.</div>
+      </details>
+    </details>
     <details class="t-card p-fold" data-fold="hcp">
       <summary><strong>Handicap index</strong> <span id="p-hcp-now" class="note"></span></summary>
       <svg id="p-hcp" role="img" aria-label="Handicap index over time"></svg>
@@ -1177,6 +1195,7 @@
 <script src="/static/coach.js"></script>
 <script src="/static/focus.js"></script>
 <script src="/static/gapping.js"></script>
+<script src="/static/wedges.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script>

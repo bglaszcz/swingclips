@@ -626,6 +626,7 @@ function renderProgress() {
   if (foldOpen("hcp")) renderHandicap();
   renderSessionTable(sessions);
   renderGapping();
+  renderWedges();
   const latestHcp = journal.handicap[journal.handicap.length - 1];
   document.getElementById("p-hcp-now").textContent = latestHcp ? `${latestHcp.index.toFixed(1)} on ${dayOf(new Date(latestHcp.date + "T12:00"))}` : "";
 }
@@ -1511,6 +1512,18 @@ function renderGapping() {
       renderProgress();
     },
   });
+}
+
+/** The card: each wedge's carry with a half, three-quarter and full swing (wedges.js). */
+function renderWedges() {
+  if (typeof SwingWedges === "undefined") return;
+  const allRows = shownClips().filter(c => !c.excluded).map(swingRow);
+  const days = Number(progressPick.period);
+  const since = days ? Date.now() - days * 86400000 : -Infinity;
+  const a = SwingWedges.analyze(allRows, { since, clubNameFn: clubName });
+  document.getElementById("p-wedges-status").textContent = a.wedges.length
+    ? `${a.wedges.length} wedge${a.wedges.length === 1 ? "" : "s"} · ${a.shots} shots` : "no wedge shots in this period";
+  if (foldOpen("wedges")) SwingWedges.render(document.getElementById("p-wedges-table"), a);
 }
 
 // Charts are drawn to their width.
