@@ -339,6 +339,17 @@
   td.gs-out { background: color-mix(in srgb, var(--warn) 12%, transparent); }
   td.gs-text, th.gs-text { text-align: left !important; color: var(--muted); font-size: 12px; white-space: normal !important; min-width: 180px; }
   #good-tempo { color: var(--muted); font-size: 12px; }
+  .p-helps-table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .p-helps-table th, .p-helps-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .p-helps-table th { color: var(--muted); font-weight: 600; }
+  .p-helps-table tbody tr { cursor: pointer; }
+  .p-helps-table tbody tr:hover { background: var(--sel); }
+  .p-helps-table .tag { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 8px; white-space: nowrap; }
+  .p-helps-table .tag.confirmed { background: var(--accent-soft); color: var(--accent); }
+  .p-helps-table .tag.emerging { background: var(--warn-soft); color: var(--warn); }
+  .p-helps-table .helps { color: var(--accent); font-weight: 600; }
+  .p-helps-table .hurts { color: var(--bad); font-weight: 600; }
+  .p-helps-table .sub { color: var(--muted); font-size: 12px; }
   .p-good-table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
   .p-good-table th, .p-good-table td, #p-good-ranges th, #p-good-ranges td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }
   #p-good-ranges { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -994,6 +1005,20 @@
           skipped. Swings left out of the trends don't count.</div>
       </details>
     </div>
+    <div class="t-card" id="p-helps">
+      <strong>What helps, what hurts</strong>
+      <div id="p-helps-status" class="note"></div>
+      <div style="overflow-x: auto" id="p-helps-list"></div>
+      <div class="note">Each move against each result with this club, within sessions: every swing against that
+        session's own usual, so warm-up, tiredness and where the cameras stood cancel out; then pooled over the
+        sessions in the period. With 18 moves and 16 results some links look strong by luck, so the chance of each is
+        corrected for how many were tested (false discovery rate, q). <b>Confirmed</b>: q under 0.05 and the same way
+        in at least 3 sessions (3 in 4 of those with 8+ swings). <b>Emerging</b>: q under 0.2 and not the other way in
+        most sessions; worth watching, not yet worth changing a swing for. Everything else could be chance and isn't
+        listed. "Between sessions" (from 5 sessions): whether sessions with more of the move also had more of the
+        result. This describes your swings; it doesn't prove the move causes the result. Tap a link to see it in the
+        latest session's trends. Greyed ~ = mostly shaky.</div>
+    </div>
     <div class="t-card" id="p-chart">
       <div class="p-chart-head"><strong>Over time</strong><select id="p-metric" aria-label="Number to chart"></select></div>
       <svg role="img"></svg>
@@ -1063,6 +1088,7 @@
 <script src="/static/summary.js"></script>
 <script src="/static/trust.js"></script>
 <script src="/static/goodshots.js"></script>
+<script src="/static/helps.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script>

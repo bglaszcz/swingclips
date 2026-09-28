@@ -59,8 +59,10 @@ the keyboard shortcuts.
   positions and the swing numbers. Numbers that can't be trusted are greyed with a **~** (hover
   for why), and a "vs my good shots" column shows where each number sat.
 - **Trends** (per session, in the list): body numbers against Square's numbers.
-- **Progress**: how your numbers and results change across sessions, your good-shot ranges, and
-  which numbers separate good shots from the rest.
+- **Progress**: how your numbers and results change across sessions, your good-shot ranges,
+  which numbers separate good shots from the rest, and **what helps, what hurts**: each move against
+  each result with a club, within sessions, labeled confirmed / emerging after a false-discovery
+  correction.
 - **Practice**: pick one number and a range, and after each swing the face-on phone says it.
 - **Cameras**: live pictures from both phones.
 - **Tools**: **Labels** (labeling progress, and a worklist of what to fix, with Go) and

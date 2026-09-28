@@ -385,6 +385,34 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   shows on the server. The swing page, Compare and practice button were checked in a browser with
   synthetic swings, not real videos.
 
+### What helps, what hurts
+On **Progress**, below the good shots, for the club and period picked there (`static/helps.js`,
+drawn by `renderHelps` in `trends.js`):
+- Every body move (the 18 numbers) against every result: Square's numbers, plus distance offline
+  and face to path either way (curve), where smaller is better. **Within sessions**: each swing's
+  move and result are taken against that session's own mean, so warm-up, tiredness and where the
+  cameras stood cancel out; the deviations are pooled over the sessions into one slope and a
+  correlation, tested with a t test on n - sessions - 1 degrees of freedom. A session needs 3 swings
+  with both numbers to take part, a link 15 pooled swings.
+- The p values get a **Benjamini-Hochberg** correction over every link tested with the club (q, the
+  false discovery rate). **Confirmed**: q < 0.05 and the same direction in at least 3 sessions, and
+  3 in 4 of the sessions with 8+ swings. **Emerging**: q < 0.2 and not the other way in most
+  sessions. The rest could be chance and isn't listed (the status line says how many were tested).
+- Each link in words, per a round step near the move's usual swing-to-swing spread: "Each 1 in more
+  hands to plane at P6 than your usual that day: club path 1.4° more out-to-in", with **Helps** /
+  **Hurts** where the result has a better way (carry, smash, ball speed up; offline and curve
+  down). **Between sessions** (from 5 sessions with 8+ swings): the session means' correlation; it
+  doesn't count toward the label, since body numbers either side of a camera move don't compare.
+  Tapping a link opens the latest session's Trends on that move and result.
+- "Leave out shaky" applies; a link is greyed ~ when most of its move's numbers are shaky.
+- First look on the live data (2026-09-27, 50 seven-iron swings in 4 sessions): 5 emerging, none
+  confirmed, all about the same pattern: hands further out at P6 and losing forward bend at impact
+  going with a more out-to-in path and more face open to the path. It takes 5-10 sessions of 20+
+  swings with one club before anything can be confirmed.
+- Tests: `node --test tests/helps.test.js` (the t test and q values, a link found within sessions
+  when the day-to-day offsets point the other way, noise giving nothing confirmed, too few sessions,
+  split sessions, helps/hurts, missing and shaky numbers).
+
 ### Practice mode: the phone says the number (capture app 0.5)
 Pick one thing to work on and a range; after each swing the phone says the number and whether it
 was in range: "Tempo 3.2, in range", "Club path minus 4, too far left", "Early extension 2, too far
@@ -1076,16 +1104,10 @@ The phone's browser can't record above 30 fps, which is why the capture app exis
 ## Planned
 Toward a single-digit handicap (16.4 in Sept 2026): see how the swing changes and which changes
 help. Done so far: swing numbers on the server, Progress, Leave out, handicap log and notes,
-practice mode (one number, spoken after each swing).
+practice mode (one number, spoken after each swing), what helps / what hurts.
 
-1. **What helps, what hurts** (next): pool swings across sessions with one club and relate each
-   move to each result. Within-session first ("on swings where I extended more than my usual that
-   day, what did path do?"), which cancels day-to-day differences (warm-up, fatigue, camera
-   placement); then between sessions. With ~18 moves x ~16 results, some links look strong by luck,
-   so: a false-discovery correction, and a label per link: confirmed (same direction in most
-   sessions), emerging, or could be chance; in plain words with the size of the effect ("each inch
-   of early extension ≈ 0.8° more out-to-in path, 6 of 7 sessions"). Needs ~5-10 sessions of 20+
-   swings with one club to say much.
+1. **What helps, what hurts**: done (Progress; see "What helps, what hurts" above). Next with it,
+   once links are confirmed: tie them to Focus tracking below.
 2. **Focus tracking**: set a focus (a move, which way, optional target, start date) and see how the
    move and the results changed since, against the usual session-to-session variation.
 3. **Compare two swings**: a reference swing (a good one, or one from before a focus) next to the

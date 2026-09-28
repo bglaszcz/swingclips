@@ -613,6 +613,7 @@ function renderProgress() {
   renderHandicap();
   renderSessionTable(sessions);
   renderGoodShots(club);
+  renderHelps(club, sessions);
 }
 
 for (const [id, key] of [["p-club", "club"], ["p-period", "period"], ["p-metric", "metric"]]) {
@@ -1066,6 +1067,63 @@ async function saveGoodSettings(s) {
   document.activeElement.blur();
   await loadTrendData();
   renderTrendView();
+}
+
+// ---- Progress: what helps, what hurts (helps.js) ----
+
+// Links listed at most (confirmed first, then emerging).
+const HELPS_TOP = 15;
+// Results worked out in helps.js, shown in Trends as the number they come from.
+const HELPS_TREND_FIELD = { absOffline: "offline", absFaceToPath: "faceToPath" };
+
+/** The card: each move against each result, within the period's sessions with the club. */
+function renderHelps(club, sessions) {
+  const status = document.getElementById("p-helps-status"), box = document.getElementById("p-helps-list");
+  const name = club ? clubName(club).toLowerCase() : "club";
+  const input = sessions.map(s => ({ key: s.key, rows: s.rows.map(r => ({ ...r,
+    shaky: Object.fromEntries(SwingSummary.BODY.map(f => [f.key, isShaky(r, f)])) })) }));
+  const a = SwingHelps.analyze(input);
+  const listed = a.links.filter(l => l.label !== "chance");
+  const shown = listed.slice(0, HELPS_TOP);
+  const counts = ["confirmed", "emerging"].map(k => [k, listed.filter(l => l.label === k).length]).filter(x => x[1]);
+  status.textContent = !a.tested
+    ? `Not enough swings with body numbers yet: ${a.swings} with the ${name}; a link needs ${SwingHelps.MIN_PAIRS} in sessions of ${SwingHelps.MIN_IN_SESSION} or more.`
+    : [`${a.swings} swings in ${a.sessions} session${a.sessions === 1 ? "" : "s"} with the ${name}`,
+       `${a.tested} links tested`,
+       counts.length ? counts.map(([k, n]) => `${n} ${k}`).join(", ") : "none stands out from chance yet",
+       a.sessions < 5 ? "it takes 5 to 10 sessions of 20+ swings to say much" : ""].filter(Boolean).join(" · ");
+  if (!shown.length) { box.replaceChildren(); return; }
+  const table = document.createElement("table");
+  table.className = "p-helps-table";
+  const head = document.createElement("tr");
+  for (const t of ["", "What goes with what", "Sessions", "r", "q", "Between sessions"]) head.append(Object.assign(document.createElement("th"), { textContent: t }));
+  const tbody = document.createElement("tbody");
+  for (const l of shown) {
+    const tr = document.createElement("tr");
+    const tag = Object.assign(document.createElement("span"), { className: `tag ${l.label}`, textContent: l.label });
+    const what = Object.assign(document.createElement("td"), { textContent: SwingHelps.sentence(l) });
+    if (l.helps != null) what.prepend(Object.assign(document.createElement("span"), { className: l.helps ? "helps" : "hurts", textContent: l.helps ? "Helps " : "Hurts " }));
+    if (l.shaky) { what.classList.add("shaky"); what.title = "Shaky: most of the move's numbers are (trust.js)"; }
+    const between = !l.between ? "–" : `${fmtR(l.between.r)}${l.between.clear ? " (clear)" : ""}, ${l.between.n} sessions`;
+    tr.append(Object.assign(document.createElement("td"), {}), what,
+      Object.assign(document.createElement("td"), { textContent: SwingHelps.support(l) }),
+      Object.assign(document.createElement("td"), { textContent: fmtR(l.r), title: `${l.n} swings, within sessions` }),
+      Object.assign(document.createElement("td"), { textContent: l.q < 0.001 ? "<0.001" : l.q.toFixed(3) }),
+      Object.assign(document.createElement("td"), { textContent: between, className: "sub" }));
+    tr.firstChild.append(tag);
+    tr.onclick = () => {
+      const latest = sessions[sessions.length - 1];
+      if (!latest) return;
+      trendPick.x = l.move;
+      trendPick.y = HELPS_TREND_FIELD[l.result] || l.result;
+      trendPick.club = club;
+      savePicks();
+      openTrends(latest.key);
+    };
+    tbody.append(tr);
+  }
+  table.append(head, tbody);
+  box.replaceChildren(table);
 }
 
 // Charts are drawn to their width.
