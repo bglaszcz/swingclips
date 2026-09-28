@@ -514,6 +514,7 @@ toward the ball". The phones face away from you, so voice is the channel.
 - Endpoints: `GET /api/practice` (target, the list of numbers, the log, which phones listened),
   `POST /api/practice` (`{on, metric, min, max, club, streak}`), `POST /api/practice/test`,
   `GET /api/practice/latest`.
+- **Practice games**: tour-baseline strokes gained scoring and target planning (`static/games.js`) exist for Combine, Wedge ladder, Random pick, and Ladder games; review page integration is coming.
 
 ### Ready panel: both phones from the review page (capture app 0.6)
 One place to see "ready", and fewer walks to the phones. The phones face away from you, so the
