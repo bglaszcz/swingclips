@@ -41,9 +41,10 @@ function renderGames() {
     now.textContent = "No game in play.";
   } else {
     const s = g.summary || {};
+    const targetText = g.sayTarget || (Number.isFinite(g.target) ? `${g.target} yards` : String(g.target));
     now.replaceChildren(
       Object.assign(document.createElement("div"), { className: "gm-target",
-        textContent: `${g.name}: next target ${g.target} yards` }),
+        textContent: `${g.name}: next target ${targetText}` }),
       Object.assign(document.createElement("div"), { className: "note",
         textContent: !s.shots ? "No shots yet." : `${s.shots} shots, ${s.greens} on the green, ${gmSg(s.sgPerShot)} strokes a shot against tour` +
           (s.mishits ? `, ${s.mishits} mishit${s.mishits > 1 ? "s" : ""}` : "") }),
@@ -66,6 +67,13 @@ function renderGames() {
   box.replaceChildren(t);
 }
 
+function gmTargetText(target) {
+  if (target === 0 || target === "fairway") return "fairway";
+  if (target === "draw" || target === "fade") return target;
+  if (Number.isFinite(target)) return target + " yd";
+  return String(target ?? "–");
+}
+
 function gmResultsTable(results) {
   const t = document.createElement("table");
   t.append(document.createElement("tr"));
@@ -73,7 +81,7 @@ function gmResultsTable(results) {
     Object.assign(document.createElement("th"), { textContent: h })));
   for (const x of results.slice(0, 30)) {
     const r = t.insertRow();
-    r.append(gmCell(x.target + " yd"), gmCell(x.club ? clubName(x.club) : "–"), gmCell(gmYd(x.carry)),
+    r.append(gmCell(gmTargetText(x.target)), gmCell(x.club ? clubName(x.club) : "–"), gmCell(gmYd(x.carry)),
       gmCell(x.sg == null ? "mishit" : gmYd(x.dist) + (x.onGreen ? ", on the green" : "")), gmCell(gmSg(x.sg)));
   }
   return t;

@@ -514,14 +514,16 @@ toward the ball". The phones face away from you, so voice is the channel.
 - Endpoints: `GET /api/practice` (target, the list of numbers, the log, which phones listened),
   `POST /api/practice` (`{on, metric, min, max, club, streak}`), `POST /api/practice/test`,
   `GET /api/practice/latest`.
-- **Practice games** (Games card at the top of Practice): pick Combine, Wedge ladder, Random pick or Ladder and
-  press Start game. The speaking phone says the target; once Square's shot pairs (~15 s) it says where the ball
-  landed ("8 short, 3 right, on the green") and the next target. A swing whose shot never comes is skipped (same
-  target again); a Square mishit scores the worst. Scoring is strokes against a tour baseline from where the ball
-  lands (no roll into a net; within 15 yd counts as the green); targets and scoring are `static/games.js`, the game in
-  play `game.json` and finished games `games-log.jsonl` next to the clips folder (`server/games.py`). Starting a game
-  turns the practice number off, and turning that on stops the game. The Combine is always the same 27 shots
-  (9 targets, 50-170 yd, shuffled), so its score is comparable across weeks. No phone update needed.
+- **Practice games** (Games card at the top of Practice): pick Combine, Wedge ladder, Random pick, Ladder,
+  Driving or Shot shaping and press Start game. The speaking phone says the target; once Square's shot pairs
+  (~15 s) it says where the ball landed ("8 short, 3 right, on the green") and the next target. A swing whose
+  shot never comes is skipped (same target again); a Square mishit scores the worst. Scoring is strokes against
+  a tour baseline from where the ball lands (no roll into a net; within 15 yd counts as the green); Driving
+  scores 14 tee shots against a 30-yard fairway par-4 baseline, while Shot shaping scores 12 called draws and
+  fades by spin axis. Targets and scoring are `static/games.js`, the game in play `game.json` and finished
+  games `games-log.jsonl` next to the clips folder (`server/games.py`). Starting a game turns the practice number
+  off, and turning that on stops the game. The Combine is always the same 27 shots (9 targets, 50-170 yd,
+  shuffled), so its score is comparable across weeks. No phone update needed.
 
 ### Ready panel: both phones from the review page (capture app 0.6)
 One place to see "ready", and fewer walks to the phones. The phones face away from you, so the

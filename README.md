@@ -65,9 +65,9 @@ the keyboard shortcuts.
   each result with a club, within sessions, labeled confirmed / emerging after a false-discovery
   correction.
 - **Practice**: pick one number and a range, and after each swing the face-on phone says it. Or play a
-  **game** (Combine, Wedge ladder, Random pick, Ladder): the phone says each target, then where the ball
-  landed and the next one; shots are scored in strokes against a tour baseline, and the Combine (the same
-  27 shots every time) gives one score to follow week to week.
+  **game** (Combine, Wedge ladder, Random pick, Ladder, Driving, Shot shaping): the phone says each target, then where the ball
+  landed and the next one; shots are scored in strokes against a tour baseline, Driving tests 14 tee shots at a fairway,
+  Shot shaping tests 12 called curves, and the Combine (the same 27 shots every time) gives one score to follow week to week.
 - **Cameras**: live pictures from both phones.
 - **Tools**: **Labels** (labeling progress, and a worklist of what to fix, with Go) and
   **Shutter test** (light, grain, flicker and sharpness by shutter setting).

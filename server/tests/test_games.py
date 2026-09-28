@@ -46,8 +46,8 @@ class GamesTest(unittest.TestCase):
     def swing(self, dt, s=None, name=None):
         return {"name": name or f"swing_face_{int(T0 + dt)}.mp4", "t": T0 + dt, "shot": s}
 
-    def test_catalog_has_the_four_games(self):
-        self.assertEqual({g["id"] for g in self.g.catalog()}, {"combine", "wedges", "random", "ladder"})
+    def test_catalog_has_the_games(self):
+        self.assertEqual({g["id"] for g in self.g.catalog()}, {"combine", "wedges", "random", "ladder", "driving", "shaping"})
 
     def test_start_says_the_first_target(self):
         g = self.g.start("wedges")
@@ -123,10 +123,69 @@ class GamesTest(unittest.TestCase):
         self.assertEqual(self.g.state()["log"], [])   # nothing hit: nothing logged
 
     def test_shot_of(self):
-        self.assertEqual(games.shot_of(shot(100, -3)), {"carry": 100, "offline": -3})
+        self.assertEqual(
+            games.shot_of(shot(100, -3)),
+            {
+                "carry": 100,
+                "offline": -3,
+                "club": "7i",
+                "spinAxis": None,
+                "hla": None,
+                "path": None,
+                "faceToPath": None,
+            },
+        )
         self.assertIsNone(games.shot_of(shot(100, -3, valid=False))["carry"])
         self.assertIsNone(games.shot_of({"ball": {"carry": None}})["carry"])
         self.assertIsNone(games.shot_of(None)["carry"])
+        full = {
+            "club": "DR",
+            "ball": {"carry": 240, "side": 8, "spinAxis": -4.2, "hla": 1.5},
+            "clubData": {"path": 2.0, "faceToTarget": 0.5},
+        }
+        self.assertEqual(
+            games.shot_of(full),
+            {
+                "carry": 240,
+                "offline": 8,
+                "club": "DR",
+                "spinAxis": -4.2,
+                "hla": 1.5,
+                "path": 2.0,
+                "faceToPath": -1.5,
+            },
+        )
+
+    def test_driving_game_plays_and_says_the_fairway(self):
+        g = self.g.start("driving")
+        self.assertEqual(g["target"], 0)
+        said = self.g.latest(0)
+        self.assertEqual(len(said), 1)
+        self.assertIn("First target: the fairway.", said[0]["text"])
+        self.assertEqual(self.g.state()["game"]["sayTarget"], "the fairway")
+
+        self.clock.t = T0 + 20
+        made = self.g.step([self.swing(5, shot(240, 5, club="DR"))])
+        self.assertEqual(len(made), 1)
+        self.assertTrue(made[0]["onGreen"])
+        self.assertIn("fairway, 240", self.g.latest(0)[-1]["text"])
+        self.assertIn("Next: the fairway.", self.g.latest(0)[-1]["text"])
+
+    def test_shaping_game_scores_with_spin_axis(self):
+        self.g.start("shaping", {"seed": 42})
+        target = self.g.game["target"]
+        self.assertIn(target, ("draw", "fade"))
+        self.assertEqual(self.g.state()["game"]["sayTarget"], f"a {target}")
+
+        self.clock.t = T0 + 20
+        spin = -5.0 if target == "draw" else 5.0
+        side = -4.0 if target == "draw" else 4.0
+        s = {"club": "7i", "ball": {"carry": 150, "side": side, "spinAxis": spin}}
+        made = self.g.step([self.swing(5, s)])
+        self.assertEqual(len(made), 1)
+        self.assertTrue(made[0]["onGreen"])
+        self.assertEqual(made[0]["sg"], 0.0)
+        self.assertIn(f"{target}, good", self.g.latest(0)[-1]["text"])
 
 
 if __name__ == "__main__":

@@ -61,6 +61,18 @@
   // Default parameters for the Ladder game.
   const LADDER_DEFAULTS = { min: 50, max: 150, step: 10, count: 30 };
 
+  // Driving game constants
+  const FAIRWAY_HALF_WIDTH_YD = 15;
+  const ROUGH_EDGE_YD = 30;
+  const DRIVE_HOLE_YD = 400;
+  const DRIVE_TEE_EXPECTED = 3.99;
+  const DRIVING_SHOTS = 14;
+
+  // Shot shaping game constants
+  const SHAPE_MIN_AXIS = 3;
+  const SHAPE_MAX_OFFLINE_PCT = 10;
+  const SHAPING_SHOTS = 12;
+
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
   // Mulberry32: a tiny 32-bit seeded PRNG returning [0, 1).
@@ -162,9 +174,128 @@
   }
 
   /**
+   * Score a driving tee shot against a 400 yd par 4 baseline.
+   * @param {number} target Target distance in yards (0 for driving)
+   * @param {{carry: number, offline: number}} shot Shot carry and offline in yards
+   * @returns {{along: number, side: number, dist: number, onGreen: boolean, sg: number, verdict: string} | null}
+   */
+  function scoreDriving(target, shot) {
+    if (!shot || typeof shot !== "object") return null;
+    if (!finite(shot.carry) || shot.carry <= 0) return null;
+    if (!finite(shot.offline)) return null;
+
+    const along = shot.carry;
+    const side = shot.offline;
+    const dist = Math.abs(side);
+    const absSide = Math.abs(side);
+
+    const rem = DRIVE_HOLE_YD - shot.carry;
+    const eBase = expectedStrokes(rem);
+    if (!finite(eBase)) return null;
+
+    let eEnd;
+    let onGreen;
+    let band;
+    if (absSide <= FAIRWAY_HALF_WIDTH_YD) {
+      eEnd = eBase;
+      onGreen = true;
+      band = "fairway";
+    } else if (absSide <= ROUGH_EDGE_YD) {
+      eEnd = eBase + 0.20;
+      onGreen = false;
+      band = "rough";
+    } else {
+      eEnd = eBase + 0.60;
+      onGreen = false;
+      band = "miss";
+    }
+
+    const sg = DRIVE_TEE_EXPECTED - eEnd - 1;
+    const carryWhole = Math.round(shot.carry);
+    let verdict;
+    if (band === "fairway") {
+      verdict = `fairway, ${carryWhole}`;
+    } else {
+      const sideDir = side > 0 ? "right" : "left";
+      const sideDist = Math.round(absSide);
+      if (band === "rough") {
+        verdict = `${sideDist} ${sideDir}, rough, ${carryWhole}`;
+      } else {
+        verdict = `${sideDist} ${sideDir}, a miss, ${carryWhole}`;
+      }
+    }
+
+    return { along, side, dist, onGreen, sg, verdict };
+  }
+
+  /**
+   * Score a shot shaping attempt against a called shape ("draw" or "fade").
+   * @param {"draw" | "fade"} target Called shape
+   * @param {{carry: number, offline: number, spinAxis?: number}} shot Shot details
+   * @returns {{along: number, side: number, dist: number, onGreen: boolean, sg: number, verdict: string} | null}
+   */
+  function scoreShaping(target, shot) {
+    if (target !== "draw" && target !== "fade") return null;
+    if (!shot || typeof shot !== "object") return null;
+    if (!finite(shot.carry) || shot.carry <= 0) return null;
+    if (!finite(shot.offline)) return null;
+    if (!finite(shot.spinAxis)) return null;
+
+    let shape;
+    if (shot.spinAxis <= -SHAPE_MIN_AXIS) {
+      shape = "draw";
+    } else if (shot.spinAxis >= SHAPE_MIN_AXIS) {
+      shape = "fade";
+    } else {
+      shape = "straight";
+    }
+
+    const maxOffline = (SHAPE_MAX_OFFLINE_PCT / 100) * shot.carry;
+    const withinLine = Math.abs(shot.offline) <= maxOffline;
+    const onGreen = shape === target && withinLine;
+
+    // Strokes gained is not meaningful for shot shaping; return 0 for success,
+    // -0.5 for miss so session summaries can still rank sessions.
+    const sg = onGreen ? 0 : -0.5;
+
+    let verdict;
+    if (shape === target) {
+      if (withinLine) {
+        verdict = `${shape}, good`;
+      } else {
+        const sideDir = shot.offline > 0 ? "right" : "left";
+        verdict = `${shape}, but ${Math.round(Math.abs(shot.offline))} ${sideDir}`;
+      }
+    } else {
+      verdict = `${shape}, wanted a ${target}`;
+    }
+
+    const along = shot.carry;
+    const side = shot.offline;
+    const dist = Math.abs(shot.offline);
+
+    return { along, side, dist, onGreen, sg, verdict };
+  }
+
+  /**
+   * Score a shot for a given game, dispatching to the game's own scorer if defined.
+   * @param {string} gameId Game identifier
+   * @param {any} target Game target
+   * @param {object} shot Shot details
+   * @returns {object | null}
+   */
+  function scoreFor(gameId, target, shot) {
+    const g = GAMES[gameId];
+    if (g && typeof g.score === "function") {
+      return g.score(target, shot);
+    }
+    return scoreShot(target, shot);
+  }
+
+  /**
    * Summarize a session of practice game results.
-   * @param {Array<{target: number, sg: number|null, onGreen?: boolean, dist?: number}>} results
-   * @returns {{shots: number, mishits: number, sgTotal: number, sgPerShot: number, greens: number, byTarget: Array<{target: number, shots: number, sgPerShot: number, avgDist: number|null}>}}
+   * @param {Array<{target: number|string, sg: number|null, onGreen?: boolean, dist?: number}>} results
+   * @returns {{shots: number, mishits: number, sgTotal: number, sgPerShot: number, greens: number, byTarget: Array<{target: number|string, shots: number, sgPerShot: number, avgDist: number|null}>}}
    */
   function summarize(results) {
     const list = results || [];
@@ -180,7 +311,7 @@
       sgTotal += shotSg;
       if (r && r.onGreen) greens++;
 
-      const target = r && finite(r.target) ? r.target : null;
+      const target = r && (finite(r.target) || typeof r.target === "string") ? r.target : null;
       if (target != null) {
         let entry = targetMap.get(target);
         if (!entry) {
@@ -200,7 +331,11 @@
     const sgPerShot = shots > 0 ? sgTotal / shots : 0;
 
     const byTarget = Array.from(targetMap.entries())
-      .sort((a, b) => a[0] - b[0])
+      .sort((a, b) =>
+        typeof a[0] === "number" && typeof b[0] === "number"
+          ? a[0] - b[0]
+          : String(a[0]).localeCompare(String(b[0]))
+      )
       .map(([target, entry]) => ({
         target,
         shots: entry.shots,
@@ -297,6 +432,31 @@
     return target;
   }
 
+  // Plan shot shaping targets: 12 shots, 6 draw and 6 fade, at most 2 in a row, seeded.
+  function planShaping(options = {}) {
+    const rng = mulberry32(options.seed);
+    while (true) {
+      const items = [
+        "draw", "draw", "draw", "draw", "draw", "draw",
+        "fade", "fade", "fade", "fade", "fade", "fade",
+      ];
+      for (let i = items.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        const tmp = items[i];
+        items[i] = items[j];
+        items[j] = tmp;
+      }
+      let valid = true;
+      for (let i = 2; i < items.length; i++) {
+        if (items[i] === items[i - 1] && items[i] === items[i - 2]) {
+          valid = false;
+          break;
+        }
+      }
+      if (valid) return items;
+    }
+  }
+
   const GAMES = {
     combine: {
       id: "combine",
@@ -310,6 +470,9 @@
         const p = this.plan(options);
         const idx = history ? history.length : 0;
         return idx < p.length ? p[idx] : null;
+      },
+      sayTarget: function (target) {
+        return `${target} yards`;
       },
     },
     wedges: {
@@ -325,6 +488,9 @@
         const idx = history ? history.length : 0;
         return idx < p.length ? p[idx] : null;
       },
+      sayTarget: function (target) {
+        return `${target} yards`;
+      },
     },
     random: {
       id: "random",
@@ -339,6 +505,9 @@
         const idx = history ? history.length : 0;
         return idx < p.length ? p[idx] : null;
       },
+      sayTarget: function (target) {
+        return `${target} yards`;
+      },
     },
     ladder: {
       id: "ladder",
@@ -350,6 +519,50 @@
       },
       next: function (options, history) {
         return nextLadder(options, history);
+      },
+      sayTarget: function (target) {
+        return `${target} yards`;
+      },
+    },
+    driving: {
+      id: "driving",
+      name: "Driving",
+      describe: "Driving: 14 tee shots at a 30 yard fairway. Hit driver or your tee club.",
+      clubsHint: "any",
+      plan: function (options) {
+        const count = options?.count ?? DRIVING_SHOTS;
+        return Array(count).fill(0);
+      },
+      next: function (options, history) {
+        const p = this.plan(options);
+        const idx = history ? history.length : 0;
+        return idx < p.length ? p[idx] : null;
+      },
+      sayTarget: function (target) {
+        return "the fairway";
+      },
+      score: function (target, shot) {
+        return scoreDriving(target, shot);
+      },
+    },
+    shaping: {
+      id: "shaping",
+      name: "Shot shaping",
+      describe: "Shot shaping: 12 shots, each a called draw or fade. Any club.",
+      clubsHint: "any",
+      plan: function (options) {
+        return planShaping(options);
+      },
+      next: function (options, history) {
+        const p = this.plan(options);
+        const idx = history ? history.length : 0;
+        return idx < p.length ? p[idx] : null;
+      },
+      sayTarget: function (target) {
+        return target === "draw" || target === "fade" ? `a ${target}` : String(target);
+      },
+      score: function (target, shot) {
+        return scoreShaping(target, shot);
       },
     },
   };
@@ -364,11 +577,23 @@
     WEDGE_TARGETS,
     RANDOM_DEFAULTS,
     LADDER_DEFAULTS,
+    FAIRWAY_HALF_WIDTH_YD,
+    ROUGH_EDGE_YD,
+    DRIVE_HOLE_YD,
+    DRIVE_TEE_EXPECTED,
+    DRIVING_SHOTS,
+    SHAPE_MIN_AXIS,
+    SHAPE_MAX_OFFLINE_PCT,
+    SHAPING_SHOTS,
     mulberry32,
     expectedPutts,
     expectedStrokes,
     scoreShot,
+    scoreDriving,
+    scoreShaping,
+    scoreFor,
     summarize,
+    planShaping,
     GAMES,
   };
 

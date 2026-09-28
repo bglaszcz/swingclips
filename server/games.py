@@ -43,6 +43,7 @@ ADAPTER = """
 SwingGames.list = () => Object.values(SwingGames.GAMES).map(g =>
   ({id: g.id, name: g.name, describe: g.describe, clubsHint: g.clubsHint}));
 SwingGames.nextTarget = (id, options, history) => SwingGames.GAMES[id].next(options, history);
+SwingGames.sayTarget = (id, target) => SwingGames.GAMES[id].sayTarget(target);
 """
 
 
@@ -73,16 +74,34 @@ class Rules:
 
 
 def shot_of(shot: dict | None) -> dict:
-    """{carry, offline} for games.js; carry None for a mishit (as gapping.js isMishit)."""
+    """{carry, offline, club, spinAxis, hla, path, faceToPath} for games.js; carry None for a mishit."""
     b = (shot or {}).get("ball") or {}
+    c = (shot or {}).get("clubData") or {}
     bad = any(d.get("valid") is False or d.get("isValid") is False or d.get("invalid") is True
               for d in (shot or {}, b))
     carry = _finite(b.get("carry"))
-    return {"carry": None if bad or carry is None or carry <= 0 else carry, "offline": _finite(b.get("side"))}
+    path = _finite(c.get("path"))
+    face_to_target = _finite(c.get("faceToTarget"))
+    face_to_path = _finite(face_to_target - path) if face_to_target is not None and path is not None else None
+    return {
+        "carry": None if bad or carry is None or carry <= 0 else carry,
+        "offline": _finite(b.get("side")),
+        "club": (shot or {}).get("club"),
+        "spinAxis": _finite(b.get("spinAxis")),
+        "hla": _finite(b.get("hla")),
+        "path": path,
+        "faceToPath": face_to_path,
+    }
 
 
-def say_yards(y) -> str:
-    return f"{int(y)} yards"
+def say_yards(*args) -> str:
+    if len(args) == 3 and isinstance(args[0], Rules):
+        return args[0].call("sayTarget", args[1], args[2])
+    if len(args) >= 2 and isinstance(args[-1], Rules):
+        return args[-1].call("sayTarget", args[0], args[1])
+    if len(args) == 1 and isinstance(args[0], (int, float)):
+        return f"{int(args[0])} yards"
+    return f"{args[0]} yards" if args else ""
 
 
 class Games:
@@ -100,6 +119,9 @@ class Games:
     def catalog(self) -> list[dict]:
         return self.rules.call("list")
 
+    def say_target(self, game_id: str, target) -> str:
+        return self.rules.call("sayTarget", game_id, target)
+
     def start(self, game_id: str, options: dict | None = None) -> dict:
         games = {g["id"]: g for g in self.catalog()}
         if game_id not in games:
@@ -116,7 +138,7 @@ class Games:
             self.game = {"id": game_id, "name": games[game_id]["name"], "options": options, "started": now,
                          "results": [], "target": first}
             self._save()
-            self._say(f"{games[game_id]['describe']} First target: {say_yards(first)}.")
+            self._say(f"{games[game_id]['describe']} First target: {self.say_target(game_id, first)}.")
             return dict(self.game)
 
     def stop(self) -> dict | None:
@@ -150,7 +172,7 @@ class Games:
                     continue  # never came: the same target is asked again
                 shot = s["shot"]
                 target = g["target"]
-                scored = self.rules.call("scoreShot", target, shot_of(shot))
+                scored = self.rules.call("scoreFor", g["id"], target, shot_of(shot))
                 r = {"t": t, "clip": s["name"], "target": target, "club": shot.get("club"),
                      "carry": _finite((shot.get("ball") or {}).get("carry")),
                      "offline": _finite((shot.get("ball") or {}).get("side")),
@@ -167,7 +189,7 @@ class Games:
                     self._say(f"{verdict}. {g['name']} done. {done['spoken']}")
                     break
                 g["target"] = nxt
-                self._say(f"{verdict}. Next: {say_yards(nxt)}.")
+                self._say(f"{verdict}. Next: {self.say_target(g['id'], nxt)}.")
             if made and self.game:
                 self._save()
             elif self.game and now - max(done_times + [g["started"]]) > IDLE_END_S:
@@ -186,6 +208,8 @@ class Games:
             g = dict(self.game) if self.game else None
             if g:
                 g["summary"] = self.rules.call("summarize", g["results"])
+                if g.get("target") is not None:
+                    g["sayTarget"] = self.say_target(g["id"], g["target"])
             return {"game": g, "games": self.catalog(), "log": self._log()[-log_limit:]}
 
     # ---- Inside (lock held) ----

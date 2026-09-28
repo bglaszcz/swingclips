@@ -319,6 +319,230 @@ test("fixed games next: returns null at the end", () => {
   assert.equal(Games.GAMES.random.next({ seed: 1, count: 20 }, rHist), null);
 });
 
+test("scoreFor: dispatches to game-specific score or falls back to scoreShot", () => {
+  // combine uses scoreShot
+  const c = Games.scoreFor("combine", 100, { carry: 100, offline: 0 });
+  assert.ok(c);
+  assert.equal(c.verdict, "pin high, on line, on the green");
+
+  // driving uses scoreDriving
+  const d = Games.scoreFor("driving", 0, { carry: 240, offline: 5 });
+  assert.ok(d);
+  assert.equal(d.verdict, "fairway, 240");
+
+  // shaping uses scoreShaping
+  const s = Games.scoreFor("shaping", "draw", { carry: 150, offline: -5, spinAxis: -5 });
+  assert.ok(s);
+  assert.equal(s.verdict, "draw, good");
+
+  // unknown falls back to scoreShot
+  const u = Games.scoreFor("unknown", 100, { carry: 100, offline: 0 });
+  assert.ok(u);
+  assert.equal(u.verdict, "pin high, on line, on the green");
+});
+
+test("driving score: band edges at 15 and 30 yd, sg order fairway > rough > miss", () => {
+  const carry = 240;
+  // Par 4 (400 yd): rem = 160 yd -> expectedStrokes(160) = 2.98
+  // Fairway sg: 3.99 - 2.98 - 1 = 0.01
+  // Rough sg: 3.99 - (2.98 + 0.20) - 1 = -0.19
+  // Miss sg: 3.99 - (2.98 + 0.60) - 1 = -0.59
+
+  // Center: fairway
+  const sCenter = Games.scoreFor("driving", 0, { carry, offline: 0 });
+  assert.equal(sCenter.onGreen, true);
+  assert.equal(sCenter.verdict, "fairway, 240");
+  assert.ok(Math.abs(sCenter.sg - 0.01) < 1e-9);
+
+  // Exact fairway edges at 15.0 yd
+  const s15R = Games.scoreFor("driving", 0, { carry, offline: 15.0 });
+  assert.equal(s15R.onGreen, true);
+  assert.equal(s15R.verdict, "fairway, 240");
+  assert.ok(Math.abs(s15R.sg - 0.01) < 1e-9);
+
+  const s15L = Games.scoreFor("driving", 0, { carry, offline: -15.0 });
+  assert.equal(s15L.onGreen, true);
+  assert.equal(s15L.verdict, "fairway, 240");
+  assert.ok(Math.abs(s15L.sg - 0.01) < 1e-9);
+
+  // Just into rough at 15.1 yd
+  const s151R = Games.scoreFor("driving", 0, { carry, offline: 15.1 });
+  assert.equal(s151R.onGreen, false);
+  assert.equal(s151R.verdict, "15 right, rough, 240");
+  assert.ok(Math.abs(s151R.sg - -0.19) < 1e-9);
+
+  const s151L = Games.scoreFor("driving", 0, { carry, offline: -15.1 });
+  assert.equal(s151L.onGreen, false);
+  assert.equal(s151L.verdict, "15 left, rough, 240");
+  assert.ok(Math.abs(s151L.sg - -0.19) < 1e-9);
+
+  // Prompt example: "18 right, rough, 231"
+  const s18R = Games.scoreFor("driving", 0, { carry: 231, offline: 18 });
+  assert.equal(s18R.onGreen, false);
+  assert.equal(s18R.verdict, "18 right, rough, 231");
+
+  // Exact rough edges at 30.0 yd
+  const s30R = Games.scoreFor("driving", 0, { carry, offline: 30.0 });
+  assert.equal(s30R.onGreen, false);
+  assert.equal(s30R.verdict, "30 right, rough, 240");
+  assert.ok(Math.abs(s30R.sg - -0.19) < 1e-9);
+
+  const s30L = Games.scoreFor("driving", 0, { carry, offline: -30.0 });
+  assert.equal(s30L.onGreen, false);
+  assert.equal(s30L.verdict, "30 left, rough, 240");
+  assert.ok(Math.abs(s30L.sg - -0.19) < 1e-9);
+
+  // Just into miss at 30.1 yd
+  const s301R = Games.scoreFor("driving", 0, { carry, offline: 30.1 });
+  assert.equal(s301R.onGreen, false);
+  assert.equal(s301R.verdict, "30 right, a miss, 240");
+  assert.ok(Math.abs(s301R.sg - -0.59) < 1e-9);
+
+  // Prompt example: "35 left, a miss, 220"
+  const s35L = Games.scoreFor("driving", 0, { carry: 220, offline: -35 });
+  assert.equal(s35L.onGreen, false);
+  assert.equal(s35L.verdict, "35 left, a miss, 220");
+
+  // SG order check: fairway > rough > miss
+  assert.ok(sCenter.sg > s151R.sg);
+  assert.ok(s151R.sg > s301R.sg);
+  assert.ok(Math.abs((sCenter.sg - s151R.sg) - 0.20) < 1e-9);
+  assert.ok(Math.abs((s151R.sg - s301R.sg) - 0.40) < 1e-9);
+  assert.ok(Math.abs((sCenter.sg - s301R.sg) - 0.60) < 1e-9);
+
+  // Mishits and invalid inputs
+  assert.equal(Games.scoreFor("driving", 0, null), null);
+  assert.equal(Games.scoreFor("driving", 0, { carry: 0, offline: 0 }), null);
+  assert.equal(Games.scoreFor("driving", 0, { carry: -10, offline: 0 }), null);
+  assert.equal(Games.scoreFor("driving", 0, { carry: 240, offline: null }), null);
+  assert.equal(Games.scoreFor("driving", 0, { carry: 240, offline: NaN }), null);
+
+  // Driving plan and next
+  const dPlan = Games.GAMES.driving.plan();
+  assert.equal(dPlan.length, 14);
+  assert.ok(dPlan.every(t => t === 0));
+  assert.equal(Games.GAMES.driving.next({}, []), 0);
+  assert.equal(
+    Games.GAMES.driving.next({}, Array(14).fill({ target: 0, onGreen: true })),
+    null
+  );
+});
+
+test("shaping score: draw/fade edges at 3 deg, 10% line rule, and missing spinAxis", () => {
+  // 3 deg spinAxis edges: target "draw"
+  // Carry 100: max offline 10 yd
+  const dGood = Games.scoreFor("shaping", "draw", { carry: 100, offline: 0, spinAxis: -3.0 });
+  assert.ok(dGood);
+  assert.equal(dGood.onGreen, true);
+  assert.equal(dGood.verdict, "draw, good");
+  assert.equal(dGood.sg, 0);
+
+  const dStraight = Games.scoreFor("shaping", "draw", { carry: 100, offline: 0, spinAxis: -2.9 });
+  assert.ok(dStraight);
+  assert.equal(dStraight.onGreen, false);
+  assert.equal(dStraight.verdict, "straight, wanted a draw");
+  assert.equal(dStraight.sg, -0.5);
+
+  const dFade = Games.scoreFor("shaping", "draw", { carry: 100, offline: 0, spinAxis: 3.0 });
+  assert.ok(dFade);
+  assert.equal(dFade.onGreen, false);
+  assert.equal(dFade.verdict, "fade, wanted a draw");
+  assert.equal(dFade.sg, -0.5);
+
+  // 3 deg spinAxis edges: target "fade"
+  const fGood = Games.scoreFor("shaping", "fade", { carry: 100, offline: 0, spinAxis: 3.0 });
+  assert.ok(fGood);
+  assert.equal(fGood.onGreen, true);
+  assert.equal(fGood.verdict, "fade, good");
+  assert.equal(fGood.sg, 0);
+
+  const fStraight = Games.scoreFor("shaping", "fade", { carry: 100, offline: 0, spinAxis: 2.9 });
+  assert.ok(fStraight);
+  assert.equal(fStraight.onGreen, false);
+  assert.equal(fStraight.verdict, "straight, wanted a fade");
+  assert.equal(fStraight.sg, -0.5);
+
+  const fDraw = Games.scoreFor("shaping", "fade", { carry: 100, offline: 0, spinAxis: -3.0 });
+  assert.ok(fDraw);
+  assert.equal(fDraw.onGreen, false);
+  assert.equal(fDraw.verdict, "draw, wanted a fade");
+  assert.equal(fDraw.sg, -0.5);
+
+  // 10% line rule: carry 100 -> max offline 10 yd
+  // Offline exactly 10.0 yd -> good
+  const dLine10 = Games.scoreFor("shaping", "draw", { carry: 100, offline: -10.0, spinAxis: -5 });
+  assert.equal(dLine10.onGreen, true);
+  assert.equal(dLine10.verdict, "draw, good");
+
+  // Offline 10.1 yd -> outside line
+  const dLine101 = Games.scoreFor("shaping", "draw", { carry: 100, offline: -10.1, spinAxis: -5 });
+  assert.equal(dLine101.onGreen, false);
+  assert.equal(dLine101.verdict, "draw, but 10 left");
+
+  // Prompt example: "draw, but 14 left"
+  const dPrompt = Games.scoreFor("shaping", "draw", { carry: 100, offline: -14, spinAxis: -5 });
+  assert.equal(dPrompt.onGreen, false);
+  assert.equal(dPrompt.verdict, "draw, but 14 left");
+
+  // Fade with offline too far right
+  const fLineRight = Games.scoreFor("shaping", "fade", { carry: 100, offline: 15, spinAxis: 5 });
+  assert.equal(fLineRight.onGreen, false);
+  assert.equal(fLineRight.verdict, "fade, but 15 right");
+
+  // Missing spinAxis is mishit (null)
+  assert.equal(Games.scoreFor("shaping", "draw", { carry: 100, offline: 0 }), null);
+  assert.equal(Games.scoreFor("shaping", "draw", { carry: 100, offline: 0, spinAxis: null }), null);
+  assert.equal(Games.scoreFor("shaping", "draw", { carry: 100, offline: 0, spinAxis: NaN }), null);
+  assert.equal(Games.scoreFor("shaping", "draw", { carry: 0, offline: 0, spinAxis: -5 }), null);
+  assert.equal(Games.scoreFor("shaping", "draw", { carry: 100, offline: null, spinAxis: -5 }), null);
+  assert.equal(Games.scoreFor("shaping", "straight", { carry: 100, offline: 0, spinAxis: 0 }), null);
+});
+
+test("shaping plan: 6 draws and 6 fades, never 3 in a row, deterministic by seed", () => {
+  const seeds = [1, 2, 7, 42, 99, 100, 999, 12345, 999999];
+  for (const seed of seeds) {
+    const plan = Games.GAMES.shaping.plan({ seed });
+    assert.equal(plan.length, 12, `Seed ${seed} length`);
+    const draws = plan.filter(s => s === "draw").length;
+    const fades = plan.filter(s => s === "fade").length;
+    assert.equal(draws, 6, `Seed ${seed} draws`);
+    assert.equal(fades, 6, `Seed ${seed} fades`);
+
+    // Never 3 of the same in a row
+    for (let i = 2; i < plan.length; i++) {
+      assert.ok(
+        !(plan[i] === plan[i - 1] && plan[i] === plan[i - 2]),
+        `Seed ${seed} had 3 consecutive ${plan[i]} at index ${i}`
+      );
+    }
+  }
+
+  // Determinism
+  const p1 = Games.GAMES.shaping.plan({ seed: 42 });
+  const p2 = Games.GAMES.shaping.plan({ seed: 42 });
+  const p3 = Games.GAMES.shaping.plan({ seed: 99 });
+  assert.deepEqual(p1, p2);
+  assert.notDeepEqual(p1, p3);
+
+  // Next stops at 12 shots
+  const hist = p1.map(t => ({ target: t, onGreen: true }));
+  assert.equal(Games.GAMES.shaping.next({ seed: 42 }, hist), null);
+});
+
+test("every game has sayTarget returning expected phrasing", () => {
+  for (const [id, game] of Object.entries(Games.GAMES)) {
+    assert.equal(typeof game.sayTarget, "function", `Game ${id} has sayTarget`);
+  }
+
+  assert.equal(Games.GAMES.combine.sayTarget(110), "110 yards");
+  assert.equal(Games.GAMES.wedges.sayTarget(40), "40 yards");
+  assert.equal(Games.GAMES.random.sayTarget(75), "75 yards");
+  assert.equal(Games.GAMES.ladder.sayTarget(100), "100 yards");
+  assert.equal(Games.GAMES.driving.sayTarget(0), "the fairway");
+  assert.equal(Games.GAMES.shaping.sayTarget("draw"), "a draw");
+  assert.equal(Games.GAMES.shaping.sayTarget("fade"), "a fade");
+});
+
 test("game definitions have required metadata", () => {
   for (const [id, game] of Object.entries(Games.GAMES)) {
     assert.equal(game.id, id);
@@ -327,5 +551,6 @@ test("game definitions have required metadata", () => {
     assert.ok(game.describe.length > 10);
     assert.equal(game.clubsHint, "any");
     assert.equal(typeof game.next, "function");
+    assert.equal(typeof game.sayTarget, "function");
   }
 });
