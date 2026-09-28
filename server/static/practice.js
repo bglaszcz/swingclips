@@ -43,7 +43,7 @@ async function loadPractice() {
 async function pollPractice() {
   clearTimeout(prTimer);
   if (practiceBox.hidden) return;
-  await loadPractice();
+  await Promise.all([loadPractice(), typeof loadGames === "function" ? loadGames() : null]);
   prTimer = setTimeout(pollPractice, 5000);
 }
 

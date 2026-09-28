@@ -7,6 +7,7 @@ default: a "pose" folder next to the clips folder), SWINGCLIPS_PORT (default 800
 SWINGCLIPS_POSE_MODEL (MediaPipe .task file; default public/mediapipe/pose_landmarker_full.task),
 SWINGCLIPS_LABELS (hand labels for the scorecard, eval.py; default: a "labels" folder next to the clips folder),
 SWINGCLIPS_PRACTICE / SWINGCLIPS_PRACTICE_LOG (practice mode's target and log; default next to the clips folder),
+SWINGCLIPS_GAME / SWINGCLIPS_GAMES_LOG (the practice game in play and finished games; default next to the clips folder),
 SWINGCLIPS_NOISE (the noise floor per number; default noise.json next to the clips folder),
 SWINGCLIPS_GOODSHOTS (the rules for which shots count as good, for your personal ranges; default
 goodshots.json next to the clips folder),
@@ -43,6 +44,7 @@ from pydantic import BaseModel
 
 import ballflight
 import calib
+import games
 import goodshots
 import labelcheck
 import models
@@ -594,28 +596,49 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
 
 
 def practice_worker(stop: threading.Event):
-    """Forever, while practice is on: make each new swing's spoken result once its number is known."""
+    """Forever, while practice is on or a game is in play: make each new swing's spoken result once
+    its number is known."""
     while not stop.is_set():
-        if not practice_state.config["on"]:
+        if not practice_state.config["on"] and not games_state.game:
             stop.wait(2)
             continue
         try:
-            practice_tick()
+            if practice_state.config["on"]:
+                practice_tick()
+            if games_state.game:
+                game_tick()
         except Exception:
             traceback.print_exc()
         stop.wait(1)
 
 
-def practice_tick() -> list[dict]:
-    """One look at the swings since practice was turned on; returns the results made."""
-    clips = listed_clips(since=practice_state.config["since"] - PAIR_SLACK_S)
+def swings_since(since: float) -> list[dict]:
+    """The swings as listed (by the face-on clip, or a lone one) struck after `since`, with the strike's
+    time ("t") and the partner clip's pose state."""
+    clips = listed_clips(since=since - PAIR_SLACK_S)
     by_name = {c["name"]: c for c in clips}
-    # The swings as listed (by the face-on clip, or a lone one), with the strike's time.
     swings_now = [dict(c) for c in clips
                   if SWING_NAME.match(c["name"]) and not (c["partner"] and c["angle"] != "face")]
     for s in swings_now:
         s["t"] = recorded_at(CLIPS_DIR / s["name"])
         s["partnerPose"] = by_name[s["partner"]]["pose"] if s["partner"] in by_name else None
+    return swings_now
+
+
+def game_tick() -> list[dict]:
+    """One look at the swings of the game in play; returns the shots scored."""
+    g = games_state.game
+    if not g:
+        return []
+    made = games_state.step(swings_since(g["started"]))
+    for r in made:
+        print(f"Game: {r['target']} yd target, carry {r['carry']} offline {r['offline']}, sg {r['sg']}", flush=True)
+    return made
+
+
+def practice_tick() -> list[dict]:
+    """One look at the swings since practice was turned on; returns the results made."""
+    swings_now = swings_since(practice_state.config["since"])
     with records_lock:
         # Only records worked out with today's JavaScript and the swing's current partner.
         records = {s["name"]: swing_records[s["name"]] for s in swings_now
@@ -674,6 +697,7 @@ async def lifespan(app: FastAPI):
     worker.join(timeout=5)  # lets it close its JavaScript engine, which otherwise holds up the exit
     camera_setup.close()
     practice.close_rules()
+    games_state.rules.close()
 
 
 app = FastAPI(title="SwingClips", lifespan=lifespan)
@@ -1170,6 +1194,8 @@ async def set_practice(request: Request):
         c = practice_state.set_config(body)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    if c["on"] and games_state.game:
+        games_state.stop()  # one thing spoken after each swing
     m = practice.BY_KEY[c["metric"]]
     print(f"Practice: {'on' if c['on'] else 'off'}, {m['label']} {practice.fmt_range(m, c['min'], c['max'])}", flush=True)
     return c
@@ -1189,9 +1215,53 @@ async def practice_latest(since: int | None = None, angle: str | None = Query(No
     give_up = time.monotonic() + wait
     while True:
         out = practice_state.latest(since, angle)
+        out["on"] = out["on"] or bool(games_state.game)
+        if since is not None:
+            # Practice games speak through the same phone, with ids from the same counter.
+            out["results"] = sorted(out["results"] + [
+                {"id": e["id"], "text": e["text"], "age": round(time.time() - e["made"], 1), "status": None,
+                 "clip": None} for e in games_state.latest(since)], key=lambda e: e["id"])
         if out["results"] or since is None or time.monotonic() >= give_up:
             return out
         await asyncio.sleep(0.25)
+
+
+# ---- Practice games: a target, the shot scored, the next target (see games.py) ----
+GAME_FILE = Path(os.environ.get("SWINGCLIPS_GAME", CLIPS_DIR.parent / "game.json"))
+GAMES_LOG = Path(os.environ.get("SWINGCLIPS_GAMES_LOG", CLIPS_DIR.parent / "games-log.jsonl"))
+games_state = games.Games(GAME_FILE, GAMES_LOG, practice_state.new_id)
+
+
+@app.get("/api/game")
+def get_game():
+    """The game in play (with its score so far), the games there are, and finished games."""
+    return games_state.state()
+
+
+@app.post("/api/game")
+async def start_game(request: Request):
+    """Starts a game: {game: "combine" | "wedges" | "random" | "ladder", options: {...}}. Turns practice
+    mode off, so the phone says one thing after each swing."""
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Expected a game")
+    try:
+        g = games_state.start(body.get("game"), body.get("options") if isinstance(body.get("options"), dict) else {})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if practice_state.config["on"]:
+        practice_state.set_config({**practice_state.config, "on": False})
+    print(f"Game: {g['name']} started, first target {g['target']} yd", flush=True)
+    return g
+
+
+@app.post("/api/game/stop")
+def stop_game():
+    """Ends the game in play and saves it as it stands."""
+    done = games_state.stop()
+    if done:
+        print(f"Game: {done['name']} stopped. {done['spoken']}", flush=True)
+    return {"stopped": done}
 
 
 @app.get("/api/swings")

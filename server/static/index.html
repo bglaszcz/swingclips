@@ -312,6 +312,10 @@
   @media (max-width: 480px) { header { flex-wrap: wrap; row-gap: 6px; } }
   #pr-suggest { font-size: 13px; color: var(--muted); }
   .pr-session { margin-top: 10px; }
+  /* Practice games: a target spoken, the shot scored. */
+  .gm-target { font-size: 16px; font-weight: 600; color: var(--accent); }
+  #gm-now table, #gm-history table { font-size: 13px; border-collapse: collapse; margin-top: 6px; }
+  #gm-now td, #gm-now th, #gm-history td, #gm-history th { padding: 2px 10px 2px 0; text-align: left; white-space: nowrap; }
   .pr-shead { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 13px; }
   .pr-shead span { color: var(--muted); }
   .pr-log { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 4px; }
@@ -990,6 +994,24 @@
     <div class="t-head">
       <strong>Practice</strong><span id="pr-status"></span>
       <button id="pr-close" class="small">Close</button>
+    </div>
+    <div class="t-card">
+      <strong>Games</strong>
+      <div class="t-filters">
+        <label>Game <select id="gm-game"></select></label>
+        <button id="gm-start">Start game</button>
+        <button id="gm-stop" class="small" hidden>Stop</button>
+      </div>
+      <div class="note" id="gm-describe"></div>
+      <div id="gm-msg" class="note"></div>
+      <div id="gm-now"></div>
+      <div class="note">The speaking phone says each target; hit it with the club you would play. Once Square's shot is in
+        (about 15 s) it says where the ball landed against the target and the next one. A net has no roll, so the ball
+        finishes where it lands. Each shot is scored in strokes against a tour player from that distance (+ is better);
+        the Combine is always the same 27 shots, so its score is the one to follow week to week. Starting a game turns
+        the practice number below off.</div>
+      <strong style="margin-top: 8px">Combine scores</strong>
+      <div id="gm-history"></div>
     </div>
     <div class="t-card">
       <div id="pr-state"></div>
@@ -3083,6 +3105,7 @@ setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 <script src="/static/setup.js"></script>
 <script src="/static/shutter.js"></script>
 <script src="/static/practice.js"></script>
+<script src="/static/gamesview.js"></script>
 <script src="/static/status.js"></script>
 <script src="/static/labelview.js"></script>
 <script src="/static/labels.js"></script>

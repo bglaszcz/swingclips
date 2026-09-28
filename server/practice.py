@@ -249,6 +249,11 @@ class Practice:
             tmp.replace(self.config_file)
             return dict(new)
 
+    def new_id(self) -> int:
+        """An id for a sentence the speaking phone says (practice games use the same counter)."""
+        with self.lock:
+            return self._next_id()
+
     def _next_id(self) -> int:
         # Milliseconds, and always going up: ids stay unique across server restarts, so a phone
         # still asking "since" an id from before a restart gets the new results.
