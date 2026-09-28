@@ -628,6 +628,8 @@ review page starts them and one of them does the talking.
   (`journal.json`). When a phone is moved (the golfer's place in its picture shifts by 0.02
   picture heights or size by 6%; within a session it varies ~0.004 and ~2%), the chart marks
   "camera moved" and the tiles only compare that camera's numbers since then.
+  A **Gapping** card maps your bag in the chosen period: each club's median carry and middle-50%
+  spread, and the gaps between neighbouring clubs (flagging overlaps under 7 yd and big gaps over 20 yd).
 - **Compare** (Compare… or C on a swing; `static/compare.js`): this swing against another one,
   usually one of your own better ones. The picker lists every other swing with its date, club and
   Square numbers, filtered to this club and the last 90 days by default, sorted by carry (or ball

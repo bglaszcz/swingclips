@@ -282,6 +282,10 @@
   .p-key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
   .p-key.p-latest { background: var(--dot); } .p-key.p-before { background: var(--muted); opacity: 0.6; }
   #p-hcp-list { display: flex; flex-direction: column; }
+  #p-gapping-chart svg { display: block; width: 100%; min-width: 320px; }
+  .p-gap-row { cursor: pointer; }
+  .p-gap-row:hover .p-gap-bg { fill: var(--sel); }
+  .p-gap-row.sel .p-gap-bg { fill: var(--sel); stroke: var(--accent); stroke-width: 1; }
   .p-hcp-row { display: flex; align-items: center; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
   .p-hcp-row span { flex: 1; color: var(--muted); }
   input { font: inherit; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
@@ -1054,6 +1058,13 @@
         <span><i class="p-key p-before"></i>Sessions before it</span></div>
       <div class="note">The rings hold about two shots in three: a smaller ring is a tighter pattern.</div>
     </div>
+    <div class="t-card" id="p-gapping">
+      <div class="t-head">
+        <strong>Gapping</strong><span id="p-gapping-status" class="note"></span>
+      </div>
+      <div style="overflow-x: auto" id="p-gapping-chart"></div>
+      <div class="note">Each club's median carry and middle 50% spread in this period, and the gap in median carry between neighbouring clubs. Gaps under 7 yd (overlap) or over 20 yd (big gap) are flagged. Mishits and clubs with fewer than 5 shots are left out.</div>
+    </div>
     <div class="t-card">
       <strong>Handicap index</strong>
       <svg id="p-hcp" role="img" aria-label="Handicap index over time"></svg>
@@ -1110,6 +1121,7 @@
 <script src="/static/helps.js"></script>
 <script src="/static/coach.js"></script>
 <script src="/static/focus.js"></script>
+<script src="/static/gapping.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script>

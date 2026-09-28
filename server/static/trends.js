@@ -615,6 +615,7 @@ function renderProgress() {
   renderGoodShots(club);
   renderHelps(club, sessions);
   renderFocus();
+  renderGapping();
 }
 
 for (const [id, key] of [["p-club", "club"], ["p-period", "period"], ["p-metric", "metric"]]) {
@@ -1268,6 +1269,38 @@ function renderFocus() {
     kids.push(el("div", "muted", "Before: " + past.map(p => `${(SwingCoach.MOVES[p.move] || {})[p.aim]?.name || p.move} (${p.since} to ${p.until})`).join("; ")));
   }
   box.replaceChildren(...kids);
+}
+
+/** The card: bag mapping across all clubs hit in the period. */
+function renderGapping() {
+  if (typeof SwingGapping === "undefined") return;
+  const box = document.getElementById("p-gapping-chart");
+  const status = document.getElementById("p-gapping-status");
+  if (!box) return;
+  const allRows = shownClips().filter(c => !c.excluded).map(swingRow);
+  const days = Number(progressPick.period);
+  const since = days ? Date.now() - days * 86400000 : -Infinity;
+  const analysis = SwingGapping.analyze(allRows, { since, clubNameFn: clubName });
+  if (status) {
+    const mapped = analysis.clubs.filter(c => c.enough).length;
+    const parts = [
+      `${analysis.clubs.length} club${analysis.clubs.length === 1 ? "" : "s"} (${mapped} mapped)`,
+      `${analysis.totalShots} shot${analysis.totalShots === 1 ? "" : "s"}`,
+    ];
+    const overlaps = analysis.clubs.filter(c => c.gapFlag === "overlap").length;
+    const bigGaps = analysis.clubs.filter(c => c.gapFlag === "big gap").length;
+    if (overlaps) parts.push(`${overlaps} overlap${overlaps === 1 ? "" : "s"}`);
+    if (bigGaps) parts.push(`${bigGaps} big gap${bigGaps === 1 ? "" : "s"}`);
+    status.textContent = parts.join(" · ");
+  }
+  SwingGapping.render(box, analysis, {
+    selectedClub: progressPick.club,
+    onSelectClub: c => {
+      progressPick.club = c;
+      savePicks();
+      renderProgress();
+    },
+  });
 }
 
 // Charts are drawn to their width.
