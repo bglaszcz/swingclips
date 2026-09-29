@@ -61,7 +61,8 @@ Faults, drills, and a summary sentence highlight what went well and what needs w
   analysis state) and the open swing: its club and carry with newer / older buttons (K / J), both
   angles in sync, a scrubber with P1-P8 marked (or keys 1-8), play (Space), frame steps (← →),
   speeds and full screen (F). **Show ▾** picks the overlays (skeleton, angles, hand path, head,
-  plane). **Compare…** puts it side by side with another swing. **Label** is for the scorecard.
+  plane). **Compare…** puts it side by side with another swing (a good shot, or one from before
+  your focus), key positions lined up. **Label** is for the scorecard.
   **⋯** has handedness, Leave out and Delete. Square's numbers lead with carry, then key
   positions and the swing numbers. Numbers that can't be trusted are greyed with a **~** (hover
   for why), and a "vs my good shots" column shows where each number sat.

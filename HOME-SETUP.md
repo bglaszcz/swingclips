@@ -658,13 +658,20 @@ review page starts them and one of them does the talking.
 - **Compare** (Compare… or C on a swing; `static/compare.js`): this swing against another one,
   usually one of your own better ones. The picker lists every other swing with its date, club and
   Square numbers, filtered to this club and the last 90 days by default, sorted by carry (or ball
-  speed, club speed, smash, straightest, newest). The two then play side by side, one row per
+  speed, club speed, smash, straightest, newest). A ✓ marks good shots (the rules in Progress);
+  **Good shots only** keeps to them, and the period **Before my focus** (there while a focus is set)
+  keeps to swings from before the day it started, to see what the focus has changed. The two then play side by side, one row per
   camera angle both have. **Key positions** (default) lines them up by P1-P8, stretching the time
   between each pair in a straight line, so the reference plays faster or slower between them;
   **Real time** lines them up at impact only, both at real speed, so tempo differences show.
   Play, scrub, frame steps (← →) and P1-P8 (keys 1-8) move both. **Ghost** (G) draws the
   reference's skeleton, dashed, over this swing's video, lined up at address by the feet and hips
-  and scaled by body height. Below: tempo, the body numbers at address / top / P6 / impact for both
+  and scaled by body height. **Key positions** under the videos: both swings' scorecard tiles, a
+  column per P1-P8 (this swing over the reference), each coloured against your good shots with this
+  swing's club as on the swing page. Tapping a column (or keys 1-8) puts both swings there and
+  shows that position's numbers for both, each on a bar against the middle 50% of your good shots
+  (dark mark this swing, pink the reference) with the difference; then each swing's named faults.
+  Below: tempo, the body numbers at address / top / P6 / impact for both
   swings and the difference, and Square's numbers side by side; numbers from a camera that couldn't
   see all of a swing (the camera check) are greyed out. The address bar holds
   `#compare=<clip>,<clip>`, so a comparison can be bookmarked or sent. Swap puts the reference
@@ -1229,9 +1236,8 @@ practice mode (one number, spoken after each swing), what helps / what hurts.
 
 1. **What helps, what hurts**: done (Progress; see "What helps, what hurts" above).
 2. **Focus tracking**: done (Progress, "My focus"; see "My focus" above).
-3. **Compare two swings**: a reference swing (a good one, or one from before a focus) next to the
-   current one, synced on impact, key-position cards lined up (the two-angle sync code carries
-   over).
+3. **Compare two swings**: done (Compare; see "Compare" above): a good shot, or one from before
+   the focus, next to this one, synced by key position or at impact, key-position cards lined up.
 4. **3D from both cameras**: the groundwork is in, off by default (see "3D from both phones"):
    calibration, triangulation, true turns and a kinematic sequence. Next: testing it on the real
    setup, then deciding whether the 3D turns replace the face-on estimates in Trends and Progress.

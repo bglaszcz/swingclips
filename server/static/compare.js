@@ -4,7 +4,10 @@
 // stretched or squeezed in a straight line (piecewise-linear time warping). "Real time" instead
 // lines them up at impact only, so tempo differences show. The reference swing's skeleton can be
 // drawn as a faint ghost over this one's video, lined up at address by the feet and hips and
-// scaled by body height. Linkable as #compare=<clipA>,<clipB>. Esc closes it.
+// scaled by body height. Under the videos, both swings' scorecards (scorecard.js) lined up by key
+// position: a column per P1-P8, tapping one puts both swings there and shows its numbers for both
+// against the range of my good shots. The picker can keep to good shots and to swings from before
+// my focus started. Linkable as #compare=<clipA>,<clipB>. Esc closes it.
 //
 // The time mapping works in the browser (window.SwingCompare) and in Node (module.exports) for
 // testing. The view itself uses the review page's own state and helpers (index.html): clips,
@@ -12,8 +15,9 @@
 // fetchPose, analysisInput, syncPoint, followVideo, frameIndexAt, fitRect, freshCanvas, drawPose,
 // point, fmtValue, fmtWhen, clubName, side, READOUT, DTL_READOUT, SPEEDS, SKELETON, JOINTS, LM,
 // L_INDEX, R_INDEX, SHAFT_CONFIDENT, MIN_VISIBILITY, showToast, lightOf, trustCell, noiseTable; and
-// trends.js's field, fmtField, goodRange, goodSettings and trendDataLoaded (the reference ranges from
-// my good shots, goodshots.js). Each number's trust is trust.js's (SwingTrust), as on the swing page.
+// trends.js's field, fmtField, goodRange, goodShotData, goodSettings, journal and trendDataLoaded (the
+// reference ranges from my good shots, goodshots.js, and my focus); faults.js and scorecard.js.
+// Each number's trust is trust.js's (SwingTrust), as on the swing page.
 (function (root) {
   const KEYS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
 
@@ -89,7 +93,30 @@
     } catch { return null; }
   }
 
-  const api = { KEYS, anchors, warp, rate, unwarp, hashFor, parseHash };
+  /**
+   * The two swings' scorecard tiles (scorecard.js phases) lined up by key position: one column per
+   * key position either swing has, in P1-P8 order, as [{key, a, b}] (a or b null where that swing
+   * has no such position).
+   */
+  function lineUp(phasesA, phasesB) {
+    const of = (list, k) => (list || []).find(p => p.key === k) || null;
+    return KEYS.map(key => ({ key, a: of(phasesA, key), b: of(phasesB, key) })).filter(col => col.a || col.b);
+  }
+
+  /**
+   * The picker's period as [from, to) in ms: "30", "90", "365" days back from now, "0" all, or
+   * "focus": everything before the local day the focus started (focus.since, "YYYY-MM-DD").
+   */
+  function periodRange(period, focus, now = Date.now()) {
+    if (period === "focus") {
+      const since = focus && focus.since ? new Date(focus.since + "T00:00:00").getTime() : NaN;
+      return Number.isFinite(since) ? [0, since] : [0, Infinity];
+    }
+    const days = Number(period);
+    return [days > 0 ? now - days * 86400000 : 0, Infinity];
+  }
+
+  const api = { KEYS, anchors, warp, rate, unwarp, hashFor, parseHash, lineUp, periodRange };
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
   root.SwingCompare = api;
   if (typeof document === "undefined") return;
@@ -112,16 +139,19 @@
   let cmp = null;           // the loaded comparison: {A, B, rows, anch, ghostT, master}
   let picking = false;
   let mode = "keys", ghost = false, skel = true, cSpeed = 1;
-  const pick = { club: null, sort: "carry", period: "90" };
+  let cardKey = null;       // the key position whose numbers show under the lined-up cards
+  let trendTried = false;   // the picker has asked for the trends' data (good shots, the focus): once, so a failing server isn't asked in a loop
+  const pick = { club: null, sort: "carry", period: "90", good: false };
   try {
     const saved = JSON.parse(localStorage.getItem("compare") || "{}");
     if (saved.mode === "impact") mode = "impact";
     ghost = !!saved.ghost;
     if (saved.sort) pick.sort = saved.sort;
     if (saved.period) pick.period = saved.period;
+    pick.good = !!saved.good;
   } catch {}
   const remember = () => {
-    try { localStorage.setItem("compare", JSON.stringify({ mode, ghost, sort: pick.sort, period: pick.period })); } catch {}
+    try { localStorage.setItem("compare", JSON.stringify({ mode, ghost, sort: pick.sort, period: pick.period, good: pick.good })); } catch {}
   };
 
   function el(tag, props = {}, ...children) {
@@ -340,9 +370,10 @@
     m.currentTime = midFrame(p, f[i].t);
   }
 
-  /** Puts both swings at key position `key` (this swing's; the reference follows). */
-  function jumpToPosition(key) {
+  /** Puts both swings at key position `key` (this swing's; the reference follows), and shows its numbers under the cards. */
+  function jumpToPosition(key, select = true) {
     const m = master(), g = cmp && cmp.rows[0];
+    if (cmp && select) selectCard(key);
     if (!m || cmp.A.times[key] == null) return;
     const p = cmp.A.poses[g], i = cmp.A.posIdx[g] && cmp.A.posIdx[g][key];
     m.pause();
@@ -430,6 +461,9 @@
     const key = positionAt(S, g, i);
     stage.pos.textContent = key ? POSITION_TAGS[key] + (S.estimated[key] ? " ~" : "") : "";
     stage.pos.hidden = !key;
+    if (which === "A" && g === cmp.rows[0]) {
+      box.querySelectorAll(".c-card").forEach(b => b.classList.toggle("here", !!key && b.dataset.key === key));
+    }
     if (skel && f.lm) drawPose(ctx, f, r, false, p);
     // The reference at the moment this frame starts, as the others are lined up.
     if (which === "A" && ghost) drawGhost(ctx, r, g, f.t - S.offset[g]);
@@ -509,8 +543,11 @@
       kids.push(el("div", { className: "controls", id: "c-controls" }));
       kids.push(el("div", { className: "note", id: "c-sync-note" }));
     }
+    const cards = renderCards();
+    if (cards) kids.push(cards);
     kids.push(renderNumbers());
     box.replaceChildren(...kids);
+    if (cards) selectCard(cardKey);
     const s = box.querySelector("#c-scrub");
     if (s) {
       s.oninput = () => { const m = master(); m.pause(); m.currentTime = Number(s.value); };
@@ -519,7 +556,7 @@
       for (const S of [cmp.A, cmp.B]) for (const v of Object.values(S.vids)) v.playbackRate = cSpeed;
       const m = master();
       // Start at this swing's address, both lined up.
-      const start = () => { if (cmp.A.times.p1 != null) jumpToPosition("p1"); else syncAll(); };
+      const start = () => { if (cmp.A.times.p1 != null) jumpToPosition("p1", false); else syncAll(); };
       m.readyState ? start() : m.addEventListener("loadedmetadata", start, { once: true });
     }
     resize.disconnect();
@@ -597,6 +634,142 @@
           : "Key positions weren't found in both swings, so they're lined up at impact instead."
         : "Real time: both at the same speed, lined up at impact.") + ghostNote;
     }
+  }
+
+  // ---- Key positions lined up (scorecard.js) ----
+
+  /**
+   * Swing S's scorecard, against the ranges of my good shots with `club`: its body numbers (no
+   * reading left out, as the swing page does), each one's trust, and its faults (faults.js).
+   */
+  function scorecardOf(S, ranges) {
+    if (!S.a || typeof SwingScorecard === "undefined") return null;
+    const body = SwingSummary.bodyNumbers(S.a), trust = {};
+    for (const b of SwingSummary.BODY) {
+      const j = judge(S, SwingTrust.numberOf(b.key), body[b.key]);
+      trust[b.key] = j;
+      if (j && j.level === "none") body[b.key] = null;
+    }
+    const faults = typeof SwingFaults !== "undefined"
+      ? SwingFaults.faultsOf({ ...body, trust }, (r, k) => r.trust && r.trust[k] && r.trust[k].level === "shaky")
+      : [];
+    return SwingScorecard.buildScorecard(S.a.positions, body, trust, ranges, faults);
+  }
+
+  /** The ranges of my good shots with this swing's club, by body number, or {} without them. */
+  function cardRanges() {
+    const club = cmp.A.c.shot ? cmp.A.c.shot.club : null;
+    const out = {};
+    if (!club || !SwingGoodShots.groupOf(club) || typeof goodRange !== "function" || !trendDataLoaded) return out;
+    for (const b of SwingSummary.BODY) out[b.key] = goodRange(club, b.key);
+    return out;
+  }
+
+  const SEVERITY = ["", "slight", "moderate", "big"];
+
+  function faultLine(who, sc) {
+    const list = sc ? sc.faults : [];
+    return el("div", { className: "c-faults" }, el("b", { textContent: who + ": " }),
+      list.length ? list.map(f => `${f.name} (${SEVERITY[f.severity] || ""}, ${f.phaseName.toLowerCase()})`).join(", ")
+                  : sc ? "no named faults" : "not analyzed");
+  }
+
+  /** Both swings' key position cards, lined up in columns; the numbers of the picked one below. */
+  function renderCards() {
+    if (!cmp || (!cmp.A.a && !cmp.B.a) || typeof SwingScorecard === "undefined") return null;
+    const ranges = cardRanges();
+    cmp.scA = scorecardOf(cmp.A, ranges);
+    cmp.scB = scorecardOf(cmp.B, ranges);
+    const cols = SwingCompare.lineUp(cmp.scA && cmp.scA.phases, cmp.scB && cmp.scB.phases);
+    if (!cols.length) return null;
+    cmp.cols = cols;
+    if (!cols.some(c => c.key === cardKey)) cardKey = (cols.find(c => (c.a || c.b).metrics.length) || cols[0]).key;
+
+    const grid = el("div", { className: "c-cardgrid" });
+    grid.style.gridTemplateColumns = `auto repeat(${cols.length}, minmax(64px, 1fr))`;
+    grid.append(el("span"));
+    for (const col of cols) grid.append(el("span", { className: "c-cardhead", textContent: col.key.toUpperCase() }));
+    for (const [which, who] of [["a", "This"], ["b", "Ref"]]) {
+      grid.append(el("span", { className: "c-cardwho", textContent: who }));
+      for (const col of cols) {
+        const p = col[which], S = which === "a" ? cmp.A : cmp.B;
+        if (!p) { grid.append(el("span", { className: "c-card none", textContent: "not found" })); continue; }
+        const b = el("button", { className: `sc-tile c-card ${p.color}` + (which === "b" ? " ref" : ""),
+                                 title: "Put both swings at " + POSITION_TAGS[col.key] + " and show its numbers" },
+          el("span", { textContent: p.name + (S.estimated[col.key] ? " ~" : "") }));
+        b.dataset.key = col.key;
+        b.onclick = () => jumpToPosition(col.key);
+        grid.append(b);
+      }
+    }
+    const club = cmp.A.c.shot ? clubName(cmp.A.c.shot.club).toLowerCase() : null;
+    const hasRanges = Object.values(ranges).some(r => r && r.enough);
+    const note = hasRanges
+      ? `Coloured against your good shots with the ${club}: green inside their middle 50%, amber a little outside, red well outside, dashed = no range or shaky. Tap a column to put both swings there.`
+      : "No good-shot ranges for this club yet, so the cards aren't coloured. Tap a column to put both swings there.";
+    return el("div", { className: "c-cards" }, el("strong", { textContent: "Key positions" }),
+      el("div", { className: "c-scroll" }, grid),
+      el("div", { className: "c-cardnums", id: "c-cardnums" }),
+      faultLine("This swing", cmp.scA), faultLine("Reference", cmp.scB),
+      el("div", { className: "note", textContent: note }));
+  }
+
+  /** Shows key position `key`'s numbers for both swings, each against the range of my good shots. */
+  function selectCard(key) {
+    if (!cmp || !cmp.cols) return;
+    const col = cmp.cols.find(c => c.key === key);
+    const out = box.querySelector("#c-cardnums");
+    if (!col || !out) return;
+    cardKey = key;
+    box.querySelectorAll(".c-card").forEach(b => b.classList.toggle("selected", b.dataset.key === key));
+    const byKey = {};
+    for (const p of [col.a, col.b]) for (const m of (p ? p.metrics : [])) byKey[m.key] = byKey[m.key] || m;
+    const metricOf = (p, k) => p && p.metrics.find(m => m.key === k);
+    // Numbers neither swing has a reading for (a camera it doesn't have, say) are left out.
+    const read = m => m && finite(m.value);
+    const shown = Object.values(byKey).filter(m => read(metricOf(col.a, m.key)) || read(metricOf(col.b, m.key)));
+    const rows = shown.map(first => {
+      const a = metricOf(col.a, first.key), b = metricOf(col.b, first.key), r = first.range;
+      const shakyA = a && a.trust && a.trust.level === "shaky", shakyB = b && b.trust && b.trust.level === "shaky";
+      const fmt = (m, shaky, ref) => el("span", { className: "val" + (ref ? " ref" : "") + (shaky ? " shaky" : ""), textContent: m && finite(m.value) ? scValue(m.value, first.unit) : "--",
+                                             title: shaky ? "Shaky: " + (m.trust.text || "read with low confidence") : "" });
+      const diff = a && b && finite(a.value) && finite(b.value) ? a.value - b.value : null;
+      const line = el("div", { className: "row" }, el("span", { textContent: first.label }),
+        el("span", { className: "c-cardvals" }, fmt(a, shakyA), el("span", { className: "vs", textContent: "vs" }), fmt(b, shakyB, true),
+           el("span", { className: "c-delta", textContent: diff == null ? "" : "Δ " + (diff > 0 ? "+" : diff < 0 ? "−" : "") + SwingGoodShots.amount(diff, first.unit) })));
+      const row = el("div", { className: "sc-num" }, line);
+      const vals = [a && finite(a.value) ? a.value : null, b && finite(b.value) ? b.value : null];
+      if (r && r.enough && vals.some(v => v != null)) {
+        const known = vals.filter(v => v != null);
+        const lo = Math.min(r.q10, ...known), hi = Math.max(r.q90, ...known), pad = (hi - lo) * 0.15 || 1;
+        const start = lo - pad, span = hi + pad - start;
+        const pct = x => Math.max(0, Math.min(100, (x - start) / span * 100));
+        const band = el("div", { className: "sc-band" });
+        band.style.left = pct(r.q25) + "%";
+        band.style.width = (pct(r.q75) - pct(r.q25)) + "%";
+        const bar = el("div", { className: "sc-bar" }, band);
+        vals.forEach((v, i) => {
+          if (v == null) return;
+          const mark = el("div", { className: "sc-mark" + (i ? " ref" : "") + ((i ? shakyB : shakyA) ? " shaky" : "") });
+          mark.style.left = pct(v) + "%";
+          bar.append(mark);
+        });
+        row.append(bar);
+      }
+      return row;
+    });
+    out.replaceChildren(el("div", { className: "c-cardtitle", textContent: `${key.toUpperCase()} ${(col.a || col.b).name}` }),
+      ...(rows.length ? rows : [el("div", { className: "sc-none", textContent: Object.keys(byKey).length
+        ? "Neither swing has a reading at this position." : "No numbers are measured at this position." })]));
+    if (rows.length) out.append(el("div", { className: "note", textContent: "Bars: the green band is the middle 50% of your good shots; the dark mark is this swing, the pink one the reference." }));
+  }
+
+  /** A number as the good-shot ranges show it: signed where the unit has a direction, "+34°", "-1.2 in". */
+  function scValue(v, unit) {
+    if (unit === ":1") return v.toFixed(1) + " : 1";
+    if (unit === "s") return v.toFixed(2) + " s";
+    const t = unit === "in" ? v.toFixed(1) : v.toFixed(0);
+    return (v > 0 && Number(t) !== 0 ? "+" : "") + t.replace(/^-0(\.0)?$/, "0") + (unit === "in" ? " in" : unit || "");
   }
 
   // ---- The numbers ----
@@ -760,18 +933,41 @@
     clubSel.value = clubs.includes(pick.club) ? pick.club : "";
     const sortSel = el("select", { "aria-label": "Sort by" }, ...SORTS.map(([k, label]) => el("option", { value: k, textContent: label })));
     sortSel.value = pick.sort;
-    const periodSel = el("select", { "aria-label": "Period" },
-      ...[["30", "Last 30 days"], ["90", "Last 90 days"], ["365", "Last year"], ["0", "All"]].map(([v, t]) => el("option", { value: v, textContent: t })));
-    periodSel.value = pick.period;
-    const again = () => { pick.club = clubSel.value; pick.sort = sortSel.value; pick.period = periodSel.value; remember(); render(); };
-    clubSel.onchange = sortSel.onchange = periodSel.onchange = again;
+    // Good shots and my focus come with the trends' data: fetched once, then drawn again.
+    const loaded = typeof trendDataLoaded !== "undefined" && trendDataLoaded;
+    if (!loaded && !trendTried && typeof loadTrendData === "function") {
+      trendTried = true;
+      loadTrendData().finally(() => { if (isOpen && picking) render(); });
+    }
+    const focus = loaded && journal && journal.focus && journal.focus.since ? journal.focus : null;
+    const periods = [["30", "Last 30 days"], ["90", "Last 90 days"], ["365", "Last year"], ["0", "All"]];
+    if (focus) periods.push(["focus", `Before my focus (${new Date(focus.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })})`]);
+    const periodSel = el("select", { "aria-label": "Period" }, ...periods.map(([v, t]) => el("option", { value: v, textContent: t })));
+    // "Before my focus" with no focus (yet, or any more) shows the default until there is one.
+    periodSel.value = periods.some(([v]) => v === pick.period) ? pick.period : "90";
+    const goodBox = el("input", { type: "checkbox", checked: pick.good });
+    const again = () => {
+      pick.club = clubSel.value; pick.sort = sortSel.value; pick.good = goodBox.checked;
+      // Keep "Before my focus" while the focus is still loading.
+      if (periodSel.value !== "90" || pick.period !== "focus" || focus) pick.period = periodSel.value;
+      remember(); render();
+    };
+    clubSel.onchange = sortSel.onchange = periodSel.onchange = goodBox.onchange = again;
     wrap.append(el("div", { className: "t-filters" },
-      el("label", {}, "Club ", clubSel), el("label", {}, "Sort by ", sortSel), el("label", {}, "Period ", periodSel)));
+      el("label", {}, "Club ", clubSel), el("label", {}, "Sort by ", sortSel), el("label", {}, "Period ", periodSel),
+      el("label", { title: "Only shots your good-shot rules (Progress) count as good" }, goodBox, " Good shots only")));
 
-    const since = pick.period === "0" ? 0 : Date.now() - Number(pick.period) * 86400000;
+    const [from, to] = SwingCompare.periodRange(periodSel.value, focus);
+    const verdictOf = c => {
+      const club = c.shot && c.shot.club, data = loaded && club && typeof goodShotData === "function" ? goodShotData().clubs[club] : null;
+      return data ? data.verdicts[c.name] || null : null;
+    };
     const aAngles = anglesOf(A);
-    let rows = all.filter(c => (!pick.club || (c.shot && c.shot.club === pick.club)) && new Date(c.recorded).getTime() >= since)
-      .map(c => ({ c, sw: swingOf(c.name), n: SwingSummary.shotNumbers(c.shot) }));
+    let rows = all.filter(c => {
+      const t = new Date(c.recorded).getTime();
+      return (!pick.club || (c.shot && c.shot.club === pick.club)) && t >= from && t < to;
+    }).map(c => ({ c, sw: swingOf(c.name), n: SwingSummary.shotNumbers(c.shot), good: !!(verdictOf(c) || {}).good }));
+    if (pick.good) rows = rows.filter(r => r.good);
     const sort = SORTS.find(s => s[0] === pick.sort) || SORTS[0];
     const value = r => sort[0] === "straight" ? (r.n.offline == null ? null : Math.abs(r.n.offline)) : r.n[sort[0]];
     if (sort[0] !== "newest") {
@@ -784,18 +980,23 @@
     const total = rows.length;
     rows = rows.slice(0, 200);
     if (!rows.length) {
-      wrap.append(el("div", { className: "note", textContent: all.length ? "No swings match: try another club or a longer period." : "There are no other swings yet." }));
+      const why = !all.length ? "There are no other swings yet."
+        : pick.good && !loaded ? "Loading which shots are good…"
+        : pick.good ? "No good shots match: try another club or period, or untick Good shots only. Good shots are set in Progress."
+        : "No swings match: try another club or a longer period.";
+      wrap.append(el("div", { className: "note", textContent: why }));
       return wrap;
     }
     const table = el("table", { className: "c-table c-picktable" }, el("tr", {},
-      ...["When", "Club", "Carry", "Offline", "Ball mph", "Club mph", "Smash", "Angles", ""].map(t => el("th", { textContent: t }))));
+      ...["When", "Club", "Good", "Carry", "Offline", "Ball mph", "Club mph", "Smash", "Angles", ""].map(t => el("th", { textContent: t }))));
     const fmt = (x, d) => x == null ? "–" : x.toFixed(d);
-    for (const { c, sw, n } of rows) {
+    for (const { c, sw, n, good } of rows) {
       const common = anglesOf(sw).filter(g => aAngles.includes(g));
       const states = [c.pose, ...(c.partner ? [clips.find(x => x.name === c.partner)?.pose] : [])];
       const status = !common.length ? "no angle in common" : states.some(s => s !== "done") ? "not analyzed yet" : c.excluded ? "left out of trends" : "";
       const tr = el("tr", { tabIndex: 0 },
         el("td", { textContent: fmtWhen(c.recorded) }), el("td", { textContent: c.shot ? clubName(c.shot.club) : "" }),
+        el("td", { className: good ? "c-goodshot" : "", textContent: good ? "✓" : "", title: good ? "A good shot by your rules (Progress)" : "" }),
         el("td", { textContent: fmt(n.carry, 0) }), el("td", { textContent: n.offline == null ? "–" : side(n.offline).replace("°", " yd") }),
         el("td", { textContent: fmt(n.ballSpeed, 1) }), el("td", { textContent: fmt(n.clubSpeed, 1) }), el("td", { textContent: fmt(n.smash, 2) }),
         el("td", { textContent: anglesOf(sw).length === 2 ? "both" : anglesOf(sw)[0] === "dtl" ? "down the line" : "face-on" }),
@@ -812,7 +1013,8 @@
     wrap.append(el("div", { className: "c-scroll" }, table));
     wrap.append(el("div", { className: "note", textContent:
       (total > rows.length ? `The first ${rows.length} of ${total}. ` : "") +
-      "Tap a swing to compare with it. Numbers are from the launch monitor; Straightest sorts by how far offline." }));
+      "Tap a swing to compare with it. Numbers are from the launch monitor; Straightest sorts by how far offline. ✓ = a good shot by your rules in Progress." +
+      (periodSel.value === "focus" ? ` Before my focus: swings before ${focus.since}, when you started working on ${field(focus.move).label.toLowerCase()}.` : "") }));
     return wrap;
   }
 

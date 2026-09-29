@@ -17,7 +17,7 @@
     --accent-soft: #e4f4ea; --sel: #e6f3ea; --warn: #b45309; --warn-soft: #fdf1e3; --bad: #dc2626;
     --dot: #16803f; --shadow: 0 1px 2px rgba(16, 24, 18, 0.06), 0 1px 3px rgba(16, 24, 18, 0.08);
     --shadow-lg: 0 12px 32px rgba(16, 24, 18, 0.18); --radius: 12px; --radius-sm: 8px;
-    --appbar-h: 56px; --tabbar-h: 0px;
+    --appbar-h: 56px; --tabbar-h: 0px; --ref: #a21caf;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -25,6 +25,7 @@
       --line: #223029; --line-strong: #2f3f35; --accent: #34c26f; --accent-2: #4ad283; --accent-text: #04130a;
       --accent-soft: #143322; --sel: #16291d; --warn: #f59e0b; --warn-soft: #2d2110; --bad: #f87171;
       --dot: #34b86a; --shadow: 0 1px 2px rgba(0, 0, 0, 0.4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+      --ref: #e879f9;
     }
   }
   * { box-sizing: border-box; }
@@ -518,6 +519,25 @@
   .c-picktable tr:not(:first-child):hover { background: var(--sel); }
   .c-picktable tr.off { cursor: default; opacity: 0.5; }
   .c-picktable tr.off:hover { background: none; }
+  .c-picktable td.c-goodshot { color: var(--accent); text-align: center; font-weight: 700; }
+  /* Key positions lined up: a column per P1-P8, this swing's card over the reference's. */
+  .c-cards { display: flex; flex-direction: column; gap: 8px; }
+  .c-cardgrid { display: grid; gap: 6px; align-items: stretch; }
+  .c-cardhead { font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; }
+  .c-cardwho { font-size: 12px; color: var(--muted); align-self: center; padding-right: 4px; }
+  .sc-tile.c-card { min-width: 0; padding: 6px 8px; font-size: 12px; line-height: 1.25; overflow-wrap: anywhere; }
+  .sc-tile.c-card span { font-size: 12px; }
+  .sc-tile.c-card.here { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .c-card.none { font-size: 11px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 6px 8px; text-align: center; }
+  .c-cardtitle { font-size: 14px; font-weight: 600; }
+  .c-cardnums { display: flex; flex-direction: column; gap: 10px; }
+  .c-cardvals { display: inline-flex; gap: 6px; align-items: baseline; flex-wrap: wrap; justify-content: flex-end; }
+  .c-cardvals .vs { color: var(--muted); font-size: 11px; }
+  .c-cardvals .val.ref { color: var(--ref); }
+  .c-delta { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; }
+  .sc-mark.ref { background: var(--ref); }
+  .c-faults { font-size: 13px; }
+  .c-faults b { font-weight: 600; }
   .c-picktable td:first-child { color: var(--text); }
   .c-picktable .c-status { color: var(--muted); font-size: 12px; text-align: left; }
 
@@ -2187,7 +2207,7 @@ async function buildPositions(name) {
   dtlMetrics = a.dtlMetrics;
   showCameraCheck(a, analysisInput(name, pose));
   if (!noiseTable) await loadNoise();
-  if (run !== positionsRun || current !== name) return;
+  if (run !== positionsRun || current !== name || !pose) return;
   showNumbers();
   show3d(name);
   redraw();
@@ -2215,6 +2235,8 @@ async function buildPositions(name) {
 
   if (thumbVideo.src !== video.src) thumbVideo.src = video.src;
   await whenReady(thumbVideo, "loadeddata", () => thumbVideo.readyState >= 2);
+  // Another swing (or Compare's) may have been opened meanwhile.
+  if (run !== positionsRun || current !== name || !pose) return;
   const crop = cropFor(positions.map(p => p.index), 192 / 256);
   // The same moments down the line.
   const otherIdx = other ? positions.map(p => frameIndexAt(toPartnerTime(p.t), other)) : [];
@@ -2222,6 +2244,7 @@ async function buildPositions(name) {
   if (other) {
     if (thumbVideo2.src !== video2.src) thumbVideo2.src = video2.src;
     await whenReady(thumbVideo2, "loadeddata", () => thumbVideo2.readyState >= 2);
+    if (run !== positionsRun || current !== name || !pose) return;
     otherCrop = cropFor(otherIdx, 192 / 256, other);
   }
   for (let i = 0; i < cards.length; i++) {

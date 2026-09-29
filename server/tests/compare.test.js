@@ -86,3 +86,29 @@ test("links", () => {
   assert.equal(C.parseHash("#" + a), null);
   assert.equal(C.parseHash(""), null);
 });
+
+test("key position cards line up by position, in P1-P8 order", () => {
+  const A = [{ key: "p4", color: "green" }, { key: "p1", color: "grey" }, { key: "p7", color: "red" }];
+  const B = [{ key: "p1", color: "green" }, { key: "p7", color: "amber" }, { key: "p8", color: "grey" }];
+  const cols = C.lineUp(A, B);
+  assert.deepEqual(cols.map(c => c.key), ["p1", "p4", "p7", "p8"]);
+  assert.equal(cols[1].b, null, "the reference has no top");
+  assert.equal(cols[3].a, null, "this swing has no finish");
+  assert.equal(cols[2].a.color, "red");
+  assert.equal(cols[2].b.color, "amber");
+  assert.deepEqual(C.lineUp(null, B).map(c => c.key), ["p1", "p7", "p8"], "one swing not analyzed");
+  assert.deepEqual(C.lineUp(null, null), []);
+});
+
+test("the picker's periods", () => {
+  const now = new Date("2026-09-29T12:00:00").getTime();
+  assert.deepEqual(C.periodRange("0", null, now), [0, Infinity]);
+  assert.deepEqual(C.periodRange("30", null, now), [now - 30 * 86400000, Infinity]);
+  // Before my focus: everything up to the start of the local day it began.
+  const [from, to] = C.periodRange("focus", { since: "2026-09-10" }, now);
+  assert.equal(from, 0);
+  assert.equal(to, new Date("2026-09-10T00:00:00").getTime());
+  assert.ok(new Date("2026-09-09T23:59:00").getTime() < to && new Date("2026-09-10T07:00:00").getTime() >= to);
+  // No focus: nothing is cut off.
+  assert.deepEqual(C.periodRange("focus", null, now), [0, Infinity]);
+});
