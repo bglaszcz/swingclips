@@ -16,7 +16,7 @@ monitor's numbers for that shot.
 ## A session
 
 1. **Server** - running (see "Server" below for updates).
-2. **Phones** - open **SwingClips** on each (capture app 0.7); nothing to press, they stay on their
+2. **Phones** - open **SwingClips** on each (capture app 0.8); nothing to press, they stay on their
    stands. Stand at the ball: **one** phone (the one with Practice voice on, face-on by default)
    says how both cameras see you, only when it changes: "Both cameras look good", or "Face-on good.
    Down the line: tilt the phone up".
@@ -514,7 +514,8 @@ toward the ball". The phones face away from you, so voice is the channel.
   range (70%), 2 no reading"). No readings don't count toward the share. Tap a row to open the swing.
 - Endpoints: `GET /api/practice` (target, the list of numbers, the log, which phones listened),
   `POST /api/practice` (`{on, metric, min, max, club, streak}`), `POST /api/practice/test`,
-  `GET /api/practice/latest`.
+  `GET /api/practice/latest`, `GET /api/game` (game in play, state, finished games),
+  `POST /api/game` (`{game, options}`), `POST /api/game/stop`.
 - **Practice games** (Games card at the top of Practice): pick Combine, Wedge ladder, Random pick, Ladder,
   Driving, Shot shaping, Distance control or Hole builder and press Start game. The speaking phone says the target; once Square's shot pairs
   (~15 s) it says where the ball landed ("8 short, 3 right, on the green") and the next target. A swing whose
@@ -754,6 +755,29 @@ set SWINGCLIPS_POSE_BACKEND=rtmpose-m
   numbers follow. A clip that fails keeps its old result. Delete the line (or the file) to go back:
   the clips are then analyzed again with MediaPipe the same way.
 
+#### Settings (`server\settings.cmd`)
+Settings can be set in `server\settings.cmd` (or the Windows environment). User-facing settings:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `SWINGCLIPS_PORT` | `8000` | Port the web server listens on. |
+| `SWINGCLIPS_CLIPS` | `D:\SwingClips\clips` | Root folder for clips, pose files, shots and logs. |
+| `SWINGCLIPS_TRASH` | `D:\SwingClips\trash` | Folder where deleted clips and shots are moved. |
+| `SWINGCLIPS_MODELS` | `public\models` | Folder where downloaded ONNX models are stored. |
+| `SWINGCLIPS_CALIB` | `D:\SwingClips\calib` | Calibration files for two-camera 3D. |
+| `SWINGCLIPS_EVAL` | `D:\SwingClips\eval` | Output folder for `eval.py` scorecard runs. |
+| `SWINGCLIPS_POSE_BACKEND` | `mediapipe` (`rtmpose-m` in `settings.cmd`) | Body pose model: `mediapipe`, `rtmpose-m`, `rtmpose-l` or `rtmw`. |
+| `SWINGCLIPS_ORT_PROVIDER` | `cpu` | ONNX Runtime provider: `cpu`, `dml` (DirectX 12 / Intel GPU), `cuda` or `auto`. |
+| `SWINGCLIPS_ORT_DEVICE` | `0` | GPU device index for `dml` or `cuda`. |
+| `SWINGCLIPS_POSE_WORKERS` | half of logical CPUs | Background worker processes for clip analysis. |
+| `SWINGCLIPS_BODY_STRIDE` | `2` on CPU (`1` on GPU) | Body model stride during session (1 = every frame, 2 = every other). |
+| `SWINGCLIPS_DURING_SESSION` | unset | Set to `wait` to pause clip analysis until 10 min after session ends. |
+| `SWINGCLIPS_DEEP` | `on` | Set to `off` to disable the background deep pass after a session. |
+| `SWINGCLIPS_QUICK` | `on` | Set to `off` to disable quick pass optimizations during a session. |
+| `SWINGCLIPS_3D` | `1` | Set to `0` or `off` to turn off 3D joint triangulation. |
+| `SWINGCLIPS_CLUB_BACKEND` | `raycast` | Club tracker: `raycast` (ray casting) or `yolo` (YOLO pose model). |
+
+
 #### Recording first, the deep pass after the session
 During a session the server's first job is taking the clips in; the careful analysis comes after.
 - **A session is on** while a phone is recording, and until 10 minutes after the last clip came in.
@@ -980,7 +1004,7 @@ server's case decides the card:
 - 6 workers each hold their own copy of the model on the card: a few hundred MB each with CUDA, so
   6 GB is plenty.
 
-#### The ball search (pose.py, `BALL_VERSION` 2)
+#### The ball search (pose.py, `BALL_VERSION` 4)
 Impact is the first frame the ball is gone. A spot only counts as the ball if it's a ball's size
 (1-3% of nose-to-feet height), where a ball sits for the camera's angle (face-on below the feet;
 down the line level with them or a little above) and leaves between 80 ms before and 10 ms after

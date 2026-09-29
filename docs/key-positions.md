@@ -110,7 +110,7 @@ is (nothing it can tune helps). Three swings have the camera 80-133 ms later tha
 angles, the same pattern as the nine that were relabeled: 1790353567, 1790354222, 1790371527 (Sep
 25), likely early labels. The camera onset isn't in the pose files yet (it runs on video crops
 behind the ball), so using it for the takeaway means computing it during analysis and letting
-phases.js take it when present. Scored with the server's `/api/clubmotion`, quiet from 0.35 s
+phases.js take it when present. Scored with the server's `/api/clubmotion/<clip>`, quiet from 0.35 s
 before the label.
 
 ### Takeaway: why it got late, and the first thing that moves
