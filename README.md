@@ -49,6 +49,10 @@ Tabs along the top (along the bottom on a phone): **Swings**, **Progress**, **Pr
 **Cameras** and **Tools**. On a phone, "Add to Home screen" installs it like an app. **?** lists
 the keyboard shortcuts.
 
+The **Swings** tab shows a phase scorecard for each swing, breaking it down from Address to Finish. 
+Click a phase tile to see the video frame and its numbers against your personal good-shot range. 
+Faults, drills, and a summary sentence highlight what went well and what needs work.
+
 - **Ready bar** (under the tabs): both phones, Square, framing and the server's queue at a glance,
   with Start and Stop for both phones or each one.
 - **Swings**: the list by session (a club filter at the top, each swing with its club, carry and

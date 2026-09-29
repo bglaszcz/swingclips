@@ -80,7 +80,7 @@ monitor's numbers for that shot.
 ### Two angles
 - Each phone listens for the strike on its own; they don't talk to each other. The server pairs a
   face-on and a down-the-line clip whose strikes are within 2 s (strikes are at least 3 s apart).
-- The review page lists one row per swing ("2 angles") and plays both side by side. The
+- The review page lists one row per swing ("2 angles") and plays both side by side. The swing view features a phase scorecard that details how each part of the swing went (Address to Finish), tagging faults and comparing numbers to the golfer's personal good-shot range. The
   down-the-line video follows the face-on one: exactly when paused or stepping frames, and nudged
   back if it drifts while playing. They're lined up on impact: the frame the ball is gone in each
   clip when the server found the ball in both, else the strike each phone heard.

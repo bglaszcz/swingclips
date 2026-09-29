@@ -1224,6 +1224,7 @@
 <script src="/static/goodshots.js"></script>
 <script src="/static/helps.js"></script>
 <script src="/static/coach.js"></script>
+<script src="/static/scorecard.js"></script>
 <script src="/static/focus.js"></script>
 <script src="/static/gapping.js"></script>
 <script src="/static/wedges.js"></script>
@@ -2273,105 +2274,114 @@ function openGoodRanges(tp, facts) {
 /** Tempo, and the numbers at address, the top, P6 and impact: face-on, then down the line. */
 function showNumbers() {
   const box = document.getElementById("numbers");
-  const cols = ["p1", "p4", "p6", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
-  box.hidden = !(metrics || dtlMetrics) || !cols.length;
-  if (box.hidden) return;
-  document.getElementById("face-note").hidden = !metrics;
-  document.getElementById("dtl-note").hidden = !dtlMetrics;
+  const oldPosBox = document.getElementById("positions");
+  
   const facts = openFacts();
+  if (!lastCameraCheck) { box.hidden = true; oldPosBox.hidden = true; return; }
+  
+  const a = lastCameraCheck[0];
+  const c = clips.find(x => x.name === current);
+  if (!c) { box.hidden = true; oldPosBox.hidden = true; return; }
+  
   const tp = metrics && metrics.tempo;
-  const tempoBox = document.getElementById("tempo");
-  tempoBox.replaceChildren();
-  if (tp) {
-    const part = (key, text) => trustCell(document.createElement("span"), text,
-      facts && SwingTrust.judge(SwingTrust.numberOf(key), facts, { tempo: tp.ratio, backswing: tp.back, downswing: tp.down }[key], noiseTable));
-    tempoBox.append("Tempo ", part("tempo", `${tp.ratio.toFixed(1)} : 1`), " - backswing ", part("backswing", `${tp.back.toFixed(2)} s`),
-                    " (from takeaway), downswing ", part("downswing", `${tp.down.toFixed(2)} s`));
-  }
   const good = openGoodRanges(tp, facts);
-  const faultsEl = document.getElementById("num-faults");
-  faultsEl.replaceChildren();
-  if (lastCameraCheck) {
-    const body = SwingSummary.bodyNumbers(lastCameraCheck[0]);
-    const trust = {};
-    for (const b of SwingSummary.BODY) {
-      const j = facts && SwingTrust.judge(SwingTrust.numberOf(b.key), facts, body[b.key], noiseTable);
-      trust[b.key] = j;
-      if (j && j.level === "none") body[b.key] = null;
-    }
-    const openRow = { ...body, trust };
-    const faults = typeof SwingFaults !== "undefined"
-      ? SwingFaults.faultsOf(openRow, (r, k) => r.trust && r.trust[k] && r.trust[k].level === "shaky")
-      : [];
-    if (faults.length) {
-      faultsEl.append("Faults on this swing: ");
-      faults.forEach((f, i) => {
-        if (i > 0) faultsEl.append(", ");
-        const span = document.createElement("span");
-        span.textContent = f.name;
-        if (f.thought) span.title = f.thought;
-        faultsEl.append(span);
-      });
-    }
+  
+  const swingData = {
+     record: c,
+     light: lightOf(current),
+     club: c.shot ? c.shot.club : null,
+     positions: a.positions
+  };
+  
+  const scorecard = SwingScorecard.buildScorecard(swingData, good.ranges, noiseTable);
+  window.currentScorecard = scorecard;
+  
+  let html = `<div style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">Scorecard</div>
+    <div style="margin-bottom: 16px; font-size: 14px;"><strong>Summary:</strong> ${scorecard.summarySentence}</div>
+    <div class="sc-phases" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px;">`;
+  
+  scorecard.phases.forEach((p) => {
+     const colorMap = { green: 'var(--accent)', amber: '#f59e0b', red: '#ef4444', grey: 'var(--muted)', none: 'transparent' };
+     const bg = colorMap[p.color] || 'var(--muted)';
+     html += `<button class="pos" style="flex: 0 0 auto; border: 2px solid ${bg}; padding: 10px 14px; background: ${p.color==='green'?'var(--accent-soft)':'var(--panel)'}" onclick="jumpToPhase('${p.key}')">
+        <strong>${p.name}</strong>
+     </button>`;
+  });
+  html += `</div>
+    <div id="sc-details" style="margin-top: 12px;"></div>
+    <div id="sc-faults" style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">`;
+    
+  scorecard.faults.forEach(f => {
+     const coach = typeof SwingCoach !== 'undefined' ? SwingCoach.MOVES[f.key] : null;
+     const thought = coach ? (f.dir === 'more' ? coach.more.thought : coach.less.thought) : "";
+     const drill = coach ? (f.dir === 'more' ? coach.more.drill : coach.less.drill) : "";
+     html += `<details class="explain card"><summary><strong style="color:#ef4444">${f.phaseName}: ${f.name}</strong> (Severity ${f.severity})</summary>
+       <div class="note" style="margin-top:8px;"><strong>Thought:</strong> ${thought}</div>
+       <div class="note"><strong>Drill:</strong> ${drill}</div>
+     </details>`;
+  });
+  html += `</div>`;
+  
+  box.innerHTML = html;
+  box.hidden = false;
+  oldPosBox.hidden = true; // hide original positions box entirely
+
+  if (scorecard.phases.length) {
+    jumpToPhase(scorecard.phases[0].key, true);
   }
-  const table = document.getElementById("num-table");
-  const head = document.createElement("tr");
-  head.innerHTML = "<th></th>";
-  for (const p of cols) {
-    const th = document.createElement("th");
-    th.textContent = `${p.tag} ${p.label}${p.estimated ? " ~" : ""}`;
-    head.append(th);
+}
+
+window.jumpToPhase = function(key, noSeek) {
+  const p = window.currentScorecard.phases.find(x => x.key === key);
+  if (!p) return;
+  if (!noSeek && p.index != null) jumpTo(p.index);
+  
+  const detailsBox = document.getElementById("sc-details");
+  if (!detailsBox) return;
+  
+  if (p.metrics.length === 0) {
+    detailsBox.innerHTML = `<div class="hint">No numbers for this phase.</div>`;
+  } else {
+    let dHtml = `<strong style="display:block; margin-bottom:12px;">${p.name} Numbers</strong><div style="display: flex; flex-direction: column; gap: 14px;">`;
+    p.metrics.forEach(m => {
+       const v = m.value != null ? m.value.toFixed(1) : '--';
+       const u = m.unit || '';
+       const shaky = m.trust && m.trust.level === 'shaky';
+       const valStyle = shaky ? 'color: var(--muted); text-decoration: underline dashed;' : 'font-weight: 650; font-size: 15px;';
+       
+       let barHtml = "";
+       if (m.range && m.range.enough && m.value != null) {
+         const min = Math.min(m.range.q10, m.value) - Math.abs(m.range.q10)*0.2 - 1;
+         const max = Math.max(m.range.q90, m.value) + Math.abs(m.range.q90)*0.2 + 1;
+         const span = max - min || 1;
+         const pct = x => Math.max(0, Math.min(100, ((x - min) / span) * 100));
+         const q25 = pct(m.range.q25);
+         const q75 = pct(m.range.q75);
+         const valPct = pct(m.value);
+         
+         barHtml = `<div style="position: relative; height: 12px; background: var(--line); border-radius: 6px; margin-top: 6px; overflow: hidden;">
+           <div style="position: absolute; left: ${q25}%; width: ${q75 - q25}%; height: 100%; background: var(--accent);"></div>
+           <div style="position: absolute; left: calc(${valPct}% - 2px); width: 4px; height: 100%; background: var(--text); border-radius: 2px; ${shaky ? 'opacity: 0.5' : ''}"></div>
+         </div>`;
+       } else {
+         barHtml = `<div class="hint" style="margin-top: 2px;">${m.trust && m.trust.level === 'none' ? 'No reading' : 'No range yet'}</div>`;
+       }
+       
+       dHtml += `<div>
+         <div style="display: flex; justify-content: space-between; align-items: center; font-size: 14px;">
+           <span>${m.label}</span>
+           <span style="${valStyle}" title="${shaky ? 'Shaky: ' + m.trust.text : ''}">${v}${u}</span>
+         </div>
+         ${barHtml}
+       </div>`;
+    });
+    dHtml += `</div>`;
+    detailsBox.innerHTML = dHtml;
   }
-  if (good.any) head.append(Object.assign(document.createElement("th"), { className: "gs-text", textContent: `vs my good shots (${clubName(good.club)})` }));
-  // Each view's rows under its own heading; the down-the-line clip is read at the same moments.
-  const sections = [];
-  if (metrics) sections.push(["Face-on", READOUT, metrics, cols.map(p => p.index), "face"]);
-  if (dtlMetrics) {
-    const dp = partner ? partner.pose : pose;
-    sections.push(["Down the line", DTL_READOUT, dtlMetrics, cols.map(p => positionIndex(p.key, dp)), "dtl"]);
-  }
-  const rows = [];
-  let shaky = 0, none = 0;
-  for (const [title, readout, m, idx, view] of sections) {
-    if (sections.length > 1) {
-      const tr = document.createElement("tr");
-      tr.className = "group";
-      tr.innerHTML = `<th colspan="${cols.length + 1 + (good.any ? 1 : 0)}"></th>`;
-      tr.firstChild.textContent = title;
-      rows.push(tr);
-    }
-    for (const [label, key, unit] of readout) {
-      const tr = document.createElement("tr");
-      const name = document.createElement("td");
-      name.textContent = label;
-      tr.append(name);
-      const said = [];
-      idx.forEach((i, c) => {
-        const v = m.values[i];
-        const j = facts && SwingTrust.judge({ view, value: key, pos: cols[c].key }, facts, v ? v[key] : null, noiseTable, unit);
-        if (j && j.level === "shaky") shaky++;
-        if (j && j.level === "none" && v && v[key] != null) none++;
-        const td = trustCell(document.createElement("td"), fmtValue(v, key, unit), j);
-        // The body number read here (summary.js BODY), against its range on my good shots.
-        const b = good.any && SwingSummary.BODY.find(f => f.view === view && f.value === key && f.pos === cols[c].key);
-        if (b && (!j || j.level !== "none")) {
-          const r = good.ranges[b.key], at = SwingGoodShots.place(v ? v[key] : null, r, b.unit);
-          if (at.status === "in" || at.status === "above" || at.status === "below") {
-            td.classList.add(at.status === "in" ? "gs-in" : "gs-out");
-            td.title = (td.title ? td.title + "\n" : "") + `My good shots: ${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)} (middle 50% of ${r.n})`;
-          }
-          said.push(`${cols[c].tag}: ${at.text}` + (r && r.enough ? ` (${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)})` : ""));
-        }
-        tr.append(td);
-      });
-      if (good.any) tr.append(Object.assign(document.createElement("td"), { className: "gs-text", textContent: said.join("; ") }));
-      rows.push(tr);
-    }
-  }
-  table.replaceChildren(head, ...rows);
-  document.getElementById("trust-note").textContent = shaky || none
-    ? "Greyed ~ = shaky: tracking noise or the conditions could account for it. -- = no reading: that camera couldn't see all of you, or it couldn't be measured. Hover for why."
-    : "";
+  
+  document.querySelectorAll('.sc-phases .pos').forEach(btn => {
+    btn.classList.toggle('here', btn.textContent.trim() === p.name);
+  });
 }
 
 function jumpTo(index) {
