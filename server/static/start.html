@@ -374,12 +374,9 @@ async function pollSwings() {
 }
 async function pollGame() {
   clearTimeout(gameTimer);
-  if (document.hidden) return;
   const data = await getJson("/api/game");
   if (data) renderGame(data);
-  if (!document.hidden) {
-    gameTimer = setTimeout(pollGame, 2000);
-  }
+  gameTimer = setTimeout(pollGame, document.hidden ? 20000 : 2000);
 }
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
