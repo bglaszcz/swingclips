@@ -524,7 +524,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   fades by spin axis, while Distance control tests 15 random carries (50-130 yd) scored on carry alone against a 5-yard window. Targets and scoring are `static/games.js`, the game in play `game.json` and finished
   games `games-log.jsonl` next to the clips folder (`server/games.py`). Starting a game turns the practice number
   off, and turning that on stops the game. The Combine is always the same 27 shots (9 targets, 50-170 yd,
-  shuffled), so its score is comparable across weeks. Under the Combine scores table, "Where you lose strokes" breaks down strokes gained by target distance over the last 3 Combines to pinpoint the weakest yardages. No phone update needed.
+  shuffled), so its score is comparable across weeks. Under the Combine scores table, "Where you lose strokes" breaks down strokes gained by target distance over the last 3 Combines to pinpoint the weakest yardages. The Past games table lets you pick any game to view past sessions with that game's own hit wording (on the green, in the fairway, shaped as called, or within 5 yards). No phone update needed.
 
 ### Ready panel: both phones from the review page (capture app 0.6)
 One place to see "ready", and fewer walks to the phones. The phones face away from you, so the

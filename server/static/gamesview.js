@@ -16,6 +16,13 @@ async function loadGames() {
   renderGames();
 }
 
+// Matches HIT_WORDS in server/games.py (the game in play has g.hitWord, but past games need it too)
+const HIT_WORDS = {
+  driving: "in the fairway",
+  shaping: "shaped as called",
+  distance: "within 5 yards",
+};
+
 const gmSg = v => v == null || !Number.isFinite(v) ? "–" : (v >= 0 ? "+" : "") + v.toFixed(2);
 const gmYd = v => v == null || !Number.isFinite(v) ? "–" : Math.round(v) + " yd";
 const gmDay = t => new Date(t * 1000).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
@@ -52,40 +59,63 @@ function renderGames() {
       ...(g.results.length ? [gmResultsTable([...g.results].reverse())] : []));
   }
 
-  // Finished Combines, newest first: the number to follow.
-  const combines = gmState.log.filter(x => x.id === "combine" && x.summary).reverse();
+  // Past games history for the selected game.
+  const hSel = gmEl("gm-history-game");
+  if (hSel && !hSel.options.length && gmState.games) {
+    hSel.replaceChildren(...gmState.games.map(x =>
+      Object.assign(document.createElement("option"), { value: x.id, textContent: x.name })));
+    hSel.value = "combine";
+  }
+  const selectedGame = (hSel && hSel.value) || "combine";
+  const gameObj = (gmState.games || []).find(x => x.id === selectedGame);
+  const gameName = (gameObj && gameObj.name) || (selectedGame === "combine" ? "Combine" : selectedGame);
+
+  const history = typeof SwingGames !== "undefined" && SwingGames.gameHistory
+    ? SwingGames.gameHistory(gmState.log, selectedGame)
+    : [];
+
   const box = gmEl("gm-history");
-  if (!combines.length) { box.textContent = "No Combine finished yet."; return; }
+  if (!history.length) {
+    box.textContent = `No ${gameName} finished yet.`;
+    return;
+  }
+  const hitWord = HIT_WORDS[selectedGame] || "on the green";
+  const hitHeader = hitWord.charAt(0).toUpperCase() + hitWord.slice(1);
   const t = document.createElement("table");
   t.append(Object.assign(document.createElement("tr"), {}));
-  t.rows[0].append(...["Day", "Shots", "Greens", "Strokes a shot vs tour", "Ended"].map(h =>
+  t.rows[0].append(...["Day", "Shots", hitHeader, "Strokes a shot vs tour", "Ended"].map(h =>
     Object.assign(document.createElement("th"), { textContent: h })));
-  for (const x of combines) {
+  for (const x of history) {
     const r = t.insertRow();
-    r.append(gmCell(gmDay(x.started)), gmCell(String(x.summary.shots)), gmCell(String(x.summary.greens)),
-      gmCell(gmSg(x.summary.sgPerShot)), gmCell(x.how === "done" ? "finished" : x.how === "idle" ? "left unfinished" : "stopped"));
+    r.append(gmCell(gmDay(x.started)), gmCell(String(x.shots)), gmCell(String(x.hits)),
+      gmCell(gmSg(x.sgPerShot)), gmCell(x.how === "done" ? "finished" : x.how === "idle" ? "left unfinished" : "stopped"));
+    if (history.best && x === history.best) {
+      r.title = `Personal best: ${Math.round(x.hitShare * 100)}% ${hitWord}`;
+    }
   }
   const elements = [t];
-  const breakdown = typeof SwingGames !== "undefined" && SwingGames.combineBreakdown ? SwingGames.combineBreakdown(gmState.log) : null;
-  if (breakdown && breakdown.targets && breakdown.targets.length) {
-    const worstText = breakdown.worst && breakdown.worst.length
-      ? breakdown.worst.map(w => `${w.target} yd ${gmSg(w.sgPerShot)} a shot`).join(", ")
-      : "not enough shots yet";
-    const line = Object.assign(document.createElement("div"), {
-      className: "note",
-      style: "margin: 12px 0 6px;",
-      textContent: `Where you lose strokes (last 3 Combines): ${worstText}.`,
-    });
-    elements.push(line);
-    const bt = document.createElement("table");
-    bt.append(document.createElement("tr"));
-    bt.rows[0].append(...["Target", "Shots", "Greens", "Strokes a shot"].map(h =>
-      Object.assign(document.createElement("th"), { textContent: h })));
-    for (const b of breakdown.targets) {
-      const r = bt.insertRow();
-      r.append(gmCell(b.target + " yd"), gmCell(String(b.shots)), gmCell(String(b.greens)), gmCell(gmSg(b.sgPerShot)));
+  if (selectedGame === "combine") {
+    const breakdown = typeof SwingGames !== "undefined" && SwingGames.combineBreakdown ? SwingGames.combineBreakdown(gmState.log) : null;
+    if (breakdown && breakdown.targets && breakdown.targets.length) {
+      const worstText = breakdown.worst && breakdown.worst.length
+        ? breakdown.worst.map(w => `${w.target} yd ${gmSg(w.sgPerShot)} a shot`).join(", ")
+        : "not enough shots yet";
+      const line = Object.assign(document.createElement("div"), {
+        className: "note",
+        style: "margin: 12px 0 6px;",
+        textContent: `Where you lose strokes (last 3 Combines): ${worstText}.`,
+      });
+      elements.push(line);
+      const bt = document.createElement("table");
+      bt.append(document.createElement("tr"));
+      bt.rows[0].append(...["Target", "Shots", "Greens", "Strokes a shot"].map(h =>
+        Object.assign(document.createElement("th"), { textContent: h })));
+      for (const b of breakdown.targets) {
+        const r = bt.insertRow();
+        r.append(gmCell(b.target + " yd"), gmCell(String(b.shots)), gmCell(String(b.greens)), gmCell(gmSg(b.sgPerShot)));
+      }
+      elements.push(bt);
     }
-    elements.push(bt);
   }
   box.replaceChildren(...elements);
 }
@@ -122,5 +152,7 @@ async function gmPost(url, body) {
 }
 
 gmEl("gm-game").addEventListener("change", renderGames);
+const hSelEl = gmEl("gm-history-game");
+if (hSelEl) hSelEl.addEventListener("change", renderGames);
 gmEl("gm-start").addEventListener("click", () => gmPost("/api/game", { game: gmEl("gm-game").value }));
 gmEl("gm-stop").addEventListener("click", () => gmPost("/api/game/stop"));

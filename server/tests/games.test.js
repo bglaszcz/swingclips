@@ -779,4 +779,199 @@ test("distance game: sayTarget and describe metadata", () => {
   assert.equal(s.onGreen, true);
 });
 
+test("gameHistory: filters by gameId, newest first, and extracts all fields from summary", () => {
+  const log = [
+    {
+      id: "combine",
+      started: 1000,
+      how: "done",
+      summary: { shots: 27, greens: 15, sgPerShot: -0.22 },
+    },
+    {
+      id: "wedges",
+      started: 1500,
+      how: "done",
+      summary: { shots: 13, greens: 10, sgPerShot: 0.05 },
+    },
+    {
+      id: "combine",
+      started: 2000,
+      how: "stopped",
+      summary: { shots: 20, greens: 16, sgPerShot: 0.15 },
+    },
+  ];
+
+  const hist = Games.gameHistory(log, "combine");
+  assert.equal(hist.length, 2);
+  // Newest first: started 2000 before started 1000
+  assert.equal(hist[0].started, 2000);
+  assert.equal(hist[0].shots, 20);
+  assert.equal(hist[0].hits, 16);
+  assert.equal(hist[0].hitShare, 16 / 20);
+  assert.equal(hist[0].sgPerShot, 0.15);
+  assert.equal(hist[0].how, "stopped");
+
+  assert.equal(hist[1].started, 1000);
+  assert.equal(hist[1].shots, 27);
+  assert.equal(hist[1].hits, 15);
+  assert.equal(hist[1].hitShare, 15 / 27);
+  assert.equal(hist[1].sgPerShot, -0.22);
+  assert.equal(hist[1].how, "done");
+
+  // Best: 16/20 (80%) vs 15/27 (55.6%), both >= 13.5 shots
+  assert.equal(hist.best, hist[0]);
+});
+
+test("gameHistory: falls back to results array when summary is missing", () => {
+  const log = [
+    {
+      id: "wedges",
+      started: 1000,
+      results: [
+        { target: 50, onGreen: true, sg: 0.2 },
+        { target: 60, onGreen: true, sg: 0.4 },
+        { target: 70, onGreen: false, sg: -0.6 },
+      ],
+    },
+  ];
+
+  const hist = Games.gameHistory(log, "wedges");
+  assert.equal(hist.length, 1);
+  assert.equal(hist[0].shots, 3);
+  assert.equal(hist[0].hits, 2);
+  assert.ok(Math.abs(hist[0].hitShare - 2 / 3) < 1e-9);
+  // (0.2 + 0.4 - 0.6) / 3 = 0
+  assert.ok(Math.abs(hist[0].sgPerShot - 0) < 1e-9);
+  assert.equal(hist[0].how, "done");
+});
+
+test("gameHistory: sgPerShot is strictly null for shaping", () => {
+  const log = [
+    {
+      id: "shaping",
+      started: 1000,
+      how: "done",
+      summary: { shots: 12, greens: 8, sgPerShot: 0.35 },
+      results: [{ target: "draw", onGreen: true, sg: 0.35 }],
+    },
+  ];
+
+  const hist = Games.gameHistory(log, "shaping");
+  assert.equal(hist.length, 1);
+  assert.equal(hist[0].shots, 12);
+  assert.equal(hist[0].hits, 8);
+  assert.equal(hist[0].hitShare, 8 / 12);
+  assert.equal(hist[0].sgPerShot, null);
+  assert.equal(hist.best, hist[0]);
+});
+
+test("gameHistory: best requires at least half the game's usual shots", () => {
+  // Combine: usual = 27 -> half = 13.5 -> at least 14 shots required
+  const combineLog = [
+    {
+      id: "combine",
+      started: 1000,
+      summary: { shots: 10, greens: 10, sgPerShot: 0.5 }, // 100% hits, but only 10 shots (< 14)
+    },
+    {
+      id: "combine",
+      started: 2000,
+      summary: { shots: 14, greens: 10, sgPerShot: 0.1 }, // 71.4% hits, 14 shots (>= 14)
+    },
+    {
+      id: "combine",
+      started: 3000,
+      summary: { shots: 27, greens: 16, sgPerShot: 0.2 }, // 59.3% hits, 27 shots
+    },
+  ];
+
+  const combineHist = Games.gameHistory(combineLog, "combine");
+  // Best should be the 14-shot game, NOT the 10-shot 100% game
+  assert.equal(combineHist.best.started, 2000);
+  assert.equal(combineHist.best.shots, 14);
+
+  // Wedges: usual = 13 -> half = 6.5 -> at least 7 shots required
+  const wedgesLog = [
+    {
+      id: "wedges",
+      started: 1000,
+      summary: { shots: 6, greens: 6, sgPerShot: 0.3 }, // 6 shots < 6.5 -> ineligible
+    },
+  ];
+  const wedgesHist = Games.gameHistory(wedgesLog, "wedges");
+  assert.equal(wedgesHist.best, null);
+
+  // Distance: usual = 15 -> half = 7.5 -> at least 8 shots required
+  const distLog = [
+    {
+      id: "distance",
+      started: 1000,
+      summary: { shots: 7, greens: 7, sgPerShot: 0.4 }, // 7 shots < 7.5 -> ineligible
+    },
+    {
+      id: "distance",
+      started: 2000,
+      summary: { shots: 8, greens: 6, sgPerShot: 0.1 }, // 8 shots >= 7.5 -> eligible
+    },
+  ];
+  const distHist = Games.gameHistory(distLog, "distance");
+  assert.equal(distHist.best.started, 2000);
+});
+
+test("gameHistory: best breaks ties with more shots then newer timestamp", () => {
+  const log = [
+    {
+      id: "combine",
+      started: 1000,
+      summary: { shots: 15, greens: 12, sgPerShot: 0.1 }, // 80% with 15 shots
+    },
+    {
+      id: "combine",
+      started: 2000,
+      summary: { shots: 20, greens: 16, sgPerShot: 0.1 }, // 80% with 20 shots (beats 15 shots)
+    },
+    {
+      id: "combine",
+      started: 3000,
+      summary: { shots: 20, greens: 16, sgPerShot: 0.1 }, // 80% with 20 shots, newer timestamp (beats 2000)
+    },
+  ];
+
+  const hist = Games.gameHistory(log, "combine");
+  assert.equal(hist.best.started, 3000);
+});
+
+test("gameHistory: handles empty log, non-matching game, and supports destructuring and array iteration", () => {
+  assert.equal(Games.gameHistory(null, "combine").length, 0);
+  assert.equal(Games.gameHistory(null, "combine").best, null);
+  assert.equal(Games.gameHistory([], "combine").length, 0);
+  assert.equal(Games.gameHistory([], "combine").best, null);
+
+  const nonMatching = Games.gameHistory([{ id: "wedges", summary: { shots: 13, greens: 10 } }], "combine");
+  assert.equal(nonMatching.length, 0);
+  assert.equal(nonMatching.best, null);
+
+  const log = [
+    { id: "combine", started: 100, summary: { shots: 27, greens: 20, sgPerShot: 0.2 } },
+    { id: "combine", started: 200, summary: { shots: 27, greens: 22, sgPerShot: 0.3 } },
+  ];
+  const hist = Games.gameHistory(log, "combine");
+  assert.ok(Array.isArray(hist));
+  assert.equal(hist.length, 2);
+
+  // Destructuring { games, best }
+  const { games, best } = Games.gameHistory(log, "combine");
+  assert.equal(games.length, 2);
+  assert.equal(best.started, 200);
+
+  // Iteration
+  let count = 0;
+  for (const g of hist) {
+    assert.equal(g.shots, 27);
+    count++;
+  }
+  assert.equal(count, 2);
+});
+
+
 

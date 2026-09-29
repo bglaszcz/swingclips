@@ -706,6 +706,85 @@
     };
   }
 
+  // Usual shot count for each game (for best score eligibility: >= half usual shots).
+  const USUAL_SHOTS = {
+    combine: COMBINE_TARGETS.length * COMBINE_SHOTS_PER_TARGET, // 27
+    wedges: WEDGE_TARGETS.length, // 13
+    random: RANDOM_DEFAULTS.count, // 20
+    ladder: LADDER_DEFAULTS.count, // 30
+    driving: DRIVING_SHOTS, // 14
+    shaping: SHAPING_SHOTS, // 12
+    distance: DISTANCE_DEFAULTS.count, // 15
+  };
+
+  /**
+   * Extract history of finished sessions for a game, newest first, plus best session.
+   * @param {Array<object>} logEntries Finished game log entries from /api/game
+   * @param {string} gameId Game ID (e.g. "combine", "wedges", "driving", "distance", etc.)
+   * @returns {Array<{started: number|null, shots: number, hits: number, hitShare: number, sgPerShot: number|null, how: string}> & {best: object|null, games: Array, history: Array}}
+   */
+  function gameHistory(logEntries, gameId) {
+    const matching = (logEntries || []).filter(e => e && e.id === gameId);
+    const indexed = matching.map((entry, idx) => ({ entry, idx }));
+    indexed.sort((a, b) => {
+      const timeA = a.entry.started ?? 0;
+      const timeB = b.entry.started ?? 0;
+      if (timeB !== timeA) return timeB - timeA;
+      return b.idx - a.idx;
+    });
+
+    const list = indexed.map(({ entry }) => {
+      const s = entry.summary;
+      const res = Array.isArray(entry.results) ? entry.results : null;
+      const shots = s && typeof s.shots === "number"
+        ? s.shots
+        : (res ? res.length : 0);
+      const hits = s && typeof s.greens === "number"
+        ? s.greens
+        : (res ? res.filter(r => r && r.onGreen).length : 0);
+      const hitShare = shots > 0 ? hits / shots : 0;
+
+      let sgPerShot = null;
+      if (gameId !== "shaping") {
+        if (s && finite(s.sgPerShot)) {
+          sgPerShot = s.sgPerShot;
+        } else if (res && res.length > 0) {
+          const sum = summarize(res);
+          sgPerShot = finite(sum.sgPerShot) ? sum.sgPerShot : null;
+        }
+      }
+
+      const how = entry.how || "done";
+      const started = entry.started ?? null;
+
+      return {
+        started,
+        shots,
+        hits,
+        hitShare,
+        sgPerShot,
+        how,
+      };
+    });
+
+    const usual = USUAL_SHOTS[gameId] ?? 10;
+    const minShots = usual / 2;
+    const eligible = list.filter(h => h.shots >= minShots);
+    let best = null;
+    if (eligible.length > 0) {
+      best = eligible.slice().sort((a, b) => {
+        if (b.hitShare !== a.hitShare) return b.hitShare - a.hitShare;
+        if (b.shots !== a.shots) return b.shots - a.shots;
+        return (b.started ?? 0) - (a.started ?? 0);
+      })[0];
+    }
+
+    list.best = best;
+    list.games = list;
+    list.history = list;
+    return list;
+  }
+
   const api = {
     GREEN_RADIUS_YD,
     MISHIT_SG,
@@ -726,6 +805,7 @@
     SHAPING_SHOTS,
     DISTANCE_WINDOW_YD,
     DISTANCE_DEFAULTS,
+    USUAL_SHOTS,
     mulberry32,
     expectedPutts,
     expectedStrokes,
@@ -738,6 +818,7 @@
     planShaping,
     planDistance,
     combineBreakdown,
+    gameHistory,
     GAMES,
   };
 
