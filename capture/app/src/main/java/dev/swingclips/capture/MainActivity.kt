@@ -212,6 +212,7 @@ class MainActivity : Activity() {
         ).also {
             it.sensitivity = prefs.getInt("sensitivity", 100)
             it.start()
+            cameraSetup.onSpeaking = { on -> it.speaking(on) }
         }
         showState()
     }

@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import android.view.PixelCopy
 import android.view.SurfaceView
@@ -46,6 +47,31 @@ class CameraSetup(
         speechReady = status == TextToSpeech.SUCCESS
     }.also { it.language = Locale.US }
 
+    /** Called with true while this phone is speaking and false once it has stopped: the strike
+     *  listener ignores sounds meanwhile (its own voice would otherwise trigger a recording, and a
+     *  "no swing found" warning spoken about that recording would trigger the next one). */
+    @Volatile var onSpeaking: ((Boolean) -> Unit)? = null
+    private val pending = java.util.concurrent.atomic.AtomicInteger(0)
+
+    init {
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {}
+            override fun onDone(utteranceId: String?) = finished()
+            @Deprecated("Deprecated in Java") override fun onError(utteranceId: String?) = finished()
+            override fun onStop(utteranceId: String?, interrupted: Boolean) = finished()
+            private fun finished() {
+                if (pending.updateAndGet { maxOf(0, it - 1) } == 0) onSpeaking?.invoke(false)
+            }
+        })
+    }
+
+    private fun speak(text: String, mode: Int, id: String) {
+        if (pending.getAndIncrement() == 0) onSpeaking?.invoke(true)
+        if (tts.speak(text, mode, null, id) != TextToSpeech.SUCCESS) {
+            if (pending.updateAndGet { maxOf(0, it - 1) } == 0) onSpeaking?.invoke(false)
+        }
+    }
+
     private var heard: String? = null     // the latest verdict, and how many times in a row
     private var heardCount = 0
     private var said: String? = null
@@ -75,12 +101,12 @@ class CameraSetup(
 
     /** Say something outside the setup checks (e.g. what shutter the camera is really using). */
     fun say(text: String) {
-        if (speechReady) tts.speak(text, TextToSpeech.QUEUE_ADD, null, "note")
+        if (speechReady) speak(text, TextToSpeech.QUEUE_ADD, "note")
     }
 
     /** Say something now, cutting off what's being said (a newer setup verdict replaces an older one). */
     fun sayNow(text: String) {
-        if (speechReady) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "setup")
+        if (speechReady) speak(text, TextToSpeech.QUEUE_FLUSH, "setup")
     }
 
     /** Forget what was said and focused, e.g. after recording: the next setup starts fresh. */
@@ -156,7 +182,7 @@ class CameraSetup(
         if (!ownVoice()) {
             said = null   // so switching back to its own voice says the current verdict
         } else if (heardCount >= 2 && speechReady && (say != said || (!ok && now - saidAt > REPEAT_MS))) {
-            tts.speak(say, TextToSpeech.QUEUE_FLUSH, null, "setup")
+            speak(say, TextToSpeech.QUEUE_FLUSH, "setup")
             said = say
             saidAt = now
         }

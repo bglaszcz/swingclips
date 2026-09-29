@@ -32,6 +32,13 @@ class ImpactListener(
 
     /** Start the cooldown now, e.g. for a manual save (its beep would otherwise trigger one). */
     fun holdOff() { lastTrigger = System.nanoTime() }
+
+    /** While the phone speaks (and a moment after) nothing triggers: its own voice isn't a strike. */
+    fun speaking(on: Boolean) {
+        muted = on
+        if (!on) lastTrigger = System.nanoTime() + SPEECH_TAIL_NS - COOLDOWN_NS
+    }
+    @Volatile private var muted = false
     private var thread: Thread? = null
 
     @SuppressLint("MissingPermission")
@@ -99,7 +106,7 @@ class ImpactListener(
                 val background = (history[0] + history[1]) / 2
                 val spike = background == 0f || sum > background * 2.5f
                 val now = System.nanoTime()
-                if (sum > threshold && spike && now - lastTrigger > COOLDOWN_NS) {
+                if (sum > threshold && spike && !muted && now - lastTrigger > COOLDOWN_NS) {
                     lastTrigger = now
                     // When the loudest sample was captured, from the recorder's own timestamp if
                     // it has one, else estimated from when the read returned.
@@ -124,6 +131,8 @@ class ImpactListener(
         const val WINDOW = 1024
         const val METER_MAX = 150f
         private const val COOLDOWN_NS = 3_000_000_000L
+        /** Quiet time after speech ends (room echo), counted from its end. */
+        private const val SPEECH_TAIL_NS = 1_500_000_000L
 
         fun thresholdFor(sensitivity: Int) = 150f - sensitivity / 100f * 140f
     }
