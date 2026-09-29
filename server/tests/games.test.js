@@ -554,3 +554,110 @@ test("game definitions have required metadata", () => {
     assert.equal(typeof game.sayTarget, "function");
   }
 });
+
+test("combineBreakdown: empty log and non-combine games ignored", () => {
+  assert.deepEqual(Games.combineBreakdown([]), { targets: [], byTarget: [], worst: [] });
+  assert.deepEqual(Games.combineBreakdown(null), { targets: [], byTarget: [], worst: [] });
+
+  const nonCombines = [
+    { id: "wedges", results: [{ target: 50, sg: 0.2, onGreen: true }] },
+    { id: "driving", results: [{ target: 0, sg: 0.1, onGreen: true }] },
+  ];
+  assert.deepEqual(Games.combineBreakdown(nonCombines), { targets: [], byTarget: [], worst: [] });
+});
+
+test("combineBreakdown: only combines counted and latest N used", () => {
+  const log = [
+    { id: "combine", results: [{ target: 50, sg: 0.5, onGreen: true, dist: 5 }] }, // 1st (too old for last: 2)
+    { id: "wedges", results: [{ target: 50, sg: -0.9, onGreen: false, dist: 20 }] }, // ignored
+    { id: "combine", results: [{ target: 50, sg: 0.1, onGreen: true, dist: 8 }] },  // 2nd
+    { id: "combine", results: [{ target: 50, sg: -0.3, onGreen: false, dist: 12 }] }, // 3rd
+  ];
+
+  // Default last 3: includes 1st, 2nd, 3rd combines (not wedges)
+  const b3 = Games.combineBreakdown(log);
+  assert.equal(b3.targets.length, 1);
+  assert.equal(b3.targets[0].target, 50);
+  assert.equal(b3.targets[0].shots, 3);
+  // (0.5 + 0.1 - 0.3) / 3 = 0.1
+  assert.ok(Math.abs(b3.targets[0].sgPerShot - 0.1) < 1e-9);
+  assert.equal(b3.targets[0].greens, 2);
+  assert.equal(b3.targets[0].avgDist, (5 + 8 + 12) / 3);
+
+  // Custom last 2: only 2nd and 3rd combines
+  const b2 = Games.combineBreakdown(log, { last: 2 });
+  assert.equal(b2.targets.length, 1);
+  assert.equal(b2.targets[0].shots, 2);
+  // (0.1 - 0.3) / 2 = -0.1
+  assert.ok(Math.abs(b2.targets[0].sgPerShot - -0.1) < 1e-9);
+  assert.equal(b2.targets[0].greens, 1);
+  assert.equal(b2.targets[0].avgDist, (8 + 12) / 2);
+});
+
+test("combineBreakdown: mishits count as MISHIT_SG", () => {
+  const log = [
+    {
+      id: "combine",
+      results: [
+        { target: 100, sg: 0.5, onGreen: true, dist: 6 },
+        { target: 100, sg: null }, // mishit: -1.0, dist excluded
+        { target: 100, sg: -0.1, onGreen: true, dist: 12 },
+      ],
+    },
+  ];
+  const b = Games.combineBreakdown(log);
+  assert.equal(b.targets.length, 1);
+  assert.equal(b.targets[0].shots, 3);
+  // (0.5 - 1.0 - 0.1) / 3 = -0.6 / 3 = -0.2
+  assert.ok(Math.abs(b.targets[0].sgPerShot - -0.2) < 1e-9);
+  assert.equal(b.targets[0].greens, 2);
+  assert.equal(b.targets[0].avgDist, (6 + 12) / 2);
+});
+
+test("combineBreakdown: sorting by target ascending and 3-shot rule for worst", () => {
+  const log = [
+    {
+      id: "combine",
+      results: [
+        // Target 140: 3 shots, avg SG -0.42
+        { target: 140, sg: -0.40, onGreen: false },
+        { target: 140, sg: -0.44, onGreen: false },
+        { target: 140, sg: -0.42, onGreen: false },
+        // Target 50: 3 shots, avg SG +0.20
+        { target: 50, sg: 0.20, onGreen: true },
+        { target: 50, sg: 0.20, onGreen: true },
+        { target: 50, sg: 0.20, onGreen: true },
+        // Target 95: only 2 shots, avg SG -0.90 (ineligible for worst despite lowest SG)
+        { target: 95, sg: -0.90, onGreen: false },
+        { target: 95, sg: -0.90, onGreen: false },
+        // Target 155: 3 shots, avg SG -0.38
+        { target: 155, sg: -0.38, onGreen: false },
+        { target: 155, sg: -0.38, onGreen: false },
+        { target: 155, sg: -0.38, onGreen: false },
+        // Target 110: 3 shots, avg SG -0.10
+        { target: 110, sg: -0.10, onGreen: true },
+        { target: 110, sg: -0.10, onGreen: true },
+        { target: 110, sg: -0.10, onGreen: true },
+      ],
+    },
+  ];
+
+  const b = Games.combineBreakdown(log);
+
+  // Targets sorted ascending by target: 50, 95, 110, 140, 155
+  assert.deepEqual(
+    b.targets.map(t => t.target),
+    [50, 95, 110, 140, 155]
+  );
+
+  // Worst: 2 targets with lowest sgPerShot having at least 3 shots
+  // Target 95 is excluded (only 2 shots).
+  // Remaining: 140 (-0.42), 155 (-0.38), 110 (-0.10), 50 (+0.20)
+  // Two lowest: 140 and 155
+  assert.equal(b.worst.length, 2);
+  assert.equal(b.worst[0].target, 140);
+  assert.ok(Math.abs(b.worst[0].sgPerShot - -0.42) < 1e-9);
+  assert.equal(b.worst[1].target, 155);
+  assert.ok(Math.abs(b.worst[1].sgPerShot - -0.38) < 1e-9);
+});
+

@@ -35,7 +35,8 @@ monitor's numbers for that shot.
    a list of the swings so far with their Square shot ("no shot" once 25 s pass without one). Each
    phone says "Recording"; then switch to Square's app. (Or: **Start both** in the review page's
    **Ready** bar, **Auto-start** on the phones, or `Start golf.cmd -StartCameras` to start both
-   phones as soon as they connect, without the page.)
+   phones as soon as they connect, without the page.) Section 5 (**Play a game**) below lets you start
+   or stop practice games with the current target shown large (64px+) for reading from the mat.
 5. **Hit balls** once Ready is green. After the first analyzed swing (about a minute) the speaking
    phone says "First swing: both cameras saw you, Square paired", or what's wrong ("Down the line:
    ball not found", "No Square shot"). After that it only speaks up about problems.
@@ -523,7 +524,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   fades by spin axis. Targets and scoring are `static/games.js`, the game in play `game.json` and finished
   games `games-log.jsonl` next to the clips folder (`server/games.py`). Starting a game turns the practice number
   off, and turning that on stops the game. The Combine is always the same 27 shots (9 targets, 50-170 yd,
-  shuffled), so its score is comparable across weeks. No phone update needed.
+  shuffled), so its score is comparable across weeks. Under the Combine scores table, "Where you lose strokes" breaks down strokes gained by target distance over the last 3 Combines to pinpoint the weakest yardages. No phone update needed.
 
 ### Ready panel: both phones from the review page (capture app 0.6)
 One place to see "ready", and fewer walks to the phones. The phones face away from you, so the

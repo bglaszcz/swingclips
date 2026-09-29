@@ -567,6 +567,60 @@
     },
   };
 
+  /**
+   * Breakdown finished Combines by target distance over the latest N sessions.
+   * @param {Array<object>} logEntries Finished game log entries from /api/game
+   * @param {{last?: number}} [options] Options, e.g. last (default 3)
+   * @returns {{targets: Array<{target: number, shots: number, sgPerShot: number, greens: number, avgDist: number|null}>, byTarget: Array<object>, worst: Array<object>}}
+   */
+  function combineBreakdown(logEntries, options = {}) {
+    const lastN = options && typeof options.last === "number" && options.last > 0 ? options.last : 3;
+    const combines = (logEntries || []).filter(e => e && e.id === "combine" && Array.isArray(e.results));
+    const recent = combines.slice(-lastN);
+    const targetMap = new Map();
+
+    for (const c of recent) {
+      for (const r of c.results || []) {
+        if (!r || r.target == null || !finite(r.target)) continue;
+        const target = r.target;
+        let entry = targetMap.get(target);
+        if (!entry) {
+          entry = { target, shots: 0, sgTotal: 0, greens: 0, distSum: 0, distCount: 0 };
+          targetMap.set(target, entry);
+        }
+        entry.shots++;
+        const isMishit = r.sg == null || !finite(r.sg);
+        const shotSg = isMishit ? MISHIT_SG : r.sg;
+        entry.sgTotal += shotSg;
+        if (r.onGreen) entry.greens++;
+        if (finite(r.dist)) {
+          entry.distSum += r.dist;
+          entry.distCount++;
+        }
+      }
+    }
+
+    const targets = Array.from(targetMap.values())
+      .sort((a, b) => a.target - b.target)
+      .map(e => ({
+        target: e.target,
+        shots: e.shots,
+        sgPerShot: e.shots > 0 ? e.sgTotal / e.shots : 0,
+        greens: e.greens,
+        avgDist: e.distCount > 0 ? e.distSum / e.distCount : null,
+      }));
+
+    const eligible = targets.filter(t => t.shots >= 3);
+    eligible.sort((a, b) => a.sgPerShot - b.sgPerShot || a.target - b.target);
+    const worst = eligible.slice(0, 2);
+
+    return {
+      targets,
+      byTarget: targets,
+      worst,
+    };
+  }
+
   const api = {
     GREEN_RADIUS_YD,
     MISHIT_SG,
@@ -594,6 +648,7 @@
     scoreFor,
     summarize,
     planShaping,
+    combineBreakdown,
     GAMES,
   };
 

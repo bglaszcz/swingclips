@@ -65,7 +65,29 @@ function renderGames() {
     r.append(gmCell(gmDay(x.started)), gmCell(String(x.summary.shots)), gmCell(String(x.summary.greens)),
       gmCell(gmSg(x.summary.sgPerShot)), gmCell(x.how === "done" ? "finished" : x.how === "idle" ? "left unfinished" : "stopped"));
   }
-  box.replaceChildren(t);
+  const elements = [t];
+  const breakdown = typeof SwingGames !== "undefined" && SwingGames.combineBreakdown ? SwingGames.combineBreakdown(gmState.log) : null;
+  if (breakdown && breakdown.targets && breakdown.targets.length) {
+    const worstText = breakdown.worst && breakdown.worst.length
+      ? breakdown.worst.map(w => `${w.target} yd ${gmSg(w.sgPerShot)} a shot`).join(", ")
+      : "not enough shots yet";
+    const line = Object.assign(document.createElement("div"), {
+      className: "note",
+      style: "margin: 12px 0 6px;",
+      textContent: `Where you lose strokes (last 3 Combines): ${worstText}.`,
+    });
+    elements.push(line);
+    const bt = document.createElement("table");
+    bt.append(document.createElement("tr"));
+    bt.rows[0].append(...["Target", "Shots", "Greens", "Strokes a shot"].map(h =>
+      Object.assign(document.createElement("th"), { textContent: h })));
+    for (const b of breakdown.targets) {
+      const r = bt.insertRow();
+      r.append(gmCell(b.target + " yd"), gmCell(String(b.shots)), gmCell(String(b.greens)), gmCell(gmSg(b.sgPerShot)));
+    }
+    elements.push(bt);
+  }
+  box.replaceChildren(...elements);
 }
 
 function gmTargetText(target) {

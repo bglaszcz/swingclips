@@ -630,8 +630,27 @@ function renderProgress() {
   renderSessionTable(sessions);
   renderGapping();
   renderWedges();
+  renderProgressCombine();
   const latestHcp = journal.handicap[journal.handicap.length - 1];
   document.getElementById("p-hcp-now").textContent = latestHcp ? `${latestHcp.index.toFixed(1)} on ${dayOf(new Date(latestHcp.date + "T12:00"))}` : "";
+}
+
+async function renderProgressCombine() {
+  const el = document.getElementById("p-combine-line");
+  if (!el) return;
+  el.hidden = true;
+  el.textContent = "";
+  try {
+    const res = await fetch("/api/game");
+    if (!res.ok) return;
+    const data = await res.json();
+    const combines = (data.log || []).filter(x => x.id === "combine" && x.summary);
+    if (combines.length < 2) return;
+    const first = combines[0], latest = combines[combines.length - 1];
+    const fmt = v => v == null || !Number.isFinite(v) ? "–" : (v >= 0 ? "+" : "") + v.toFixed(2);
+    el.textContent = `Combine: ${fmt(latest.summary.sgPerShot)} strokes a shot on ${dayOf(latest.started * 1000)}, first ${fmt(first.summary.sgPerShot)} on ${dayOf(first.started * 1000)}.`;
+    el.hidden = false;
+  } catch {}
 }
 
 // Set once a number is picked for the chart (the tiles, the chips or the list): then it stays.
