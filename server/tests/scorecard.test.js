@@ -1,106 +1,128 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-// Mock dependencies
-globalThis.SwingSummary = {
-  BODY: [
-    { key: "tempo", label: "Tempo", unit: ":1" },
-    { key: "shoulderTop", label: "Shoulder turn", unit: "°" },
-    { key: "earlyExt", label: "Hips to ball", unit: "in" },
-    { key: "lagP5", label: "Lag at P5", unit: "°" }
-  ]
-};
-
-globalThis.SwingFaults = {
-  FAULTS: [
-    { key: "earlyExt", threshold: 3, dir: "more" }
-  ],
-  faultsOf: (record, shaky) => {
-    const out = [];
-    if (record.body.earlyExt > 3 && !shaky({ shown: record.body }, "earlyExt")) {
-      out.push({ key: "earlyExt", name: "early extension", value: record.body.earlyExt });
-    }
-    return out;
-  }
-};
-
-globalThis.SwingGoodShots = {
-  place: (val, range, unit) => {
-    if (!range) return { status: "few" };
-    if (val >= range.q10 && val <= range.q90) {
-      if (val >= range.q25 && val <= range.q75) return { status: "in", wide: true };
-      return { status: "above", wide: true }; // simplification for mock
-    }
-    return { status: "above", wide: false };
-  }
-};
-
-globalThis.SwingTrust = {
-  factsOf: () => ({ measured: true }),
-  judge: (f, facts, val, table) => {
-    if (val == null) return { level: "none" };
-    if (val === -999) return { level: "shaky" };
-    return { level: "ok" };
-  }
-};
-
 const Scorecard = require("../static/scorecard.js");
+const Summary = require("../static/summary.js");
+const Faults = require("../static/faults.js");
 
-test("buildScorecard - normal swing", () => {
-  const swingData = {
-    record: {
-      body: {
-        tempo: 3.1,
-        shoulderTop: 90,
-        lagP5: 60,
-        earlyExt: 4
-      }
-    },
-    positions: [
-      { key: "p1", t: 1.0, index: 30 },
-      { key: "p4", t: 1.5, index: 45 },
-      { key: "p7", t: 1.8, index: 54 }
-    ]
-  };
-  swingData.positions.takeaway = { t: 1.1 };
+// Mock global objects that scorecard.js might need via root if not running with require
+globalThis.SwingSummary = Summary;
+globalThis.SwingFaults = Faults;
 
-  const goodRanges = {
-    tempo: { q10: 2.8, q25: 2.9, q50: 3.0, q75: 3.2, q90: 3.3, enough: true },
-    shoulderTop: { q10: 80, q25: 85, q50: 88, q75: 92, q90: 95, enough: true },
-    lagP5: { q10: 40, q25: 45, q50: 50, q75: 55, q90: 60, enough: true },
-    earlyExt: { q10: 0, q25: 0.5, q50: 1.0, q75: 1.5, q90: 2.0, enough: true }
-  };
+test("buildScorecard handles missing ranges and empty faults", () => {
+  const positions = [
+    { key: "p1", tag: "address", label: "Address", index: 0, t: 0, estimated: false },
+    { key: "p4", tag: "top", label: "Top", index: 10, t: 0.5, estimated: false },
+  ];
+  const body = { shoulderTop: 90, tempo: 3.0 };
+  const trust = { shoulderTop: { level: "ok" }, tempo: { level: "ok" } };
+  const goodRanges = {};
+  const swingFaults = [];
 
-  const res = Scorecard.buildScorecard(swingData, goodRanges, null);
+  const res = Scorecard.buildScorecard(positions, body, trust, goodRanges, swingFaults);
   
-  assert.strictEqual(res.nTotal, 3);
-  assert.ok(res.nInside > 0);
+  assert.strictEqual(res.phases.length, 2);
+  assert.strictEqual(res.phases[0].key, "p1");
+  assert.strictEqual(res.phases[0].color, "grey"); // no metrics for p1
   
-  const impactPhase = res.phases.find(p => p.key === "p7");
-  assert.ok(impactPhase);
-  assert.strictEqual(impactPhase.color, "red"); // earlyExt is outside 90th percentile (4 vs 2)
+  assert.strictEqual(res.phases[1].key, "p4");
+  assert.strictEqual(res.phases[1].color, "grey"); // no ranges -> grey
   
-  const fault = res.faults[0];
-  assert.ok(fault);
-  assert.strictEqual(fault.key, "earlyExt");
-  assert.strictEqual(fault.phase, "p7");
+  assert.strictEqual(res.faults.length, 0);
+  assert.strictEqual(res.summarySentence, "Not enough good shots yet to show a trend.");
 });
 
-test("buildScorecard - missing phases and shaky numbers", () => {
-  const swingData = {
-    record: {
-      body: {
-        tempo: -999, // shaky
-      }
-    },
-    positions: [
-      { key: "p1", t: 1.0, index: 30 }
-    ]
+test("buildScorecard maps metrics and sets colors based on ranges", () => {
+  const positions = [
+    { key: "p4", index: 10, t: 0.5 }
+  ];
+  const body = { shoulderTop: 90 };
+  const trust = { shoulderTop: { level: "ok" } };
+  const goodRanges = {
+    shoulderTop: { q10: 80, q25: 85, q75: 95, q90: 100, reliable: true, enough: true }
   };
+  const swingFaults = [];
 
-  const res = Scorecard.buildScorecard(swingData, {}, null);
-  const p1 = res.phases.find(p => p.key === "p1");
+  // Should be 'in' -> green
+  const res1 = Scorecard.buildScorecard(positions, body, trust, goodRanges, swingFaults);
+  assert.strictEqual(res1.phases[0].color, "green");
+  assert.strictEqual(res1.nInside, 1);
+  assert.strictEqual(res1.nTotal, 1);
+  assert.match(res1.summarySentence, /shoulder turn at top is in your good range/i);
+
+  // Amber (wide)
+  const body2 = { shoulderTop: 98 };
+  const res2 = Scorecard.buildScorecard(positions, body2, trust, goodRanges, swingFaults);
+  assert.strictEqual(res2.phases[0].color, "amber");
+
+  // Red (outside)
+  const body3 = { shoulderTop: 105 };
+  const res3 = Scorecard.buildScorecard(positions, body3, trust, goodRanges, swingFaults);
+  assert.strictEqual(res3.phases[0].color, "red");
   
-  assert.strictEqual(p1.color, "grey"); // because tempo is shaky
+  // Grey (shaky)
+  const trustShaky = { shoulderTop: { level: "shaky" } };
+  const res4 = Scorecard.buildScorecard(positions, body, trustShaky, goodRanges, swingFaults);
+  assert.strictEqual(res4.phases[0].color, "grey");
+});
+
+test("buildScorecard sets faults correctly", () => {
+  const positions = [{ key: "p7", index: 20, t: 1.0 }];
+  const body = { earlyExt: 5 };
+  const trust = { earlyExt: { level: "ok" } };
+  const goodRanges = {};
+  const swingFaults = [{
+    key: "earlyExt",
+    name: "early extension",
+    value: 5,
+    drill: "Wall drill",
+    thought: "Keep back"
+  }];
+
+  const res = Scorecard.buildScorecard(positions, body, trust, goodRanges, swingFaults);
+  
+  assert.strictEqual(res.faults.length, 1);
+  assert.strictEqual(res.faults[0].phase, "p7");
+  
+  assert.strictEqual(res.faults[0].severity, 2);
+  
+  assert.match(res.summarySentence, /Main thing: early extension/i);
+});
+
+const range = (q25, q75) => ({ q10: q25 - 5, q25, q75, q90: q75 + 5, reliable: true, enough: true });
+
+test("summary: names the best number with its capitals, and only says solid when most numbers are inside", () => {
+  const positions = [{ key: "p4", index: 10, t: 0.5 }, { key: "p5", index: 12, t: 0.6 }];
+  const ok = { level: "ok" };
+  // One number inside, one well outside: not "a very solid swing".
+  let res = Scorecard.buildScorecard(positions, { shoulderTop: 90, lagP5: 10 }, { shoulderTop: ok, lagP5: ok },
+    { shoulderTop: range(85, 95), lagP5: range(60, 70) }, []);
+  assert.strictEqual(res.nInside, 1);
+  assert.strictEqual(res.summarySentence, "Best: shoulder turn at top is in your good range.");
+  // Both inside: solid, and P5 keeps its capital.
+  res = Scorecard.buildScorecard(positions, { shoulderTop: 90, lagP5: 65 }, { shoulderTop: ok, lagP5: ok },
+    { shoulderTop: range(85, 95), lagP5: range(60, 70) }, []);
+  assert.strictEqual(res.summarySentence, "Best: shoulder turn at top is in your good range. A very solid swing.");
+  res = Scorecard.buildScorecard([{ key: "p5", index: 12, t: 0.6 }], { lagP5: 65 }, { lagP5: ok }, { lagP5: range(60, 70) }, []);
+  assert.match(res.summarySentence, /wrist hinge at P5/);
+});
+
+test("shaky and unreadable numbers are grey and never count as inside or outside", () => {
+  const positions = [{ key: "p7", index: 20, t: 0.9 }];
+  const res = Scorecard.buildScorecard(positions, { earlyExt: 9, hipSway: null },
+    { earlyExt: { level: "shaky" }, hipSway: { level: "none" } }, { earlyExt: range(0, 2) }, []);
+  assert.strictEqual(res.phases[0].color, "grey");
   assert.strictEqual(res.nTotal, 0);
+  assert.strictEqual(res.nInside, 0);
+});
+
+test("faults get a phase, a severity from the distance past the threshold, and are sorted worst first", () => {
+  const positions = [{ key: "p6", index: 15, t: 0.8 }, { key: "p7", index: 20, t: 0.9 }];
+  const faults = Faults.faultsOf({ earlyExt: 3.5, handsPlaneP6: 12, trust: {} });
+  const res = Scorecard.buildScorecard(positions, {}, {}, {}, faults);
+  assert.deepStrictEqual(res.faults.map(f => f.key), ["handsPlaneP6", "earlyExt"]);
+  assert.strictEqual(res.faults[0].phase, "p6");
+  assert.strictEqual(res.faults[1].phase, "p7");
+  assert.ok(res.faults[0].severity > res.faults[1].severity);
+  assert.ok(res.faults.every(f => f.severity >= 1 && f.severity <= 3));
 });

@@ -49,8 +49,10 @@ Tabs along the top (along the bottom on a phone): **Swings**, **Progress**, **Pr
 **Cameras** and **Tools**. On a phone, "Add to Home screen" installs it like an app. **?** lists
 the keyboard shortcuts.
 
-The **Swings** tab shows a phase scorecard for each swing, breaking it down from Address to Finish. 
-Click a phase tile to see the video frame and its numbers against your personal good-shot range. 
+The **Swings** tab shows a scorecard for each swing: one tile per key position (P1-P8), green when its numbers are inside 
+your own good-shot range for that club, amber a little outside, red well outside, grey when there is no range yet or the 
+number is shaky. Click a tile to jump the video to that frame and see its numbers as bars against your range. Named faults 
+come with a severity, the position they happen at, and the swing thought and drill. It measures; it gives no made-up score. 
 Faults, drills, and a summary sentence highlight what went well and what needs work.
 
 - **Ready bar** (under the tabs): both phones, Square, framing and the server's queue at a glance,

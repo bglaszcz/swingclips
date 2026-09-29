@@ -155,6 +155,36 @@
   .pos { flex: 0 0 auto; width: 96px; padding: 0; border-radius: 6px; overflow: hidden; text-align: left;
          background: var(--panel); }
   .pos.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  /* Scorecard: one tile per key position, coloured by the golfer's own good-shot ranges (scorecard.js). */
+  #scorecard { display: flex; flex-direction: column; gap: 10px; }
+  #scorecard[hidden] { display: none; }
+  .sc-summary { font-size: 15px; font-weight: 600; }
+  .sc-count { font-size: 12px; color: var(--muted); }
+  .sc-tiles { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+  .sc-tile { flex: 0 0 auto; min-width: 82px; padding: 8px 10px; border-radius: 8px; border: 2px solid var(--line); background: var(--panel);
+             text-align: left; cursor: pointer; scroll-snap-align: start; }
+  .sc-tile b { display: block; font-size: 11px; color: var(--muted); font-weight: 600; }
+  .sc-tile span { font-size: 13px; }
+  .sc-tile.green { border-color: var(--accent); background: var(--accent-soft); }
+  .sc-tile.amber { border-color: var(--warn); background: var(--warn-soft); }
+  .sc-tile.red { border-color: var(--bad); }
+  .sc-tile.grey { border-style: dashed; }
+  .sc-tile.selected { box-shadow: 0 0 0 2px var(--text); }
+  .sc-tile.here b::after { content: " \25CF"; color: var(--accent); }
+  .sc-nums { display: flex; flex-direction: column; gap: 10px; }
+  .sc-num .row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+  .sc-num .val { font-variant-numeric: tabular-nums; font-weight: 650; white-space: nowrap; }
+  .sc-num .val.shaky { color: var(--muted); font-weight: 400; text-decoration: underline dotted; }
+  .sc-bar { position: relative; height: 10px; border-radius: 5px; background: var(--line); margin-top: 4px; overflow: hidden; }
+  .sc-band { position: absolute; top: 0; bottom: 0; background: var(--accent); opacity: 0.55; }
+  .sc-mark { position: absolute; top: -1px; bottom: -1px; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--text); }
+  .sc-mark.shaky { opacity: 0.4; }
+  .sc-none { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .sc-faults { display: flex; flex-direction: column; gap: 6px; }
+  .sc-fault summary { cursor: pointer; font-size: 14px; }
+  .sc-sev { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 9px; margin-right: 6px; border: 1px solid var(--warn); color: var(--warn); }
+  .sc-sev.s3 { background: var(--warn); color: var(--panel); }
+  .sc-phase-link { font-size: 12px; color: var(--muted); margin-left: 6px; text-decoration: underline; cursor: pointer; background: none; border: 0; padding: 0; }
   .pos canvas { display: block; width: 96px; height: 128px; background: #000; }
   /* Both angles in one card. */
   .pos.two { width: 192px; }
@@ -852,6 +882,7 @@
     </div>
     <div id="labelpanel" hidden></div>
     <div id="shotdata" hidden title="From the launch monitor, via the shot listener"></div>
+    <div id="scorecard" class="card" hidden></div>
     <div id="positions" class="card" hidden>
       <div class="pos-head">
         <strong>Key positions</strong><span class="hint">Tap a position, or press 1–8</span>
@@ -1228,6 +1259,7 @@
 <script src="/static/gapping.js"></script>
 <script src="/static/wedges.js"></script>
 <script src="/static/faults.js"></script>
+<script src="/static/scorecard.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script>
@@ -2275,7 +2307,7 @@ function showNumbers() {
   const box = document.getElementById("numbers");
   const cols = ["p1", "p4", "p6", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
   box.hidden = !(metrics || dtlMetrics) || !cols.length;
-  if (box.hidden) return;
+  if (box.hidden) { document.getElementById("scorecard").hidden = true; return; }
   document.getElementById("face-note").hidden = !metrics;
   document.getElementById("dtl-note").hidden = !dtlMetrics;
   const facts = openFacts();
@@ -2303,6 +2335,7 @@ function showNumbers() {
     const faults = typeof SwingFaults !== "undefined"
       ? SwingFaults.faultsOf(openRow, (r, k) => r.trust && r.trust[k] && r.trust[k].level === "shaky")
       : [];
+    renderScorecard(body, trust, faults, good.ranges);
     if (faults.length) {
       faultsEl.append("Faults on this swing: ");
       faults.forEach((f, i) => {
@@ -2374,6 +2407,114 @@ function showNumbers() {
     : "";
 }
 
+// ---- Scorecard: a tile per key position, coloured against the golfer's own good-shot ranges ----
+
+let scSelected = null;   // the phase key whose numbers show under the tiles
+
+function scFormat(v, unit) {
+  if (v == null || !Number.isFinite(v)) return "--";
+  const dec = unit === "s" ? 2 : unit === "\u00b0" ? 0 : 1;
+  return v.toFixed(dec) + (unit === ":1" ? " : 1" : unit);
+}
+
+function scEl(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+/** Draws the scorecard for the open swing: body/trust as showNumbers built them, faults from SwingFaults, good ranges. */
+function renderScorecard(body, trust, faults, ranges) {
+  const box = document.getElementById("scorecard");
+  if (typeof SwingScorecard === "undefined" || !positions.length) { box.hidden = true; return; }
+  const sc = SwingScorecard.buildScorecard(positions, body, trust, ranges, faults);
+  window.currentScorecard = sc;
+  if (!sc.phases.length) { box.hidden = true; return; }
+  if (!sc.phases.some(p => p.key === scSelected)) scSelected = (sc.phases.find(p => p.metrics.length) || sc.phases[0]).key;
+
+  const head = scEl("div");
+  head.append(scEl("div", "sc-summary", sc.summarySentence));
+  if (sc.nTotal) head.append(scEl("div", "sc-count", `${sc.nInside} of ${sc.nTotal} readable numbers are inside your good range`));
+
+  const tiles = scEl("div", "sc-tiles");
+  for (const p of sc.phases) {
+    const pos = positions.find(q => q.key === p.key);
+    const t = scEl("button", `sc-tile ${p.color}`);
+    t.dataset.phase = p.key;
+    t.append(scEl("b", null, pos ? pos.tag : ""), scEl("span", null, (pos ? pos.label : p.name) + (pos && pos.estimated ? " ~" : "")));
+    t.title = p.metrics.length ? "Show this phase's numbers and jump the video to it" : "Jump the video to this position";
+    t.onclick = () => selectPhase(p.key, true);
+    tiles.append(t);
+  }
+
+  const nums = scEl("div", "sc-nums");
+  nums.id = "sc-nums";
+
+  const faultsBox = scEl("div", "sc-faults");
+  const sev = ["", "slight", "moderate", "big"];
+  for (const f of sc.faults) {
+    const d = scEl("details", "sc-fault");
+    const sum = scEl("summary");
+    sum.append(scEl("span", `sc-sev s${f.severity}`, sev[f.severity] || ""), f.name[0].toUpperCase() + f.name.slice(1));
+    const link = scEl("button", "sc-phase-link", `at ${f.phaseName.toLowerCase()}`);
+    link.onclick = e => { e.preventDefault(); selectPhase(f.phase, true); };
+    sum.append(link);
+    d.append(sum);
+    if (f.thought) d.append(scEl("div", "note", "Swing thought: " + f.thought));
+    if (f.drill) d.append(scEl("div", "note", "Drill: " + f.drill));
+    faultsBox.append(d);
+  }
+
+  box.replaceChildren(scEl("strong", null, "Scorecard"), head, tiles, nums, faultsBox);
+  box.hidden = false;
+  selectPhase(scSelected, false);
+  markPosition(video.currentTime);
+}
+
+function selectPhase(key, seek) {
+  const sc = window.currentScorecard;
+  const p = sc && sc.phases.find(x => x.key === key);
+  if (!p) return;
+  scSelected = key;
+  if (seek && p.index != null && pose) jumpTo(p.index);
+  document.querySelectorAll("#scorecard .sc-tile").forEach(t => t.classList.toggle("selected", t.dataset.phase === key));
+  const nums = document.getElementById("sc-nums");
+  nums.replaceChildren();
+  if (!p.metrics.length) {
+    nums.append(scEl("div", "sc-none", "No numbers are measured at this position."));
+    return;
+  }
+  for (const m of p.metrics) {
+    const shaky = m.trust && m.trust.level === "shaky";
+    const row = scEl("div", "sc-num");
+    const line = scEl("div", "row");
+    line.append(scEl("span", null, m.label));
+    const val = scEl("span", "val" + (shaky ? " shaky" : ""), scFormat(m.value, m.unit));
+    if (shaky) val.title = "Shaky: " + (m.trust.text || "read with low confidence");
+    line.append(val);
+    row.append(line);
+    const r = m.range;
+    if (m.value != null && r && r.enough) {
+      const lo = Math.min(r.q10, m.value), hi = Math.max(r.q90, m.value), pad = (hi - lo) * 0.15 || 1;
+      const a = lo - pad, span = hi + pad - a;
+      const pct = x => Math.max(0, Math.min(100, (x - a) / span * 100));
+      const bar = scEl("div", "sc-bar");
+      const band = scEl("div", "sc-band");
+      band.style.left = pct(r.q25) + "%";
+      band.style.width = (pct(r.q75) - pct(r.q25)) + "%";
+      const mark = scEl("div", "sc-mark" + (shaky ? " shaky" : ""));
+      mark.style.left = pct(m.value) + "%";
+      bar.append(band, mark);
+      row.append(bar);
+      if (m.goodStatus) row.append(scEl("div", "sc-none", m.goodStatus.text));
+    } else {
+      row.append(scEl("div", "sc-none", m.value == null ? "No reading on this swing" : (m.goodStatus ? m.goodStatus.text : "No good-shot range yet")));
+    }
+    nums.append(row);
+  }
+}
+
 function jumpTo(index) {
   video.pause();
   const f = pose.frames;
@@ -2386,6 +2527,8 @@ function markPosition(t) {
   const i = frameIndexAt(t);
   posList.querySelectorAll(".pos").forEach((b, k) => b.classList.toggle("here", positions[k].index === i));
   marksBox.querySelectorAll(".mark").forEach((b, k) => b.classList.toggle("here", positions[k] && positions[k].index === i));
+  const at = positions.find(p => p.index === i);
+  document.querySelectorAll("#scorecard .sc-tile").forEach(t => t.classList.toggle("here", !!at && t.dataset.phase === at.key));
 }
 
 // ---- Transport: play, the scrubber and its key-position marks ----
@@ -2515,6 +2658,7 @@ function open(name) {
   document.getElementById("camcheck").hidden = true;
   lastCameraCheck = null;
   document.getElementById("numbers").hidden = true;
+  document.getElementById("scorecard").hidden = true;
   posList.replaceChildren();
   marksBox.replaceChildren();
   video.src = "/clips/" + encodeURIComponent(name);
