@@ -73,6 +73,10 @@
   const SHAPE_MAX_OFFLINE_PCT = 10;
   const SHAPING_SHOTS = 12;
 
+  // Distance control game constants
+  const DISTANCE_WINDOW_YD = 5;
+  const DISTANCE_DEFAULTS = { count: 15, min: 50, max: 130, step: 5 };
+
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
   // Mulberry32: a tiny 32-bit seeded PRNG returning [0, 1).
@@ -278,6 +282,43 @@
   }
 
   /**
+   * Score a distance control shot against a target carry distance in yards.
+   * Only the carry counts; direction is ignored.
+   * @param {number} target Target carry distance in yards
+   * @param {{carry: number, offline?: number}} shot Shot details
+   * @returns {{along: number, side: number, dist: number, onGreen: boolean, sg: number, verdict: string} | null}
+   */
+  function scoreDistance(target, shot) {
+    if (!finite(target) || target <= 0) return null;
+    if (!shot || typeof shot !== "object") return null;
+    if (!finite(shot.carry) || shot.carry <= 0) return null;
+
+    const along = shot.carry - target;
+    const side = finite(shot.offline) ? shot.offline : 0;
+    const dist = Math.abs(along);
+    const onGreen = dist <= DISTANCE_WINDOW_YD;
+
+    // sg: the green table (expectedPutts) at |along| * 3 feet when within 15 yd,
+    // else the fairway table at |along|, so sg = expectedStrokes(target) - that - 1;
+    // same idea as scoreShot but on carry alone.
+    const eOff = expectedStrokes(target);
+    const eEnd = dist <= GREEN_RADIUS_YD ? expectedPutts(dist * 3) : expectedStrokes(dist);
+    const sg = eOff - eEnd - 1;
+
+    let distWord;
+    if (Math.abs(along) < 1) {
+      distWord = "pin high";
+    } else if (along > 0) {
+      distWord = `${Math.round(along)} long`;
+    } else {
+      distWord = `${Math.round(-along)} short`;
+    }
+
+    const verdict = onGreen ? `${distWord}, in` : distWord;
+    return { along, side, dist, onGreen, sg, verdict };
+  }
+
+  /**
    * Score a shot for a given game, dispatching to the game's own scorer if defined.
    * @param {string} gameId Game identifier
    * @param {any} target Game target
@@ -457,6 +498,30 @@
     }
   }
 
+  // Plan distance control targets: 15 random carries from 50 to 130 yards, never the same target twice in a row, seeded.
+  function planDistance(options = {}) {
+    const count = options.count ?? DISTANCE_DEFAULTS.count;
+    const min = options.min ?? DISTANCE_DEFAULTS.min;
+    const max = options.max ?? DISTANCE_DEFAULTS.max;
+    const step = options.step ?? DISTANCE_DEFAULTS.step;
+    const rng = mulberry32(options.seed);
+    const lo = Math.ceil(min / step);
+    const hi = Math.floor(max / step);
+    const candidates = [];
+    for (let s = lo; s <= hi; s++) candidates.push(s * step);
+    const targets = [];
+    let last = null;
+    for (let i = 0; i < count; i++) {
+      const choices = candidates.length > 1 && last !== null
+        ? candidates.filter(t => t !== last)
+        : candidates;
+      const pick = choices[Math.floor(rng() * choices.length)];
+      targets.push(pick);
+      last = pick;
+    }
+    return targets;
+  }
+
   const GAMES = {
     combine: {
       id: "combine",
@@ -565,6 +630,26 @@
         return scoreShaping(target, shot);
       },
     },
+    distance: {
+      id: "distance",
+      name: "Distance control",
+      describe: "Distance control: 15 random carries from 50 to 130 yards. Only the carry counts: within 5 yards is a hit.",
+      clubsHint: "any",
+      plan: function (options) {
+        return planDistance(options);
+      },
+      next: function (options, history) {
+        const p = this.plan(options);
+        const idx = history ? history.length : 0;
+        return idx < p.length ? p[idx] : null;
+      },
+      sayTarget: function (target) {
+        return `${target} yards carry`;
+      },
+      score: function (target, shot) {
+        return scoreDistance(target, shot);
+      },
+    },
   };
 
   /**
@@ -639,15 +724,19 @@
     SHAPE_MIN_AXIS,
     SHAPE_MAX_OFFLINE_PCT,
     SHAPING_SHOTS,
+    DISTANCE_WINDOW_YD,
+    DISTANCE_DEFAULTS,
     mulberry32,
     expectedPutts,
     expectedStrokes,
     scoreShot,
     scoreDriving,
     scoreShaping,
+    scoreDistance,
     scoreFor,
     summarize,
     planShaping,
+    planDistance,
     combineBreakdown,
     GAMES,
   };

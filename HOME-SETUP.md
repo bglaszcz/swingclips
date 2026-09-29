@@ -516,12 +516,12 @@ toward the ball". The phones face away from you, so voice is the channel.
   `POST /api/practice` (`{on, metric, min, max, club, streak}`), `POST /api/practice/test`,
   `GET /api/practice/latest`.
 - **Practice games** (Games card at the top of Practice): pick Combine, Wedge ladder, Random pick, Ladder,
-  Driving or Shot shaping and press Start game. The speaking phone says the target; once Square's shot pairs
+  Driving, Shot shaping or Distance control and press Start game. The speaking phone says the target; once Square's shot pairs
   (~15 s) it says where the ball landed ("8 short, 3 right, on the green") and the next target. A swing whose
   shot never comes is skipped (same target again); a Square mishit scores the worst. Scoring is strokes against
   a tour baseline from where the ball lands (no roll into a net; within 15 yd counts as the green); Driving
-  scores 14 tee shots against a 30-yard fairway par-4 baseline, while Shot shaping scores 12 called draws and
-  fades by spin axis. Targets and scoring are `static/games.js`, the game in play `game.json` and finished
+  scores 14 tee shots against a 30-yard fairway par-4 baseline, Shot shaping scores 12 called draws and
+  fades by spin axis, while Distance control tests 15 random carries (50-130 yd) scored on carry alone against a 5-yard window. Targets and scoring are `static/games.js`, the game in play `game.json` and finished
   games `games-log.jsonl` next to the clips folder (`server/games.py`). Starting a game turns the practice number
   off, and turning that on stops the game. The Combine is always the same 27 shots (9 targets, 50-170 yd,
   shuffled), so its score is comparable across weeks. Under the Combine scores table, "Where you lose strokes" breaks down strokes gained by target distance over the last 3 Combines to pinpoint the weakest yardages. No phone update needed.

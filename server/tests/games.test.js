@@ -661,3 +661,122 @@ test("combineBreakdown: sorting by target ascending and 3-shot rule for worst", 
   assert.ok(Math.abs(b.worst[1].sgPerShot - -0.38) < 1e-9);
 });
 
+test("distance score: window edges at 5 yd", () => {
+  const target = 100;
+  // Pin high: carry 100 -> along = 0, onGreen = true
+  const s0 = Games.scoreDistance(target, { carry: 100 });
+  assert.ok(s0);
+  assert.equal(s0.onGreen, true);
+  assert.equal(s0.verdict, "pin high, in");
+
+  // Window edge: carry 105.0 -> along = 5.0 -> onGreen = true
+  const s5Long = Games.scoreDistance(target, { carry: 105.0 });
+  assert.equal(s5Long.onGreen, true);
+  assert.equal(s5Long.verdict, "5 long, in");
+
+  // Just past edge: carry 105.1 -> along = 5.1 -> onGreen = false
+  const s51Long = Games.scoreDistance(target, { carry: 105.1 });
+  assert.equal(s51Long.onGreen, false);
+  assert.equal(s51Long.verdict, "5 long");
+
+  // Window edge: carry 95.0 -> along = -5.0 -> onGreen = true
+  const s5Short = Games.scoreDistance(target, { carry: 95.0 });
+  assert.equal(s5Short.onGreen, true);
+  assert.equal(s5Short.verdict, "5 short, in");
+
+  // Just past edge: carry 94.9 -> along = -5.1 -> onGreen = false
+  const s51Short = Games.scoreDistance(target, { carry: 94.9 });
+  assert.equal(s51Short.onGreen, false);
+  assert.equal(s51Short.verdict, "5 short");
+});
+
+test("distance score: direction ignored and verdicts", () => {
+  const target = 100;
+
+  // Prompt example: "4 short, in"
+  const s4Short = Games.scoreDistance(target, { carry: 96, offline: 12 });
+  assert.equal(s4Short.onGreen, true);
+  assert.equal(s4Short.verdict, "4 short, in");
+
+  // Direction ignored: offline has no effect on sg, onGreen or verdict
+  const s4ShortNoOff = Games.scoreDistance(target, { carry: 96 });
+  const s4ShortLeft = Games.scoreDistance(target, { carry: 96, offline: -25 });
+  assert.equal(s4Short.sg, s4ShortNoOff.sg);
+  assert.equal(s4Short.sg, s4ShortLeft.sg);
+  assert.equal(s4Short.verdict, s4ShortNoOff.verdict);
+  assert.equal(s4Short.verdict, s4ShortLeft.verdict);
+
+  // Prompt example: "9 long"
+  const s9Long = Games.scoreDistance(target, { carry: 109, offline: -5 });
+  assert.equal(s9Long.onGreen, false);
+  assert.equal(s9Long.verdict, "9 long");
+
+  // Prompt example: "pin high, in"
+  const sPinHigh = Games.scoreDistance(target, { carry: 100.3, offline: 20 });
+  assert.equal(sPinHigh.onGreen, true);
+  assert.equal(sPinHigh.verdict, "pin high, in");
+
+  // Mishits and invalid inputs
+  assert.equal(Games.scoreDistance(100, null), null);
+  assert.equal(Games.scoreDistance(100, {}), null);
+  assert.equal(Games.scoreDistance(100, { carry: 0 }), null);
+  assert.equal(Games.scoreDistance(100, { carry: -10 }), null);
+  assert.equal(Games.scoreDistance(0, { carry: 100 }), null);
+});
+
+test("distance score: strokes gained uses putts table within 15 yd, fairway table beyond", () => {
+  const target = 100;
+  const eOff = Games.expectedStrokes(100);
+
+  // Carry 104 -> along = 4 -> dist = 4 yd (12 ft) <= 15 yd -> expectedPutts(12)
+  const sWithin = Games.scoreDistance(target, { carry: 104 });
+  const expectedSgWithin = eOff - Games.expectedPutts(12) - 1;
+  assert.ok(Math.abs(sWithin.sg - expectedSgWithin) < 1e-9);
+
+  // Carry 125 -> along = 25 -> dist = 25 yd > 15 yd -> expectedStrokes(25)
+  const sBeyond = Games.scoreDistance(target, { carry: 125 });
+  const expectedSgBeyond = eOff - Games.expectedStrokes(25) - 1;
+  assert.ok(Math.abs(sBeyond.sg - expectedSgBeyond) < 1e-9);
+});
+
+test("distance plan: 15 targets, no repeats, uniform in range, deterministic", () => {
+  const seeds = [1, 2, 7, 42, 99, 100, 999, 12345, 999999];
+  for (const seed of seeds) {
+    const plan = Games.GAMES.distance.plan({ seed });
+    assert.equal(plan.length, 15, `Seed ${seed} length`);
+    for (let i = 0; i < plan.length; i++) {
+      const t = plan[i];
+      assert.equal(t % 5, 0, `Seed ${seed} multiple of 5`);
+      assert.ok(t >= 50 && t <= 130, `Seed ${seed} in range 50..130`);
+      if (i > 0) {
+        assert.notEqual(plan[i], plan[i - 1], `Seed ${seed} repeat at index ${i}`);
+      }
+    }
+  }
+
+  // Determinism
+  const p1 = Games.GAMES.distance.plan({ seed: 42 });
+  const p2 = Games.GAMES.distance.plan({ seed: 42 });
+  const p3 = Games.GAMES.distance.plan({ seed: 99 });
+  assert.deepEqual(p1, p2);
+  assert.notDeepEqual(p1, p3);
+
+  // Next stops at 15 shots
+  const hist = p1.map(t => ({ target: t, onGreen: true }));
+  assert.equal(Games.GAMES.distance.next({ seed: 42 }, hist), null);
+});
+
+test("distance game: sayTarget and describe metadata", () => {
+  assert.equal(Games.GAMES.distance.sayTarget(75), "75 yards carry");
+  assert.equal(
+    Games.GAMES.distance.describe,
+    "Distance control: 15 random carries from 50 to 130 yards. Only the carry counts: within 5 yards is a hit."
+  );
+
+  // scoreFor dispatches to scoreDistance
+  const s = Games.scoreFor("distance", 100, { carry: 96, offline: 30 });
+  assert.equal(s.verdict, "4 short, in");
+  assert.equal(s.onGreen, true);
+});
+
+
