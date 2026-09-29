@@ -769,12 +769,12 @@ Settings can be set in `server\settings.cmd` (or the Windows environment). User-
 | `SWINGCLIPS_POSE_BACKEND` | `mediapipe` (`rtmpose-m` in `settings.cmd`) | Body pose model: `mediapipe`, `rtmpose-m`, `rtmpose-l` or `rtmw`. |
 | `SWINGCLIPS_ORT_PROVIDER` | `cpu` | ONNX Runtime provider: `cpu`, `dml` (DirectX 12 / Intel GPU), `cuda` or `auto`. |
 | `SWINGCLIPS_ORT_DEVICE` | `0` | GPU device index for `dml` or `cuda`. |
-| `SWINGCLIPS_POSE_WORKERS` | half of logical CPUs | Background worker processes for clip analysis. |
+| `SWINGCLIPS_POSE_WORKERS` | half of logical CPUs, at most 6 (8 recommended on the server) | Background worker processes for clip analysis. |
 | `SWINGCLIPS_BODY_STRIDE` | `2` on CPU (`1` on GPU) | Body model stride during session (1 = every frame, 2 = every other). |
-| `SWINGCLIPS_DURING_SESSION` | unset | Set to `wait` to pause clip analysis until 10 min after session ends. |
+| `SWINGCLIPS_DURING_SESSION` | `quick` | `quick` = quick analysis during a session, deep pass after; `wait` = pause analysis until 10 min after the session ends. |
 | `SWINGCLIPS_DEEP` | `on` | Set to `off` to disable the background deep pass after a session. |
 | `SWINGCLIPS_QUICK` | `on` | Set to `off` to disable quick pass optimizations during a session. |
-| `SWINGCLIPS_3D` | `1` | Set to `0` or `off` to turn off 3D joint triangulation. |
+| `SWINGCLIPS_3D` | off | Set to `1` or `on` to turn on 3D joint triangulation (needs calibrated phones). |
 | `SWINGCLIPS_CLUB_BACKEND` | `raycast` | Club tracker: `raycast` (ray casting) or `yolo` (YOLO pose model). |
 
 
