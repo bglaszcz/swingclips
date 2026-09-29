@@ -1116,6 +1116,167 @@ test("holes next: terminates after 12 shots", () => {
   assert.equal(Games.GAMES.holes.next({}, fullHist), null);
 });
 
+test("clubsByTarget: grouping by target and club, sorted by target then shots descending", () => {
+  const log = [
+    {
+      id: "combine",
+      results: [
+        { target: 100, club: "7i", onGreen: true, dist: 4 },
+        { target: 100, club: "7i", onGreen: true, dist: 6 },
+        { target: 100, club: "8i", onGreen: false, dist: 18 },
+        { target: 150, club: "5i", onGreen: true, dist: 10 },
+      ],
+    },
+    {
+      id: "distance",
+      results: [
+        { target: 100, club: "7i", onGreen: false, dist: 5 },
+        { target: 100, club: "8i", onGreen: true, dist: 8 },
+        { target: 100, club: "8i", onGreen: true, dist: 12 },
+        { target: 50, club: "SW", onGreen: true, dist: 2 },
+      ],
+    },
+  ];
 
+  const rows = Games.clubsByTarget(log);
+  // Targets sorted ascending: 50, 100, 150
+  assert.equal(rows.length, 3);
+  assert.equal(rows[0].target, 50);
+  assert.equal(rows[1].target, 100);
+  assert.equal(rows[2].target, 150);
 
+  // Target 50: SW x1
+  assert.equal(rows[0].clubs.length, 1);
+  assert.equal(rows[0].clubs[0].club, "SW");
+  assert.equal(rows[0].clubs[0].shots, 1);
+  assert.equal(rows[0].clubs[0].avgDist, 2);
+  assert.equal(rows[0].clubs[0].greenShare, 1.0);
 
+  // Target 100: 7i (3 shots: 2 green, dists 4, 6, 5 -> avg 5), 8i (3 shots: 2 green, dists 18, 8, 12 -> avg 12.67)
+  assert.equal(rows[1].clubs.length, 2);
+  const c7i = rows[1].clubs.find(c => c.club === "7i");
+  const c8i = rows[1].clubs.find(c => c.club === "8i");
+  assert.ok(c7i);
+  assert.ok(c8i);
+  assert.equal(c7i.shots, 3);
+  assert.equal(c7i.avgDist, 5);
+  assert.ok(Math.abs(c7i.greenShare - 2 / 3) < 1e-9);
+  assert.equal(c8i.shots, 3);
+  assert.ok(Math.abs(c8i.avgDist - (18 + 8 + 12) / 3) < 1e-9);
+  assert.ok(Math.abs(c8i.greenShare - 2 / 3) < 1e-9);
+
+  // Target 150: 5i x1
+  assert.equal(rows[2].clubs.length, 1);
+  assert.equal(rows[2].clubs[0].club, "5i");
+  assert.equal(rows[2].clubs[0].shots, 1);
+});
+
+test("clubsByTarget: ignores missing clubs, ignores shaping and driving by default, supports options.id", () => {
+  const log = [
+    {
+      id: "shaping", // excluded by default
+      results: [{ target: "draw", club: "7i", onGreen: true }],
+    },
+    {
+      id: "driving", // excluded by default
+      results: [{ target: 0, club: "DR", onGreen: true }],
+    },
+    {
+      id: "combine",
+      results: [
+        { target: 100, club: null, onGreen: true }, // missing club ignored
+        { target: 100, club: "", onGreen: true },   // empty club ignored
+        { target: 100, club: "7i", onGreen: true, dist: 5 },
+      ],
+    },
+    {
+      id: "wedges",
+      results: [
+        { target: 60, club: "LW", onGreen: true, dist: 3 },
+      ],
+    },
+  ];
+
+  // Default: excludes shaping & driving, excludes missing club
+  const rows = Games.clubsByTarget(log);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].target, 60);
+  assert.equal(rows[1].target, 100);
+  assert.equal(rows[1].clubs.length, 1);
+  assert.equal(rows[1].clubs[0].club, "7i");
+  assert.equal(rows[1].clubs[0].shots, 1);
+
+  // Restricted with options.id: "combine" only
+  const combineOnly = Games.clubsByTarget(log, { id: "combine" });
+  assert.equal(combineOnly.length, 1);
+  assert.equal(combineOnly[0].target, 100);
+
+  // Empty log
+  assert.deepEqual(Games.clubsByTarget([]), []);
+  assert.deepEqual(Games.clubsByTarget(null), []);
+});
+
+test("clubSuggestion: 3-shot minimum rule", () => {
+  // Club with 2 shots (100% green) vs club with 3 shots (67% green)
+  const clubs = [
+    { club: "8i", shots: 2, avgDist: 3, greenShare: 1.0 },
+    { club: "7i", shots: 3, avgDist: 5, greenShare: 0.67 },
+  ];
+  // 8i is ineligible due to < 3 shots; 7i is picked
+  assert.equal(Games.clubSuggestion(clubs), "7i");
+
+  // If no club has at least 3 shots, returns null
+  const underMin = [
+    { club: "8i", shots: 2, avgDist: 3, greenShare: 1.0 },
+    { club: "7i", shots: 1, avgDist: 5, greenShare: 1.0 },
+  ];
+  assert.equal(Games.clubSuggestion(underMin), null);
+  assert.equal(Games.clubSuggestion([]), null);
+  assert.equal(Games.clubSuggestion(null), null);
+});
+
+test("clubSuggestion: ties broken by more shots", () => {
+  // Both have >= 3 shots and the same greenShare (0.8)
+  const clubs = [
+    { club: "8i", shots: 3, avgDist: 6, greenShare: 0.8 },
+    { club: "7i", shots: 5, avgDist: 4, greenShare: 0.8 },
+  ];
+  // 7i wins tie because it has 5 shots vs 3 shots
+  assert.equal(Games.clubSuggestion(clubs), "7i");
+
+  // Different greenShare: higher greenShare wins regardless of shot count (as long as >= 3)
+  const clubsDiff = [
+    { club: "8i", shots: 10, avgDist: 6, greenShare: 0.7 },
+    { club: "7i", shots: 3, avgDist: 4, greenShare: 0.8 },
+  ];
+  assert.equal(Games.clubSuggestion(clubsDiff), "7i");
+});
+
+test("clubSuggestion: accepts target rows array or single target row", () => {
+  const rows = [
+    {
+      target: 100,
+      clubs: [
+        { club: "7i", shots: 3, greenShare: 0.67 },
+        { club: "8i", shots: 2, greenShare: 1.0 },
+      ],
+    },
+    {
+      target: 150,
+      clubs: [
+        { club: "5i", shots: 2, greenShare: 0.5 },
+      ],
+    },
+  ];
+
+  // Called on single target row
+  assert.equal(Games.clubSuggestion(rows[0]), "7i");
+  assert.equal(Games.clubSuggestion(rows[1]), null);
+
+  // Called on rows array: returns map / sets row.best
+  const suggestions = Games.clubSuggestion(rows);
+  assert.equal(suggestions.get(100), "7i");
+  assert.equal(suggestions.get(150), null);
+  assert.equal(rows[0].best, "7i");
+  assert.equal(rows[1].best, null);
+});

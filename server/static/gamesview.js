@@ -76,48 +76,83 @@ function renderGames() {
     : [];
 
   const box = gmEl("gm-history");
+  const elements = [];
   if (!history.length) {
-    box.textContent = `No ${gameName} finished yet.`;
-    return;
-  }
-  const hitWord = HIT_WORDS[selectedGame] || "on the green";
-  const hitHeader = hitWord.charAt(0).toUpperCase() + hitWord.slice(1);
-  const t = document.createElement("table");
-  t.append(Object.assign(document.createElement("tr"), {}));
-  t.rows[0].append(...["Day", "Shots", hitHeader, "Strokes a shot vs tour", "Ended"].map(h =>
-    Object.assign(document.createElement("th"), { textContent: h })));
-  for (const x of history) {
-    const r = t.insertRow();
-    r.append(gmCell(gmDay(x.started)), gmCell(String(x.shots)), gmCell(String(x.hits)),
-      gmCell(gmSg(x.sgPerShot)), gmCell(x.how === "done" ? "finished" : x.how === "idle" ? "left unfinished" : "stopped"));
-    if (history.best && x === history.best) {
-      r.title = `Personal best: ${Math.round(x.hitShare * 100)}% ${hitWord}`;
-    }
-  }
-  const elements = [t];
-  if (selectedGame === "combine") {
-    const breakdown = typeof SwingGames !== "undefined" && SwingGames.combineBreakdown ? SwingGames.combineBreakdown(gmState.log) : null;
-    if (breakdown && breakdown.targets && breakdown.targets.length) {
-      const worstText = breakdown.worst && breakdown.worst.length
-        ? breakdown.worst.map(w => `${w.target} yd ${gmSg(w.sgPerShot)} a shot`).join(", ")
-        : "not enough shots yet";
-      const line = Object.assign(document.createElement("div"), {
-        className: "note",
-        style: "margin: 12px 0 6px;",
-        textContent: `Where you lose strokes (last 3 Combines): ${worstText}.`,
-      });
-      elements.push(line);
-      const bt = document.createElement("table");
-      bt.append(document.createElement("tr"));
-      bt.rows[0].append(...["Target", "Shots", "Greens", "Strokes a shot"].map(h =>
-        Object.assign(document.createElement("th"), { textContent: h })));
-      for (const b of breakdown.targets) {
-        const r = bt.insertRow();
-        r.append(gmCell(b.target + " yd"), gmCell(String(b.shots)), gmCell(String(b.greens)), gmCell(gmSg(b.sgPerShot)));
+    elements.push(Object.assign(document.createElement("div"), {
+      textContent: `No ${gameName} finished yet.`,
+    }));
+  } else {
+    const hitWord = HIT_WORDS[selectedGame] || "on the green";
+    const hitHeader = hitWord.charAt(0).toUpperCase() + hitWord.slice(1);
+    const t = document.createElement("table");
+    t.append(Object.assign(document.createElement("tr"), {}));
+    t.rows[0].append(...["Day", "Shots", hitHeader, "Strokes a shot vs tour", "Ended"].map(h =>
+      Object.assign(document.createElement("th"), { textContent: h })));
+    for (const x of history) {
+      const r = t.insertRow();
+      r.append(gmCell(gmDay(x.started)), gmCell(String(x.shots)), gmCell(String(x.hits)),
+        gmCell(gmSg(x.sgPerShot)), gmCell(x.how === "done" ? "finished" : x.how === "idle" ? "left unfinished" : "stopped"));
+      if (history.best && x === history.best) {
+        r.title = `Personal best: ${Math.round(x.hitShare * 100)}% ${hitWord}`;
       }
-      elements.push(bt);
+    }
+    elements.push(t);
+    if (selectedGame === "combine") {
+      const breakdown = typeof SwingGames !== "undefined" && SwingGames.combineBreakdown ? SwingGames.combineBreakdown(gmState.log) : null;
+      if (breakdown && breakdown.targets && breakdown.targets.length) {
+        const worstText = breakdown.worst && breakdown.worst.length
+          ? breakdown.worst.map(w => `${w.target} yd ${gmSg(w.sgPerShot)} a shot`).join(", ")
+          : "not enough shots yet";
+        const line = Object.assign(document.createElement("div"), {
+          className: "note",
+          style: "margin: 12px 0 6px;",
+          textContent: `Where you lose strokes (last 3 Combines): ${worstText}.`,
+        });
+        elements.push(line);
+        const bt = document.createElement("table");
+        bt.append(document.createElement("tr"));
+        bt.rows[0].append(...["Target", "Shots", "Greens", "Strokes a shot"].map(h =>
+          Object.assign(document.createElement("th"), { textContent: h })));
+        for (const b of breakdown.targets) {
+          const r = bt.insertRow();
+          r.append(gmCell(b.target + " yd"), gmCell(String(b.shots)), gmCell(String(b.greens)), gmCell(gmSg(b.sgPerShot)));
+        }
+        elements.push(bt);
+      }
     }
   }
+
+  // Clubs you pick by distance
+  const clubRows = typeof SwingGames !== "undefined" && SwingGames.clubsByTarget
+    ? SwingGames.clubsByTarget(gmState.log)
+    : [];
+  if (clubRows.length) {
+    const det = document.createElement("details");
+    det.style.marginTop = "12px";
+    const sum = document.createElement("summary");
+    sum.textContent = "Clubs you pick by distance";
+    sum.style.cursor = "pointer";
+    det.append(sum);
+
+    const ct = document.createElement("table");
+    ct.style.marginTop = "6px";
+    ct.append(document.createElement("tr"));
+    ct.rows[0].append(...["Target", "Clubs used", "Best club"].map(h =>
+      Object.assign(document.createElement("th"), { textContent: h })));
+
+    for (const r of clubRows) {
+      const tr = ct.insertRow();
+      const targetStr = r.target + " yd";
+      const clubsUsed = r.clubs.map(c => `${c.club} x${c.shots}`).join(", ");
+      const best = typeof SwingGames !== "undefined" && SwingGames.clubSuggestion
+        ? SwingGames.clubSuggestion(r.clubs)
+        : null;
+      tr.append(gmCell(targetStr), gmCell(clubsUsed), gmCell(best || "–"));
+    }
+    det.append(ct);
+    elements.push(det);
+  }
+
   box.replaceChildren(...elements);
 }
 

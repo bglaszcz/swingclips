@@ -857,6 +857,126 @@
     };
   }
 
+  /**
+   * Group finished game shots by target distance and club used.
+   * @param {Array<object>} logEntries Finished game log entries from /api/game
+   * @param {{id?: string}} [options] Options, e.g. id to restrict games (default: all except shaping and driving)
+   * @returns {Array<{target: number, clubs: Array<{club: string, shots: number, avgDist: number|null, greenShare: number}>}>}
+   */
+  function clubsByTarget(logEntries, options = {}) {
+    const list = Array.isArray(logEntries) ? logEntries : [];
+    const filterId = options && typeof options.id === "string" ? options.id : null;
+
+    const targetMap = new Map();
+
+    for (const entry of list) {
+      if (!entry) continue;
+      const id = entry.id;
+      if (filterId) {
+        if (id !== filterId) continue;
+      } else {
+        if (id === "shaping" || id === "driving") continue;
+      }
+
+      const results = Array.isArray(entry.results) ? entry.results : [];
+      for (const r of results) {
+        if (!r) continue;
+        const club = r.club;
+        if (!club || typeof club !== "string" || !club.trim()) continue;
+
+        let target = null;
+        if (finite(r.target) && r.target > 0) {
+          target = r.target;
+        } else if (r.target && typeof r.target === "object" && finite(r.target.yards) && r.target.yards > 0) {
+          target = r.target.yards;
+        }
+        if (target == null) continue;
+
+        let clubMap = targetMap.get(target);
+        if (!clubMap) {
+          clubMap = new Map();
+          targetMap.set(target, clubMap);
+        }
+
+        const clubKey = club.trim();
+        let stats = clubMap.get(clubKey);
+        if (!stats) {
+          stats = { club: clubKey, shots: 0, greens: 0, distSum: 0, distCount: 0 };
+          clubMap.set(clubKey, stats);
+        }
+
+        stats.shots++;
+        if (r.onGreen) stats.greens++;
+        if (finite(r.dist)) {
+          stats.distSum += r.dist;
+          stats.distCount++;
+        }
+      }
+    }
+
+    const rows = [];
+    for (const [target, clubMap] of targetMap.entries()) {
+      const clubs = Array.from(clubMap.values()).map(s => ({
+        club: s.club,
+        shots: s.shots,
+        avgDist: s.distCount > 0 ? s.distSum / s.distCount : null,
+        greenShare: s.shots > 0 ? s.greens / s.shots : 0,
+      }));
+
+      // Sort clubs by shots descending; ties by greenShare descending then club name
+      clubs.sort((a, b) => (b.shots - a.shots) || (b.greenShare - a.greenShare) || a.club.localeCompare(b.club));
+
+      rows.push({ target, clubs });
+    }
+
+    // Sort rows by target ascending
+    rows.sort((a, b) => a.target - b.target);
+
+    return rows;
+  }
+
+  /**
+   * Suggest the best club for a target or across targets.
+   * Finds the club with the highest greenShare among clubs with >= 3 shots (ties: more shots), or null.
+   * @param {Array<object>|object} rows Target rows from clubsByTarget, or a single row, or club list
+   * @returns {string|null|Map<number, string|null>}
+   */
+  function clubSuggestion(rows) {
+    if (!rows) return null;
+
+    // If passed a single target row: { target, clubs: [...] }
+    if (!Array.isArray(rows) && Array.isArray(rows.clubs)) {
+      return clubSuggestion(rows.clubs);
+    }
+
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+
+    // If passed an array of target rows from clubsByTarget: [{ target, clubs: [...] }, ...]
+    if (rows[0] && rows[0].target !== undefined && Array.isArray(rows[0].clubs)) {
+      const map = new Map();
+      for (const row of rows) {
+        const best = clubSuggestion(row.clubs);
+        map.set(row.target, best);
+        map[row.target] = best;
+        row.best = best;
+      }
+      return map;
+    }
+
+    // Array of club entries: [{ club, shots, greenShare, ... }, ...]
+    const eligible = rows.filter(c => c && typeof c.club === "string" && finite(c.shots) && c.shots >= 3);
+    if (eligible.length === 0) return null;
+
+    eligible.sort((a, b) => {
+      const gDiff = (b.greenShare ?? 0) - (a.greenShare ?? 0);
+      if (Math.abs(gDiff) > 1e-9) return gDiff;
+      if (b.shots !== a.shots) return b.shots - a.shots;
+      return a.club.localeCompare(b.club);
+    });
+
+    return eligible[0].club;
+  }
+
   // Usual shot count for each game (for best score eligibility: >= half usual shots).
   const USUAL_SHOTS = {
     combine: COMBINE_TARGETS.length * COMBINE_SHOTS_PER_TARGET, // 27
@@ -975,6 +1095,8 @@
     nextHoles,
     sayHolesTarget,
     combineBreakdown,
+    clubsByTarget,
+    clubSuggestion,
     gameHistory,
     GAMES,
   };
