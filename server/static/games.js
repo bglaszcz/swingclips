@@ -860,7 +860,7 @@
   /**
    * Group finished game shots by target distance and club used.
    * @param {Array<object>} logEntries Finished game log entries from /api/game
-   * @param {{id?: string}} [options] Options, e.g. id to restrict games (default: all except shaping and driving)
+   * @param {{id?: string}} [options] Options, e.g. id to restrict games (default: all except shaping, driving and holes)
    * @returns {Array<{target: number, clubs: Array<{club: string, shots: number, avgDist: number|null, greenShare: number}>}>}
    */
   function clubsByTarget(logEntries, options = {}) {
@@ -875,7 +875,7 @@
       if (filterId) {
         if (id !== filterId) continue;
       } else {
-        if (id === "shaping" || id === "driving") continue;
+        if (id === "shaping" || id === "driving" || id === "holes") continue;   // holes: tee-shot targets are hole lengths
       }
 
       const results = Array.isArray(entry.results) ? entry.results : [];
