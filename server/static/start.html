@@ -305,7 +305,9 @@ function renderGame(data) {
   if (g) {
     $("game-active").hidden = false;
     $("game-idle").hidden = true;
-    const targetText = g.sayTarget || (Number.isFinite(g.target) ? `${g.target} yards` : String(g.target));
+    const targetText = g.sayTarget || (typeof g.target === "object" && g.target
+      ? (g.target.shot === 1 ? `hole ${g.target.hole}, ${g.target.yards} yards: the fairway` : `hole ${g.target.hole}: ${g.target.yards} yards to go`)
+      : Number.isFinite(g.target) ? `${g.target} yards` : String(g.target));
     $("game-target").textContent = targetText;
     const s = g.summary || {};
     $("game-score").textContent = !s.shots ? "No shots yet." : `${s.shots} shots, ${s.greens} ${g.hitWord || "on the green"}` +

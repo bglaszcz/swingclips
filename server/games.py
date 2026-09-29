@@ -95,7 +95,7 @@ def shot_of(shot: dict | None) -> dict:
 
 
 # What a game's "green" is, for the summary: a fairway, or the shape that was called.
-HIT_WORDS = {"driving": "in the fairway", "shaping": "shaped as called", "distance": "within 5 yards"}
+HIT_WORDS = {"driving": "in the fairway", "shaping": "shaped as called", "distance": "within 5 yards", "holes": "on the green"}
 
 
 class Games:
@@ -176,7 +176,7 @@ class Games:
                 done_times.append(t)
                 made.append(r)
                 verdict = scored["verdict"] if scored else "Mishit"
-                history = [{"target": x["target"], "onGreen": x["onGreen"], "sg": x["sg"]} for x in g["results"]]
+                history = [{"target": x["target"], "onGreen": x["onGreen"], "sg": x["sg"], "carry": x.get("carry")} for x in g["results"]]
                 nxt = self.rules.call("nextTarget", g["id"], g["options"], history)
                 if nxt is None:
                     done = self._finish("done")

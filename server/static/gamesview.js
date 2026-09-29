@@ -21,6 +21,7 @@ const HIT_WORDS = {
   driving: "in the fairway",
   shaping: "shaped as called",
   distance: "within 5 yards",
+  holes: "on the green",
 };
 
 const gmSg = v => v == null || !Number.isFinite(v) ? "–" : (v >= 0 ? "+" : "") + v.toFixed(2);
@@ -123,6 +124,14 @@ function renderGames() {
 function gmTargetText(target) {
   if (target === 0 || target === "fairway") return "fairway";
   if (target === "draw" || target === "fade") return target;
+  if (target && typeof target === "object") {
+    if (typeof SwingGames !== "undefined" && SwingGames.GAMES && SwingGames.GAMES.holes) {
+      return SwingGames.GAMES.holes.sayTarget(target);
+    }
+    return target.shot === 1
+      ? `hole ${target.hole}, ${target.yards} yards: the fairway`
+      : `hole ${target.hole}: ${target.yards} yards to go`;
+  }
   if (Number.isFinite(target)) return target + " yd";
   return String(target ?? "–");
 }

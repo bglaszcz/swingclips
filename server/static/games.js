@@ -77,6 +77,10 @@
   const DISTANCE_WINDOW_YD = 5;
   const DISTANCE_DEFAULTS = { count: 15, min: 50, max: 130, step: 5 };
 
+  // Hole builder game constants: 6 par-4 holes, 2 shots per hole (12 shots total).
+  const HOLES = [340, 380, 400, 420, 440, 360];
+  const HOLES_SHOTS = HOLES.length * 2;
+
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
   // Mulberry32: a tiny 32-bit seeded PRNG returning [0, 1).
@@ -319,6 +323,78 @@
   }
 
   /**
+   * Score a hole builder shot.
+   * Shot 1: tee shot scored like scoreDriving (30 yd fairway) with sg computed against holeLength baseline.
+   * Shot 2: approach shot scored like Combine (scoreShot, green within 15 yd).
+   * @param {{hole: number, shot: number, yards: number}} target Target details
+   * @param {{carry: number, offline: number}} shot Shot details
+   * @returns {{along: number, side: number, dist: number, onGreen: boolean, sg: number, verdict: string} | null}
+   */
+  function scoreHoles(target, shot) {
+    if (!target || typeof target !== "object") return null;
+    if (!shot || typeof shot !== "object") return null;
+    if (!finite(shot.carry) || shot.carry <= 0) return null;
+
+    if (target.shot === 1) {
+      if (!finite(shot.offline)) return null;
+
+      const along = shot.carry;
+      const side = shot.offline;
+      const dist = Math.abs(side);
+      const absSide = Math.abs(side);
+
+      const holeLength = finite(target.yards) ? target.yards : DRIVE_HOLE_YD;
+      const rem = holeLength - shot.carry;
+      const eBase = expectedStrokes(rem);
+      if (!finite(eBase)) return null;
+
+      let eEnd;
+      let onGreen;
+      let band;
+      if (absSide <= FAIRWAY_HALF_WIDTH_YD) {
+        eEnd = eBase;
+        onGreen = true;
+        band = "fairway";
+      } else if (absSide <= ROUGH_EDGE_YD) {
+        eEnd = eBase + 0.20;
+        onGreen = false;
+        band = "rough";
+      } else {
+        eEnd = eBase + 0.60;
+        onGreen = false;
+        band = "miss";
+      }
+
+      const eTee = expectedStrokes(holeLength);
+      if (!finite(eTee)) return null;
+      const sg = eTee - eEnd - 1;
+
+      const carryWhole = Math.round(shot.carry);
+      let verdict;
+      if (band === "fairway") {
+        verdict = `fairway, ${carryWhole}`;
+      } else {
+        const sideDir = side > 0 ? "right" : "left";
+        const sideDist = Math.round(absSide);
+        if (band === "rough") {
+          verdict = `${sideDist} ${sideDir}, rough, ${carryWhole}`;
+        } else {
+          verdict = `${sideDist} ${sideDir}, a miss, ${carryWhole}`;
+        }
+      }
+
+      return { along, side, dist, onGreen, sg, verdict };
+    }
+
+    if (target.shot === 2) {
+      const targetYards = finite(target.yards) ? target.yards : 150;
+      return scoreShot(targetYards, shot);
+    }
+
+    return null;
+  }
+
+  /**
    * Score a shot for a given game, dispatching to the game's own scorer if defined.
    * @param {string} gameId Game identifier
    * @param {any} target Game target
@@ -352,7 +428,9 @@
       sgTotal += shotSg;
       if (r && r.onGreen) greens++;
 
-      const target = r && (finite(r.target) || typeof r.target === "string") ? r.target : null;
+      const target = r && (finite(r.target) || typeof r.target === "string")
+        ? r.target
+        : (r && r.target && typeof r.target === "object" && finite(r.target.yards) ? r.target.yards : null);
       if (target != null) {
         let entry = targetMap.get(target);
         if (!entry) {
@@ -522,6 +600,61 @@
     return targets;
   }
 
+  // Plan hole builder targets: 12 entries {hole, shot, yards}; shot 1 has hole length, shot 2 has null.
+  function planHoles(options = {}) {
+    const plan = [];
+    for (let i = 0; i < HOLES.length; i++) {
+      const hole = i + 1;
+      plan.push({ hole, shot: 1, yards: HOLES[i] });
+      plan.push({ hole, shot: 2, yards: null });
+    }
+    return plan;
+  }
+
+  // Next target for hole builder game: 12 shots (6 holes x 2 shots).
+  // Shot 1 is the tee shot (hole length).
+  // Shot 2 is the approach: holeLength - teeCarry - teeRoll (clamped >= 20 yd), or 150 yd if tee was mishit.
+  function nextHoles(options = {}, history = []) {
+    const hist = history || [];
+    const idx = hist.length;
+    if (idx >= HOLES_SHOTS) return null;
+
+    const holeIdx = Math.floor(idx / 2);
+    const hole = holeIdx + 1;
+    const shot = (idx % 2) + 1;
+    const holeLength = HOLES[holeIdx];
+
+    if (shot === 1) {
+      return { hole, shot: 1, yards: holeLength };
+    }
+
+    // Shot 2: approach distance from the tee shot
+    const prev = hist[idx - 1];
+    if (!prev || prev.sg == null || !finite(prev.sg)) {
+      // If the tee shot was a mishit (sg == null) the approach is 150 yd.
+      return { hole, shot: 2, yards: 150 };
+    }
+
+    // Square shot data has carry and no roll figure, so carry alone is used (roll is 0)
+    const teeCarry = prev.carry ?? (prev.shot && prev.shot.carry);
+    const teeRoll = prev.roll ?? (prev.shot && prev.shot.roll) ?? 0;
+    if (!finite(teeCarry) || teeCarry <= 0) {
+      return { hole, shot: 2, yards: 150 };
+    }
+
+    let yards = Math.round(holeLength - teeCarry - teeRoll);
+    if (yards < 20) yards = 20;
+    return { hole, shot: 2, yards };
+  }
+
+  function sayHolesTarget(target) {
+    if (!target || typeof target !== "object") return String(target ?? "");
+    if (target.shot === 1) {
+      return `hole ${target.hole}, ${target.yards} yards: the fairway`;
+    }
+    return `hole ${target.hole}: ${target.yards ?? 0} yards to go`;
+  }
+
   const GAMES = {
     combine: {
       id: "combine",
@@ -650,6 +783,24 @@
         return scoreDistance(target, shot);
       },
     },
+    holes: {
+      id: "holes",
+      name: "Hole builder",
+      describe: "Hole builder: 6 par 4s, a tee shot and an approach each. The approach is from where your tee shot finished.",
+      clubsHint: "any",
+      plan: function (options) {
+        return planHoles(options);
+      },
+      next: function (options, history) {
+        return nextHoles(options, history);
+      },
+      sayTarget: function (target) {
+        return sayHolesTarget(target);
+      },
+      score: function (target, shot) {
+        return scoreHoles(target, shot);
+      },
+    },
   };
 
   /**
@@ -715,6 +866,7 @@
     driving: DRIVING_SHOTS, // 14
     shaping: SHAPING_SHOTS, // 12
     distance: DISTANCE_DEFAULTS.count, // 15
+    holes: HOLES_SHOTS, // 12
   };
 
   /**
@@ -806,6 +958,7 @@
     DISTANCE_WINDOW_YD,
     DISTANCE_DEFAULTS,
     USUAL_SHOTS,
+    HOLES,
     mulberry32,
     expectedPutts,
     expectedStrokes,
@@ -813,10 +966,14 @@
     scoreDriving,
     scoreShaping,
     scoreDistance,
+    scoreHoles,
     scoreFor,
     summarize,
     planShaping,
     planDistance,
+    planHoles,
+    nextHoles,
+    sayHolesTarget,
     combineBreakdown,
     gameHistory,
     GAMES,

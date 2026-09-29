@@ -47,7 +47,7 @@ class GamesTest(unittest.TestCase):
         return {"name": name or f"swing_face_{int(T0 + dt)}.mp4", "t": T0 + dt, "shot": s}
 
     def test_catalog_has_the_games(self):
-        self.assertEqual({g["id"] for g in self.g.catalog()}, {"combine", "wedges", "random", "ladder", "driving", "shaping", "distance"})
+        self.assertEqual({g["id"] for g in self.g.catalog()}, {"combine", "wedges", "random", "ladder", "driving", "shaping", "distance", "holes"})
 
     def test_start_says_the_first_target(self):
         g = self.g.start("wedges")
@@ -213,6 +213,41 @@ class GamesTest(unittest.TestCase):
         self.assertEqual(len(made2), 1)
         self.assertFalse(made2[0]["onGreen"])
         self.assertIn("9 long", self.g.latest(0)[-1]["text"])
+
+    def test_holes_game_play_through(self):
+        g = self.g.start("holes")
+        self.assertEqual(g["target"], {"hole": 1, "shot": 1, "yards": 340})
+        said = self.g.latest(0)
+        self.assertEqual(len(said), 1)
+        self.assertIn("First target: hole 1, 340 yards: the fairway.", said[0]["text"])
+        self.assertEqual(self.g.state()["game"]["sayTarget"], "hole 1, 340 yards: the fairway")
+        self.assertEqual(self.g.state()["game"]["hitWord"], "on the green")
+
+        # Hole 1 tee shot: 240 yd carry, 5 yd offline -> fairway
+        self.clock.t = T0 + 20
+        made = self.g.step([self.swing(5, shot(240, 5, club="DR"))])
+        self.assertEqual(len(made), 1)
+        self.assertTrue(made[0]["onGreen"])
+        self.assertIn("fairway, 240", self.g.latest(0)[-1]["text"])
+        self.assertEqual(self.g.game["target"], {"hole": 1, "shot": 2, "yards": 100})
+        self.assertIn("Next: hole 1: 100 yards to go.", self.g.latest(0)[-1]["text"])
+
+        # Hole 1 approach shot: 98 yd carry, 2 yd offline -> on the green
+        self.clock.t = T0 + 40
+        made2 = self.g.step([self.swing(25, shot(98, 2, club="PW"))])
+        self.assertEqual(len(made2), 1)
+        self.assertTrue(made2[0]["onGreen"])
+        self.assertIn("on the green", self.g.latest(0)[-1]["text"])
+        self.assertEqual(self.g.game["target"], {"hole": 2, "shot": 1, "yards": 380})
+        self.assertIn("Next: hole 2, 380 yards: the fairway.", self.g.latest(0)[-1]["text"])
+
+        # Hole 2 tee shot mishit -> approach fallback is 150 yd
+        self.clock.t = T0 + 60
+        made3 = self.g.step([self.swing(45, shot(0, 0, club="DR"))])
+        self.assertEqual(len(made3), 1)
+        self.assertIsNone(made3[0]["sg"])
+        self.assertEqual(self.g.game["target"], {"hole": 2, "shot": 2, "yards": 150})
+        self.assertIn("Next: hole 2: 150 yards to go.", self.g.latest(0)[-1]["text"])
 
 
 if __name__ == "__main__":

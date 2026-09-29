@@ -541,6 +541,8 @@ test("every game has sayTarget returning expected phrasing", () => {
   assert.equal(Games.GAMES.driving.sayTarget(0), "the fairway");
   assert.equal(Games.GAMES.shaping.sayTarget("draw"), "a draw");
   assert.equal(Games.GAMES.shaping.sayTarget("fade"), "a fade");
+  assert.equal(Games.GAMES.holes.sayTarget({ hole: 3, shot: 1, yards: 400 }), "hole 3, 400 yards: the fairway");
+  assert.equal(Games.GAMES.holes.sayTarget({ hole: 3, shot: 2, yards: 138 }), "hole 3: 138 yards to go");
 });
 
 test("game definitions have required metadata", () => {
@@ -972,6 +974,148 @@ test("gameHistory: handles empty log, non-matching game, and supports destructur
   }
   assert.equal(count, 2);
 });
+
+test("holes plan shape: 12 entries, 6 holes, shot 1 has yards and shot 2 has null", () => {
+  const plan = Games.GAMES.holes.plan();
+  assert.equal(plan.length, 12);
+  const expectedLengths = [340, 380, 400, 420, 440, 360];
+  assert.deepEqual(Games.HOLES, expectedLengths);
+
+  for (let i = 0; i < 6; i++) {
+    const holeNum = i + 1;
+    const shot1 = plan[i * 2];
+    const shot2 = plan[i * 2 + 1];
+
+    assert.equal(shot1.hole, holeNum);
+    assert.equal(shot1.shot, 1);
+    assert.equal(shot1.yards, expectedLengths[i]);
+
+    assert.equal(shot2.hole, holeNum);
+    assert.equal(shot2.shot, 2);
+    assert.equal(shot2.yards, null);
+  }
+});
+
+test("holes approach distance from a tee shot", () => {
+  // Hole 1: 340 yd. Tee carry 240 -> approach is 100 yd
+  const hist1 = [
+    { target: { hole: 1, shot: 1, yards: 340 }, carry: 240, sg: 0.1, onGreen: true },
+  ];
+  const next1 = Games.GAMES.holes.next({}, hist1);
+  assert.deepEqual(next1, { hole: 1, shot: 2, yards: 100 });
+
+  // Hole 3: 400 yd. Tee carry 262 -> approach is 138 yd
+  const hist3 = [
+    ...Array(4).fill({ target: { hole: 1, shot: 1, yards: 340 }, carry: 200, sg: 0, onGreen: true }),
+    { target: { hole: 3, shot: 1, yards: 400 }, carry: 262, sg: 0.2, onGreen: true },
+  ];
+  const next3 = Games.GAMES.holes.next({}, hist3);
+  assert.deepEqual(next3, { hole: 3, shot: 2, yards: 138 });
+});
+
+test("holes floor of 20 yd", () => {
+  // Hole 1: 340 yd. Tee carry 330 -> 340 - 330 = 10 -> floored to 20 yd
+  const hist = [
+    { target: { hole: 1, shot: 1, yards: 340 }, carry: 330, sg: 0.5, onGreen: true },
+  ];
+  const next = Games.GAMES.holes.next({}, hist);
+  assert.deepEqual(next, { hole: 1, shot: 2, yards: 20 });
+
+  // Carry beyond hole length: 350 yd -> negative remaining -> floored to 20 yd
+  const histLong = [
+    { target: { hole: 1, shot: 1, yards: 340 }, carry: 350, sg: 0.6, onGreen: true },
+  ];
+  const nextLong = Games.GAMES.holes.next({}, histLong);
+  assert.deepEqual(nextLong, { hole: 1, shot: 2, yards: 20 });
+});
+
+test("holes mishit fallback to 150 yd", () => {
+  // Tee shot with sg == null (mishit)
+  const histMishit = [
+    { target: { hole: 1, shot: 1, yards: 340 }, carry: 0, sg: null, onGreen: false },
+  ];
+  const nextMishit = Games.GAMES.holes.next({}, histMishit);
+  assert.deepEqual(nextMishit, { hole: 1, shot: 2, yards: 150 });
+
+  // Tee shot with missing carry
+  const histNoCarry = [
+    { target: { hole: 1, shot: 1, yards: 340 }, carry: null, sg: null, onGreen: false },
+  ];
+  const nextNoCarry = Games.GAMES.holes.next({}, histNoCarry);
+  assert.deepEqual(nextNoCarry, { hole: 1, shot: 2, yards: 150 });
+});
+
+test("holes sayTarget: shot 1 and shot 2 phrasing", () => {
+  assert.equal(
+    Games.GAMES.holes.sayTarget({ hole: 3, shot: 1, yards: 400 }),
+    "hole 3, 400 yards: the fairway"
+  );
+  assert.equal(
+    Games.GAMES.holes.sayTarget({ hole: 3, shot: 2, yards: 138 }),
+    "hole 3: 138 yards to go"
+  );
+  assert.equal(
+    Games.GAMES.holes.sayTarget({ hole: 1, shot: 1, yards: 340 }),
+    "hole 1, 340 yards: the fairway"
+  );
+  assert.equal(
+    Games.GAMES.holes.sayTarget({ hole: 1, shot: 2, yards: 100 }),
+    "hole 1: 100 yards to go"
+  );
+});
+
+test("holes score: shot 1 scored like driving against hole length baseline, shot 2 like scoreShot", () => {
+  // Hole 1 (340 yd), tee shot: carry 240, offline 5 (fairway)
+  // rem = 340 - 240 = 100 yd -> expectedStrokes(100) = 2.80
+  // eTee = expectedStrokes(340) = 3.45 (clamped)
+  // fairway -> eEnd = eBase = 2.80
+  // sg = 3.45 - 2.80 - 1 = -0.35
+  const t1 = { hole: 1, shot: 1, yards: 340 };
+  const sTee = Games.scoreFor("holes", t1, { carry: 240, offline: 5 });
+  assert.ok(sTee);
+  assert.equal(sTee.onGreen, true);
+  assert.equal(sTee.verdict, "fairway, 240");
+  assert.ok(Math.abs(sTee.sg - -0.35) < 1e-9);
+
+  // Rough (offline 20 yd)
+  const sRough = Games.scoreFor("holes", t1, { carry: 240, offline: 20 });
+  assert.ok(sRough);
+  assert.equal(sRough.onGreen, false);
+  assert.equal(sRough.verdict, "20 right, rough, 240");
+  // eEnd = 2.80 + 0.20 = 3.00 -> sg = 3.45 - 3.00 - 1 = -0.55
+  assert.ok(Math.abs(sRough.sg - -0.55) < 1e-9);
+
+  // Approach shot (shot 2): target 100 yd, carry 98, offline 2
+  const t2 = { hole: 1, shot: 2, yards: 100 };
+  const sApp = Games.scoreFor("holes", t2, { carry: 98, offline: 2 });
+  assert.ok(sApp);
+  assert.equal(sApp.onGreen, true);
+  assert.equal(sApp.verdict, "2 short, 2 right, on the green");
+  const expectedAppSg = Games.scoreShot(100, { carry: 98, offline: 2 }).sg;
+  assert.equal(sApp.sg, expectedAppSg);
+
+  // Invalid/mishits return null
+  assert.equal(Games.scoreFor("holes", t1, null), null);
+  assert.equal(Games.scoreFor("holes", t1, { carry: 0, offline: 0 }), null);
+  assert.equal(Games.scoreFor("holes", t2, null), null);
+});
+
+test("holes next: terminates after 12 shots", () => {
+  const fullHist = [];
+  for (let i = 0; i < 12; i++) {
+    const holeIdx = Math.floor(i / 2);
+    const shotNum = (i % 2) + 1;
+    fullHist.push({
+      target: { hole: holeIdx + 1, shot: shotNum, yards: 340 },
+      carry: 200,
+      sg: 0.1,
+      onGreen: true,
+    });
+  }
+  assert.equal(fullHist.length, 12);
+  assert.equal(Games.GAMES.holes.next({}, fullHist), null);
+});
+
 
 
 
