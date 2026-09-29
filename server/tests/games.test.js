@@ -554,3 +554,424 @@ test("game definitions have required metadata", () => {
     assert.equal(typeof game.sayTarget, "function");
   }
 });
+
+test("combineBreakdown: empty log and non-combine games ignored", () => {
+  assert.deepEqual(Games.combineBreakdown([]), { targets: [], byTarget: [], worst: [] });
+  assert.deepEqual(Games.combineBreakdown(null), { targets: [], byTarget: [], worst: [] });
+
+  const nonCombines = [
+    { id: "wedges", results: [{ target: 50, sg: 0.2, onGreen: true }] },
+    { id: "driving", results: [{ target: 0, sg: 0.1, onGreen: true }] },
+  ];
+  assert.deepEqual(Games.combineBreakdown(nonCombines), { targets: [], byTarget: [], worst: [] });
+});
+
+test("combineBreakdown: only combines counted and latest N used", () => {
+  const log = [
+    { id: "combine", results: [{ target: 50, sg: 0.5, onGreen: true, dist: 5 }] }, // 1st (too old for last: 2)
+    { id: "wedges", results: [{ target: 50, sg: -0.9, onGreen: false, dist: 20 }] }, // ignored
+    { id: "combine", results: [{ target: 50, sg: 0.1, onGreen: true, dist: 8 }] },  // 2nd
+    { id: "combine", results: [{ target: 50, sg: -0.3, onGreen: false, dist: 12 }] }, // 3rd
+  ];
+
+  // Default last 3: includes 1st, 2nd, 3rd combines (not wedges)
+  const b3 = Games.combineBreakdown(log);
+  assert.equal(b3.targets.length, 1);
+  assert.equal(b3.targets[0].target, 50);
+  assert.equal(b3.targets[0].shots, 3);
+  // (0.5 + 0.1 - 0.3) / 3 = 0.1
+  assert.ok(Math.abs(b3.targets[0].sgPerShot - 0.1) < 1e-9);
+  assert.equal(b3.targets[0].greens, 2);
+  assert.equal(b3.targets[0].avgDist, (5 + 8 + 12) / 3);
+
+  // Custom last 2: only 2nd and 3rd combines
+  const b2 = Games.combineBreakdown(log, { last: 2 });
+  assert.equal(b2.targets.length, 1);
+  assert.equal(b2.targets[0].shots, 2);
+  // (0.1 - 0.3) / 2 = -0.1
+  assert.ok(Math.abs(b2.targets[0].sgPerShot - -0.1) < 1e-9);
+  assert.equal(b2.targets[0].greens, 1);
+  assert.equal(b2.targets[0].avgDist, (8 + 12) / 2);
+});
+
+test("combineBreakdown: mishits count as MISHIT_SG", () => {
+  const log = [
+    {
+      id: "combine",
+      results: [
+        { target: 100, sg: 0.5, onGreen: true, dist: 6 },
+        { target: 100, sg: null }, // mishit: -1.0, dist excluded
+        { target: 100, sg: -0.1, onGreen: true, dist: 12 },
+      ],
+    },
+  ];
+  const b = Games.combineBreakdown(log);
+  assert.equal(b.targets.length, 1);
+  assert.equal(b.targets[0].shots, 3);
+  // (0.5 - 1.0 - 0.1) / 3 = -0.6 / 3 = -0.2
+  assert.ok(Math.abs(b.targets[0].sgPerShot - -0.2) < 1e-9);
+  assert.equal(b.targets[0].greens, 2);
+  assert.equal(b.targets[0].avgDist, (6 + 12) / 2);
+});
+
+test("combineBreakdown: sorting by target ascending and 3-shot rule for worst", () => {
+  const log = [
+    {
+      id: "combine",
+      results: [
+        // Target 140: 3 shots, avg SG -0.42
+        { target: 140, sg: -0.40, onGreen: false },
+        { target: 140, sg: -0.44, onGreen: false },
+        { target: 140, sg: -0.42, onGreen: false },
+        // Target 50: 3 shots, avg SG +0.20
+        { target: 50, sg: 0.20, onGreen: true },
+        { target: 50, sg: 0.20, onGreen: true },
+        { target: 50, sg: 0.20, onGreen: true },
+        // Target 95: only 2 shots, avg SG -0.90 (ineligible for worst despite lowest SG)
+        { target: 95, sg: -0.90, onGreen: false },
+        { target: 95, sg: -0.90, onGreen: false },
+        // Target 155: 3 shots, avg SG -0.38
+        { target: 155, sg: -0.38, onGreen: false },
+        { target: 155, sg: -0.38, onGreen: false },
+        { target: 155, sg: -0.38, onGreen: false },
+        // Target 110: 3 shots, avg SG -0.10
+        { target: 110, sg: -0.10, onGreen: true },
+        { target: 110, sg: -0.10, onGreen: true },
+        { target: 110, sg: -0.10, onGreen: true },
+      ],
+    },
+  ];
+
+  const b = Games.combineBreakdown(log);
+
+  // Targets sorted ascending by target: 50, 95, 110, 140, 155
+  assert.deepEqual(
+    b.targets.map(t => t.target),
+    [50, 95, 110, 140, 155]
+  );
+
+  // Worst: 2 targets with lowest sgPerShot having at least 3 shots
+  // Target 95 is excluded (only 2 shots).
+  // Remaining: 140 (-0.42), 155 (-0.38), 110 (-0.10), 50 (+0.20)
+  // Two lowest: 140 and 155
+  assert.equal(b.worst.length, 2);
+  assert.equal(b.worst[0].target, 140);
+  assert.ok(Math.abs(b.worst[0].sgPerShot - -0.42) < 1e-9);
+  assert.equal(b.worst[1].target, 155);
+  assert.ok(Math.abs(b.worst[1].sgPerShot - -0.38) < 1e-9);
+});
+
+test("distance score: window edges at 5 yd", () => {
+  const target = 100;
+  // Pin high: carry 100 -> along = 0, onGreen = true
+  const s0 = Games.scoreDistance(target, { carry: 100 });
+  assert.ok(s0);
+  assert.equal(s0.onGreen, true);
+  assert.equal(s0.verdict, "pin high, in");
+
+  // Window edge: carry 105.0 -> along = 5.0 -> onGreen = true
+  const s5Long = Games.scoreDistance(target, { carry: 105.0 });
+  assert.equal(s5Long.onGreen, true);
+  assert.equal(s5Long.verdict, "5 long, in");
+
+  // Just past edge: carry 105.1 -> along = 5.1 -> onGreen = false
+  const s51Long = Games.scoreDistance(target, { carry: 105.1 });
+  assert.equal(s51Long.onGreen, false);
+  assert.equal(s51Long.verdict, "5 long");
+
+  // Window edge: carry 95.0 -> along = -5.0 -> onGreen = true
+  const s5Short = Games.scoreDistance(target, { carry: 95.0 });
+  assert.equal(s5Short.onGreen, true);
+  assert.equal(s5Short.verdict, "5 short, in");
+
+  // Just past edge: carry 94.9 -> along = -5.1 -> onGreen = false
+  const s51Short = Games.scoreDistance(target, { carry: 94.9 });
+  assert.equal(s51Short.onGreen, false);
+  assert.equal(s51Short.verdict, "5 short");
+});
+
+test("distance score: direction ignored and verdicts", () => {
+  const target = 100;
+
+  // Prompt example: "4 short, in"
+  const s4Short = Games.scoreDistance(target, { carry: 96, offline: 12 });
+  assert.equal(s4Short.onGreen, true);
+  assert.equal(s4Short.verdict, "4 short, in");
+
+  // Direction ignored: offline has no effect on sg, onGreen or verdict
+  const s4ShortNoOff = Games.scoreDistance(target, { carry: 96 });
+  const s4ShortLeft = Games.scoreDistance(target, { carry: 96, offline: -25 });
+  assert.equal(s4Short.sg, s4ShortNoOff.sg);
+  assert.equal(s4Short.sg, s4ShortLeft.sg);
+  assert.equal(s4Short.verdict, s4ShortNoOff.verdict);
+  assert.equal(s4Short.verdict, s4ShortLeft.verdict);
+
+  // Prompt example: "9 long"
+  const s9Long = Games.scoreDistance(target, { carry: 109, offline: -5 });
+  assert.equal(s9Long.onGreen, false);
+  assert.equal(s9Long.verdict, "9 long");
+
+  // Prompt example: "pin high, in"
+  const sPinHigh = Games.scoreDistance(target, { carry: 100.3, offline: 20 });
+  assert.equal(sPinHigh.onGreen, true);
+  assert.equal(sPinHigh.verdict, "pin high, in");
+
+  // Mishits and invalid inputs
+  assert.equal(Games.scoreDistance(100, null), null);
+  assert.equal(Games.scoreDistance(100, {}), null);
+  assert.equal(Games.scoreDistance(100, { carry: 0 }), null);
+  assert.equal(Games.scoreDistance(100, { carry: -10 }), null);
+  assert.equal(Games.scoreDistance(0, { carry: 100 }), null);
+});
+
+test("distance score: strokes gained uses putts table within 15 yd, fairway table beyond", () => {
+  const target = 100;
+  const eOff = Games.expectedStrokes(100);
+
+  // Carry 104 -> along = 4 -> dist = 4 yd (12 ft) <= 15 yd -> expectedPutts(12)
+  const sWithin = Games.scoreDistance(target, { carry: 104 });
+  const expectedSgWithin = eOff - Games.expectedPutts(12) - 1;
+  assert.ok(Math.abs(sWithin.sg - expectedSgWithin) < 1e-9);
+
+  // Carry 125 -> along = 25 -> dist = 25 yd > 15 yd -> expectedStrokes(25)
+  const sBeyond = Games.scoreDistance(target, { carry: 125 });
+  const expectedSgBeyond = eOff - Games.expectedStrokes(25) - 1;
+  assert.ok(Math.abs(sBeyond.sg - expectedSgBeyond) < 1e-9);
+});
+
+test("distance plan: 15 targets, no repeats, uniform in range, deterministic", () => {
+  const seeds = [1, 2, 7, 42, 99, 100, 999, 12345, 999999];
+  for (const seed of seeds) {
+    const plan = Games.GAMES.distance.plan({ seed });
+    assert.equal(plan.length, 15, `Seed ${seed} length`);
+    for (let i = 0; i < plan.length; i++) {
+      const t = plan[i];
+      assert.equal(t % 5, 0, `Seed ${seed} multiple of 5`);
+      assert.ok(t >= 50 && t <= 130, `Seed ${seed} in range 50..130`);
+      if (i > 0) {
+        assert.notEqual(plan[i], plan[i - 1], `Seed ${seed} repeat at index ${i}`);
+      }
+    }
+  }
+
+  // Determinism
+  const p1 = Games.GAMES.distance.plan({ seed: 42 });
+  const p2 = Games.GAMES.distance.plan({ seed: 42 });
+  const p3 = Games.GAMES.distance.plan({ seed: 99 });
+  assert.deepEqual(p1, p2);
+  assert.notDeepEqual(p1, p3);
+
+  // Next stops at 15 shots
+  const hist = p1.map(t => ({ target: t, onGreen: true }));
+  assert.equal(Games.GAMES.distance.next({ seed: 42 }, hist), null);
+});
+
+test("distance game: sayTarget and describe metadata", () => {
+  assert.equal(Games.GAMES.distance.sayTarget(75), "75 yards carry");
+  assert.equal(
+    Games.GAMES.distance.describe,
+    "Distance control: 15 random carries from 50 to 130 yards. Only the carry counts: within 5 yards is a hit."
+  );
+
+  // scoreFor dispatches to scoreDistance
+  const s = Games.scoreFor("distance", 100, { carry: 96, offline: 30 });
+  assert.equal(s.verdict, "4 short, in");
+  assert.equal(s.onGreen, true);
+});
+
+test("gameHistory: filters by gameId, newest first, and extracts all fields from summary", () => {
+  const log = [
+    {
+      id: "combine",
+      started: 1000,
+      how: "done",
+      summary: { shots: 27, greens: 15, sgPerShot: -0.22 },
+    },
+    {
+      id: "wedges",
+      started: 1500,
+      how: "done",
+      summary: { shots: 13, greens: 10, sgPerShot: 0.05 },
+    },
+    {
+      id: "combine",
+      started: 2000,
+      how: "stopped",
+      summary: { shots: 20, greens: 16, sgPerShot: 0.15 },
+    },
+  ];
+
+  const hist = Games.gameHistory(log, "combine");
+  assert.equal(hist.length, 2);
+  // Newest first: started 2000 before started 1000
+  assert.equal(hist[0].started, 2000);
+  assert.equal(hist[0].shots, 20);
+  assert.equal(hist[0].hits, 16);
+  assert.equal(hist[0].hitShare, 16 / 20);
+  assert.equal(hist[0].sgPerShot, 0.15);
+  assert.equal(hist[0].how, "stopped");
+
+  assert.equal(hist[1].started, 1000);
+  assert.equal(hist[1].shots, 27);
+  assert.equal(hist[1].hits, 15);
+  assert.equal(hist[1].hitShare, 15 / 27);
+  assert.equal(hist[1].sgPerShot, -0.22);
+  assert.equal(hist[1].how, "done");
+
+  // Best: 16/20 (80%) vs 15/27 (55.6%), both >= 13.5 shots
+  assert.equal(hist.best, hist[0]);
+});
+
+test("gameHistory: falls back to results array when summary is missing", () => {
+  const log = [
+    {
+      id: "wedges",
+      started: 1000,
+      results: [
+        { target: 50, onGreen: true, sg: 0.2 },
+        { target: 60, onGreen: true, sg: 0.4 },
+        { target: 70, onGreen: false, sg: -0.6 },
+      ],
+    },
+  ];
+
+  const hist = Games.gameHistory(log, "wedges");
+  assert.equal(hist.length, 1);
+  assert.equal(hist[0].shots, 3);
+  assert.equal(hist[0].hits, 2);
+  assert.ok(Math.abs(hist[0].hitShare - 2 / 3) < 1e-9);
+  // (0.2 + 0.4 - 0.6) / 3 = 0
+  assert.ok(Math.abs(hist[0].sgPerShot - 0) < 1e-9);
+  assert.equal(hist[0].how, "done");
+});
+
+test("gameHistory: sgPerShot is strictly null for shaping", () => {
+  const log = [
+    {
+      id: "shaping",
+      started: 1000,
+      how: "done",
+      summary: { shots: 12, greens: 8, sgPerShot: 0.35 },
+      results: [{ target: "draw", onGreen: true, sg: 0.35 }],
+    },
+  ];
+
+  const hist = Games.gameHistory(log, "shaping");
+  assert.equal(hist.length, 1);
+  assert.equal(hist[0].shots, 12);
+  assert.equal(hist[0].hits, 8);
+  assert.equal(hist[0].hitShare, 8 / 12);
+  assert.equal(hist[0].sgPerShot, null);
+  assert.equal(hist.best, hist[0]);
+});
+
+test("gameHistory: best requires at least half the game's usual shots", () => {
+  // Combine: usual = 27 -> half = 13.5 -> at least 14 shots required
+  const combineLog = [
+    {
+      id: "combine",
+      started: 1000,
+      summary: { shots: 10, greens: 10, sgPerShot: 0.5 }, // 100% hits, but only 10 shots (< 14)
+    },
+    {
+      id: "combine",
+      started: 2000,
+      summary: { shots: 14, greens: 10, sgPerShot: 0.1 }, // 71.4% hits, 14 shots (>= 14)
+    },
+    {
+      id: "combine",
+      started: 3000,
+      summary: { shots: 27, greens: 16, sgPerShot: 0.2 }, // 59.3% hits, 27 shots
+    },
+  ];
+
+  const combineHist = Games.gameHistory(combineLog, "combine");
+  // Best should be the 14-shot game, NOT the 10-shot 100% game
+  assert.equal(combineHist.best.started, 2000);
+  assert.equal(combineHist.best.shots, 14);
+
+  // Wedges: usual = 13 -> half = 6.5 -> at least 7 shots required
+  const wedgesLog = [
+    {
+      id: "wedges",
+      started: 1000,
+      summary: { shots: 6, greens: 6, sgPerShot: 0.3 }, // 6 shots < 6.5 -> ineligible
+    },
+  ];
+  const wedgesHist = Games.gameHistory(wedgesLog, "wedges");
+  assert.equal(wedgesHist.best, null);
+
+  // Distance: usual = 15 -> half = 7.5 -> at least 8 shots required
+  const distLog = [
+    {
+      id: "distance",
+      started: 1000,
+      summary: { shots: 7, greens: 7, sgPerShot: 0.4 }, // 7 shots < 7.5 -> ineligible
+    },
+    {
+      id: "distance",
+      started: 2000,
+      summary: { shots: 8, greens: 6, sgPerShot: 0.1 }, // 8 shots >= 7.5 -> eligible
+    },
+  ];
+  const distHist = Games.gameHistory(distLog, "distance");
+  assert.equal(distHist.best.started, 2000);
+});
+
+test("gameHistory: best breaks ties with more shots then newer timestamp", () => {
+  const log = [
+    {
+      id: "combine",
+      started: 1000,
+      summary: { shots: 15, greens: 12, sgPerShot: 0.1 }, // 80% with 15 shots
+    },
+    {
+      id: "combine",
+      started: 2000,
+      summary: { shots: 20, greens: 16, sgPerShot: 0.1 }, // 80% with 20 shots (beats 15 shots)
+    },
+    {
+      id: "combine",
+      started: 3000,
+      summary: { shots: 20, greens: 16, sgPerShot: 0.1 }, // 80% with 20 shots, newer timestamp (beats 2000)
+    },
+  ];
+
+  const hist = Games.gameHistory(log, "combine");
+  assert.equal(hist.best.started, 3000);
+});
+
+test("gameHistory: handles empty log, non-matching game, and supports destructuring and array iteration", () => {
+  assert.equal(Games.gameHistory(null, "combine").length, 0);
+  assert.equal(Games.gameHistory(null, "combine").best, null);
+  assert.equal(Games.gameHistory([], "combine").length, 0);
+  assert.equal(Games.gameHistory([], "combine").best, null);
+
+  const nonMatching = Games.gameHistory([{ id: "wedges", summary: { shots: 13, greens: 10 } }], "combine");
+  assert.equal(nonMatching.length, 0);
+  assert.equal(nonMatching.best, null);
+
+  const log = [
+    { id: "combine", started: 100, summary: { shots: 27, greens: 20, sgPerShot: 0.2 } },
+    { id: "combine", started: 200, summary: { shots: 27, greens: 22, sgPerShot: 0.3 } },
+  ];
+  const hist = Games.gameHistory(log, "combine");
+  assert.ok(Array.isArray(hist));
+  assert.equal(hist.length, 2);
+
+  // Destructuring { games, best }
+  const { games, best } = Games.gameHistory(log, "combine");
+  assert.equal(games.length, 2);
+  assert.equal(best.started, 200);
+
+  // Iteration
+  let count = 0;
+  for (const g of hist) {
+    assert.equal(g.shots, 27);
+    count++;
+  }
+  assert.equal(count, 2);
+});
+
+
+

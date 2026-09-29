@@ -47,7 +47,7 @@ class GamesTest(unittest.TestCase):
         return {"name": name or f"swing_face_{int(T0 + dt)}.mp4", "t": T0 + dt, "shot": s}
 
     def test_catalog_has_the_games(self):
-        self.assertEqual({g["id"] for g in self.g.catalog()}, {"combine", "wedges", "random", "ladder", "driving", "shaping"})
+        self.assertEqual({g["id"] for g in self.g.catalog()}, {"combine", "wedges", "random", "ladder", "driving", "shaping", "distance"})
 
     def test_start_says_the_first_target(self):
         g = self.g.start("wedges")
@@ -186,6 +186,33 @@ class GamesTest(unittest.TestCase):
         self.assertTrue(made[0]["onGreen"])
         self.assertEqual(made[0]["sg"], 0.0)
         self.assertIn(f"{target}, good", self.g.latest(0)[-1]["text"])
+
+    def test_distance_game_plays_and_verdict(self):
+        g = self.g.start("distance", {"seed": 42})
+        target = g["target"]
+        self.assertTrue(50 <= target <= 130)
+        self.assertEqual(target % 5, 0)
+        said = self.g.latest(0)
+        self.assertEqual(len(said), 1)
+        self.assertIn(f"First target: {target} yards carry.", said[0]["text"])
+        self.assertEqual(self.g.state()["game"]["sayTarget"], f"{target} yards carry")
+        self.assertEqual(self.g.state()["game"]["hitWord"], "within 5 yards")
+
+        # Hit within 5 yards: carry = target - 4 -> "4 short, in"
+        self.clock.t = T0 + 20
+        made = self.g.step([self.swing(5, shot(target - 4, 15))])
+        self.assertEqual(len(made), 1)
+        self.assertTrue(made[0]["onGreen"])
+        self.assertIn("4 short, in", self.g.latest(0)[-1]["text"])
+
+        # Miss: carry = next_target + 9 -> "9 long"
+        next_target = self.g.game["target"]
+        self.assertNotEqual(next_target, target)
+        self.clock.t = T0 + 40
+        made2 = self.g.step([self.swing(25, shot(next_target + 9, -5))])
+        self.assertEqual(len(made2), 1)
+        self.assertFalse(made2[0]["onGreen"])
+        self.assertIn("9 long", self.g.latest(0)[-1]["text"])
 
 
 if __name__ == "__main__":

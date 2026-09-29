@@ -73,6 +73,10 @@
   const SHAPE_MAX_OFFLINE_PCT = 10;
   const SHAPING_SHOTS = 12;
 
+  // Distance control game constants
+  const DISTANCE_WINDOW_YD = 5;
+  const DISTANCE_DEFAULTS = { count: 15, min: 50, max: 130, step: 5 };
+
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
   // Mulberry32: a tiny 32-bit seeded PRNG returning [0, 1).
@@ -278,6 +282,43 @@
   }
 
   /**
+   * Score a distance control shot against a target carry distance in yards.
+   * Only the carry counts; direction is ignored.
+   * @param {number} target Target carry distance in yards
+   * @param {{carry: number, offline?: number}} shot Shot details
+   * @returns {{along: number, side: number, dist: number, onGreen: boolean, sg: number, verdict: string} | null}
+   */
+  function scoreDistance(target, shot) {
+    if (!finite(target) || target <= 0) return null;
+    if (!shot || typeof shot !== "object") return null;
+    if (!finite(shot.carry) || shot.carry <= 0) return null;
+
+    const along = shot.carry - target;
+    const side = finite(shot.offline) ? shot.offline : 0;
+    const dist = Math.abs(along);
+    const onGreen = dist <= DISTANCE_WINDOW_YD;
+
+    // sg: the green table (expectedPutts) at |along| * 3 feet when within 15 yd,
+    // else the fairway table at |along|, so sg = expectedStrokes(target) - that - 1;
+    // same idea as scoreShot but on carry alone.
+    const eOff = expectedStrokes(target);
+    const eEnd = dist <= GREEN_RADIUS_YD ? expectedPutts(dist * 3) : expectedStrokes(dist);
+    const sg = eOff - eEnd - 1;
+
+    let distWord;
+    if (Math.abs(along) < 1) {
+      distWord = "pin high";
+    } else if (along > 0) {
+      distWord = `${Math.round(along)} long`;
+    } else {
+      distWord = `${Math.round(-along)} short`;
+    }
+
+    const verdict = onGreen ? `${distWord}, in` : distWord;
+    return { along, side, dist, onGreen, sg, verdict };
+  }
+
+  /**
    * Score a shot for a given game, dispatching to the game's own scorer if defined.
    * @param {string} gameId Game identifier
    * @param {any} target Game target
@@ -457,6 +498,30 @@
     }
   }
 
+  // Plan distance control targets: 15 random carries from 50 to 130 yards, never the same target twice in a row, seeded.
+  function planDistance(options = {}) {
+    const count = options.count ?? DISTANCE_DEFAULTS.count;
+    const min = options.min ?? DISTANCE_DEFAULTS.min;
+    const max = options.max ?? DISTANCE_DEFAULTS.max;
+    const step = options.step ?? DISTANCE_DEFAULTS.step;
+    const rng = mulberry32(options.seed);
+    const lo = Math.ceil(min / step);
+    const hi = Math.floor(max / step);
+    const candidates = [];
+    for (let s = lo; s <= hi; s++) candidates.push(s * step);
+    const targets = [];
+    let last = null;
+    for (let i = 0; i < count; i++) {
+      const choices = candidates.length > 1 && last !== null
+        ? candidates.filter(t => t !== last)
+        : candidates;
+      const pick = choices[Math.floor(rng() * choices.length)];
+      targets.push(pick);
+      last = pick;
+    }
+    return targets;
+  }
+
   const GAMES = {
     combine: {
       id: "combine",
@@ -565,7 +630,160 @@
         return scoreShaping(target, shot);
       },
     },
+    distance: {
+      id: "distance",
+      name: "Distance control",
+      describe: "Distance control: 15 random carries from 50 to 130 yards. Only the carry counts: within 5 yards is a hit.",
+      clubsHint: "any",
+      plan: function (options) {
+        return planDistance(options);
+      },
+      next: function (options, history) {
+        const p = this.plan(options);
+        const idx = history ? history.length : 0;
+        return idx < p.length ? p[idx] : null;
+      },
+      sayTarget: function (target) {
+        return `${target} yards carry`;
+      },
+      score: function (target, shot) {
+        return scoreDistance(target, shot);
+      },
+    },
   };
+
+  /**
+   * Breakdown finished Combines by target distance over the latest N sessions.
+   * @param {Array<object>} logEntries Finished game log entries from /api/game
+   * @param {{last?: number}} [options] Options, e.g. last (default 3)
+   * @returns {{targets: Array<{target: number, shots: number, sgPerShot: number, greens: number, avgDist: number|null}>, byTarget: Array<object>, worst: Array<object>}}
+   */
+  function combineBreakdown(logEntries, options = {}) {
+    const lastN = options && typeof options.last === "number" && options.last > 0 ? options.last : 3;
+    const combines = (logEntries || []).filter(e => e && e.id === "combine" && Array.isArray(e.results));
+    const recent = combines.slice(-lastN);
+    const targetMap = new Map();
+
+    for (const c of recent) {
+      for (const r of c.results || []) {
+        if (!r || r.target == null || !finite(r.target)) continue;
+        const target = r.target;
+        let entry = targetMap.get(target);
+        if (!entry) {
+          entry = { target, shots: 0, sgTotal: 0, greens: 0, distSum: 0, distCount: 0 };
+          targetMap.set(target, entry);
+        }
+        entry.shots++;
+        const isMishit = r.sg == null || !finite(r.sg);
+        const shotSg = isMishit ? MISHIT_SG : r.sg;
+        entry.sgTotal += shotSg;
+        if (r.onGreen) entry.greens++;
+        if (finite(r.dist)) {
+          entry.distSum += r.dist;
+          entry.distCount++;
+        }
+      }
+    }
+
+    const targets = Array.from(targetMap.values())
+      .sort((a, b) => a.target - b.target)
+      .map(e => ({
+        target: e.target,
+        shots: e.shots,
+        sgPerShot: e.shots > 0 ? e.sgTotal / e.shots : 0,
+        greens: e.greens,
+        avgDist: e.distCount > 0 ? e.distSum / e.distCount : null,
+      }));
+
+    const eligible = targets.filter(t => t.shots >= 3);
+    eligible.sort((a, b) => a.sgPerShot - b.sgPerShot || a.target - b.target);
+    const worst = eligible.slice(0, 2);
+
+    return {
+      targets,
+      byTarget: targets,
+      worst,
+    };
+  }
+
+  // Usual shot count for each game (for best score eligibility: >= half usual shots).
+  const USUAL_SHOTS = {
+    combine: COMBINE_TARGETS.length * COMBINE_SHOTS_PER_TARGET, // 27
+    wedges: WEDGE_TARGETS.length, // 13
+    random: RANDOM_DEFAULTS.count, // 20
+    ladder: LADDER_DEFAULTS.count, // 30
+    driving: DRIVING_SHOTS, // 14
+    shaping: SHAPING_SHOTS, // 12
+    distance: DISTANCE_DEFAULTS.count, // 15
+  };
+
+  /**
+   * Extract history of finished sessions for a game, newest first, plus best session.
+   * @param {Array<object>} logEntries Finished game log entries from /api/game
+   * @param {string} gameId Game ID (e.g. "combine", "wedges", "driving", "distance", etc.)
+   * @returns {Array<{started: number|null, shots: number, hits: number, hitShare: number, sgPerShot: number|null, how: string}> & {best: object|null, games: Array, history: Array}}
+   */
+  function gameHistory(logEntries, gameId) {
+    const matching = (logEntries || []).filter(e => e && e.id === gameId);
+    const indexed = matching.map((entry, idx) => ({ entry, idx }));
+    indexed.sort((a, b) => {
+      const timeA = a.entry.started ?? 0;
+      const timeB = b.entry.started ?? 0;
+      if (timeB !== timeA) return timeB - timeA;
+      return b.idx - a.idx;
+    });
+
+    const list = indexed.map(({ entry }) => {
+      const s = entry.summary;
+      const res = Array.isArray(entry.results) ? entry.results : null;
+      const shots = s && typeof s.shots === "number"
+        ? s.shots
+        : (res ? res.length : 0);
+      const hits = s && typeof s.greens === "number"
+        ? s.greens
+        : (res ? res.filter(r => r && r.onGreen).length : 0);
+      const hitShare = shots > 0 ? hits / shots : 0;
+
+      let sgPerShot = null;
+      if (gameId !== "shaping") {
+        if (s && finite(s.sgPerShot)) {
+          sgPerShot = s.sgPerShot;
+        } else if (res && res.length > 0) {
+          const sum = summarize(res);
+          sgPerShot = finite(sum.sgPerShot) ? sum.sgPerShot : null;
+        }
+      }
+
+      const how = entry.how || "done";
+      const started = entry.started ?? null;
+
+      return {
+        started,
+        shots,
+        hits,
+        hitShare,
+        sgPerShot,
+        how,
+      };
+    });
+
+    const usual = USUAL_SHOTS[gameId] ?? 10;
+    const minShots = usual / 2;
+    const eligible = list.filter(h => h.shots >= minShots);
+    let best = null;
+    if (eligible.length > 0) {
+      best = eligible.slice().sort((a, b) => {
+        if (b.hitShare !== a.hitShare) return b.hitShare - a.hitShare;
+        if (b.shots !== a.shots) return b.shots - a.shots;
+        return (b.started ?? 0) - (a.started ?? 0);
+      })[0];
+    }
+
+    list.best = best;
+    list.games = list;
+    list.history = list;
+    return list;
+  }
 
   const api = {
     GREEN_RADIUS_YD,
@@ -585,15 +803,22 @@
     SHAPE_MIN_AXIS,
     SHAPE_MAX_OFFLINE_PCT,
     SHAPING_SHOTS,
+    DISTANCE_WINDOW_YD,
+    DISTANCE_DEFAULTS,
+    USUAL_SHOTS,
     mulberry32,
     expectedPutts,
     expectedStrokes,
     scoreShot,
     scoreDriving,
     scoreShaping,
+    scoreDistance,
     scoreFor,
     summarize,
     planShaping,
+    planDistance,
+    combineBreakdown,
+    gameHistory,
     GAMES,
   };
 

@@ -1010,7 +1010,10 @@
         finishes where it lands. Each shot is scored in strokes against a tour player from that distance (+ is better);
         the Combine is always the same 27 shots, so its score is the one to follow week to week. Starting a game turns
         the practice number below off.</div>
-      <strong style="margin-top: 8px">Combine scores</strong>
+      <strong style="margin-top: 8px">Past games</strong>
+      <div class="t-filters" style="margin-top: 4px">
+        <label>Game <select id="gm-history-game"></select></label>
+      </div>
       <div id="gm-history"></div>
     </div>
     <div class="t-card">
@@ -1109,6 +1112,7 @@
 
     <div class="p-step"><span class="p-step-n">3</span>Is it working?</div>
     <div class="t-card" id="p-chart">
+      <div id="p-combine-line" class="note" style="margin-bottom: 8px;" hidden></div>
       <div class="p-chips" id="p-chips"></div>
       <svg role="img"></svg>
       <div id="p-tip" class="tip" hidden></div>

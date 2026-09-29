@@ -77,7 +77,12 @@
   .tag.bad { background: var(--bad-soft); color: var(--bad); }
   .tag.wait { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
   .sum { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
-  @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } }
+  .target-huge { font-size: 64px; font-weight: 700; line-height: 1.1; margin: 12px 0 8px; color: var(--accent); }
+  .game-score { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .game-verdict { font-size: 18px; color: var(--muted); margin-bottom: 12px; }
+  .game-select { font: inherit; font-size: 16px; padding: 10px 14px; border-radius: 8px;
+                 border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; } }
 </style>
 </head>
 <body>
@@ -120,6 +125,26 @@
     <div class="sum" id="sum"></div>
     <table><thead><tr><th>Time</th><th class="hide-sm">Cameras</th><th>Square</th><th>Club</th><th class="num">Ball mph</th><th class="num">Carry yd</th></tr></thead>
       <tbody id="swings"></tbody></table>
+  </section>
+
+  <section id="sec-game">
+    <h2><span class="n" id="n5">5</span>Play a game</h2>
+    <div id="game-active" hidden>
+      <div class="target-huge" id="game-target"></div>
+      <div class="game-score" id="game-score"></div>
+      <div class="game-verdict" id="game-verdict"></div>
+      <div class="go">
+        <button id="game-stop">Stop</button>
+      </div>
+    </div>
+    <div id="game-idle">
+      <div class="go">
+        <label>Game <select class="game-select" id="game-select"></select></label>
+        <button class="primary" id="game-start">Start game</button>
+      </div>
+      <p class="hint" id="game-describe" style="margin-top: 8px;"></p>
+      <div class="sum" id="game-last-combine" style="margin-top: 8px;"></div>
+    </div>
   </section>
 </main>
 <script>
@@ -267,11 +292,71 @@ function renderSwings(clips) {
     (missed ? `, ${missed} without (a practice swing, a miss Square didn't read, or Square's app not recording)` : "") : "";
 }
 
+// ---- 5. Games ----
+const gmSg = v => v == null || !Number.isFinite(v) ? "–" : (v >= 0 ? "+" : "") + v.toFixed(2);
+const gmDay = t => new Date(t * 1000).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+let gameState = null;
+
+function renderGame(data) {
+  gameState = data;
+  if (!data) return;
+  const g = data.game;
+  $("n5").className = "n" + (g ? " ok" : "");
+  if (g) {
+    $("game-active").hidden = false;
+    $("game-idle").hidden = true;
+    const targetText = g.sayTarget || (Number.isFinite(g.target) ? `${g.target} yards` : String(g.target));
+    $("game-target").textContent = targetText;
+    const s = g.summary || {};
+    $("game-score").textContent = !s.shots ? "No shots yet." : `${s.shots} shots, ${s.greens} ${g.hitWord || "on the green"}` +
+      (g.id === "shaping" ? "" : `, ${gmSg(s.sgPerShot)} strokes a shot against tour`) +
+      (s.mishits ? `, ${s.mishits} mishit${s.mishits > 1 ? "s" : ""}` : "");
+    const lastShot = g.results && g.results.length ? g.results[g.results.length - 1] : null;
+    $("game-verdict").textContent = lastShot ? ("Last shot: " + (lastShot.verdict || "mishit")) : "";
+  } else {
+    $("game-active").hidden = true;
+    $("game-idle").hidden = false;
+    const sel = $("game-select");
+    const games = data.games || [];
+    if (!sel.options.length) {
+      sel.replaceChildren(...games.map(x =>
+        Object.assign(document.createElement("option"), { value: x.id, textContent: x.name })));
+    }
+    const cur = games.find(x => x.id === sel.value) || games[0];
+    $("game-describe").textContent = cur ? cur.describe || "" : "";
+    const combines = (data.log || []).filter(x => x.id === "combine" && x.summary).reverse();
+    const last = combines[0];
+    $("game-last-combine").textContent = last
+      ? `Last Combine: ${gmSg(last.summary.sgPerShot)} strokes a shot vs tour on ${gmDay(last.started)} (${last.summary.shots} shots, ${last.summary.greens} greens).`
+      : "";
+  }
+}
+
+$("game-select").onchange = () => {
+  if (gameState && gameState.games) {
+    const cur = gameState.games.find(x => x.id === $("game-select").value);
+    $("game-describe").textContent = cur ? cur.describe || "" : "";
+  }
+};
+
+async function commandGame(url, body) {
+  try {
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    });
+  } catch {}
+  pollGame();
+}
+$("game-start").onclick = () => commandGame("/api/game", { game: $("game-select").value });
+$("game-stop").onclick = () => commandGame("/api/game/stop");
+
 // ---- Polling ----
 async function getJson(url) {
   try { const r = await fetch(url, { cache: "no-store" }); return r.ok ? await r.json() : null; } catch { return null; }
 }
-let statusTimer = 0, swingTimer = 0;
+let statusTimer = 0, swingTimer = 0, gameTimer = 0;
 async function pollStatus() {
   clearTimeout(statusTimer);
   const [s, setup] = await Promise.all([getJson("/api/status"), getJson("/api/setup")]);
@@ -287,9 +372,25 @@ async function pollSwings() {
   renderSwings(await getJson(`/api/clips?since=${Math.floor(Date.now() / 1000 - SWINGS_SINCE_S)}`));
   swingTimer = setTimeout(pollSwings, document.hidden ? 20000 : 4000);
 }
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollStatus(); pollSwings(); } });
+async function pollGame() {
+  clearTimeout(gameTimer);
+  if (document.hidden) return;
+  const data = await getJson("/api/game");
+  if (data) renderGame(data);
+  if (!document.hidden) {
+    gameTimer = setTimeout(pollGame, 2000);
+  }
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    pollStatus();
+    pollSwings();
+    pollGame();
+  }
+});
 pollStatus();
 pollSwings();
+pollGame();
 </script>
 </body>
 </html>

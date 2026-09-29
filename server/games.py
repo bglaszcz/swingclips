@@ -95,7 +95,7 @@ def shot_of(shot: dict | None) -> dict:
 
 
 # What a game's "green" is, for the summary: a fairway, or the shape that was called.
-HIT_WORDS = {"driving": "in the fairway", "shaping": "shaped as called"}
+HIT_WORDS = {"driving": "in the fairway", "shaping": "shaped as called", "distance": "within 5 yards"}
 
 
 class Games:
