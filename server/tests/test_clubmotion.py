@@ -54,5 +54,25 @@ class ClubheadMotionTest(unittest.TestCase):
         self.assertIsNone(pose.clubhead_motion(frames(), quiet_until=0.05))
 
 
+class ClubOnsetFileTest(unittest.TestCase):
+    """The onset goes in the pose file just after ballVersion, where the server reads what a pose
+    file holds (app.py _pose_stamp reads the first 400 bytes)."""
+
+    def test_placed_near_the_start(self):
+        doc = {"version": 6, "pass": "deep", "model": "rtmpose-m-256x192", "ballVersion": 4, "rotation": 90,
+               "ball": {"x": 0.5, "y": 0.8, "r": 0.004}, "frames": [{"t": 0.0}] * 3}
+        got = pose.with_club_onset(doc, 0.812)
+        self.assertEqual(list(got)[:5], ["version", "pass", "model", "ballVersion", "clubOnset"])
+        self.assertEqual(got["clubOnset"], 0.812)
+        # Again (after a new ball): replaced, still in the same place; None = looked for, not found.
+        again = pose.with_club_onset(got, None)
+        self.assertEqual(list(again), list(got))
+        self.assertIsNone(again["clubOnset"])
+
+    def test_no_ball_no_onset(self):
+        self.assertIsNone(pose.club_onset("missing.mp4", {"ball": None}, 0.8))
+        self.assertIsNone(pose.club_onset("missing.mp4", {"ball": {"x": 0.5, "y": 0.5, "r": 0.004}}, None))
+
+
 if __name__ == "__main__":
     unittest.main()

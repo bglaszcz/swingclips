@@ -18,6 +18,10 @@ During a session the server's first job is taking the clips in; the careful anal
   from the deep result (their pose stamp ends in `+deep`). The Ready panel shows "deep pass: n clips
   to go". A session starting stops it between clips; it carries on after. `SWINGCLIPS_DEEP=off` turns
   it off.
+- **Then the clubhead onset** of each face-on clip (~1.5 s a clip: the window round the takeaway
+  decoded again, `pose.club_onset`), saved in its pose file as `clubOnset` (stamp `+onset`): the
+  takeaway comes from it (docs/key-positions.md). Until then the shaft rule gives the takeaway.
+  Runs whenever the server is idle, deep pass or not; the console says "Onset: ...".
 - **The quick pass** (during a session, only when a deep pass will follow it): inside the swing,
   MediaPipe and the shaft search run only on every other frame (`SWINGCLIPS_QUICK_MP_STRIDE`, default
   2): the frames the body model runs on anyway at its CPU stride. The frames between get their

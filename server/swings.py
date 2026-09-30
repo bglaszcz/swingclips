@@ -60,7 +60,8 @@ def pose_input(clip: dict, pose_path: Path) -> dict:
     data = json.loads(gzip.decompress(pose_path.read_bytes()))
     return {"name": clip["name"], "strike": clip["strike"], "angle": clip["angle"],
             "rotation": data.get("rotation", 0), "frames": data["frames"],
-            "impact": data.get("impact"), "ball": data.get("ball"), "drill": clip.get("drill")}
+            "impact": data.get("impact"), "ball": data.get("ball"), "drill": clip.get("drill"),
+            "clubOnset": data.get("clubOnset")}
 
 
 def load(path: Path) -> dict:

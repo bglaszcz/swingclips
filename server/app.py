@@ -287,7 +287,8 @@ def body_model() -> str:
     return b if b == models.DEFAULT else models.stamp(b)
 
 
-# What made each pose file, by clip name: (file's mtime, body model, ball search version, deep pass).
+# What made each pose file, by clip name: (file's mtime, body model, ball search version, deep pass,
+# clubhead onset looked for).
 # The worker checks every clip.
 _pose_models: dict[str, tuple[int, str, int, bool]] = {}
 # Clips that failed to be analyzed again with the current model, or to have the ball found again
@@ -295,9 +296,10 @@ _pose_models: dict[str, tuple[int, str, int, bool]] = {}
 _again_failed: set[str] = set()
 _ball_failed: set[str] = set()
 _deep_failed: set[str] = set()
+_onset_failed: set[str] = set()
 
 
-def _pose_stamp(name: str) -> tuple[str, int, bool] | None:
+def _pose_stamp(name: str) -> tuple[str, int, bool, bool] | None:
     f = pose_file(name)
     try:
         mtime = f.stat().st_mtime_ns
@@ -313,9 +315,10 @@ def _pose_stamp(name: str) -> tuple[str, int, bool] | None:
             return None
         m = re.search(r'"model":"([^"]+)"', head)
         b = re.search(r'"ballVersion":(\d+)', head)
-        got = (mtime, m.group(1) if m else models.DEFAULT, int(b.group(1)) if b else 1, '"pass":"deep"' in head)
+        got = (mtime, m.group(1) if m else models.DEFAULT, int(b.group(1)) if b else 1, '"pass":"deep"' in head,
+               '"clubOnset":' in head)
         _pose_models[name] = got
-    return got[1], got[2], got[3]
+    return got[1], got[2], got[3], got[4]
 
 
 def pose_model(name: str) -> str | None:
@@ -329,7 +332,7 @@ def pose_made(name: str) -> str | None:
     "rtmpose-m-256x192+ball3+deep". Quality records, swing numbers and 3D keep it, and are worked out
     again when it changes."""
     stamp = _pose_stamp(name)
-    return stamp and f"{stamp[0]}+ball{stamp[1]}" + ("+deep" if stamp[2] else "")
+    return stamp and f"{stamp[0]}+ball{stamp[1]}" + ("+deep" if stamp[2] else "") + ("+onset" if stamp[3] else "")
 
 
 def is_deep(name: str) -> bool:
@@ -348,6 +351,8 @@ def find_ball_again(clip: Path, pool: ProcessPoolExecutor) -> ProcessPoolExecuto
     try:
         doc = json.loads(gzip.decompress(pose_file(clip.name).read_bytes()))
         result = pose.find_ball_again(str(clip), doc, pool, POSE_WORKERS)
+        if result.get("ball") != doc.get("ball"):
+            result.pop("clubOnset", None)   # it watched the old ball's spot: looked for again
         tmp = pose_file(clip.name).with_suffix(".tmp")
         tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
         tmp.replace(pose_file(clip.name))
@@ -358,6 +363,44 @@ def find_ball_again(clip: Path, pool: ProcessPoolExecutor) -> ProcessPoolExecuto
     except Exception as e:
         _ball_failed.add(clip.name)
         print(f"Ball: {clip.name} FAILED (keeps its old result)", flush=True)
+        traceback.print_exc()
+        if isinstance(e, BrokenProcessPool):
+            pool = new_pool()
+    finally:
+        with files_lock:
+            pose_busy = None
+    return pool
+
+
+def add_club_onset(clip: dict, pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> ProcessPoolExecutor:
+    """Where the clubhead starts to leave the ball (pose.club_onset), saved in a face-on clip's pose
+    file, looked for around the shaft rule's takeaway (phases.js without it). None when there's no
+    ball or swing, so it isn't looked for again. Returns the pool (a fresh one if a worker died)."""
+    global pose_busy
+    name = clip["name"]
+    with files_lock:
+        if not (CLIPS_DIR / name).exists() or name in pending_trash:
+            return pool
+        pose_busy = name
+    try:
+        path = pose_file(name)
+        mtime = path.stat().st_mtime_ns
+        doc = json.loads(gzip.decompress(path.read_bytes()))
+        inp = swings.pose_input(clip, path)
+        inp["clubOnset"] = None
+        takeaway = summarizer.call("positionTimes", inp, None, swings.LEAD_SIDE)["main"]["times"].get("takeaway")
+        onset = pool.submit(pose.club_onset, str(CLIPS_DIR / name), doc, takeaway).result()
+        with files_lock:
+            if path.stat().st_mtime_ns != mtime:
+                return pool   # analyzed again meanwhile: looked for next time round
+            tmp = path.with_suffix(".tmp")
+            tmp.write_bytes(gzip.compress(json.dumps(pose.with_club_onset(doc, onset), separators=(",", ":")).encode()))
+            tmp.replace(path)
+        print(f"Onset: {name}: " + (f"clubhead leaves at {onset} s (shaft rule {takeaway:.3f} s)" if onset is not None
+                                    else "not found"), flush=True)
+    except Exception as e:
+        _onset_failed.add(name)
+        print(f"Onset: {name} FAILED", flush=True)
         traceback.print_exc()
         if isinstance(e, BrokenProcessPool):
             pool = new_pool()
@@ -457,6 +500,14 @@ def pose_worker(stop: threading.Event):
                     if deepen:
                         pool = analyze_clip(max(deepen, key=recorded_at), pool, again=True, deep=deep)
                         continue
+                # Then the clubhead onset (the takeaway) of face-on clips without one, newest first.
+                onsets = [c for c in listed_clips(with_shots=False) if c["angle"] == "face" and c["pose"] == "done"
+                          and c["name"] not in _onset_failed and not (_pose_stamp(c["name"]) or (0, 0, 0, True))[3]]
+                if onsets:
+                    if summarizer is None:
+                        summarizer = swings.Summarizer(STATIC_DIR)
+                    pool = add_club_onset(max(onsets, key=lambda c: c["recorded"]), pool, summarizer)
+                    continue
             if waiting:
                 stop.wait(5)
                 continue

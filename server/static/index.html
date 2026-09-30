@@ -1937,7 +1937,7 @@ async function fetchPose(name, v) {
     if (f.lm && (reference = spineLine(f.lm, v))) break;
   }
   return { frames: data.frames, reference, impact: data.impact ?? null, clubLength: data.clubLength ?? null,
-           ball: data.ball ?? null, video: v, angle: c.angle || "face" };
+           ball: data.ball ?? null, clubOnset: data.clubOnset ?? null, video: v, angle: c.angle || "face" };
 }
 
 async function loadPose(name) {
@@ -2199,7 +2199,7 @@ function showCameraCheck(a, main) {
 function analysisInput(name, p) {
   const c = clips.find(c => c.name === name);
   return { name, strike: c ? c.strike : null, angle: p.angle, aspect: p.video.videoWidth / p.video.videoHeight,
-           frames: p.frames, impact: p.impact, ball: p.ball, drill: c ? c.drill : null };
+           frames: p.frames, impact: p.impact, ball: p.ball, drill: c ? c.drill : null, clubOnset: p.clubOnset ?? null };
 }
 
 async function buildPositions(name) {

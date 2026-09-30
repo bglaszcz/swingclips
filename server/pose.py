@@ -301,6 +301,40 @@ def clubhead_motion(crops, quiet_until):
     return out
 
 
+# Where club_onset looks: from CLUB_ONSET_WINDOW[0] s before the shaft rule's takeaway (the still
+# stretch ends there, and 0.35 s before it the reference starts) to CLUB_ONSET_WINDOW[1] s after:
+# the same window the Labels page's trace uses (labels.js motionFor).
+CLUB_ONSET_WINDOW = (0.3, 0.35)
+
+
+def club_onset(path, doc, takeaway):
+    """Where the clubhead starts to leave the ball (clubhead_motion), looked for around `takeaway`
+    (clip seconds: phases.js's shaft rule, without a clubOnset): clip seconds, or None. For face-on
+    clips; the server saves it in the pose file (with_club_onset) and phases.js takes the takeaway
+    from it. ~1.5 s a clip (it decodes the window again), so it waits for the end of a session."""
+    if not doc.get("ball") or takeaway is None:
+        return None
+    quiet = max(0.36, takeaway - CLUB_ONSET_WINDOW[0])
+    crops = clubhead_crops(path, doc.get("rotation", 0), doc["ball"], quiet - 0.35, takeaway + CLUB_ONSET_WINDOW[1])
+    got = clubhead_motion(crops, quiet)
+    return got and got["onset"]
+
+
+def with_club_onset(doc, onset):
+    """The pose file `doc` with "clubOnset" set (clip seconds or None: looked for, not found), just
+    after "ballVersion", where the server reads what a pose file holds (app.py, _pose_stamp)."""
+    out = {}
+    for k, v in doc.items():
+        if k == "clubOnset":
+            continue
+        out[k] = v
+        if k == "ballVersion":
+            out["clubOnset"] = onset
+    if "clubOnset" not in out:
+        out = {"clubOnset": onset, **out}
+    return out
+
+
 def decode_range(container, start_pts, end_pts):
     s = container.streams.video[0]
     container.seek(start_pts, stream=s, backward=True, any_frame=False)

@@ -73,7 +73,8 @@
 
   /**
    * @param main the clip the swing is opened through (face-on, or a lone down-the-line one):
-   *   {name, strike, angle, aspect, frames, impact, ball, drill (drills.py: "pump", or none)}
+   *   {name, strike, angle, aspect, frames, impact, ball, drill (drills.py: "pump", or none),
+   *   clubOnset (the pose file's, pose.py club_onset, or none)}
    * @param other its down-the-line partner in the same shape, or null
    * @param leadSide "left" for a right-handed golfer
    * @returns {positions, metrics (face-on) | null, dtl: the down-the-line clip | null,
@@ -83,7 +84,8 @@
     // A ball-gone that doesn't fit the heard strike isn't impact: impact then comes from the hands,
     // as when no ball was seen.
     const positions = Phases.detect(main.frames, main.aspect, leadSide, strikeWindow(main.name, main.strike),
-                                    impactCheck(main) === null ? main.impact : null, { drill: main.drill || null });
+                                    impactCheck(main) === null ? main.impact : null,
+                                    { drill: main.drill || null, clubOnset: main.clubOnset ?? null });
     const metrics = main.angle === "dtl" ? null : Metrics.compute(main.frames, main.aspect, leadSide, positions);
     const dtl = other || (main.angle === "dtl" ? main : null);
     const offset = other ? syncOffset(main, other) : 0;

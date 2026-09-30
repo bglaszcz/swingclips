@@ -7,7 +7,8 @@
 // P2, P6 and P8 are defined by the club shaft: when the server tracked it (server/club.py), they are
 // the moments it passes horizontal; otherwise they are estimated from the hands and impact.
 // The takeaway, P3, P4 and P5 follow the owner's hand labels (docs/key-positions.md): the takeaway
-// is where the shaft first turns away from its angle at address, P3 / P5 where the lead forearm
+// is where the clubhead starts to leave the ball (seen by the camera, after the deep pass), else where
+// the shaft first turns away from its angle at address, P3 / P5 where the lead forearm
 // passes level, P4 where the hands start down. They use only points both body models place
 // (MediaPipe's and RTMPose's: the wrists and elbows, not MediaPipe's finger points).
 // tune_positions.py scores them against the labels (tuned on all swings but one, tested on it).
@@ -37,7 +38,12 @@
   //  - topSpeedShares, topSmoothSeconds: the top is found from the last moments before impact the
   //    lead wrist moves at these two shares of its downswing peak (see handsStartDown), with its
   //    positions smoothed over +- this.
-  const TUNING = { takeawayDegrees: 1, topSpeedShares: [0.1, 0.4], topSmoothSeconds: 0.03 };
+  //  - onsetLead, onsetPull: with the clubhead onset (options.clubOnset: pose.py club_onset, face-on,
+  //    after the server's deep pass: where the picture round the clubhead starts to change), the
+  //    takeaway is onsetLead after it, moved toward the shaft rule's by at most onsetPull. The onset
+  //    catches the first creep, ~15 ms before the frame the labels mark as visibly moving, and wobbles
+  //    ~15 ms; the shaft rule alone was off by 100 ms on one swing in ten (tune_positions.py).
+  const TUNING = { takeawayDegrees: 1, topSpeedShares: [0.1, 0.4], topSmoothSeconds: 0.03, onsetLead: 0.017, onsetPull: 0.01 };
   const TORSO_MIN_VISIBILITY = 0.25;
   // Down-the-line, the hands spend much of the swing behind the body, so MediaPipe reports low
   // "visibility" while still placing them well. Trust them; the torso gates the frame.
@@ -321,9 +327,11 @@
    * @param impactWindow optional [from, to] clip seconds when the strike was heard
    * @param impactTime optional clip seconds of the first frame without the ball
    * @param options {drill}: "pump" for a pump-drill swing (drills.py): P1-P3 come from the first
-   *   backswing, P4 is the last top before the downswing, and the pump bottoms are returned too
+   *   backswing, P4 is the last top before the downswing, and the pump bottoms are returned too;
+   *   {clubOnset}: clip seconds where the clubhead starts to leave the ball (the pose file's, face-on
+   *   after the deep pass): the takeaway then comes from it (TUNING.onsetLead, onsetPull)
    * @returns [{key, tag, label, t, index, estimated}] - index is into `frames` - with a `takeaway`
-   *   property: {t, fromShaft}, when the club starts back, and for a pump drill `drill` ("pump") and
+   *   property: {t, fromShaft, fromClubhead}, when the club starts back, and for a pump drill `drill` ("pump") and
    *   `pumps` ([{t, index}], where the hands turned back up at the bottom of each pump). When no swing
    *   is found, an empty array with a `why` property: {reason, text, and the numbers behind it} (see noSwing).
    */
@@ -489,14 +497,21 @@
       : frames;
     const restEnd = shaftRestEnd(restFrames, until);
     const moved = restEnd >= 0 ? shaftTakeaway(restFrames, restEnd, until) : -1;
-    const takeaway = moved >= 0 ? frames[moved].t : restEnd >= 0 ? frames[restEnd].t : ms[address].t;
+    let takeaway = moved >= 0 ? frames[moved].t : restEnd >= 0 ? frames[restEnd].t : ms[address].t;
+    const onset = options.clubOnset;
+    let fromClubhead = false;
+    if (onset != null) {
+      const t = onset + TUNING.onsetLead;
+      const at = nearestFrame(frames, t + Math.max(-TUNING.onsetPull, Math.min(TUNING.onsetPull, takeaway - t)));
+      if (at >= 0) { takeaway = frames[at].t; fromClubhead = true; }
+    }
     const p1 = found.find(p => p.key === "p1");
     const a = nearestFrame(frames, takeaway - ADDRESS_LEAD);
     if (p1 && a >= 0) Object.assign(p1, { t: frames[a].t, index: a });
 
     found.sort((a, b) => a.key.localeCompare(b.key));
     // For tempo: when the club starts back, and whether that came from the shaft.
-    found.takeaway = { t: takeaway, fromShaft: restEnd >= 0 };
+    found.takeaway = { t: takeaway, fromShaft: restEnd >= 0, fromClubhead };
     if (pumps.length) {
       found.drill = "pump";
       found.pumps = pumps.map(i => ({ t: ms[i].t, index: ms[i].index }));

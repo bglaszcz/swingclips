@@ -20,7 +20,7 @@ tune_positions.py --all-labels` scores them too.
 
 | | Rule |
 |---|---|
-| **Takeaway** | where the shaft starts to turn away from its angle at address: the first frame from which the tracked angle stays off its address value (a 2° step) until P2, extended back to the address angle along the line through that step and the next one |
+| **Takeaway** | face-on after the deep pass: 17 ms after the camera sees the clubhead start to leave the ball (`clubOnset` in the pose file, `pose.club_onset`), moved at most 10 ms toward the shaft rule. Otherwise (during a session, no ball found) the shaft rule: where the shaft starts to turn away from its angle at address, the first frame from which the tracked angle stays off its address value (a 2° step) until P2, extended back to the address angle along the line through that step and the next one |
 | **P3** lead arm parallel, back | the lead **forearm** (elbow to wrist) rising through level, face-on |
 | **P4** top | where the **hands start down**: the lead wrist's speed climbing into the downswing, extended back along a straight line to zero speed |
 | **P5** lead arm parallel, down | the lead forearm falling through level |
@@ -29,8 +29,9 @@ P1 is still 0.1 s before the takeaway. P3, P4 and P5 use only the wrists and elb
 models place: RTMPose moves the wrists but leaves MediaPipe's finger points where MediaPipe put
 them, so a rule on the fingers would behave differently per model.
 
-The tuned numbers are three, in `SwingPhases.TUNING`: `takeawayDegrees` 1 (i.e. any change),
-`topSpeedShares` [0.1, 0.4] and `topSmoothSeconds` 0.03. The takeaway's extension back has no
+The tuned numbers are five, in `SwingPhases.TUNING`: `takeawayDegrees` 1 (i.e. any change),
+`topSpeedShares` [0.1, 0.4], `topSmoothSeconds` 0.03, and for the clubhead onset `onsetLead` 0.017
+and `onsetPull` 0.01. The takeaway's extension back has no
 number of its own: the tracked angle moves in 2° steps, so the first step marks about 1° of turn
 and the next about 3°, and the line through them reaches 0° half the gap between them before the
 first. P3 and P5 have none.
@@ -93,6 +94,27 @@ test (`tests/test_fixtures.py`, `KeyPositionsTest`) holds each model, angle and 
 saved median and 90th percentile (`key-positions.json`) within a frame (4.2 ms).
 
 ## The evidence, per key position
+
+### Takeaway from the clubhead onset, in phases.js (2026-09-30)
+
+The server now works out the camera onset once per face-on clip, after the deep pass (app.py
+`add_club_onset`: ~1.5 s a clip, it decodes the window round the shaft rule's takeaway again), and
+saves it in the pose file as `clubOnset`; phases.js takes the takeaway from it. 91 labels on 48
+swings (the owner labeled seven more takeaway swings on Sep 30), RTMPose-m, leave one swing out,
+median / p90 / bias / within one frame:
+
+| | face-on (43) | down the line (39) |
+|---|---|---|
+| shaft rule (before) | 21 / 96 / +18 ms / 19% | 17 / 112 / +13 ms / 18% |
+| clubhead onset + 17 ms, at most 10 ms toward the rule | 8 / 25 / +5 ms / 33% | 8 / 33 / +2 ms / 31% |
+
+Every held-out swing picked the same `onsetLead` / `onsetPull`. The onset itself runs ~15 ms ahead
+of the labels: on 1790706208 the clubhead has slid a fraction of a pixel from 0.804 s (optical flow
+on the box), 1 px by 0.829 s where the label is. The labels mark "visibly moves back", and the
+onset follows them. The two cameras agree on the owner's labels (median 4 ms apart after the sync)
+better than on the onset (21 ms). The down-the-line onset isn't used: the clubhead moves straight
+away from that camera, and averaging it in didn't help. Optical flow instead of the pixel change
+was tried too: fine face-on, 40-60 ms late down the line.
 
 ### Takeaway: the camera's clubhead onset beats the shaft rule (2026-09-28)
 

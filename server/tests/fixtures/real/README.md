@@ -33,6 +33,9 @@ changes from making worse; after a change that makes them better, `python tune_p
 redone (ones taken from the labeling page's suggested frames, which can only agree with the
 detector); `tune_positions.py --all-labels` scores them anyway.
 
+Face-on pose files from the server's deep pass have `clubOnset` (pose.py club_onset: where the
+camera sees the clubhead start to leave the ball), which phases.js takes the takeaway from.
+
 Label definitions the owner used: takeaway = first frame the clubhead visibly moves back; P2/P6/P8
 shaft parallel to the ground; P3/P5 lead arm parallel; P4 top = the last frame before the club starts
 down (after a pause at the top: where it leaves, not where it arrives); P7 impact = first frame the
