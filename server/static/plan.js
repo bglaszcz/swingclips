@@ -245,12 +245,6 @@
           } else if (DrillSets && typeof DrillSets.formatSet === "function") {
             const verd = dSet.verdict || DrillSets.verdict(dSet);
             drillSetLine = DrillSets.formatSet(dSet, verd);
-          } else {
-            const dateStr = dSet.dateFormatted || dSet.date || "";
-            const pumpsStr = dSet.pumps && dSet.pumps.handsPlane != null ? `pumps ${dSet.pumps.handsPlane.toFixed(1)} in` : "";
-            const afterStr = dSet.after && dSet.after.median != null ? `your swings after ${dSet.after.median.toFixed(1)} in` : "";
-            const vText = (dSet.verdict && dSet.verdict.text) || dSet.verdict || "no carry-over yet";
-            drillSetLine = `${dSet.drill === "pump" ? "Pump drill" : "Drill"}, ${dateStr}: ${[pumpsStr, afterStr].filter(Boolean).join(", ")}: ${vText}.`;
           }
         }
       }

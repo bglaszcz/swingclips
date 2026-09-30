@@ -67,7 +67,7 @@ What the server works out for each swing and what each part of the review page s
   half 65-80%; and the biggest carry hole between them (`static/wedges.js`).
   The page reads top to bottom as three steps (how did the last session go, what to work on, is it
   working: the chart opens on the focus move; inside step 3, a short Drill sets block appears when
-  drill sets exist, showing the latest set's pumps, drill swings' P6, and normal swings before and
+  drill sets exist, showing the latest set's pumps, drill swings' P6, and normal swings before (or "your usual": the last 15 same-club swings of earlier sessions, when the session starts with the drill) and
   after with a verdict on whether the rehearsal carried over against wobble, with older sets folded
   and tapping any set opening its first drill swing); step 1 also highlights the session's top faults under
   the headline sentence, along with any strong links between them (e.g. casting and early extension)

@@ -7,7 +7,9 @@
 //   pumps' median hands-to-plane (and lag);
 //   drill swings' own P6 median;
 //   normal swings with the same club in the same session: up to 15 before and 15 after,
-//   their P6 medians and counts.
+//   their P6 medians and counts. With fewer than MIN_SWINGS trusted ones before the set (a session
+//   that starts with the drill), "before" is the last 15 trusted same-club normal swings of earlier
+//   sessions instead (before.earlier: "your usual").
 //
 // Leave out swings whose numbers are shaky or missing under trust.js (estimated P6,
 // doubtful impact, bad camera, dark/flicker, or missing value).
@@ -137,8 +139,9 @@
     sessions.push(currentSession);
 
     const outSets = [];
+    const isNormal = s => !s.c.drill && !(s.rec && s.rec.drill);
 
-    for (const sess of sessions) {
+    for (const [sessIdx, sess] of sessions.entries()) {
       // Find drill sets within this session
       // A set is a contiguous sequence of drill swings of the same drill, <= setGap apart
       let i = 0;
@@ -218,6 +221,26 @@
           else afterLeftOut++;
         }
 
+        // A session that starts with the drill: the same club's trusted normal swings from earlier
+        // sessions, the latest first, are what "before" means ("your usual").
+        let earlier = false;
+        if (validBefore.length < MIN_SWINGS && primaryClub) {
+          const usual = [];
+          for (let k = sessIdx - 1; k >= 0 && usual.length < maxNormal; k--) {
+            for (let m = sessions[k].length - 1; m >= 0 && usual.length < maxNormal; m--) {
+              const s = sessions[k][m];
+              if (!isNormal(s) || !s.c.shot || s.c.shot.club !== primaryClub) continue;
+              const tRes = checkP6Trust(s.rec, s.c, noise);
+              if (tRes.valid) usual.push(tRes.value);
+            }
+          }
+          if (usual.length >= MIN_SWINGS) {
+            validBefore.splice(0, validBefore.length, ...usual.reverse());
+            beforeLeftOut = 0;
+            earlier = true;
+          }
+        }
+
         const totalLeftOut = drillLeftOut + beforeLeftOut + afterLeftOut;
         const firstItem = drillSwings[0];
         const lastItem = drillSwings[drillSwings.length - 1];
@@ -245,6 +268,7 @@
           drillP6Count: validDrillP6.length,
           drillSwings: validDrillP6,
           before: {
+            earlier,
             count: validBefore.length,
             median: median(validBefore),
             swings: validBefore
@@ -275,10 +299,12 @@
    * Plain-words verdict on carry-over against wobble.
    *
    * @param {object} set set from sets()
-   * @param {object} [range] good-shot range for handsPlaneP6 (used as baseline if no swings before)
+   * Against the swings before the set (or, for a session that starts with the drill, the usual
+   * ones from earlier sessions: sets() before.earlier); with fewer than MIN_SWINGS of those, only
+   * "too few swings".
    * @returns {object} verdict object with .text, .level, and toString()
    */
-  function verdict(set, range) {
+  function verdict(set) {
     if (!set) return makeVerdict("too few swings", "few");
 
     const pumpT = set.pumps ? set.pumps.handsPlane : null;
@@ -290,24 +316,11 @@
     const nAfter = set.after ? set.after.count : 0;
     const mAfter = set.after ? set.after.median : null;
 
-    let nBefore = set.before ? set.before.count : 0;
-    let mBefore = set.before ? set.before.median : null;
-
-    // If no before swings in session, check if range provides a baseline, else fallback to drill swings
-    let usedRangeBaseline = false;
-    if (nBefore < MIN_SWINGS) {
-      if (range && (range.median != null || (range.q25 != null && range.q75 != null))) {
-        mBefore = range.median != null ? range.median : (range.q25 + range.q75) / 2;
-        nBefore = range.count || range.shots || 10;
-        usedRangeBaseline = true;
-      } else if (nDrill >= MIN_SWINGS && nAfter >= MIN_SWINGS) {
-        mBefore = mDrill;
-        nBefore = nDrill;
-      }
-    }
+    const nBefore = set.before ? set.before.count : 0;
+    const mBefore = set.before ? set.before.median : null;
 
     // Minimum check
-    if (nDrill < MIN_SWINGS || (nAfter < MIN_SWINGS && nBefore < MIN_SWINGS)) {
+    if (nDrill < MIN_SWINGS || nBefore < MIN_SWINGS) {
       return makeVerdict("too few swings", "few");
     }
 
@@ -315,7 +328,7 @@
     const groups = [
       set.drillSwings || [],
       (set.after && set.after.swings) || [],
-      (!usedRangeBaseline && set.before && set.before.swings) || []
+      (set.before && set.before.swings) || []
     ].filter(g => g.length > 0);
 
     let ss = 0, df = 0;
@@ -425,11 +438,11 @@
     if (set.after && set.after.count > 0) {
       let afterPart = `your swings after ${fmt(set.after.median)}`;
       if (set.before && set.before.count > 0) {
-        afterPart += ` (before ${fmt(set.before.median)})`;
+        afterPart += ` (${set.before.earlier ? "your usual" : "before"} ${fmt(set.before.median)})`;
       }
       parts.push(afterPart);
     } else if (set.before && set.before.count > 0) {
-      parts.push(`your swings before ${fmt(set.before.median)}`);
+      parts.push(`${set.before.earlier ? "your usual" : "your swings before"} ${fmt(set.before.median)}`);
     }
 
     const numbersStr = parts.join(", ");

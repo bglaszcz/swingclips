@@ -281,13 +281,25 @@ test("real Sep 30 data: 10 pump drill swings, 14 normal after (1 null left out)"
   assert.strictEqual(s.leftOut, 1);
   assert.ok(Math.abs(s.after.median - 4.29) < 0.1);
 
-  // Verdict against usual 7-iron range (4.4 in): no carry-over yet
-  const verd = DrillSets.verdict(s, { median: 4.4 });
+  // Nothing to compare with (no normal 7 irons before, no earlier sessions): too few swings.
+  assert.strictEqual(DrillSets.verdict(s).level, "few");
+
+  // With earlier sessions' 7 irons (Sep 28, ~4.4 in), "before" is those: your usual.
+  const usual = [4.1, 4.9, 3.8, 4.6, 4.4, 5.0, 4.2];
+  const earlierClips = usual.map((v, i) => makeClip(`face_u${i}`, `2026-09-28T18:0${i}:00`, null, "I7"));
+  const withUsual = { ...realSwings };
+  usual.forEach((v, i) => { withUsual[`face_u${i}`] = makeRecord(v); });
+  const s2 = DrillSets.sets([...earlierClips, ...realClips], withUsual)[0];
+  assert.strictEqual(s2.before.earlier, true);
+  assert.strictEqual(s2.before.count, usual.length);
+  assert.strictEqual(s2.leftOut, 1);
+  const verd = DrillSets.verdict(s2);
   assert.strictEqual(verd.level, "none");
   assert.strictEqual(verd.text, "no carry-over yet");
 
   // Formatted line
-  const line = DrillSets.formatSet(s, verd);
+  const line = DrillSets.formatSet(s2, verd);
+  assert.ok(line.includes("(your usual 4.4 in)"));
   assert.ok(line.includes("Pump drill, Sep 30 (10 swings, 7 iron)"));
   assert.ok(line.includes("pumps -0.9 in"));
   assert.ok(line.includes("drill swings' P6 4.7 in"));

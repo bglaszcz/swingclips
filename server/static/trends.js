@@ -659,8 +659,7 @@ function renderProgressDrillSets(club) {
   if (!sets.length) return;
 
   const latest = sets[0];
-  const range = goodRange(latest.club, "handsPlaneP6");
-  const verd = SwingDrillSets.verdict(latest, range);
+  const verd = SwingDrillSets.verdict(latest);
   const thought = SwingDrillSets.thoughtFor(latest, journal && journal.focus);
 
   const block = document.createElement("div");
@@ -707,8 +706,7 @@ function renderProgressDrillSets(club) {
     fold.append(sum);
 
     for (const s of older) {
-      const sRange = goodRange(s.club, "handsPlaneP6");
-      const sVerd = SwingDrillSets.verdict(s, sRange);
+      const sVerd = SwingDrillSets.verdict(s);
       const row = document.createElement("div");
       row.className = "drill-set-line older";
       row.tabIndex = 0;
