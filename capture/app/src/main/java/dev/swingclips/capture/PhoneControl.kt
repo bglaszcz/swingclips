@@ -61,17 +61,29 @@ object PhoneControl {
 
     // ---- The setup voice setting ----
 
+    const val VOICE_OFF = "off"
     const val VOICE_COMBINED = "combined"
     const val VOICE_OWN = "own"
 
-    /** The saved setting, or the default: the server combines both phones' verdicts. */
-    fun setupVoice(saved: String?) = if (saved == VOICE_OWN) VOICE_OWN else VOICE_COMBINED
+    /**
+     * The saved setting, or the default (0.11): off, since the Start page's live stills are the camera
+     * check; "combined" has the server say both phones' verdicts through one, "own" each its own.
+     */
+    fun setupVoice(saved: String?) = if (saved == VOICE_OWN || saved == VOICE_COMBINED) saved else VOICE_OFF
+
+    /** The next setting when its button is pressed: off, combined, this phone, off. */
+    fun nextSetupVoice(setting: String) = when (setting) {
+        VOICE_OFF -> VOICE_COMBINED
+        VOICE_COMBINED -> VOICE_OWN
+        else -> VOICE_OFF
+    }
 
     /**
-     * Whether this phone says its own camera setup verdicts: set to "own", or the server can't do
-     * it (an older server, or not reached lately: then this phone speaks for itself as before).
+     * Whether this phone says its own camera setup verdicts: set to "own", or "combined" while the
+     * server can't do it (an older server, or not reached lately: then it speaks for itself as before).
      */
-    fun speaksOwnSetup(setting: String, serverCombines: Boolean) = setting == VOICE_OWN || !serverCombines
+    fun speaksOwnSetup(setting: String, serverCombines: Boolean) =
+        setting == VOICE_OWN || (setting == VOICE_COMBINED && !serverCombines)
 
     // ---- Talking to the server ----
 

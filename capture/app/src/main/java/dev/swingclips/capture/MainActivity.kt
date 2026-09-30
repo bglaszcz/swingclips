@@ -602,17 +602,21 @@ class MainActivity : Activity() {
      * Who says the camera setup verdicts: "combined" (the default: the server says both phones'
      * together, through the phone that speaks) or "own" (each phone says its own, as before 0.6).
      */
-    private fun setupVoice() = PhoneControl.setupVoice(prefs.getString("setup_voice", null))
+    // A new key in 0.11: everyone starts at the new default, off (the Start page's stills are the check).
+    private fun setupVoice() = PhoneControl.setupVoice(prefs.getString("setup_voice_v2", null))
 
     private fun toggleSetupVoice() {
-        val next = if (setupVoice() == PhoneControl.VOICE_OWN) PhoneControl.VOICE_COMBINED else PhoneControl.VOICE_OWN
-        prefs.edit().putString("setup_voice", next).apply()
+        prefs.edit().putString("setup_voice_v2", PhoneControl.nextSetupVoice(setupVoice())).apply()
         updateSetupVoiceButton()
         phoneLink.poke()
     }
 
     private fun updateSetupVoiceButton() {
-        setupVoiceButton.text = if (setupVoice() == PhoneControl.VOICE_OWN) "This phone" else "Combined"
+        setupVoiceButton.text = when (setupVoice()) {
+            PhoneControl.VOICE_OWN -> "This phone"
+            PhoneControl.VOICE_COMBINED -> "Combined"
+            else -> "Off"
+        }
     }
 
     /** "Start recording when the camera check is good" (off unless turned on). */
@@ -928,7 +932,7 @@ class MainActivity : Activity() {
         setting("Address", null, serverButton)
         section("Voice")
         setting("Practice voice", "Says your practice number after each swing", practiceButton)
-        setting("Setup voice", "Who says the camera check", setupVoiceButton)
+        setting("Setup voice", "Say the camera check out loud (off: the Start page shows the cameras)", setupVoiceButton)
         setting("Auto-start", "Start recording once the camera check is good", autoStartButton)
         setting("Speaker", "Says a sample result at the media volume", voiceCheckButton)
         card.addView(TextView(this).apply {

@@ -262,7 +262,7 @@ class PracticeTest(unittest.TestCase):
         self.turn_on()
         first = self.p.latest(None, "face")
         self.assertEqual(first["results"], [])
-        self.clock.t = T0 + 40
+        self.clock.t = T0 + 12
         [e] = self.p.step([swing(1, T0)], {"swing_face_1.mp4": record()})
         got = self.p.latest(first["last"])
         self.assertEqual([r["text"] for r in got["results"]], ["Tempo 3.2, in range"])
@@ -271,6 +271,19 @@ class PracticeTest(unittest.TestCase):
         self.clock.t += practice.SPEAK_WITHIN_S + 1
         self.assertEqual(self.p.latest(first["last"])["results"], [])
         self.assertIn("face", self.p.state()["listeners"])
+
+    def test_a_result_long_after_its_swing_is_logged_but_not_said(self):
+        self.turn_on()
+        first = self.p.latest(None, "face")
+        self.clock.t = T0 + practice.SAY_WITHIN_STRIKE_S + 5    # the server fell behind
+        [e] = self.p.step([swing(1, T0)], {"swing_face_1.mp4": record()})
+        self.assertEqual(e["text"], "Tempo 3.2, in range")
+        self.assertEqual(self.p.latest(first["last"])["results"], [])
+
+    def test_drill_swings_get_no_result(self):
+        self.turn_on()
+        self.clock.t = T0 + 12
+        self.assertEqual(self.p.step([swing(1, T0, drill="pump")], {"swing_face_1.mp4": record()}), [])
 
     def test_voice_check_speaks_even_when_off(self):
         last = self.p.latest(None)["last"]

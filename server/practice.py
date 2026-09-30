@@ -35,6 +35,9 @@ DTL_WAIT_S = 90.0
 STALE_S = 300.0
 # The phone doesn't speak results older than this (e.g. after a Wi-Fi drop): it's the next swing by then.
 SPEAK_WITHIN_S = 45.0
+# Nor a result ready this long after its swing: by then the golfer has hit another ball or two, so
+# it's shown on the page but not said (the server fell behind, e.g. with drill clips to analyze).
+SAY_WITHIN_STRIKE_S = 25.0
 # Two clips of one swing are at most this far apart (app.py PAIR_SLACK_S): one result per swing.
 PAIR_SLACK_S = 2.0
 # Swings in one session (as the review page groups them): a longer gap ends a streak.
@@ -281,6 +284,8 @@ class Practice:
                 t, age = s["t"], now - s["t"]
                 if t < c["since"] or s["name"] in done_names or age > STALE_S:
                     continue
+                if s.get("drill"):
+                    continue  # a drill rehearsal (drills.py): not the move as it's swung
                 if any(abs(t - d) <= PAIR_SLACK_S for d in done_times):
                     continue  # the other clip of a swing that's had its say
                 rec = records.get(s["name"])
@@ -353,7 +358,8 @@ class Practice:
                 return out
             # A voice check is spoken even with practice off; results only while it's on.
             fresh = [e for e in self.tests + (self.log[-50:] if self.config["on"] else [])
-                     if e["id"] > since and now - e["made"] <= SPEAK_WITHIN_S]
+                     if e["id"] > since and now - e["made"] <= SPEAK_WITHIN_S
+                     and (e.get("test") or e["made"] - e["t"] <= SAY_WITHIN_STRIKE_S)]
             out["results"] = [{"id": e["id"], "text": e["text"], "age": round(now - e["made"], 1),
                                "status": e.get("status"), "clip": e.get("clip")}
                               for e in sorted(fresh, key=lambda e: e["id"])]

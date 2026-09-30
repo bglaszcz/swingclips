@@ -69,8 +69,11 @@ end).
 - **Mode**: 1080p 240 fps (the default). The phones drop some frames at 240 fps; that's expected
   and doesn't affect the sync.
 - **Voices**: **Practice voice** on for the phone that should talk (face-on by default).
-  **Setup voice: combined** (default) lets that one phone say both cameras' setup; **this phone**
-  gives a phone its own voice back. The phone that isn't talking stops listening for strikes while
+  **Setup voice: off** (the default from 0.11): the phones don't talk you into place; the Start
+  page's live pictures are the camera check. **Combined** lets one phone say both cameras' setup;
+  **this phone** gives a phone its own voice. Practice mode's result is only said when it's ready
+  within 25 s of the swing (when the server is behind it's shown on the page instead), and never for
+  drill swings. The phone that isn't talking stops listening for strikes while
   the other one talks (0.9), so a voice can't start a recording.
 - **Sensitivity** (the strike trigger's slider, 0-100): higher triggers on quieter sounds; 100 by
   default. A clip needs a strike over the threshold and 2.5x louder than just before it, at most

@@ -565,3 +565,59 @@ class EndpointsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AutoStartTest(unittest.TestCase):
+    """Start recording asks for the session to record: a phone that wasn't there starts when it is."""
+
+    def setUp(self):
+        self.clock = Clock()
+        self.s = Status(self.clock)
+        self.s.heartbeat("dtl", hb())
+
+    def starts(self, angle):
+        return [c for c in self.s.take(angle)["commands"] if c["action"] == "start"]
+
+    def test_a_phone_in_the_background_starts_when_it_comes_back(self):
+        out = {c["angle"]: c for c in self.s.command("start", "both")}
+        self.assertEqual(out["dtl"]["state"], "queued")
+        self.assertNotIn("face", out)                        # never seen: nothing to refuse yet
+        self.assertEqual(len(self.starts("dtl")), 1)
+        self.clock.t += 5
+        self.s.heartbeat("face", hb())                      # the app is opened
+        self.assertEqual(len(self.starts("face")), 1)
+        self.s.heartbeat("face", hb(recording=True))
+        self.clock.t += 60
+        self.s.heartbeat("face", hb(recording=False, closing=True))   # to the background
+        self.s.heartbeat("face", hb(recording=False))                 # and back
+        self.assertEqual(len(self.starts("face")), 1)
+
+    def test_stopped_on_the_phone_itself_is_left_alone(self):
+        self.s.command("start", "both")
+        self.s.heartbeat("dtl", hb(recording=True))
+        self.clock.t += 60
+        self.s.heartbeat("dtl", hb(recording=False))
+        self.clock.t += 60
+        self.s.heartbeat("dtl", hb(recording=False))
+        self.assertEqual(self.starts("dtl"), [])
+
+    def test_stop_from_the_page_ends_it(self):
+        self.s.command("start", "both")
+        self.s.command("stop", "both")
+        self.clock.t += 5
+        self.s.heartbeat("face", hb())
+        self.assertEqual(self.starts("face"), [])
+
+    def test_not_retried_on_every_poll(self):
+        self.s.command("start", "both")
+        self.clock.t += 5
+        self.s.heartbeat("face", hb(busy="settings open"))
+        self.assertEqual(self.starts("face"), [])
+        self.s.heartbeat("face", hb())
+        self.assertEqual(len(self.starts("face")), 1)
+        self.clock.t += status.COMMAND_TIMEOUT_S + 1           # it never answered
+        self.s.heartbeat("face", hb())
+        self.assertEqual(self.starts("face"), [])
+        self.clock.t += status.AUTO_START_EVERY_S
+        self.s.heartbeat("face", hb())
+        self.assertEqual(len(self.starts("face")), 1)

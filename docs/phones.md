@@ -20,8 +20,10 @@ How the capture app records, how the two angles pair, the shutter and clip quali
 - **Camera setup** (`CameraSetup.kt`): while not recording, a still of the preview (PixelCopy,
   upright, ~960 px) goes to `POST /api/setup/<angle>` about once a second. The server finds the
   golfer (MediaPipe on the still, ~25 ms) and judges it with `setupAdvice` in summary.js; the phone
-  shows it under the status line. Who says it (0.6): by default the server combines both phones'
-  verdicts and one phone says them (see "Ready panel" below); with **Setup voice: this phone** the
+  shows it under the status line. Who says it: from 0.11 nobody by default (**Setup voice: off**; the
+  Start page's live stills are the check, and the stills still go to the server). With **combined** the
+  server combines both phones' verdicts and one phone says them (see "Ready panel" below); with
+  **Setup voice: this phone** the
   phone says its own verdict out loud (Android text-to-speech) once it holds for two stills and
   repeats a problem every 12 s, as before 0.6. A phone set to "combined" that can't reach a 0.6
   server speaks for itself too. When the golfer has held still for two stills, the
@@ -188,9 +190,12 @@ review page starts them and one of them does the talking.
   is "no answer" and isn't carried out later. **Auto-start** (a phone setting, off by default):
   "Start recording when the camera check is good": once per opening of the app, when its own camera
   check has held good for two stills. After a Stop it doesn't start again by itself until the app is
-  opened again.
+  opened again. **Start recording asks for the session to record** (`status.py want`): a phone that
+  wasn't connected when it was pressed (its app closed or in the background) is started by the server
+  when it reports in, and again when it comes back from the background, until Stop on the page,
+  Stop on the phone itself, or an hour without recording (logged as `autostart`).
 - **One voice for camera setup**: the server combines the verdicts of the phones in setup (not
-  recording) and set to **Setup voice: combined** (the default), and the speaking phone says them,
+  recording) and set to **Setup voice: combined** (off by default from 0.11), and the speaking phone says them,
   only when they change (held for 1.5 s, never repeated): "Both cameras look good", "Face-on good.
   Down the line: you're at the left edge: aim the phone more toward you." A phone starting to record
   isn't announced. The speaking phone is the one with **Practice voice** on (face-on first); with

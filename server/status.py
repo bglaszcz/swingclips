@@ -35,6 +35,11 @@ RELAY_GONE_S = 90
 EXPECTED_S = 12 * 3600
 # A command not answered in this long is "no answer" (and no longer delivered).
 COMMAND_TIMEOUT_S = 20
+# Start recording asks for the session to record: a phone that wasn't there (app closed or in the
+# background) is started when it reports in, until recording has stopped this long, or it's stopped.
+WANT_S = 3600
+# At most one automatic start per phone this often (one that fails isn't retried on every poll).
+AUTO_START_EVERY_S = 30
 COMMANDS_KEPT = 20
 # Something to say that hasn't been picked up in this long is dropped: it's out of date.
 SAY_WITHIN_S = 20
@@ -377,6 +382,9 @@ class Status:
         # Seconds each phone should keep before the strike (more during a drill, drills.py), and what
         # each was last told; phones from 0.10 report theirs as "pre".
         self.pre_wanted = 2
+        # Recording asked for (Start recording): angle -> when; and each phone's last automatic start.
+        self.want: dict[str, float] = {}
+        self.auto_started: dict[str, float] = {}
         self.pre_sent: dict[str, int | None] = {a: None for a in ANGLES}
 
     def _id(self) -> int:
@@ -411,6 +419,7 @@ class Status:
             self.phones[angle] = {"hb": clean(body, PHONE_FIELDS), "seen": now}
             if self.phones[angle]["hb"].get("pre") != old.get("pre"):
                 self.pre_sent[angle] = None   # it changed on its own (the app restarted): tell it again
+            self._start_if_wanted(angle, old, now)
             if was and not self.phones[angle]["hb"].get("speaking"):
                 self.talk[angle]["stopped"] = now
             for ack in body.get("acks") or []:
@@ -427,6 +436,32 @@ class Status:
                     self.notes.append({"kind": "session", "by": angle,
                                        "sinceRecording": round(now - self.last_recording, 1) if self.last_recording else None})
                 self.last_recording = now
+
+    def _start_if_wanted(self, angle: str, old: dict, now: float) -> None:
+        """Starts phone `angle` if recording was asked for and it isn't: its app was closed or in the
+        background when Start was pressed, or it has come back since. Stopped on the phone itself
+        (recording, then not, with the app open): left alone. Call with the lock held."""
+        hb = self.phones[angle]["hb"]
+        if old.get("recording") and not hb.get("recording") and not old.get("closing") and not hb.get("closing"):
+            self.want.pop(angle, None)
+        w = self.want.get(angle)
+        if w is None:
+            return
+        if now - max(w, self.last_recording) > WANT_S:
+            self.want.pop(angle, None)
+            return
+        if hb.get("recording") or hb.get("closing") or hb.get("busy") or hb.get("cameraError"):
+            return
+        if now - self.auto_started.get(angle, 0.0) < AUTO_START_EVERY_S:
+            return
+        self._expire(now)
+        if any(c["angle"] == angle and c["action"] == "start" and c["state"] in ("queued", "sent") for c in self.commands):
+            return
+        self.auto_started[angle] = now
+        self.commands.append({"id": self._id(), "angle": angle, "action": "start", "made": now, "state": "queued",
+                              "error": None, "sent": None, "answered": None, "auto": True})
+        self.commands = self.commands[-COMMANDS_KEPT:]
+        self.notes.append({"kind": "autostart", "angle": angle})
 
     def drain_events(self) -> list[dict]:
         """Session starts and each swing the health check looked at, since the last call (app.py logs them)."""
@@ -544,13 +579,20 @@ class Status:
         now = self.clock()
         with self.lock:
             angles = [target] if target != "both" else (self.expected(now) or list(ANGLES))
+            # Start asks for the session to record: phones not here yet start when they report in.
+            for a in ([target] if target != "both" else ANGLES):
+                if action == "start":
+                    self.want[a] = now
+                else:
+                    self.want.pop(a, None)
             out = []
             for a in angles:
                 c = {"id": self._id(), "angle": a, "action": action, "made": now, "state": "queued",
                      "error": None, "sent": None, "answered": None}
                 hb = (self.phones.get(a) or {}).get("hb", {})
                 if not self.connected(a, now):
-                    c.update(state="failed", error="not connected (is the app open?)")
+                    c.update(state="failed", error="not connected: it starts when its app is open"
+                             if action == "start" else "not connected (is the app open?)")
                 elif action == "start" and hb.get("busy"):
                     c.update(state="failed", error=hb["busy"])
                 else:

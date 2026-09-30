@@ -72,11 +72,16 @@ class PhoneControlTest {
     }
 
     @Test fun setupVoice() {
-        assertEquals("combined", PhoneControl.setupVoice(null))
-        assertEquals("combined", PhoneControl.setupVoice("junk"))
+        assertEquals("off", PhoneControl.setupVoice(null))
+        assertEquals("off", PhoneControl.setupVoice("junk"))
         assertEquals("own", PhoneControl.setupVoice("own"))
+        assertEquals("combined", PhoneControl.setupVoice("combined"))
+        assertEquals("combined", PhoneControl.nextSetupVoice("off"))
+        assertEquals("own", PhoneControl.nextSetupVoice("combined"))
+        assertEquals("off", PhoneControl.nextSetupVoice("own"))
+        assertFalse(PhoneControl.speaksOwnSetup("off", serverCombines = false))
+        assertFalse(PhoneControl.speaksOwnSetup("off", serverCombines = true))
         assertFalse(PhoneControl.speaksOwnSetup("combined", serverCombines = true))
-        // The server isn't answering (or is older): the phone speaks for itself, as before.
         assertTrue(PhoneControl.speaksOwnSetup("combined", serverCombines = false))
         assertTrue(PhoneControl.speaksOwnSetup("own", serverCombines = true))
     }
