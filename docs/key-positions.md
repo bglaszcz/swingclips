@@ -22,7 +22,7 @@ tune_positions.py --all-labels` scores them too.
 |---|---|
 | **Takeaway** | face-on after the deep pass: 17 ms after the camera sees the clubhead start to leave the ball (`clubOnset` in the pose file, `pose.club_onset`), moved at most 10 ms toward the shaft rule. Otherwise (during a session, no ball found) the shaft rule: where the shaft starts to turn away from its angle at address, the first frame from which the tracked angle stays off its address value (a 2° step) until P2, extended back to the address angle along the line through that step and the next one |
 | **P3** lead arm parallel, back | the lead **forearm** (elbow to wrist) rising through level, face-on |
-| **P4** top | where the **hands start down**: the lead wrist's speed climbing into the downswing, extended back along a straight line to zero speed |
+| **P4** top | half way between where the **hands start down** (the lead wrist's speed climbing into the downswing, extended back along a straight line to zero speed) and where the lead wrist is **slowest** (positions smoothed over ±50 ms) in the 0.2 s before that |
 | **P5** lead arm parallel, down | the lead forearm falling through level |
 
 P1 is still 0.1 s before the takeaway. P3, P4 and P5 use only the wrists and elbows, which both
@@ -30,8 +30,8 @@ models place: RTMPose moves the wrists but leaves MediaPipe's finger points wher
 them, so a rule on the fingers would behave differently per model.
 
 The tuned numbers are five, in `SwingPhases.TUNING`: `takeawayDegrees` 1 (i.e. any change),
-`topSpeedShares` [0.1, 0.4], `topSmoothSeconds` 0.03, and for the clubhead onset `onsetLead` 0.017
-and `onsetPull` 0.01. The takeaway's extension back has no
+`topSpeedShares` [0.1, 0.4], `topSmoothSeconds` 0.03, for the clubhead onset `onsetLead` 0.017
+and `onsetPull` 0.01, and for the top's slowest moment `topSlowSeconds` 0.05 and `topRuleWeight` 0.5. The takeaway's extension back has no
 number of its own: the tracked angle moves in 2° steps, so the first step marks about 1° of turn
 and the next about 3°, and the line through them reaches 0° half the gap between them before the
 first. P3 and P5 have none.
@@ -94,6 +94,28 @@ test (`tests/test_fixtures.py`, `KeyPositionsTest`) holds each model, angle and 
 saved median and 90th percentile (`key-positions.json`) within a frame (4.2 ms).
 
 ## The evidence, per key position
+
+### Top: half way to the slowest moment (2026-09-30)
+
+20 of the 43 face-on top labels were exactly on the detector's frame (confirmed suggestions, which
+can only agree with it). The owner relabeled them by stepping to the last frame before the club
+starts down (some stayed). Against the relabeled set the speed rule alone scored 21 ms median, p90
+46, +15 ms late, 19% within a frame: it extends the downswing's speed climb back to zero, so a
+gentle start puts it late (1790353993: +62 ms). Two measures of the slowest moment at the top sit
+on the labels instead: the camera (the picture round the hands and club, each crop normalized and
+compared with the frame 1/60 s before so the lights' flicker cancels) at median 12.5 ms, -8 ms bias,
+and the lead wrist's own slowest moment (RTMPose-m, smoothed over ±50 ms) at 12.5 ms, no bias. The
+wrist needs no video, so phases.js takes half way between it and the speed rule. Leave one swing
+out, RTMPose-m, median / p90 / bias / within one frame:
+
+| | face-on (43) | down the line (39) |
+|---|---|---|
+| speed rule (before) | 17 / 45 / +9 ms / 26% | 17 / 47 / +14 ms / 23% |
+| half way to the slowest wrist | 12.5 / 41 / +7 ms / 30% | 12.5 / 38 / +9 ms / 26% |
+
+The worst tenth barely moves: the hands hang still for 30-80 ms at the top, and on those swings
+neither measure pins one frame. Averaging in the camera's slowest moment would take the p90 to
+~33 ms, but it needs another decode per clip; not done. MediaPipe alone is 33-38 ms median either way.
 
 ### Takeaway from the clubhead onset, in phases.js (2026-09-30)
 

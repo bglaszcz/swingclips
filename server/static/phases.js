@@ -43,7 +43,14 @@
   //    takeaway is onsetLead after it, moved toward the shaft rule's by at most onsetPull. The onset
   //    catches the first creep, ~15 ms before the frame the labels mark as visibly moving, and wobbles
   //    ~15 ms; the shaft rule alone was off by 100 ms on one swing in ten (tune_positions.py).
-  const TUNING = { takeawayDegrees: 1, topSpeedShares: [0.1, 0.4], topSmoothSeconds: 0.03, onsetLead: 0.017, onsetPull: 0.01 };
+  //  - topSlowSeconds, topRuleWeight: the top is then moved to where the lead wrist is slowest
+  //    (positions smoothed over +- topSlowSeconds) in the TOP_SLOW_WINDOW round it, keeping
+  //    topRuleWeight of the way back to the speed rule's (1 = the speed rule alone). The owner's
+  //    top labels sit on the slowest moment; the speed rule alone runs ~15 ms late (see handsSlowest).
+  const TUNING = { takeawayDegrees: 1, topSpeedShares: [0.1, 0.4], topSmoothSeconds: 0.03, onsetLead: 0.017, onsetPull: 0.01,
+                   topSlowSeconds: 0.05, topRuleWeight: 0.5 };
+  // Where handsSlowest looks, s round the speed rule's top: it runs late, so mostly before it.
+  const TOP_SLOW_WINDOW = [0.2, 0.03];
   const TORSO_MIN_VISIBILITY = 0.25;
   // Down-the-line, the hands spend much of the swing behind the body, so MediaPipe reports low
   // "visibility" while still placing them well. Trust them; the torso gates the frame.
@@ -224,6 +231,40 @@
     const tLo = climbs(lo), tHi = climbs(hi);
     if (!peak || tLo == null || tHi == null || tHi <= tLo) return null;
     return Math.max(from, tLo - (tHi - tLo) * lo / (hi - lo));
+  }
+
+  /**
+   * Where the lead wrist moves slowest between `from` and `to` (clip seconds), or null: positions
+   * smoothed over +-TUNING.topSlowSeconds, speed over +-SPEED_SECONDS, x scaled by the aspect. With
+   * the positions smoothed that wide the stretch the hands hang at the top has one slowest moment,
+   * and it's where the owner labels the top (the last frame before the club starts down): median
+   * 12 ms off on 43 swings relabeled by stepping, no bias; the speed rule 21 ms, +15 ms
+   * (RTMPose-m, docs/key-positions.md).
+   */
+  function handsSlowest(frames, aspect, leadSide, from, to) {
+    const k = leadSide === "left" ? LM.L_WRIST : LM.R_WRIST;
+    const half = TUNING.topSlowSeconds;
+    const pts = [];
+    for (const f of frames) {
+      if (f.lm && f.t >= from - half - SPEED_SECONDS && f.t <= to + half + SPEED_SECONDS) {
+        pts.push({ t: f.t, x: f.lm[k * 3] * aspect, y: f.lm[k * 3 + 1] });
+      }
+    }
+    const sm = pts.map(p => {
+      const near = pts.filter(q => Math.abs(q.t - p.t) <= half);
+      return { x: near.reduce((a, q) => a + q.x, 0) / near.length, y: near.reduce((a, q) => a + q.y, 0) / near.length };
+    });
+    let best = null, slowest = Infinity;
+    pts.forEach((p, i) => {
+      if (p.t < from || p.t > to) return;
+      let a = i, b = i;
+      while (a > 0 && p.t - pts[a - 1].t <= SPEED_SECONDS) a--;
+      while (b + 1 < pts.length && pts[b + 1].t - p.t <= SPEED_SECONDS) b++;
+      if (b <= a) return;
+      const v = Math.hypot(sm[b].x - sm[a].x, sm[b].y - sm[a].y) / (pts[b].t - pts[a].t);
+      if (v < slowest) { slowest = v; best = p.t; }
+    });
+    return best;
   }
 
   /**
@@ -428,7 +469,12 @@
     let p3 = forearmLevel(ms, address + 1, pumps.length ? backTop : impact, true);
     if (p3 < 0) p3 = armParallel(ms, address + 1, backTop);
     const downFrom = pumps.length ? ms[pumps[pumps.length - 1]].t : p3 >= 0 ? ms[p3].t : ms[address].t;
-    const turn = handsStartDown(frames, aspect, leadSide, downFrom, ms[impact].t);
+    let turn = handsStartDown(frames, aspect, leadSide, downFrom, ms[impact].t);
+    if (turn != null && TUNING.topRuleWeight < 1) {
+      const slow = handsSlowest(frames, aspect, leadSide, Math.max(downFrom, turn - TOP_SLOW_WINDOW[0]),
+                                Math.min(ms[impact].t, turn + TOP_SLOW_WINDOW[1]));
+      if (slow != null) turn = slow + TUNING.topRuleWeight * (turn - slow);
+    }
     if (turn != null) top = nearest(ms, turn);
     if (!pumps.length) backTop = top;
 
