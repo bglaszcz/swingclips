@@ -337,7 +337,23 @@ toward the ball". The phones face away from you, so voice is the channel.
   games `games-log.jsonl` next to the clips folder (`server/games.py`). Starting a game turns the practice number
   off, and turning that on stops the game. The Combine is always the same 27 shots (9 targets, 50-170 yd,
   shuffled), so its score is comparable across weeks. Under the Combine scores table, "Where you lose strokes" breaks down strokes gained by target distance over the last 3 Combines to pinpoint the weakest yardages. The Past games table lets you pick any game to view past sessions with that game's own hit wording (on the green, in the fairway, shaped as called, or within 5 yards). No phone update needed.
-- **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page (section 5)
+- **Coach program** (`programs.py`, `programs.json`, `/api/program*`, Start page section 5): a coach's drill
+  ladder as data: blocks in order, each with its drill (drill mode, so rehearsals stay out of the trends;
+  a block without one, like the transfer block, counts as normal swings), ball or no ball, reps, and a gate
+  (`count`: need of reps, or `streak`: need in a row) of checks on Square's numbers (`strikeV`, `attack`,
+  `faceToPath`, `loft`, ...: min/max), plus `mark` for the golfer's tap on what they saw. No-ball reps are
+  tapped Pass/Miss on the page (clips the phones record during them are ignored). Ball shots are judged
+  once the shot pairs; a shot Square didn't read (club speed 0, or strike across the face exactly 0.0, whose
+  up-down number is filler) is left out of the gate. Face to path = face minus path. The phone says each
+  shot's verdict through the practice feed (practice voice and games are turned off; one voice at a time).
+  A block ends when its reps are in or its streak is made, then the next starts (`requires`: skipped unless
+  that block passed); the program ends after the last block, at its cap (every swing counts, taps too), or
+  45 minutes idle, and is logged to `programs-log.jsonl`. **Copy for coach** (`/api/program/report`): per
+  block the gate result and medians (range) of attack angle, dynamic loft and face to path for shots 1-10
+  and 11 on, the club order, every shot in order with its verdict, and the impact frame
+  (`/api/still/{clip}`) of the first ball swing hit in a no-ball block (the toe-tap swing). Tested in
+  `tests/test_programs.py`.
+- **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page (section 6)
   for quick setup in the barn. Lays out an ordered 45-minute practice session (60-80 balls) across 4 blocks:
   (1) Warm-up wedge shots, (2) Focus block with the active focus move, its coach.js drill and swing thought,
   the latest drill set line if recorded in the last 14 days, and a "Practice this" button that configures
@@ -351,7 +367,8 @@ toward the ball". The phones face away from you, so voice is the channel.
   off) and its game on (any other stopped), and remembers the block for 4 hours, so the laptop and a
   phone's browser both show which block is **Now**. End the plan turns everything off.
 - **Drill mode** (`drills.py`, `/api/drill`): when the focus drill is the pump drill, the plan's focus
-  block turns it on. While it's on the phones (capture app 0.10) keep 6 s before the strike
+  block turns it on (and a coach program's drill blocks turn theirs on). Drill sets (`drillsets.js`) are the
+  pump drill's only. While it's on the phones (capture app 0.10) keep 6 s before the strike
   instead of 2, so the pumps are in the clip, and every swing recorded is tagged with the drill (by time,
   `drills.json`) and left out of the trends, good-shot ranges, noise table and labeling worklist: a
   rehearsal isn't the usual swing. The swing list says "pump drill · left out of trends". It ends when

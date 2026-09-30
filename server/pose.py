@@ -783,6 +783,24 @@ def frame_at(path, rotation, t):
         return upright_gray(got, rotation)
 
 
+def still_jpeg(path, t, quality=90):
+    """The upright colour frame on screen at time t (s), as JPEG bytes."""
+    with av.open(path) as c:
+        s = c.streams.video[0]
+        tb = float(s.time_base)
+        c.seek(int(t / tb), stream=s, backward=True)
+        got = None
+        for f in c.decode(s):
+            if got is not None and f.pts * tb > t + 1e-6:
+                break
+            got = f
+        rotation = int(-getattr(got, "rotation", 0)) % 360
+        img = got.to_ndarray(format="bgr24")
+    if rotation in ROTATE_CW:
+        img = cv2.rotate(img, ROTATE_CW[rotation])
+    return cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])[1].tobytes()
+
+
 def top_of_backswing(frames):
     """When the hands are highest before their fastest moment (the downswing), or None."""
     speed = hand_speed(frames)

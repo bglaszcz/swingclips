@@ -32,13 +32,20 @@ end).
    a list of the swings so far with their Square shot ("no shot" once 25 s pass without one). Each
    phone says "Recording"; then switch to Square's app. (Or: **Start both** in the review page's
    **Ready** bar, **Auto-start** on the phones, or `Start golf.cmd -StartCameras` to start both
-   phones as soon as they connect, without the page.) Section 5 (**Today's plan**) lays out an
+   phones as soon as they connect, without the page.) Section 5 (**Coach program**) runs a drill
+   ladder from your coach (`server/programs.json`, e.g. "Low point forward"): pick it, **Start
+   program**, and do one block at a time. No-ball blocks: tap **Pass** or **Miss** after each rep
+   (nothing needs recording). Ball blocks: the phone says each shot's verdict on Square's numbers
+   and the gate count; on the flush line tap where the mark started. The next block starts by itself
+   once a gate is decided (the full-speed block only after the flush-line gate passes), and it stops
+   at the swing cap. **Copy for coach** gives the text to paste back into the coach chat, and the
+   down-the-line impact frame of a toe-tap ball swing, if you hit one. Section 6 (**Today's plan**) lays out an
    ordered 45-minute practice session of 60-80 balls tailored to your data: warm-up wedge shots, your
    current focus with its drill, a scoring-zone block based on your worst Combine targets or wedge
    matrix gap, and a finishing test (Combine or weakest area). **Tap Start on the first block**, hit its
    balls, then **Next**: each block switches on what it needs and the one before off (the pump drill's
    6 s recording in the focus block, a game in the last two; practice voice off), and the block you're on
-   is marked **Now** on every device. **End the plan** turns it all off. Section 6
+   is marked **Now** on every device. **End the plan** turns it all off. Section 7
    (**Play a game**) starts or stops practice games with the current target shown large, for reading
    from the mat.
 5. **Hit balls** once Ready is green. After the first analyzed swing (about a minute) the speaking

@@ -1,0 +1,69 @@
+{
+  "programs": [
+    {
+      "id": "lowpoint",
+      "name": "Low point forward",
+      "from": "Golf coach chat, Sep 30 2026: stop casting by getting pressure and the low point forward",
+      "cap": 40,
+      "clubs": "7 iron only, no driver",
+      "bringBack": "Attack angle, dynamic loft and face to path for each block, the shot order, and one down-the-line frame at impact from a toe-tap swing.",
+      "blocks": [
+        {
+          "id": "toetap",
+          "name": "Lead foot only",
+          "drill": "toetap",
+          "ball": false,
+          "reps": 10,
+          "how": "Pull the trail foot back so only its toe touches the mat. 3/4 swings, no ball, brush the mat.",
+          "ask": "Brush at or ahead of the ball spot?",
+          "extraBall": "Hit one toe-tap swing with a ball for the down-the-line impact frame your coach asked for.",
+          "gate": { "kind": "streak", "need": 10 }
+        },
+        {
+          "id": "stepthrough",
+          "name": "Step through",
+          "drill": "stepthrough",
+          "ball": false,
+          "reps": 10,
+          "how": "Feet together, swing back, step the lead foot toward the target as the downswing starts. The hands follow the step. No ball.",
+          "ask": "Belt buckle open and all your weight on the lead foot?",
+          "gate": { "kind": "count", "need": 10 }
+        },
+        {
+          "id": "flush",
+          "name": "Flush line",
+          "drill": "flush",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "how": "Foot spray or a dry-erase line from the ball toward the target (no tape). 7 iron at 3/4 speed; read where the mark starts.",
+          "ask": "Mark starts at or ahead of the ball?",
+          "gate": {
+            "kind": "count", "need": 7, "mark": true,
+            "checks": [
+              { "key": "strikeV", "max": 3, "min": -8 },
+              { "key": "attack", "max": -2 }
+            ]
+          }
+        },
+        {
+          "id": "transfer",
+          "name": "Transfer",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "requires": "flush",
+          "how": "Full-speed 7 iron, one ball, full routine, no do-overs. Drop the step, keep the feel.",
+          "gate": {
+            "kind": "streak", "need": 5,
+            "checks": [
+              { "key": "strikeV", "max": 3, "min": -8 },
+              { "key": "attack", "max": -2 },
+              { "key": "faceToPath", "min": -2, "max": 2 }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

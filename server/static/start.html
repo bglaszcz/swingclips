@@ -99,6 +99,30 @@
   .plan-card.now { border: 2px solid var(--accent); }
   .plan-card.now .plan-title::before { content: "Now · "; color: var(--accent); }
   .plan-on { flex-basis: 100%; font-size: 13px; color: var(--accent); font-weight: 600; }
+  .prog-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 16px; margin-bottom: 8px; }
+  .prog-head span { color: var(--muted); font-weight: 600; }
+  .prog-now { padding: 14px; border-radius: 10px; border: 2px solid var(--accent); background: var(--panel-2); margin-bottom: 10px; }
+  .prog-now h3 { margin: 0 0 6px; font-size: 18px; }
+  .prog-now .gate { font-weight: 700; font-size: 20px; margin: 8px 0; }
+  .prog-now .ask { font-weight: 600; margin-top: 10px; }
+  .prog-taps { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+  .prog-taps button { font: inherit; font-size: 20px; font-weight: 700; padding: 16px 26px; border-radius: 10px; cursor: pointer;
+                      border: 1px solid var(--line); background: var(--panel); color: var(--text); flex: 1 1 140px; }
+  .prog-taps button.yes { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .prog-taps button.no { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+  .prog-taps button.undo { flex: 0 0 auto; font-size: 14px; padding: 8px 14px; }
+  .prog-reps { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+  .prog-reps span { width: 26px; height: 26px; border-radius: 6px; display: inline-grid; place-items: center; font-size: 13px; font-weight: 700;
+                    background: var(--panel); border: 1px solid var(--line); color: var(--muted); }
+  .prog-reps span.y { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .prog-reps span.n { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
+  .prog-blocks { display: grid; gap: 6px; margin: 8px 0; font-size: 14px; }
+  .prog-blocks div { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .prog-blocks b { min-width: 9em; }
+  .prog-report { margin-top: 12px; }
+  .prog-report textarea { width: 100%; min-height: 220px; margin-top: 8px; font: 12px/1.4 ui-monospace, Consolas, monospace;
+                          background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  .prog-report img { max-width: 100%; max-height: 420px; border-radius: 8px; margin-top: 8px; display: block; }
   @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; } }
 </style>
 <script src="/static/games.js"></script>
@@ -154,14 +178,43 @@
       <tbody id="swings"></tbody></table>
   </section>
 
+  <section id="sec-program">
+    <h2><span class="n" id="n5">5</span>Coach program</h2>
+    <p class="hint" id="prog-hint">Drill blocks from your coach, each with a gate to pass. The phone says each shot's verdict.</p>
+    <div id="prog-idle">
+      <div class="go">
+        <label>Program <select class="game-select" id="prog-select"></select></label>
+        <button class="primary" id="prog-start">Start program</button>
+      </div>
+      <div class="prog-blocks" id="prog-plan"></div>
+    </div>
+    <div id="prog-active" hidden>
+      <div class="prog-head"><b id="prog-name"></b><span id="prog-used"></span></div>
+      <div class="prog-now" id="prog-now"></div>
+      <div class="prog-blocks" id="prog-blocks"></div>
+      <div class="plan-act">
+        <button class="plan-btn on" id="prog-next">End this block, next</button>
+        <button class="plan-btn on" id="prog-stop">Stop the program</button>
+      </div>
+    </div>
+    <div class="prog-report" id="prog-report-box">
+      <div class="plan-act">
+        <button class="plan-btn" id="prog-copy">Copy for coach</button>
+        <span class="plan-note" id="prog-copied"></span>
+      </div>
+      <textarea id="prog-report" readonly hidden></textarea>
+      <div id="prog-frame" hidden></div>
+    </div>
+  </section>
+
   <section id="sec-plan">
-    <h2><span class="n ok" id="n5">5</span>Today's plan</h2>
+    <h2><span class="n ok" id="n6">6</span>Today's plan</h2>
     <p class="hint" id="plan-summary">Ordered practice session built from your data.</p>
     <div class="plan-blocks" id="plan-blocks"></div>
   </section>
 
   <section id="sec-game">
-    <h2><span class="n" id="n6">6</span>Play a game</h2>
+    <h2><span class="n" id="n7">7</span>Play a game</h2>
     <div id="game-active" hidden>
       <div class="target-huge" id="game-target"></div>
       <div class="game-score" id="game-score"></div>
@@ -413,7 +466,7 @@ function blockAction(b) {
 function blockOnText(b) {
   const a = blockAction(b);
   if (a.drill) return "Recording pump drills: the phones keep 6 s before the strike, and these swings stay out of your trends.";
-  if (a.game) return "Game on: the target is in section 6 below, and the phone says it.";
+  if (a.game) return "Game on: the target is in section 7 below, and the phone says it.";
   return "Nothing to switch on: just hit.";
 }
 
@@ -476,7 +529,7 @@ function renderGame(data) {
   gameState = data;
   if (!data) return;
   const g = data.game;
-  $("n6").className = "n" + (g ? " ok" : "");
+  $("n7").className = "n" + (g ? " ok" : "");
   if (g) {
     $("game-active").hidden = false;
     $("game-idle").hidden = true;
@@ -529,6 +582,152 @@ async function commandGame(url, body) {
 $("game-start").onclick = () => commandGame("/api/game", { game: $("game-select").value });
 $("game-stop").onclick = () => commandGame("/api/game/stop");
 
+// ---- 5. Coach program ----
+let programState = null;
+const pgNum = (v, d = 1) => v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(d);
+
+function gateText(b) {
+  const g = b.gate, checks = (g.checks || []).map(c => {
+    const name = { strikeV: "strike", attack: "attack", faceToPath: "face to path" }[c.key] || c.key;
+    if (c.min != null && c.max != null && c.min === -c.max) return `${name} within ±${c.max}`;
+    if (c.key === "strikeV") return `strike ≤ +${c.max} mm` + (c.min != null ? ` (not below ${c.min})` : "");
+    return c.max != null ? `${name} ≤ ${c.max}` : `${name} ≥ ${c.min}`;
+  });
+  if (g.mark) checks.push("mark at or ahead");
+  const count = g.kind === "streak" ? `${g.need} in a row` : `${g.need} of ${b.reps}`;
+  return count + (checks.length ? ": " + checks.join(", ") : "");
+}
+
+function blockLine(b) {
+  const d = document.createElement("div");
+  const res = b.result === "passed" ? `<span class="tag ok">passed</span>` : b.result === "not passed" ? `<span class="tag bad">not passed</span>`
+    : b.result === "skipped" ? `<span class="tag wait">skipped</span>` : b.now ? `<span class="tag warn">now</span>` : "";
+  const needs = b.requires && programState && (programState.programs || []).flatMap(p => p.blocks).find(x => x.id === b.requires);
+  d.innerHTML = `<b>${esc(b.name)}</b><span>${esc(b.ball ? "ball" : "no ball, you judge")} · ${esc(gateText(b))}` +
+    `${needs ? esc(` · only after ${needs.name} passes`) : ""}</span> ${res}`;
+  return d;
+}
+
+async function programPost(url, body) {
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    if (!r.ok) $("prog-copied").textContent = ((await r.json().catch(() => ({}))).detail) || `The server said ${r.status}`;
+  } catch { $("prog-copied").textContent = "Can't reach the server"; }
+  pollProgram();
+  pollGame();
+}
+
+function renderProgram(data) {
+  programState = data;
+  if (!data) return;
+  const run = data.program;
+  $("n5").className = "n" + (run ? " ok" : "");
+  $("prog-active").hidden = !run;
+  $("prog-idle").hidden = !!run;
+  $("prog-report-box").hidden = !run && !(data.log || []).length;
+  if (!run) {
+    const sel = $("prog-select");
+    if (!sel.options.length) sel.replaceChildren(...(data.programs || []).map(x =>
+      Object.assign(document.createElement("option"), { value: x.id, textContent: x.name })));
+    const cur = (data.programs || []).find(x => x.id === sel.value);
+    $("prog-hint").textContent = cur ? `${cur.from}. ${cur.cap} swings at most (every swing counts, no-ball reps too); ${cur.clubs}.`
+      : "No programs in programs.json.";
+    $("prog-plan").replaceChildren(...(cur ? cur.blocks.map(b => blockLine(b)) : []));
+    return;
+  }
+  $("prog-hint").textContent = "Drill blocks switch drill mode on (left out of your trends); Square's numbers still count for the gate and the report.";
+  $("prog-name").textContent = run.name;
+  $("prog-used").textContent = `${run.used} of ${run.cap} swings`;
+  const b = run.blocks[run.block];
+  const box = $("prog-now");
+  box.replaceChildren();
+  const h = document.createElement("h3");
+  h.textContent = `Block ${run.block + 1}: ${b.name}`;
+  const how = document.createElement("div");
+  how.textContent = b.how;
+  const gate = document.createElement("div");
+  gate.className = "gate";
+  gate.textContent = `Gate: ${gateText(b)}. Now: ${run.progress}`;
+  box.append(h, how, gate);
+  if (b.extraBall) {
+    const x = document.createElement("div");
+    x.className = "plan-note";
+    x.textContent = "Optional: " + b.extraBall;
+    box.append(x);
+  }
+  const judged = b.judged.filter(r => r.gate != null || r.kind === "shot");
+  const reps = document.createElement("div");
+  reps.className = "prog-reps";
+  reps.append(...judged.map((r, i) => Object.assign(document.createElement("span"), {
+    className: r.gate === true ? "y" : r.gate === false ? "n" : "",
+    textContent: r.gate === true ? "✓" : r.gate === false ? "✗" : "?",
+    title: r.numbers ? `attack ${pgNum(r.numbers.attack)}, strike ${pgNum(r.numbers.strikeV, 0)} mm, face to path ${pgNum(r.numbers.faceToPath)}` +
+      (r.noRead ? ` (not counted: ${r.noRead})` : "") + (r.mark === false ? ", mark behind" : "") : `rep ${i + 1}`
+  })));
+  box.append(reps);
+  if (!b.ball || (b.gate && b.gate.mark)) {
+    const ask = document.createElement("div");
+    ask.className = "ask";
+    ask.textContent = b.ask || "";
+    const taps = document.createElement("div");
+    taps.className = "prog-taps";
+    const tap = (label, cls, ok) => {
+      const x = document.createElement("button");
+      x.className = cls;
+      x.textContent = label;
+      x.onclick = () => { x.disabled = true; programPost("/api/program/tap", { ok }); };
+      return x;
+    };
+    const undo = document.createElement("button");
+    undo.className = "undo";
+    undo.textContent = "Undo";
+    undo.onclick = () => programPost("/api/program/undo");
+    taps.append(b.ball ? tap("At or ahead ✓", "yes", true) : tap("Pass ✓", "yes", true),
+                b.ball ? tap("Behind ✗", "no", false) : tap("Miss ✗", "no", false), undo);
+    box.append(ask, taps);
+  }
+  const last = [...b.judged].reverse().find(r => r.numbers);
+  if (last && b.ball) {
+    const n = last.numbers, x = document.createElement("div");
+    x.className = "plan-note";
+    x.textContent = `Last shot: attack ${pgNum(n.attack)}°, strike ${pgNum(n.strikeV, 0)} mm, face to path ${pgNum(n.faceToPath)}°, dynamic loft ${n.loft == null ? "–" : n.loft.toFixed(1)}°` +
+      (last.noRead ? ` (not counted: ${last.noRead})` : "");
+    box.append(x);
+  }
+  $("prog-blocks").replaceChildren(...run.blocks.map(blockLine));
+}
+
+$("prog-select").onchange = () => renderProgram(programState);
+$("prog-start").onclick = () => programPost("/api/program", { program: $("prog-select").value });
+$("prog-next").onclick = () => programPost("/api/program/next");
+$("prog-stop").onclick = () => { if (confirm("Stop the program? It's saved as it stands.")) programPost("/api/program/stop"); };
+$("prog-copy").onclick = async () => {
+  const rep = await getJson("/api/program/report");
+  const ta = $("prog-report");
+  if (!rep) { $("prog-copied").textContent = "No program yet."; return; }
+  ta.hidden = false;
+  ta.value = rep.text;
+  // The server is plain http on the home network: the clipboard API needs https, so select and copy.
+  ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { ok = false; }
+  $("prog-copied").textContent = ok ? "Copied: paste it into the coach chat." : "Select the text below and copy it.";
+  const fr = $("prog-frame");
+  const f = rep.frame, clip = f && (f.partner && /^swing_dtl_/.test(f.partner) ? f.partner : /^swing_dtl_/.test(f.clip) ? f.clip : null);
+  fr.hidden = !f;
+  fr.innerHTML = !f ? "" : clip
+    ? `<div class="plan-note">Down the line at impact (${esc(f.block)} ball swing): save the picture and attach it to the chat.</div>
+       <a href="/api/still/${encodeURIComponent(clip)}" download="impact-dtl.jpg"><img src="/api/still/${encodeURIComponent(clip)}" alt="Down the line at impact"></a>`
+    : `<div class="plan-note">The ${esc(f.block)} ball swing has no down-the-line clip.</div>`;
+};
+
+let programTimer = 0;
+async function pollProgram() {
+  clearTimeout(programTimer);
+  renderProgram(await getJson("/api/program"));
+  programTimer = setTimeout(pollProgram, document.hidden ? 20000 : 2000);
+}
+
 // ---- Polling ----
 async function getJson(url) {
   try { const r = await fetch(url, { cache: "no-store" }); return r.ok ? await r.json() : null; } catch { return null; }
@@ -564,12 +763,14 @@ document.addEventListener("visibilitychange", () => {
     pollStatus();
     pollSwings();
     pollGame();
+    pollProgram();
     loadPlanData();
   }
 });
 pollStatus();
 pollSwings();
 pollGame();
+pollProgram();
 loadPlanData();
 </script>
 </body>

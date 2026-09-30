@@ -53,6 +53,7 @@ import models
 import pose
 import quality
 import practice
+import programs
 import setup
 import status
 import swing3d
@@ -730,10 +731,10 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
 
 
 def practice_worker(stop: threading.Event):
-    """Forever, while practice is on or a game is in play: make each new swing's spoken result once
-    its number is known."""
+    """Forever, while practice is on or a game or coach program is in play: make each new swing's
+    spoken result once its number is known."""
     while not stop.is_set():
-        if not practice_state.config["on"] and not games_state.game:
+        if not practice_state.config["on"] and not games_state.game and not programs_state.run:
             stop.wait(2)
             continue
         try:
@@ -741,6 +742,8 @@ def practice_worker(stop: threading.Event):
                 practice_tick()
             if games_state.game:
                 game_tick()
+            if programs_state.run:
+                program_tick()
         except Exception:
             traceback.print_exc()
         stop.wait(1)
@@ -767,6 +770,17 @@ def game_tick() -> list[dict]:
     made = games_state.step(swings_since(g["started"]))
     for r in made:
         print(f"Game: {r['target']} yd target, carry {r['carry']} offline {r['offline']}, sg {r['sg']}", flush=True)
+    return made
+
+
+def program_tick() -> list[dict]:
+    """One look at the swings of the coach program in play; returns the reps added."""
+    run = programs_state.run
+    if not run:
+        return []
+    made = programs_state.step(swings_since(run["started"]))
+    for r in made:
+        print(f"Program: {r['block']} {r['kind']}" + (f", {r['numbers']}" if r.get("numbers") else ""), flush=True)
     return made
 
 
@@ -1341,6 +1355,8 @@ async def set_practice(request: Request):
         raise HTTPException(400, str(e))
     if c["on"] and games_state.game:
         games_state.stop()  # one thing spoken after each swing
+    if c["on"] and programs_state.run:
+        programs_state.stop()
     m = practice.BY_KEY[c["metric"]]
     print(f"Practice: {'on' if c['on'] else 'off'}, {m['label']} {practice.fmt_range(m, c['min'], c['max'])}", flush=True)
     return c
@@ -1360,12 +1376,12 @@ async def practice_latest(since: int | None = None, angle: str | None = Query(No
     give_up = time.monotonic() + wait
     while True:
         out = practice_state.latest(since, angle)
-        out["on"] = out["on"] or bool(games_state.game)
+        out["on"] = out["on"] or bool(games_state.game) or bool(programs_state.run)
         if since is not None:
-            # Practice games speak through the same phone, with ids from the same counter.
+            # Practice games and coach programs speak through the same phone, with ids from the same counter.
             out["results"] = sorted(out["results"] + [
                 {"id": e["id"], "text": e["text"], "age": round(time.time() - e["made"], 1), "status": None,
-                 "clip": None} for e in games_state.latest(since)], key=lambda e: e["id"])
+                 "clip": None} for e in games_state.latest(since) + programs_state.latest(since)], key=lambda e: e["id"])
         if out["results"] or since is None or time.monotonic() >= give_up:
             if angle in status.ANGLES:
                 for e in out["results"]:
@@ -1399,6 +1415,8 @@ async def start_game(request: Request):
         raise HTTPException(400, str(e))
     if practice_state.config["on"]:
         practice_state.set_config({**practice_state.config, "on": False})
+    if programs_state.run:
+        programs_state.stop()
     print(f"Game: {g['name']} started, first target {g['target']} yd", flush=True)
     return g
 
@@ -1482,6 +1500,13 @@ def load_plan_step() -> dict | None:
     return step if isinstance(step, dict) and time.time() - step.get("since", 0) <= PLAN_STEP_S else None
 
 
+def save_plan_step(step: dict | None) -> None:
+    PLAN_STEP_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = PLAN_STEP_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(step), encoding="utf-8")
+    tmp.replace(PLAN_STEP_FILE)
+
+
 class PlanStep(BaseModel):
     block: str | None = None   # the plan block's id (warmup, focus, scoring, finish); None ends the plan
     drill: str | None = None   # a drill recorded in this block (drills.py)
@@ -1504,6 +1529,8 @@ def set_plan_step(body: PlanStep):
         raise HTTPException(400, "Unknown game")
     if practice_state.config["on"]:
         practice_state.set_config({**practice_state.config, "on": False})
+    if programs_state.run and body.block:
+        programs_state.stop()
     drills_state.set(body.drill)
     drills_tick()
     running = games_state.game
@@ -1513,12 +1540,109 @@ def set_plan_step(body: PlanStep):
     if body.game and not running:
         games_state.start(body.game, {})
     step = {"block": body.block, "drill": body.drill, "game": body.game, "since": round(time.time(), 3)} if body.block else None
-    PLAN_STEP_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = PLAN_STEP_FILE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(step), encoding="utf-8")
-    tmp.replace(PLAN_STEP_FILE)
+    save_plan_step(step)
     print(f"Plan: {body.block or 'ended'}" + (f", drill {body.drill}" if body.drill else "") + (f", game {body.game}" if body.game else ""), flush=True)
     return {"step": step, "drill": drills_state.state(), "game": games_state.game}
+
+
+# ---- Coach programs: drill blocks with gates, from the coach (programs.py, programs.json) ----
+PROGRAM_FILE = Path(os.environ.get("SWINGCLIPS_PROGRAM", CLIPS_DIR.parent / "program.json"))
+PROGRAMS_LOG = Path(os.environ.get("SWINGCLIPS_PROGRAMS_LOG", CLIPS_DIR.parent / "programs-log.jsonl"))
+
+
+def program_block_drill(drill: str | None) -> None:
+    """A program block starts (or the program ends): its drill mode on, any other off."""
+    drills_state.set(drill)
+    drills_tick()
+
+
+programs_state = programs.Programs(PROGRAM_FILE, PROGRAMS_LOG, practice_state.new_id, on_block=program_block_drill)
+
+
+@app.get("/api/program")
+def get_program():
+    """The coach program in play (its blocks, reps judged, gates), the programs there are, finished ones."""
+    return programs_state.state()
+
+
+class ProgramChoice(BaseModel):
+    program: str
+
+
+@app.post("/api/program")
+def start_program(body: ProgramChoice):
+    """Starts a coach program: practice voice, game and plan block off (one voice, one thing at a time)."""
+    try:
+        run = programs_state.start(body.program)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if practice_state.config["on"]:
+        practice_state.set_config({**practice_state.config, "on": False})
+    if games_state.game:
+        games_state.stop()
+    save_plan_step(None)
+    print(f"Program: {run['name']} started", flush=True)
+    return run
+
+
+@app.post("/api/program/stop")
+def stop_program():
+    done = programs_state.stop()
+    if done:
+        print(f"Program: {done['name']} stopped. {done['spoken']}", flush=True)
+    return {"stopped": done}
+
+
+class ProgramTap(BaseModel):
+    ok: bool
+
+
+@app.post("/api/program/tap")
+def program_tap(body: ProgramTap):
+    """The golfer's verdict on a no-ball rep (pass/miss), or the mark they saw for the last shot."""
+    try:
+        return programs_state.tap(body.ok)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/program/undo")
+def program_undo():
+    try:
+        return programs_state.undo()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/program/next")
+def program_next():
+    """Ends the block in play as it stands and starts the next."""
+    try:
+        return programs_state.next_block()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/api/program/report")
+def program_report(started: float | None = None):
+    """The report to paste back to the coach, of the program in play or a finished one."""
+    got = programs_state.report(started)
+    if got is None:
+        raise HTTPException(404, "No program yet")
+    return got
+
+
+@app.get("/api/still/{name}")
+def get_still(name: str):
+    """A clip's frame at impact (as found, else the heard strike) as a JPEG: the frame a coach asks for."""
+    path = checked_clip(name)
+    doc = json.loads(gzip.decompress(pose_file(name).read_bytes())) if pose_state(name) == "done" else {}
+    t = doc.get("impact")
+    if t is None:
+        t = pose.clip_facts(str(path))[1]
+    if t is None:
+        raise HTTPException(404, "No impact or strike in this clip")
+    return Response(pose.still_jpeg(str(path), t), media_type="image/jpeg")
 
 
 # ---- Good shots: the rules for which shots count as good, per club (goodshots.py) ----

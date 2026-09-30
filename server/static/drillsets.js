@@ -30,6 +30,7 @@
   const SET_GAP_MS = 20 * 60 * 1000;
   const MAX_NORMAL_SWINGS = 15;
   const MIN_SWINGS = 3;
+  const P6_DRILLS = new Set(["pump"]);
 
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
@@ -148,7 +149,8 @@
       while (i < sess.length) {
         const item = sess[i];
         const drill = item.c.drill || (item.rec && item.rec.drill && item.rec.drill.kind) || null;
-        if (!drill) {
+        // Only drills that rehearse a P6 (the pump): the coach program's blocks report on their own (programs.py).
+        if (!P6_DRILLS.has(drill)) {
           i++;
           continue;
         }

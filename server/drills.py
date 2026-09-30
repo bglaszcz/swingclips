@@ -16,6 +16,10 @@ from pathlib import Path
 # id -> name and the seconds each phone keeps before the strike while it's on.
 DRILLS = {
     "pump": {"name": "Pump drill", "pre": 6},
+    # The coach program's drill blocks (programs.py): rehearsals too, with the usual lead-in.
+    "toetap": {"name": "Lead foot only", "pre": 2},
+    "stepthrough": {"name": "Step through", "pre": 2},
+    "flush": {"name": "Flush line", "pre": 2},
 }
 # The phones' usual seconds before the strike (capture app MainActivity PRE_S).
 PRE_S = 2
