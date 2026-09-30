@@ -21,6 +21,8 @@ class PhoneLink(
     /** Do a command and return what happened (called on this thread; MainActivity runs it on the main one). */
     private val onCommand: (PhoneCommand) -> CommandAck,
     private val say: (PhoneSay) -> Unit,
+    /** Seconds not to listen for strikes from now: the other phone is talking (0 = listen again). */
+    private val quiet: (Double) -> Unit = {},
 ) {
     private val inbox = CommandInbox()
     @Volatile private var generation = 0
@@ -109,6 +111,7 @@ class PhoneLink(
                 answeredAt = System.currentTimeMillis()
                 first = false
                 failures = 0
+                if (reply.has("quiet")) quiet(reply.optDouble("quiet", 0.0))
                 val says = reply.optJSONArray("say")
                 for (i in 0 until (says?.length() ?: 0)) {
                     val s = says!!.getJSONObject(i)

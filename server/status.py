@@ -40,6 +40,14 @@ COMMANDS_KEPT = 20
 SAY_WITHIN_S = 20
 # A setup verdict older than this is from a phone that stopped sending stills (setup.js's SETUP_STALE_S).
 SETUP_LIVE_S = 5
+# While one phone speaks the other doesn't listen for strikes (the capture app mutes only its own
+# listener, so the other phone heard the voice as a strike and recorded a clip of nobody). The
+# server tells the other phone as it sends the sentence, before the voice starts; a phone that
+# reports "speaking" (0.9 on) then says when it really stopped. Until its report comes (a poke,
+# well under TALK_REPORT_S), and for older apps the whole estimated sentence, it's taken as talking.
+# The listener stays quiet TALK_TAIL_S past the end (room echo), and at most TALK_MAX_S past the
+# speaking phone's last report (one that drops off mid-sentence doesn't deafen the other for good).
+TALK_START_S, TALK_S_PER_WORD, TALK_REPORT_S, TALK_TAIL_S, TALK_MAX_S = 0.5, 0.4, 2.0, 1.5, 30.0
 # A combined setup sentence is said once it has held this long (not every flicker).
 HOLD_S = 1.5
 # Ready panel: amber below this battery (%) when not charging; spoken below LOW_BATTERY_SAY.
@@ -82,7 +90,7 @@ PHONE_FIELDS = {
     "recording": bool, "mode": str, "shutter": str, "shutterUsed": str, "exposure": str,
     "battery": int, "charging": bool, "freeMb": int, "version": str, "pending": int,
     "practiceVoice": bool, "setupVoice": str, "autoStart": bool, "busy": str, "cameraError": str,
-    "saved": int, "closing": bool,
+    "saved": int, "closing": bool, "speaking": bool,
 }
 RELAY_FIELDS = {"source": str, "squareRunning": bool, "lastShotAt": str, "version": str,
                 "monitorConnected": bool, "monitorReady": bool}
@@ -362,6 +370,10 @@ class Status:
         self.phone_problems: set[str] = set()
         self.last_recording = 0.0
         self.last_id = 0
+        # Talking: angle -> {"sent": t, "words": n} (the latest sentence sent to it), "stopped": t
+        # (when it reported it had stopped); quiet_sent: angle -> the quiet-until it was last told.
+        self.talk: dict[str, dict] = {a: {"sent": 0.0, "words": 0, "stopped": 0.0} for a in ANGLES}
+        self.quiet_sent: dict[str, float] = {a: 0.0 for a in ANGLES}
 
     def _id(self) -> int:
         self.last_id = max(self.last_id + 1, int(self.clock() * 1000))
@@ -390,7 +402,10 @@ class Status:
             # minute and comes back recording is the same session).
             before = now - self.last_recording <= SESSION_TAIL_S and any(
                 p["hb"].get("recording") and not p["hb"].get("closing") for p in self.phones.values())
+            was = self.phones.get(angle, {}).get("hb", {}).get("speaking")
             self.phones[angle] = {"hb": clean(body, PHONE_FIELDS), "seen": now}
+            if was and not self.phones[angle]["hb"].get("speaking"):
+                self.talk[angle]["stopped"] = now
             for ack in body.get("acks") or []:
                 if not isinstance(ack, dict):
                     continue
@@ -428,12 +443,43 @@ class Status:
             box[:] = [x for x in box if x["kind"] != "setup"]   # only the latest verdict matters
         box.append({"id": self._id(), "text": text, "kind": kind, "made": now, "flush": kind == "setup"})
 
+    def talked(self, angle: str, text: str) -> None:
+        """A sentence went out to phone `angle` to say (its poll or the practice feed): the other
+        phone stops listening for strikes (see TALK_*); has_mail wakes its poll to tell it."""
+        with self.lock:
+            self.talk[angle].update(sent=self.clock(), words=len(text.split()))
+
+    def _quiet_until(self, angle: str, now: float) -> float:
+        """Until when phone `angle` shouldn't listen for strikes: the other phone is talking."""
+        out = 0.0
+        for other in ANGLES:
+            if other == angle:
+                continue
+            t = self.talk[other]
+            p = self.phones.get(other)
+            hb = p["hb"] if p and not p["hb"].get("closing") else {}
+            if "speaking" in hb:
+                out = max(out, t["sent"] + TALK_START_S + TALK_REPORT_S, t["stopped"] + TALK_TAIL_S)
+                if hb["speaking"]:
+                    out = max(out, p["seen"] + TALK_MAX_S)
+            elif t["words"]:   # an older app: the whole sentence, estimated
+                out = max(out, t["sent"] + TALK_START_S + TALK_S_PER_WORD * t["words"] + TALK_TAIL_S)
+        return out
+
+    def _quiet_news(self, angle: str, now: float) -> float | None:
+        """A new quiet-until for phone `angle` that it hasn't been told (None if nothing new)."""
+        q = self._quiet_until(angle, now)
+        if abs(q - self.quiet_sent[angle]) > 0.01 and max(q, self.quiet_sent[angle]) > now:
+            return q
+        return None
+
     def has_mail(self, angle: str) -> bool:
         now = self.clock()
         with self.lock:
             self._expire(now)
             return any(c["angle"] == angle and c["state"] == "queued" for c in self.commands) or \
-                any(now - x["made"] <= SAY_WITHIN_S for x in self.outbox[angle])
+                any(now - x["made"] <= SAY_WITHIN_S for x in self.outbox[angle]) or \
+                self._quiet_news(angle, now) is not None
 
     def take(self, angle: str) -> dict:
         """The commands and sentences for a phone's poll; each goes out once."""
@@ -448,7 +494,13 @@ class Status:
             say = [{"id": x["id"], "text": x["text"], "flush": x["flush"]}
                    for x in self.outbox[angle] if now - x["made"] <= SAY_WITHIN_S]
             self.outbox[angle] = []
-            return {"commands": cmds, "say": say, "ms": int(now * 1000)}
+            out = {"commands": cmds, "say": say, "ms": int(now * 1000)}
+            q = self._quiet_news(angle, now)
+            if q is not None:
+                # Seconds from now (the phones' clocks aren't the server's); 0 = listen again.
+                self.quiet_sent[angle] = q
+                out["quiet"] = round(max(0.0, q - now), 2)
+            return out
 
     # ---- Commands from the review page ----
 

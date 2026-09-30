@@ -16,7 +16,7 @@ monitor's numbers for that shot.
 ## A session
 
 1. **Server** - running (see "Server" below for updates).
-2. **Phones** - open **SwingClips** on each (capture app 0.8); nothing to press, they stay on their
+2. **Phones** - open **SwingClips** on each (capture app 0.9); nothing to press, they stay on their
    stands. Stand at the ball: **one** phone (the one with Practice voice on, face-on by default)
    says how both cameras see you, only when it changes: "Both cameras look good", or "Face-on good.
    Down the line: tilt the phone up".
@@ -583,9 +583,13 @@ review page starts them and one of them does the talking.
   strike was heard), `no-backswing`, `impact-before-top`, `timing` (backswing outside 0.3-2 s or
   downswing outside 0.15-0.6 s: not a swing), each with the numbers behind it. The log also has
   each sentence sent to a phone to say (`say`), each upload, and `afterSpeech` on an upload heard
-  while the **other** phone was probably saying something: the capture app mutes only the phone
-  that speaks, so its voice can set the other one off, recording a lone clip with nobody swinging.
-  An upload with `afterSpeech` and then a `noswing` with `lone: true` is that. Such a **phantom**
+  while the **other** phone was probably saying something: capture apps before 0.9 muted only the
+  phone that speaks, so its voice could set the other one off, recording a lone clip with nobody
+  swinging. An upload with `afterSpeech` and then a `noswing` with `lone: true` is that. From 0.9
+  the other phone doesn't listen either: the server tells it as it sends the sentence (before the
+  voice starts), the speaking phone reports `speaking` and when it stops, and the other phone
+  listens again 1.5 s after (`status.py TALK_*`; logged as `quiet`, seconds not to listen). With
+  an older speaking phone the whole sentence is estimated (0.4 s a word). Such a **phantom**
   (one phone alone, no swing found, no Square shot: `status.py phantom`) isn't treated as a swing:
   practice mode doesn't say "no reading" about it and the health check doesn't count it (logged as
   `check` with `ignored`). Before, each did speak, and that set off the next phantom: a loop that

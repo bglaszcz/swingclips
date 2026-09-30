@@ -136,6 +136,7 @@ def sent_to_say(angle: str, text: str, via: str) -> None:
     """A sentence went out to phone `angle` to say (via: "phone poll" or "practice")."""
     now = time.time()
     recent_speech.append((now, angle, text))
+    session_status.talked(angle, text)   # the other phone stops listening meanwhile
     log_event("say", to=angle, text=text, via=via)
 
 
@@ -1623,7 +1624,8 @@ def status_tick() -> list[str]:
 async def phone_poll(angle: str, request: Request, wait: float = Query(0, ge=0, le=status.POLL_WAIT_MAX_S)):
     """A capture phone (0.6 and later) reports in: its state as JSON, with its answers to commands
     ("acks"). Held open up to `wait` s until there's a command or something to say for it (a long
-    poll): {commands: [{id, action}], say: [{id, text, flush}], ms (the server's clock)}."""
+    poll): {commands: [{id, action}], say: [{id, text, flush}], ms (the server's clock),
+    quiet (s not to listen for strikes: the other phone is talking; 0 = listen again; only when new)}."""
     if angle not in status.ANGLES:
         raise HTTPException(404, "No such camera angle")
     try:
@@ -1638,10 +1640,13 @@ async def phone_poll(angle: str, request: Request, wait: float = Query(0, ge=0, 
         if await request.is_disconnected():
             # The phone hung up to report something new: keep what's waiting for its next poll.
             return Response(status_code=204)
-        await asyncio.sleep(0.25)
+        # Often: a quiet for this phone (the other one is about to talk) must beat the voice.
+        await asyncio.sleep(0.1)
     out = session_status.take(angle)
     for x in out["say"]:
         sent_to_say(angle, x["text"], "phone poll")
+    if "quiet" in out:
+        log_event("quiet", to=angle, s=out["quiet"])
     return out
 
 

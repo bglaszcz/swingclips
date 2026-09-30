@@ -74,6 +74,10 @@ class MainActivity : Activity() {
     private val autoStart = AutoStart()
     /** A settings dialog is open: the review page's Start is refused until it's closed. */
     @Volatile private var settingOpen = false
+    // This phone is talking (reported to the server), and until when (System.nanoTime()) the other
+    // one is: the strike listener ignores both, since a phone's voice set the other one recording.
+    @Volatile private var speaking = false
+    @Volatile private var otherTalksUntil = 0L
     /** The camera's last error since it was opened (reported to the review page). */
     @Volatile private var cameraError: String? = null
     /** What the camera really used for exposure (e.g. "1/1000 s, ISO 800"), and how ("manual", "auto"...). */
@@ -129,10 +133,16 @@ class MainActivity : Activity() {
             ownVoice = { PhoneControl.speaksOwnSetup(setupVoice(), ::phoneLink.isInitialized && phoneLink.linked) },
             onSteady = { ok -> if (autoStart.shouldStart(autoStartOn(), ok, armed)) autoStartNow() },
         )
+        cameraSetup.onSpeaking = { on ->
+            speaking = on
+            listener?.speaking(on)
+            if (::phoneLink.isInitialized) phoneLink.poke()   // the other phone stops listening meanwhile
+        }
         phoneLink = PhoneLink(::serverUrl, ::angle,
             state = { onMain(1000) { linkState() } ?: linkState() },
             onCommand = { cmd -> onMain(3000) { doCommand(cmd) } ?: CommandAck(cmd.id, false, "the phone didn't answer in time") },
             say = { s -> main.post { if (s.flush) cameraSetup.sayNow(s.text) else cameraSetup.say(s.text) } },
+            quiet = { s -> otherTalksUntil = System.nanoTime() + (s * 1e9).toLong() },
         )
         practiceVoice = PracticeVoice(::serverUrl, ::angle, ::practiceVoiceOn, { cameraSetup.say(it) }) { text ->
             main.post { practiceView.text = text }
@@ -209,10 +219,11 @@ class MainActivity : Activity() {
                 if (armed) onImpact(at)
                 else main.post { flashStatus("Heard a strike (not recording)") }
             },
+            quietUntil = { otherTalksUntil },
         ).also {
             it.sensitivity = prefs.getInt("sensitivity", 100)
             it.start()
-            cameraSetup.onSpeaking = { on -> it.speaking(on) }
+            if (speaking) it.speaking(true)
         }
         showState()
     }
@@ -383,6 +394,7 @@ class MainActivity : Activity() {
             "autoStart" to autoStartOn(),
             "busy" to if (settingOpen) PhoneControl.BUSY_SETTING else null,
             "cameraError" to cameraError?.let { PhoneControl.cameraProblem(it) },
+            "speaking" to speaking,
         )
     }
 

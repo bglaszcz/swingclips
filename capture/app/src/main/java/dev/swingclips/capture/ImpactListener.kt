@@ -23,6 +23,8 @@ class ImpactListener(
     private val ctx: Context,
     private val onLevel: (Float) -> Unit,
     private val onImpact: (Long) -> Unit,
+    /** Until when (System.nanoTime()) the OTHER phone is talking: its voice isn't a strike either. */
+    private val quietUntil: () -> Long = { 0L },
 ) {
     /** 0-100; higher = triggers on quieter sounds. */
     @Volatile var sensitivity = 100
@@ -106,7 +108,7 @@ class ImpactListener(
                 val background = (history[0] + history[1]) / 2
                 val spike = background == 0f || sum > background * 2.5f
                 val now = System.nanoTime()
-                if (sum > threshold && spike && !muted && now - lastTrigger > COOLDOWN_NS) {
+                if (sum > threshold && spike && !muted && now - lastTrigger > COOLDOWN_NS && now >= quietUntil()) {
                     lastTrigger = now
                     // When the loudest sample was captured, from the recorder's own timestamp if
                     // it has one, else estimated from when the read returned.

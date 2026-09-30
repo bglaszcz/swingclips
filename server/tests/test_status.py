@@ -208,6 +208,69 @@ class CommandTest(unittest.TestCase):
         self.assertEqual(self.s.snapshot({}, {}, None)["phones"]["face"]["command"]["state"], "queued")
 
 
+class QuietTest(unittest.TestCase):
+    """While one phone talks the other doesn't listen for strikes (its voice set it off)."""
+
+    def setUp(self):
+        self.clock = Clock()
+        self.s = Status(self.clock)
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=False))
+        self.s.heartbeat("dtl", hb(recording=True, speaking=False))
+
+    def test_other_phone_told_as_the_sentence_goes_out(self):
+        self.assertFalse(self.s.has_mail("dtl"))
+        self.s.talked("face", "Seven iron, 152 carry")
+        self.assertTrue(self.s.has_mail("dtl"))
+        self.assertFalse(self.s.has_mail("face"))           # a phone mutes itself
+        q = self.s.take("dtl")["quiet"]
+        self.assertAlmostEqual(q, status.TALK_START_S + status.TALK_REPORT_S)
+        self.assertNotIn("quiet", self.s.take("dtl"))        # once
+        self.assertFalse(self.s.has_mail("dtl"))
+
+    def test_speaking_report_holds_then_ends_with_the_echo(self):
+        self.s.talked("face", "Seven iron, 152 carry")
+        self.s.take("dtl")
+        self.clock.t += 0.4
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=True))
+        self.assertAlmostEqual(self.s.take("dtl")["quiet"], status.TALK_MAX_S)
+        self.clock.t += 6                                     # a long sentence: still quiet
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=False))
+        self.assertTrue(self.s.has_mail("dtl"))
+        self.assertAlmostEqual(self.s.take("dtl")["quiet"], status.TALK_TAIL_S)
+        self.clock.t += status.TALK_TAIL_S + 0.1
+        self.assertFalse(self.s.has_mail("dtl"))
+
+    def test_short_sentence_ends_sooner_than_the_report_window(self):
+        self.s.talked("face", "Good")
+        self.s.take("dtl")
+        self.clock.t += 0.3
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=True))
+        self.s.take("dtl")
+        self.clock.t += 0.5
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=False))
+        # stopped + tail (2.3 s after sent) vs the report window (2.5 s after sent): the later one
+        self.assertAlmostEqual(self.s.take("dtl")["quiet"], status.TALK_START_S + status.TALK_REPORT_S - 0.8)
+
+    def test_own_speech_the_server_didnt_send(self):
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=True))
+        self.assertAlmostEqual(self.s.take("dtl")["quiet"], status.TALK_MAX_S)
+        self.clock.t += 2
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=False))
+        self.assertAlmostEqual(self.s.take("dtl")["quiet"], status.TALK_TAIL_S)
+
+    def test_speaking_phone_gone_doesnt_deafen_the_other_for_good(self):
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=True))
+        self.s.take("dtl")
+        self.clock.t += status.TALK_MAX_S + 1
+        self.assertFalse(self.s.has_mail("dtl"))
+
+    def test_older_app_whole_sentence_estimated(self):
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True))   # no "speaking"
+        self.s.talked("face", "one two three four five")
+        q = self.s.take("dtl")["quiet"]
+        self.assertAlmostEqual(q, status.TALK_START_S + 5 * status.TALK_S_PER_WORD + status.TALK_TAIL_S)
+
+
 class CombinedVoiceTest(unittest.TestCase):
     def setUp(self):
         self.clock = Clock()

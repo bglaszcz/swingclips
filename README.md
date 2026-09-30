@@ -79,7 +79,7 @@ Faults, drills, and a summary sentence highlight what went well and what needs w
 - **Tools**: **Labels** (labeling progress, and a worklist of what to fix, with Go) and
   **Shutter test** (light, grain, flicker and sharpness by shutter setting).
 
-**Capture app (0.8)**: the camera fills the screen with which angle and mode it is and whether
+**Capture app (0.9)**: the camera fills the screen with which angle and mode it is and whether
 it's recording; below it the status, the server, one big Start / Stop, and the strike trigger
 (level bar and sensitivity). Everything else (angle, mode, shutter, server, voices, auto-start)
 is under **Settings**; the camera ones are locked while recording.
