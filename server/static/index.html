@@ -58,6 +58,9 @@
   #listbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line);
              position: sticky; top: 0; background: var(--bg); z-index: 1; }
   #listbar .grow { flex: 1; color: var(--muted); font-size: 13px; }
+  #listbar { flex-wrap: wrap; }
+  #listbar-row { display: flex; align-items: center; gap: 8px; flex: 1 1 100%; min-width: 0; }
+  #find { flex: 1 1 100%; min-width: 0; padding: 6px 8px; font-size: 13px; }
   /* On phones the player already sticks to the top. */
   @media (max-width: 899px) { #listbar { position: static; } }
   button.danger { color: var(--warn); }
@@ -593,7 +596,7 @@
   #listbar { background: var(--panel); padding: 10px 12px 10px 16px; }
   #listbar select { padding: 5px 8px; font-size: 13px; max-width: 60%; }
   .session { border-bottom: 1px solid var(--line); }
-  .shead { padding: 12px 12px 12px 14px; background: var(--panel-2); position: sticky; top: 53px; z-index: 1; }
+  .shead { padding: 12px 12px 12px 14px; background: var(--panel-2); position: sticky; top: var(--listbar-h, 53px); z-index: 1; }
   @media (max-width: 899px) { .shead { position: static; } }
   .shead .sname { font-size: 14px; }
   .shead .ssub { margin-top: 1px; }
@@ -859,7 +862,8 @@
 <div id="ready"></div>
 <main>
   <aside id="side">
-    <div id="listbar"></div>
+    <div id="listbar"><input type="search" id="find" placeholder="Find: times, dates or clip numbers" aria-label="Find swings"
+      title="Paste times (9:25 PM, Sep 25 9:25:49 PM), dates (Sep 25) or clip numbers (1790353993), several at once: the list shows just those swings"><div id="listbar-row"></div></div>
     <div id="list"><div class="empty"><span class="spin"></span> Loading swings…</div></div>
   </aside>
   <section id="viewer" hidden>
@@ -1280,6 +1284,7 @@
     </div>
   </div>
 </dialog>
+<script src="/static/find.js"></script>
 <script src="/static/phases.js"></script>
 <script src="/static/metrics.js"></script>
 <script src="/static/summary.js"></script>
@@ -2872,7 +2877,26 @@ function showShot(c) {
 
 // Clips less than this far apart belong to the same session (one trip to the bay).
 const SESSION_GAP_MS = 45 * 60 * 1000;
-const listbar = document.getElementById("listbar");
+const listbar = document.getElementById("listbar-row");
+// The Find box (find.js): the list shows just the swings it finds; newer / older step through them.
+// ?find=... in the address fills it (links to "these swings").
+const findBox = document.getElementById("find");
+let findQuery = null;
+function setFind(text) {
+  findQuery = SwingFind.parse(text);
+  if (SwingFind.isEmpty(findQuery)) findQuery = null;
+  renderList();
+  const found = filteredClips();
+  if (findQuery && found.length === 1 && found[0].name !== current) open(found[0].name);
+}
+findBox.value = new URLSearchParams(location.search).get("find") || "";
+if (findBox.value) findQuery = SwingFind.isEmpty(SwingFind.parse(findBox.value)) ? null : SwingFind.parse(findBox.value);
+findBox.oninput = () => setFind(findBox.value);
+findBox.onkeydown = e => { if (e.key === "Escape") { findBox.value = ""; setFind(""); } };
+// Session heads stick just under the list bar (its height changes with the layout and the Select mode).
+// On phones the list bar scrolls away (it isn't sticky there), so they keep their old place.
+const syncListbarHeight = () => document.documentElement.style.setProperty("--listbar-h", (innerWidth >= 900 ? document.getElementById("listbar").offsetHeight : 53) + "px");
+new ResizeObserver(syncListbarHeight).observe(document.getElementById("listbar"));
 let selecting = false;
 const selected = new Set();
 // Sessions the viewer opened or closed by hand, by key; the rest: newest open, others closed.
@@ -2917,7 +2941,8 @@ const clubKey = c => (c.shot && c.shot.club) || "none";
 
 /** The swings the list shows now: one per swing, of the picked club. */
 function filteredClips() {
-  const all = shownClips();
+  let all = shownClips();
+  if (findQuery) all = all.filter(c => SwingFind.matches(findQuery, [c, c.partner && clips.find(x => x.name === c.partner)]));
   return clubFilter ? all.filter(c => clubKey(c) === clubFilter) : all;
 }
 
@@ -2971,6 +2996,7 @@ function renderListbar() {
     listbar.querySelector("#start-sel").disabled = !shownClips().length;
     listbar.querySelector("#start-sel").onclick = () => { selecting = true; renderList(); };
   }
+  syncListbarHeight();
 }
 
 function clipRow(c) {
@@ -3021,7 +3047,8 @@ function clipRow(c) {
 
 function renderList() {
   const n = shownClips().length;
-  document.getElementById("count").textContent = `${n} swing${n === 1 ? "" : "s"}`;
+  const nf = findQuery ? filteredClips().length : null;
+  document.getElementById("count").textContent = nf != null ? `${nf} of ${n} swings found` : `${n} swing${n === 1 ? "" : "s"}`;
   for (const n of [...selected]) if (!clips.some(c => c.name === n)) selected.delete(n);
   renderListbar();
   renderSwingHead();
@@ -3030,14 +3057,14 @@ function renderList() {
     return;
   }
   if (!filteredClips().length) {
-    list.innerHTML = `<div class="empty">No swings with this club.</div>`;
+    list.innerHTML = `<div class="empty">${findQuery ? "No swings found: try a time like 9:25 PM, a date like Sep 25, or a clip number." : "No swings with this club."}</div>`;
     return;
   }
   const sessions = sessionsOf(filteredClips());
   list.replaceChildren(...sessions.map((s, i) => {
     const el = document.createElement("section");
     el.className = "session";
-    const isOpen = openState[s.key] ?? (i === 0 || s.clips.some(c => c.name === current));
+    const isOpen = findQuery ? true : openState[s.key] ?? (i === 0 || s.clips.some(c => c.name === current));
     el.classList.toggle("closed", !isOpen);
 
     const head = document.createElement("div");
@@ -3290,7 +3317,7 @@ async function refresh() {
     const pair = window.SwingCompare && SwingCompare.parseHash(location.hash);
     let wanted = pair ? pair[0] : location.hash.slice(1);
     try { wanted = pair ? wanted : decodeURIComponent(wanted); } catch {}
-    open(clips.some(c => c.name === wanted) ? wanted : shownClips()[0].name);
+    open(clips.some(c => c.name === wanted) ? wanted : (filteredClips()[0] || shownClips()[0]).name);
     if (pair && clips.some(c => c.name === pair[0])) Compare.show(pair[0], pair[1]);
   } else if (now && isSecondary(now)) {
     // Its face-on clip just arrived: open the swing through that.

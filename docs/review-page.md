@@ -37,6 +37,10 @@ What the server works out for each swing and what each part of the review page s
   lost behind the head in the finish. A kinematic
   sequence isn't attempted: from face-on alone the turn speeds come out in the wrong order (with
   both phones calibrated, the 3D panel has one: see [3d.md](3d.md)).
+- **Find** (the box above the swing list; `static/find.js`): paste times ("4:25 PM", "Fri Sep 25
+  4:25:49 PM"), dates ("Sep 25", "9/25") or clip numbers (the 10 digits in a clip's name, either
+  angle's), several at once: the list shows just those swings and newer / older steps through them;
+  one match opens it. `?find=...` in the address fills it, so a link can point at a set of swings.
 - **Session trends** (Trends on a session in the list; `static/summary.js`): each swing's numbers
   (tempo, turns and sway at the top / impact, and the down-the-line ones: hips and bend at impact,
   hands to plane at P6 and the top, hand height and depth) against Square's (path, face, face to
