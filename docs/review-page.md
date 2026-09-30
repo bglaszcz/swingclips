@@ -319,3 +319,11 @@ toward the ball". The phones face away from you, so voice is the channel.
   games `games-log.jsonl` next to the clips folder (`server/games.py`). Starting a game turns the practice number
   off, and turning that on stops the game. The Combine is always the same 27 shots (9 targets, 50-170 yd,
   shuffled), so its score is comparable across weeks. Under the Combine scores table, "Where you lose strokes" breaks down strokes gained by target distance over the last 3 Combines to pinpoint the weakest yardages. The Past games table lets you pick any game to view past sessions with that game's own hit wording (on the green, in the fairway, shaped as called, or within 5 yards). No phone update needed.
+- **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page (section 5)
+  for quick setup in the barn. Lays out an ordered 45-minute practice session (60-80 balls) across 4 blocks:
+  (1) Warm-up wedge shots, (2) Focus block with the active focus move, its coach.js drill and swing thought,
+  and a "Practice this" button that configures voice practice mode, (3) Scoring-zone block targeting the
+  weakest Combine yardage or the wedge matrix's biggest gap with a game suggestion, and (4) Finish with
+  a game (Combine if due for weekly benchmark >= 7 days, else a game targeting the weakest area like Driving
+  for low fairway percentage or Distance control for wide carry spread). Pure logic in `static/plan.js`, tested
+  in `tests/plan.test.js`.

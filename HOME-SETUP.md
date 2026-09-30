@@ -32,8 +32,12 @@ end).
    a list of the swings so far with their Square shot ("no shot" once 25 s pass without one). Each
    phone says "Recording"; then switch to Square's app. (Or: **Start both** in the review page's
    **Ready** bar, **Auto-start** on the phones, or `Start golf.cmd -StartCameras` to start both
-   phones as soon as they connect, without the page.) Section 5 (**Play a game**) starts or stops
-   practice games with the current target shown large, for reading from the mat.
+   phones as soon as they connect, without the page.) Section 5 (**Today's plan**) lays out an
+   ordered 45-minute practice session of 60-80 balls tailored to your data: warm-up wedge shots, your
+   current focus with its drill and a "Practice this" button, a scoring-zone block based on your
+   worst Combine targets or wedge matrix gap, and a finishing test (Combine or weakest area). Section 6
+   (**Play a game**) starts or stops practice games with the current target shown large, for reading
+   from the mat.
 5. **Hit balls** once Ready is green. After the first analyzed swing (about a minute) the speaking
    phone says "First swing: both cameras saw you, Square paired", or what's wrong ("Down the line:
    ball not found", "No Square shot"). After that it only speaks up about problems.

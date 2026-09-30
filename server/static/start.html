@@ -82,8 +82,27 @@
   .game-verdict { font-size: 18px; color: var(--muted); margin-bottom: 12px; }
   .game-select { font: inherit; font-size: 16px; padding: 10px 14px; border-radius: 8px;
                  border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  .plan-blocks { display: grid; gap: 10px; margin-top: 10px; }
+  .plan-card { padding: 12px 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+  .plan-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .plan-title { font-weight: 700; font-size: 15px; }
+  .plan-meta { color: var(--muted); font-size: 13px; font-weight: 600; }
+  .plan-why { font-size: 14px; margin-bottom: 6px; color: var(--text); }
+  .plan-drill { font-size: 13px; color: var(--muted); margin: 6px 0; padding-left: 10px; border-left: 2px solid var(--accent); }
+  .plan-drill b { color: var(--text); font-weight: 600; }
+  .plan-act { margin-top: 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .plan-btn { font: inherit; font-size: 14px; font-weight: 600; padding: 7px 14px; border-radius: 8px; cursor: pointer;
+              border: 1px solid var(--line); background: var(--accent); color: var(--accent-text); }
+  .plan-btn:disabled { opacity: 0.5; cursor: default; }
+  .plan-btn.on { background: var(--panel-2); color: var(--accent); border-color: var(--accent); }
+  .plan-note { font-size: 13px; color: var(--muted); }
   @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; } }
 </style>
+<script src="/static/games.js"></script>
+<script src="/static/coach.js"></script>
+<script src="/static/gapping.js"></script>
+<script src="/static/wedges.js"></script>
+<script src="/static/plan.js"></script>
 </head>
 <body>
 <header>
@@ -127,8 +146,14 @@
       <tbody id="swings"></tbody></table>
   </section>
 
+  <section id="sec-plan">
+    <h2><span class="n ok" id="n5">5</span>Today's plan</h2>
+    <p class="hint" id="plan-summary">Ordered practice session built from your data.</p>
+    <div class="plan-blocks" id="plan-blocks"></div>
+  </section>
+
   <section id="sec-game">
-    <h2><span class="n" id="n5">5</span>Play a game</h2>
+    <h2><span class="n" id="n6">6</span>Play a game</h2>
     <div id="game-active" hidden>
       <div class="target-huge" id="game-target"></div>
       <div class="game-score" id="game-score"></div>
@@ -292,7 +317,133 @@ function renderSwings(clips) {
     (missed ? `, ${missed} without (a practice swing, a miss Square didn't read, or Square's app not recording)` : "") : "";
 }
 
-// ---- 5. Games ----
+// ---- 5. Today's plan ----
+let journalData = null, allClips = null, practiceConfig = null, swingRecords = null;
+
+function renderPlan() {
+  if (typeof SwingPlan === "undefined") return;
+  const plan = SwingPlan.buildPlan({
+    focus: journalData ? journalData.focus : null,
+    gameLog: gameState ? gameState.log : [],
+    clips: allClips || [],
+    swings: swingRecords,
+    games: gameState ? gameState.games : []
+  });
+
+  const sumEl = $("plan-summary");
+  if (sumEl) {
+    sumEl.textContent = `${plan.totalMinutes} minutes · ${plan.totalBalls} balls across 4 blocks, built from your data.`;
+  }
+
+  const box = $("plan-blocks");
+  if (!box) return;
+
+  const cards = plan.blocks.map(b => {
+    const card = document.createElement("div");
+    card.className = "plan-card";
+
+    const top = document.createElement("div");
+    top.className = "plan-top";
+    const title = document.createElement("span");
+    title.className = "plan-title";
+    title.textContent = b.title;
+    const meta = document.createElement("span");
+    meta.className = "plan-meta";
+    meta.textContent = (b.balls ? `${b.balls} balls` : "") + (b.balls && b.minutes ? " · " : "") + (b.minutes ? `${b.minutes} min` : "");
+    top.append(title, meta);
+    card.append(top);
+
+    const why = document.createElement("div");
+    why.className = "plan-why";
+    why.textContent = b.why;
+    card.append(why);
+
+    if (b.drill || b.thought) {
+      const dt = document.createElement("div");
+      dt.className = "plan-drill";
+      if (b.drill) {
+        const d = document.createElement("div");
+        d.innerHTML = `<b>Drill:</b> ${esc(b.drill)}`;
+        dt.append(d);
+      }
+      if (b.thought) {
+        const t = document.createElement("div");
+        t.style.marginTop = "3px";
+        t.innerHTML = `<b>Thought:</b> “${esc(b.thought)}”`;
+        dt.append(t);
+      }
+      card.append(dt);
+    }
+
+    if (b.button) {
+      const act = document.createElement("div");
+      act.className = "plan-act";
+      const btn = document.createElement("button");
+      btn.className = "plan-btn";
+      btn.textContent = b.button.label;
+      if (b.button.disabled) btn.disabled = true;
+      if (b.button.title) btn.title = b.button.title;
+
+      const noteSpan = document.createElement("span");
+      noteSpan.className = "plan-note";
+
+      if (b.button.id === "practice") {
+        const isOn = practiceConfig && practiceConfig.on && practiceConfig.metric === (b.button.params && b.button.params.metric);
+        if (isOn) {
+          btn.classList.add("on");
+          btn.textContent = "Practice active";
+          noteSpan.textContent = `Speaking: ${practiceConfig.metric} (${practiceConfig.min} to ${practiceConfig.max})`;
+        }
+        btn.onclick = async () => {
+          btn.disabled = true;
+          try {
+            const res = await fetch("/api/practice", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(b.button.params)
+            });
+            if (res.ok) {
+              practiceConfig = await res.json();
+              noteSpan.textContent = "Practice mode on. Speaking phone cues each swing.";
+            } else {
+              noteSpan.textContent = "Server returned " + res.status;
+            }
+          } catch {
+            noteSpan.textContent = "Couldn't reach server";
+          }
+          btn.disabled = false;
+          renderPlan();
+        };
+      } else if (b.button.id === "game") {
+        btn.onclick = () => {
+          commandGame("/api/game", { game: b.button.gameId });
+        };
+      }
+      act.append(btn, noteSpan);
+      card.append(act);
+    }
+
+    return card;
+  });
+
+  box.replaceChildren(...cards);
+}
+
+async function loadPlanData() {
+  const [j, c, pr, s] = await Promise.all([
+    getJson("/api/journal"),
+    getJson("/api/clips"),
+    getJson("/api/practice"),
+    getJson("/api/swings")
+  ]);
+  if (j) journalData = j;
+  if (c) allClips = c;
+  if (pr) practiceConfig = pr.config;
+  if (s) swingRecords = s.swings;
+  renderPlan();
+}
+
+// ---- 6. Games ----
 const gmSg = v => v == null || !Number.isFinite(v) ? "–" : (v >= 0 ? "+" : "") + v.toFixed(2);
 const gmDay = t => new Date(t * 1000).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 let gameState = null;
@@ -301,7 +452,7 @@ function renderGame(data) {
   gameState = data;
   if (!data) return;
   const g = data.game;
-  $("n5").className = "n" + (g ? " ok" : "");
+  $("n6").className = "n" + (g ? " ok" : "");
   if (g) {
     $("game-active").hidden = false;
     $("game-idle").hidden = true;
@@ -377,7 +528,10 @@ async function pollSwings() {
 async function pollGame() {
   clearTimeout(gameTimer);
   const data = await getJson("/api/game");
-  if (data) renderGame(data);
+  if (data) {
+    renderGame(data);
+    renderPlan();
+  }
   gameTimer = setTimeout(pollGame, document.hidden ? 20000 : 2000);
 }
 document.addEventListener("visibilitychange", () => {
@@ -385,11 +539,13 @@ document.addEventListener("visibilitychange", () => {
     pollStatus();
     pollSwings();
     pollGame();
+    loadPlanData();
   }
 });
 pollStatus();
 pollSwings();
 pollGame();
+loadPlanData();
 </script>
 </body>
 </html>

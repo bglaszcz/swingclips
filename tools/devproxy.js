@@ -14,7 +14,7 @@ const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/htm
 
 http.createServer((req, res) => {
   const u = decodeURIComponent(req.url.split("?")[0]);
-  const rel = u === "/" ? "index.html" : u.startsWith("/static/") ? u.slice(8) : null;
+  const rel = u === "/" ? "index.html" : u === "/start" ? "start.html" : u.startsWith("/static/") ? u.slice(8) : null;
   if (rel && (req.method === "GET" || req.method === "HEAD")) {
     const file = path.join(STATIC, rel);
     if (!file.startsWith(STATIC)) { res.writeHead(403); return res.end(); }
