@@ -330,6 +330,7 @@ function renderTrends() {
   document.getElementById("t-club-wrap").hidden = clubs.length < 2;
   const rows = trendPick.club ? all.filter(r => r.club === trendPick.club) : all;
   renderClubFix(rows);
+  renderSessionDiff(all, clubs, trendPick.club);
 
   const fx = field(trendPick.x), fy = field(trendPick.y === "order" ? "path" : trendPick.y);
   fillSelect(document.getElementById("t-y"), byGroup(["Launch monitor", "Face-on", "Down the line"]), fy.key);
@@ -338,6 +339,94 @@ function renderTrends() {
   drawScatter(rows, fx, fy);
   renderRanking(rows, fx, fy);
   renderTrendTable(rows, fx, fy);
+}
+
+/** "Good vs bad today" block in Trends: compares good shots vs misses for the club shown. */
+function renderSessionDiff(all, clubs, pickedClub) {
+  const card = document.getElementById("t-good-bad");
+  if (!card) return;
+  const singleClub = pickedClub || (clubs && clubs.length === 1 ? clubs[0] : null);
+  if (!singleClub || typeof SwingSessionDiff === "undefined") {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const bodyEl = document.getElementById("t-good-bad-body");
+  bodyEl.replaceChildren();
+
+  const clubRows = all.filter(r => (r.club || r.c?.shot?.club) === singleClub);
+  const data = goodShotData();
+  const c = data ? data.clubs[singleClub] : null;
+  const options = {
+    settings: data ? data.settings : null,
+    baseline: c ? c.baseline : null,
+    group: c ? c.group : (typeof SwingGoodShots !== "undefined" ? SwingGoodShots.groupOf(singleClub) : null),
+    club: singleClub,
+  };
+
+  const res = SwingSessionDiff.diff(clubRows, options);
+  if (!res.separating.length) {
+    const quiet = document.createElement("div");
+    quiet.className = "hint";
+    quiet.textContent = res.lines[0] || `Nothing separates today's good and bad ${res.clubPlural} clearly yet.`;
+    bodyEl.append(quiet);
+    return;
+  }
+
+  res.separating.forEach((s, i) => {
+    const lineDiv = document.createElement("div");
+    lineDiv.className = "t-gb-line";
+    const phrase = `${s.amount} ${s.dir} ${s.fieldName} than your misses.`;
+    lineDiv.textContent = i === 0
+      ? `Good ${res.clubPlural} today (${res.nGood} of ${res.total}${res.leftOutCount > 0 ? `, ${res.leftOutCount} left out` : ""}): ${phrase}`
+      : `Also: ${phrase}`;
+    bodyEl.append(lineDiv);
+
+    if (s.coach) {
+      const det = document.createElement("details");
+      det.className = "explain";
+      const sum = document.createElement("summary");
+      sum.textContent = s.coach.name;
+      det.append(sum);
+
+      if (s.coach.drill) {
+        const dDiv = document.createElement("div");
+        dDiv.className = "note";
+        const b = document.createElement("b");
+        b.textContent = "Drill: ";
+        dDiv.append(b, document.createTextNode(s.coach.drill));
+        det.append(dDiv);
+      }
+
+      if (s.coach.thought) {
+        const tDiv = document.createElement("div");
+        tDiv.className = "note";
+        const b = document.createElement("b");
+        b.textContent = "Swing thought: ";
+        tDiv.append(b, document.createTextNode(`"${s.coach.thought}"`));
+        det.append(tDiv);
+      }
+
+      bodyEl.append(det);
+    }
+  });
+
+  if (res.best && res.worst) {
+    const act = document.createElement("div");
+    act.className = "t-gb-actions";
+    const btn = document.createElement("button");
+    btn.className = "small";
+    btn.id = "t-gb-compare";
+    btn.textContent = "Compare best and worst";
+    const bName = res.best.c?.name || res.best.name;
+    const wName = res.worst.c?.name || res.worst.name;
+    btn.onclick = () => {
+      location.hash = SwingCompare.hashFor(bName, wName);
+      if (window.Compare && Compare.show) Compare.show(bName, wName);
+    };
+    act.append(btn);
+    bodyEl.append(act);
+  }
 }
 
 /** "Change club…" for the swings shown: for when the club wasn't changed in Square's app. */

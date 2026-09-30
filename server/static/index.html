@@ -235,6 +235,9 @@
   #panel3d .seq-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
   /* Session trends: the launch monitor's numbers against the swing's, one dot per swing. */
   #trends { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  #t-good-bad-body { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+  .t-gb-line { font-size: 14px; font-weight: 550; }
+  .t-gb-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
   @media (max-width: 899px) { #trends, #progress, #setup, #shutter, #practice, #labelview { order: -1; border-bottom: 1px solid var(--line); } }
   #setup { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   #setup .note, .s-note { color: var(--muted); font-size: 12px; }
@@ -960,6 +963,10 @@
       <label title="Shaky numbers: tracking noise or the conditions could account for them (hollow dots). Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
       <span class="t-fix" id="t-fix"></span>
     </div>
+    <div class="t-card" id="t-good-bad" hidden>
+      <strong>Good vs bad today</strong>
+      <div id="t-good-bad-body"></div>
+    </div>
     <div class="t-card" id="t-chart">
       <svg role="img"></svg>
       <div id="t-tip" hidden></div>
@@ -1294,6 +1301,7 @@
 <script src="/static/coach.js"></script>
 <script src="/static/focus.js"></script>
 <script src="/static/drillsets.js"></script>
+<script src="/static/sessiondiff.js"></script>
 <script src="/static/gapping.js"></script>
 <script src="/static/wedges.js"></script>
 <script src="/static/faults.js"></script>
