@@ -96,6 +96,9 @@
   .plan-btn:disabled { opacity: 0.5; cursor: default; }
   .plan-btn.on { background: var(--panel-2); color: var(--accent); border-color: var(--accent); }
   .plan-note { font-size: 13px; color: var(--muted); }
+  .plan-card.now { border: 2px solid var(--accent); }
+  .plan-card.now .plan-title::before { content: "Now · "; color: var(--accent); }
+  .plan-on { flex-basis: 100%; font-size: 13px; color: var(--accent); font-weight: 600; }
   @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; } }
 </style>
 <script src="/static/games.js"></script>
@@ -318,7 +321,7 @@ function renderSwings(clips) {
 }
 
 // ---- 5. Today's plan ----
-let journalData = null, allClips = null, practiceConfig = null, swingRecords = null, drillState = null;
+let journalData = null, allClips = null, practiceConfig = null, swingRecords = null, planStep = null;
 
 function renderPlan() {
   if (typeof SwingPlan === "undefined") return;
@@ -332,15 +335,18 @@ function renderPlan() {
 
   const sumEl = $("plan-summary");
   if (sumEl) {
-    sumEl.textContent = `${plan.totalMinutes} minutes · ${plan.totalBalls} balls across 4 blocks, built from your data.`;
+    const now = planStep && plan.blocks.find(b => b.id === planStep.block);
+    sumEl.textContent = now ? `Now: ${now.title}. Tap Next when you've hit its balls.`
+      : `${plan.totalMinutes} minutes · ${plan.totalBalls} balls in 4 blocks, from your data. Tap Start on the first block `
+        + "when recording is on: each block switches on what it needs (a drill recording, a game) and the one before off.";
   }
 
   const box = $("plan-blocks");
   if (!box) return;
 
-  const cards = plan.blocks.map(b => {
+  const cards = plan.blocks.map((b, idx) => {
     const card = document.createElement("div");
-    card.className = "plan-card";
+    card.className = "plan-card" + (planStep && planStep.block === b.id ? " now" : "");
 
     const top = document.createElement("div");
     top.className = "plan-top";
@@ -375,94 +381,69 @@ function renderPlan() {
       card.append(dt);
     }
 
-    if (b.button) {
-      const act = document.createElement("div");
-      act.className = "plan-act";
-      const btn = document.createElement("button");
-      btn.className = "plan-btn";
-      btn.textContent = b.button.label;
-      if (b.button.disabled) btn.disabled = true;
-      if (b.button.title) btn.title = b.button.title;
-
-      const noteSpan = document.createElement("span");
-      noteSpan.className = "plan-note";
-
-      if (b.button.id === "practice") {
-        const isOn = practiceConfig && practiceConfig.on && practiceConfig.metric === (b.button.params && b.button.params.metric);
-        if (isOn) {
-          btn.classList.add("on");
-          btn.textContent = "Practice active";
-          noteSpan.textContent = `Speaking: ${practiceConfig.metric} (${practiceConfig.min} to ${practiceConfig.max})`;
-        }
-        btn.onclick = async () => {
-          btn.disabled = true;
-          try {
-            const res = await fetch("/api/practice", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(b.button.params)
-            });
-            if (res.ok) {
-              practiceConfig = await res.json();
-              noteSpan.textContent = "Practice mode on. Speaking phone cues each swing.";
-            } else {
-              noteSpan.textContent = "Server returned " + res.status;
-            }
-          } catch {
-            noteSpan.textContent = "Couldn't reach server";
-          }
-          btn.disabled = false;
-          renderPlan();
-        };
-      } else if (b.button.id === "game") {
-        btn.onclick = () => {
-          commandGame("/api/game", { game: b.button.gameId });
-        };
-      }
-      act.append(btn);
-      if (b.drillMode) act.append(drillButton(b.drillMode));
-      act.append(noteSpan);
-      card.append(act);
-    }
-
+    card.append(stepControls(plan.blocks, idx));
     return card;
   });
 
   box.replaceChildren(...cards);
 }
 
-/** Drill mode on/off (app.py /api/drill): the phones keep more video before the strike, and the swings are tagged. */
-function drillButton(id) {
-  const cur = drillState && drillState.current;
-  const on = !!cur && cur.drill === id;
-  const d = ((drillState && drillState.drills) || []).find(x => x.id === id);
-  const name = d ? d.name : id;
-  const btn = document.createElement("button");
-  btn.className = "plan-btn" + (on ? " on" : "");
-  btn.textContent = on ? `Recording ${name.toLowerCase()}s (stop)` : `Record ${name.toLowerCase()}s`;
-  btn.title = `While on, the phones keep ${d ? d.pre : 6} s before the strike so the pumps are in the clip; `
-    + "these swings are tagged and left out of your trends and good-shot ranges. Ends by itself 30 minutes after recording stops.";
-  btn.onclick = async () => {
-    btn.disabled = true;
-    try {
-      const res = await fetch("/api/drill", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ drill: on ? null : id }) });
-      if (res.ok) drillState = await res.json();
-    } catch { /* stays as it was */ }
-    renderPlan();
+/** What starting a block sets up on the server (app.py /api/plan/step): its drill, its game. */
+function blockAction(b) {
+  return { block: b.id, drill: b.drillMode || null, game: b.button && b.button.id === "game" ? b.button.gameId : null };
+}
+
+/** What's on while a block is being practiced, in a few words. */
+function blockOnText(b) {
+  const a = blockAction(b);
+  if (a.drill) return "Recording pump drills: the phones keep 6 s before the strike, and these swings stay out of your trends.";
+  if (a.game) return "Game on: the target is in section 6 below, and the phone says it.";
+  return "Nothing to switch on: just hit.";
+}
+
+async function goToBlock(action) {
+  try {
+    const res = await fetch("/api/plan/step", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(action) });
+    if (res.ok) planStep = (await res.json()).step;
+  } catch { /* stays as it was */ }
+  renderPlan();
+  pollGame();
+}
+
+/** A block's buttons: Start (or, on the block being practiced, what's on, Next and End). */
+function stepControls(blocks, idx) {
+  const b = blocks[idx], act = document.createElement("div");
+  act.className = "plan-act";
+  const btn = (label, cls, action) => {
+    const x = document.createElement("button");
+    x.className = "plan-btn" + (cls ? " " + cls : "");
+    x.textContent = label;
+    x.onclick = () => { x.disabled = true; goToBlock(action); };
+    return x;
   };
-  return btn;
+  if (planStep && planStep.block === b.id) {
+    const on = document.createElement("div");
+    on.className = "plan-on";
+    on.textContent = blockOnText(b);
+    const next = blocks[idx + 1];
+    act.append(on, next ? btn(`Next: ${next.title}`, "", blockAction(next)) : btn("Done: end the plan", "", { block: null }));
+    if (next) act.append(btn("End the plan", "on", { block: null }));
+  } else {
+    act.append(btn(planStep ? "Start this block instead" : "Start", planStep ? "on" : "", blockAction(b)));
+  }
+  return act;
 }
 
 async function loadPlanData() {
-  const [j, c, pr, s, d] = await Promise.all([
+  const [j, c, pr, s, st] = await Promise.all([
     getJson("/api/journal"),
     getJson("/api/clips"),
     getJson("/api/practice"),
     getJson("/api/swings"),
-    getJson("/api/drill")
+    getJson("/api/plan/step")
   ]);
-  if (d) drillState = d;
+  if (st) planStep = st.step;
   if (j) journalData = j;
   if (c) allClips = c;
   if (pr) practiceConfig = pr.config;
@@ -554,7 +535,8 @@ async function pollSwings() {
 }
 async function pollGame() {
   clearTimeout(gameTimer);
-  const data = await getJson("/api/game");
+  const [data, st] = await Promise.all([getJson("/api/game"), getJson("/api/plan/step")]);
+  if (st) planStep = st.step;
   if (data) {
     renderGame(data);
     renderPlan();

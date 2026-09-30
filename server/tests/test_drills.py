@@ -118,5 +118,41 @@ class Api(unittest.TestCase):
         self.assertEqual(app.session_status.pre_wanted, drills.PRE_S)
 
 
+class PlanStepApi(unittest.TestCase):
+    """Starting a plan block sets up only what it needs: one thing on at a time."""
+
+    def test_blocks_switch_drill_game_and_voice(self):
+        from fastapi.testclient import TestClient
+        import app
+        import games
+        # Its own drills and games, so the game's spoken target doesn't reach other tests' phones.
+        saved = app.drills_state, app.games_state, dict(app.practice_state.config)
+        app.drills_state = drills.Drills(TMP / "drills-plan.json")
+        app.games_state = games.Games(TMP / "game-plan.json", TMP / "games-plan.jsonl", app.practice_state.new_id)
+        app.PLAN_STEP_FILE = TMP / "plan-step.json"
+        client = TestClient(app.app)
+        try:
+            self.assertEqual(client.post("/api/plan/step", json={"block": "x", "game": "nope"}).status_code, 400)
+            app.practice_state.set_config({**app.practice_state.config, "metric": "tempo", "min": 2.8, "max": 3.4, "on": True})
+            out = client.post("/api/plan/step", json={"block": "focus", "drill": "pump"}).json()
+            self.assertEqual(out["step"]["block"], "focus")
+            self.assertEqual(out["drill"]["current"]["drill"], "pump")
+            self.assertFalse(app.practice_state.config["on"])
+            out = client.post("/api/plan/step", json={"block": "scoring", "game": "distance"}).json()
+            self.assertIsNone(out["drill"]["current"])
+            self.assertEqual(out["game"]["id"], "distance")
+            self.assertEqual(client.get("/api/plan/step").json()["step"]["block"], "scoring")
+            out = client.post("/api/plan/step", json={"block": None}).json()
+            self.assertIsNone(out["step"])
+            self.assertIsNone(out["game"])
+            self.assertIsNone(client.get("/api/plan/step").json()["step"])
+        finally:
+            app.games_state.stop()
+            app.games_state.rules.close()
+            app.drills_state, app.games_state = saved[0], saved[1]
+            app.practice_state.set_config(saved[2])
+            app.session_status.set_pre(drills.PRE_S)
+
+
 if __name__ == "__main__":
     unittest.main()

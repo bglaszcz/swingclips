@@ -1416,6 +1416,60 @@ def set_drill(body: DrillChoice):
     return drills_state.state()
 
 
+# ---- Today's plan: the block being practiced (Start page, plan.js) ----
+# Starting a block sets up everything it needs and ends what the one before had on: one thing at a
+# time, so the golfer doesn't juggle practice voice, drill and game switches.
+PLAN_STEP_FILE = Path(os.environ.get("SWINGCLIPS_PLAN_STEP", CLIPS_DIR.parent / "plan-step.json"))
+PLAN_STEP_S = 4 * 3600   # a block this old is yesterday's
+
+
+def load_plan_step() -> dict | None:
+    try:
+        step = json.loads(PLAN_STEP_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return step if isinstance(step, dict) and time.time() - step.get("since", 0) <= PLAN_STEP_S else None
+
+
+class PlanStep(BaseModel):
+    block: str | None = None   # the plan block's id (warmup, focus, scoring, finish); None ends the plan
+    drill: str | None = None   # a drill recorded in this block (drills.py)
+    game: str | None = None    # a game played in this block (games.py)
+
+
+@app.get("/api/plan/step")
+def get_plan_step():
+    """The plan block being practiced: {block, drill, game, since} or null."""
+    return {"step": load_plan_step()}
+
+
+@app.post("/api/plan/step")
+def set_plan_step(body: PlanStep):
+    """Starts a plan block (or ends the plan with block null): practice voice off, the block's drill on
+    (any other off), its game started (any other stopped)."""
+    if body.drill is not None and body.drill not in drills.DRILLS:
+        raise HTTPException(400, "Unknown drill")
+    if body.game is not None and body.game not in {g["id"] for g in games_state.catalog()}:
+        raise HTTPException(400, "Unknown game")
+    if practice_state.config["on"]:
+        practice_state.set_config({**practice_state.config, "on": False})
+    drills_state.set(body.drill)
+    drills_tick()
+    running = games_state.game
+    if running and running.get("id") != body.game:
+        games_state.stop()
+        running = None
+    if body.game and not running:
+        games_state.start(body.game, {})
+    step = {"block": body.block, "drill": body.drill, "game": body.game, "since": round(time.time(), 3)} if body.block else None
+    PLAN_STEP_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = PLAN_STEP_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(step), encoding="utf-8")
+    tmp.replace(PLAN_STEP_FILE)
+    print(f"Plan: {body.block or 'ended'}" + (f", drill {body.drill}" if body.drill else "") + (f", game {body.game}" if body.game else ""), flush=True)
+    return {"step": step, "drill": drills_state.state(), "game": games_state.game}
+
+
 # ---- Good shots: the rules for which shots count as good, per club (goodshots.py) ----
 # The page works out the personal ranges from them (static/goodshots.js).
 GOODSHOTS_FILE = Path(os.environ.get("SWINGCLIPS_GOODSHOTS", CLIPS_DIR.parent / "goodshots.json"))
