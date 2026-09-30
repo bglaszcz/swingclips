@@ -262,3 +262,42 @@ test("total time and balls are in expected 45-min / 60-80 ball practice range", 
   assert.ok(plan.totalMinutes >= 40 && plan.totalMinutes <= 55, `totalMinutes=${plan.totalMinutes}`);
   assert.ok(plan.totalBalls >= 60 && plan.totalBalls <= 80, `totalBalls=${plan.totalBalls}`);
 });
+
+test("focus block includes drill set from last 14 days, leaves out older sets", () => {
+  const focus = { move: "handsPlaneP6", aim: "less", club: "I7" };
+  const now = new Date("2026-09-30T12:00:00Z");
+
+  const recentSet = {
+    date: "2026-09-28",
+    timestamp: new Date("2026-09-28T12:00:00Z").getTime(),
+    drill: "pump",
+    club: "I7",
+    count: 10,
+    pumps: { handsPlane: -0.9 },
+    after: { count: 10, median: 4.3 },
+    verdict: "no carry-over yet"
+  };
+
+  const planRecent = Plan.buildPlan({ focus, drillSet: recentSet }, { now });
+  const fRecent = planRecent.blocks.find(b => b.id === "focus");
+  assert.ok(fRecent.drillSet);
+  assert.ok(fRecent.drillSet.includes("Pump drill"));
+  assert.ok(fRecent.drillSet.includes("no carry-over yet"));
+
+  // Set from 20 days ago (> 14 days)
+  const oldSet = {
+    date: "2026-09-10",
+    timestamp: new Date("2026-09-10T12:00:00Z").getTime(),
+    drill: "pump",
+    club: "I7",
+    count: 10,
+    pumps: { handsPlane: -0.9 },
+    after: { count: 10, median: 4.3 },
+    verdict: "no carry-over yet"
+  };
+
+  const planOld = Plan.buildPlan({ focus, drillSet: oldSet }, { now });
+  const fOld = planOld.blocks.find(b => b.id === "focus");
+  assert.strictEqual(fOld.drillSet, null);
+});
+
