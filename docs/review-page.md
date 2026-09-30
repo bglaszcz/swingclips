@@ -336,5 +336,8 @@ toward the ball". The phones face away from you, so voice is the channel.
   instead of 2, so the pumps are in the clip, and every swing recorded is tagged with the drill (by time,
   `drills.json`) and left out of the trends, good-shot ranges, noise table and labeling worklist: a
   rehearsal isn't the usual swing. The swing list says "pump drill · left out of trends". It ends when
-  turned off, or 30 minutes after the phones stop recording. Key positions on drill swings aren't drill-aware
-  yet (next: pump checkpoints scored against the good P6 range, the final swing measured back from impact).
+  turned off, or 30 minutes after the phones stop recording. A pump-drill swing's key positions are found
+  as in docs/key-positions.md "Pump drill", and the swing page shows a **Pump drill** card: each pump's
+  bottom (the P6 the drill rehearses: hands to plane, wrist hinge) against the good-shot P6 range, the
+  real swing's P6 after the pumps, and whether the rehearsal carried into the swing (within 1 in), with
+  the focus's swing thought. Each "Pump n" button jumps the video there. Tempo isn't given for these swings.

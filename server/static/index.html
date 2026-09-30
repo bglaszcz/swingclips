@@ -158,6 +158,11 @@
   .pos.here { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   /* Scorecard: one tile per key position, coloured by the golfer's own good-shot ranges (scorecard.js). */
   #scorecard { display: flex; flex-direction: column; gap: 10px; }
+  #drillcard { display: flex; flex-direction: column; gap: 6px; }
+  #drillcard[hidden] { display: none; }
+  #drillcard .drill-row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  #drillcard .drill-row b { min-width: 5.5em; }
+  #drillcard .drill-sum { margin-top: 4px; }
   #scorecard[hidden] { display: none; }
   .sc-summary { font-size: 15px; font-weight: 600; }
   .sc-count { font-size: 12px; color: var(--muted); }
@@ -902,6 +907,7 @@
     </div>
     <div id="labelpanel" hidden></div>
     <div id="shotdata" hidden title="From the launch monitor, via the shot listener"></div>
+    <div id="drillcard" class="card" hidden></div>
     <div id="scorecard" class="card" hidden></div>
     <div id="positions" class="card" hidden>
       <div class="pos-head">
@@ -2190,7 +2196,7 @@ function showCameraCheck(a, main) {
 function analysisInput(name, p) {
   const c = clips.find(c => c.name === name);
   return { name, strike: c ? c.strike : null, angle: p.angle, aspect: p.video.videoWidth / p.video.videoHeight,
-           frames: p.frames, impact: p.impact, ball: p.ball };
+           frames: p.frames, impact: p.impact, ball: p.ball, drill: c ? c.drill : null };
 }
 
 async function buildPositions(name) {
@@ -2330,7 +2336,7 @@ function showNumbers() {
   const box = document.getElementById("numbers");
   const cols = ["p1", "p4", "p6", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
   box.hidden = !(metrics || dtlMetrics) || !cols.length;
-  if (box.hidden) { document.getElementById("scorecard").hidden = true; return; }
+  if (box.hidden) { document.getElementById("scorecard").hidden = document.getElementById("drillcard").hidden = true; return; }
   document.getElementById("face-note").hidden = !metrics;
   document.getElementById("dtl-note").hidden = !dtlMetrics;
   const facts = openFacts();
@@ -2359,6 +2365,7 @@ function showNumbers() {
       ? SwingFaults.faultsOf(openRow, (r, k) => r.trust && r.trust[k] && r.trust[k].level === "shaky")
       : [];
     renderScorecard(body, trust, faults, good.ranges);
+    renderDrillCard(lastCameraCheck[0], body, good.ranges);
     if (faults.length) {
       faultsEl.append("Faults on this swing: ");
       faults.forEach((f, i) => {
@@ -2448,6 +2455,69 @@ function scEl(tag, cls, text) {
 }
 
 /** Draws the scorecard for the open swing: body/trust as showNumbers built them, faults from SwingFaults, good ranges. */
+/**
+ * A pump-drill swing (drills.py): each pump's bottom, the position the drill rehearses, against the
+ * good-shot P6 range, and the real swing's P6 after the pumps: did the rehearsal carry into the swing?
+ */
+function renderDrillCard(a, body, ranges) {
+  const box = document.getElementById("drillcard");
+  const d = SwingSummary.drillNumbers(a);
+  box.hidden = !d || !d.pumps.length;
+  if (box.hidden) return;
+  const r = ranges && ranges.handsPlaneP6, unit = "in";
+  const fmt = v => v == null ? "no reading" : `${v >= 0 ? "+" : ""}${v.toFixed(1)} in`;
+  const where = v => {
+    if (v == null) return "";
+    const pl = SwingGoodShots.place(v, r, unit);
+    return pl.status === "in" ? "in your P6 range" : pl.status === "above" ? "above your P6 range" : pl.status === "below" ? "below your P6 range" : "";
+  };
+  const kids = [];
+  const head = document.createElement("div");
+  head.innerHTML = "<strong>Pump drill</strong> <span class=\"hint\">hands to plane: + over the address shaft line, &minus; under it</span>";
+  kids.push(head);
+  const note = document.createElement("div");
+  note.className = "hint";
+  note.textContent = r && r.enough
+    ? `Your good shots' P6: ${SwingGoodShots.rangeText(r.q25, r.q75, unit)}. Each pump's bottom is the P6 you rehearse; the swing's P6 is the real one.`
+    : "Each pump's bottom is the P6 you rehearse; the swing's P6 is the real one.";
+  kids.push(note);
+  d.pumps.forEach((p, i) => {
+    const row = document.createElement("div");
+    row.className = "drill-row";
+    const go = document.createElement("button");
+    go.className = "small";
+    go.textContent = `Pump ${i + 1}`;
+    const idx = (a.positions.pumps || [])[i];
+    go.onclick = () => idx && jumpTo(idx.index);
+    row.append(go, `hands ${fmt(p.handsPlane)}`, Object.assign(document.createElement("span"), { className: "hint", textContent: where(p.handsPlane) }),
+      p.lag != null ? `· wrist hinge ${Math.round(p.lag)}°` : "");
+    kids.push(row);
+  });
+  const real = body.handsPlaneP6;
+  const swing = document.createElement("div");
+  swing.className = "drill-row";
+  const p6 = positions.find(q => q.key === "p6");
+  const go = document.createElement("button");
+  go.className = "small";
+  go.textContent = "Swing P6";
+  go.onclick = () => p6 && jumpTo(p6.index);
+  swing.append(go, `hands ${fmt(real)}`, Object.assign(document.createElement("span"), { className: "hint", textContent: where(real) }));
+  kids.push(swing);
+  const pumpHands = d.pumps.map(p => p.handsPlane).filter(v => v != null);
+  if (real != null && pumpHands.length) {
+    const avg = pumpHands.reduce((x, y) => x + y, 0) / pumpHands.length, gap = real - avg;
+    const move = SwingCoach.MOVES.handsPlaneP6 && SwingCoach.MOVES.handsPlaneP6.less;
+    const sum = document.createElement("div");
+    sum.className = "drill-sum";
+    sum.textContent = Math.abs(gap) < 1
+      ? `The swing's P6 matched the pumps (within 1 in): the rehearsal carried into the swing.`
+      : `In the swing the hands came down ${Math.abs(gap).toFixed(1)} in ${gap > 0 ? "higher (more over the line)" : "lower (more under the line)"} than in the pumps: `
+        + "the rehearsed position didn't carry into the swing yet." + (move ? ` Swing thought: “${move.thought}”` : "");
+    kids.push(sum);
+  }
+  box.replaceChildren(...kids);
+}
+
 function renderScorecard(body, trust, faults, ranges) {
   const box = document.getElementById("scorecard");
   if (typeof SwingScorecard === "undefined" || !positions.length) { box.hidden = true; return; }

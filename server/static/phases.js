@@ -43,6 +43,11 @@
   // "visibility" while still placing them well. Trust them; the torso gates the frame.
   const HAND_MIN_VISIBILITY = 0.1;
   const SMOOTH_SECONDS = 1 / 60;   // half-width of the position smoothing window
+  // Pump drill (drills.py): the hands go to the top, down to the trail pocket and back up, once or
+  // more, before the real downswing. A turn of the hands counts once they've come back this many
+  // torso lengths (shoulders to hips; ~1.2 top to pump bottom on the owner's drills); the final top
+  // is the highest the hands get this long before impact.
+  const PUMP_DEPTH = 0.5, PUMP_LAST_TOP_SECONDS = 1.0;
   const SPEED_SECONDS = 1 / 60;    // half-width of the span speed is measured over
 
   function lmAt(lm, i) {
@@ -83,6 +88,7 @@
         hand: { x: hand.x * aspect, y: hand.y },
         leadShoulder: { x: ps.x * aspect, y: ps.y },
         shoulderWidth: Math.abs(ls.x - rs.x) * aspect,
+        torso: Math.hypot(((ls.x + rs.x) - (lh.x + rh.x)) / 2 * aspect, ((ls.y + rs.y) - (lh.y + rh.y)) / 2),
         // Lead forearm above (+) or below (-) horizontal, in degrees; null when the model hasn't
         // got the arm.
         forearm: el.v >= HAND_MIN_VISIBILITY && wr.v >= HAND_MIN_VISIBILITY
@@ -284,16 +290,44 @@
 
 
   /**
+   * The hands' turning points from ms[from] to ms[to] (a zigzag: each turn is kept once the hands
+   * have come back PUMP_DEPTH torso lengths from it): [{i, top}] in order, top = highest (true) or
+   * lowest (false) point, indices into ms. The last point is where the stretch ends.
+   */
+  function handTurns(ms, from, to) {
+    const torsos = ms.slice(from, to + 1).map(m => m.torso).filter(v => v > 0).sort((a, b) => a - b);
+    if (!torsos.length) return [];
+    const depth = PUMP_DEPTH * torsos[Math.floor(torsos.length / 2)];
+    const out = [];
+    let ext = from, up = null;   // the extreme so far, and whether the hands are going up (y falling)
+    for (let i = from + 1; i <= to; i++) {
+      const y = ms[i].hand.y, ey = ms[ext].hand.y;
+      if (up === null) {
+        if (Math.abs(y - ey) >= depth) { up = y < ey; out.push({ i: ext, top: !up }); ext = i; }
+        else if (y > ey) ext = i;   // before any move, the lowest point so far (address)
+        continue;
+      }
+      if (up ? y < ey : y > ey) ext = i;
+      else if (Math.abs(y - ey) >= depth) { out.push({ i: ext, top: up }); up = !up; ext = i; }
+    }
+    out.push({ i: ext, top: up === true });
+    return out;
+  }
+
+  /**
    * @param frames [{t, lm}] from the server's pose file (lm = flat [x, y, visibility] * 33 or null)
    * @param aspect picture width / height as displayed
    * @param leadSide "left" for a right-handed golfer
    * @param impactWindow optional [from, to] clip seconds when the strike was heard
    * @param impactTime optional clip seconds of the first frame without the ball
+   * @param options {drill}: "pump" for a pump-drill swing (drills.py): P1-P3 come from the first
+   *   backswing, P4 is the last top before the downswing, and the pump bottoms are returned too
    * @returns [{key, tag, label, t, index, estimated}] - index is into `frames` - with a `takeaway`
-   *   property: {t, fromShaft}, when the club starts back. When no swing is found, an empty array
-   *   with a `why` property: {reason, text, and the numbers behind it} (see noSwing).
+   *   property: {t, fromShaft}, when the club starts back, and for a pump drill `drill` ("pump") and
+   *   `pumps` ([{t, index}], where the hands turned back up at the bottom of each pump). When no swing
+   *   is found, an empty array with a `why` property: {reason, text, and the numbers behind it} (see noSwing).
    */
-  function detect(frames, aspect, leadSide = "left", impactWindow = null, impactTime = null) {
+  function detect(frames, aspect, leadSide = "left", impactWindow = null, impactTime = null, options = {}) {
     const ms = metrics(frames, aspect, leadSide);
     // Impact must be in this window: around the ball leaving, else when the strike was heard,
     // else anywhere in the clip.
@@ -332,11 +366,29 @@
     }
     if (top < 0) return noSwing("no-backswing", `the hands' fastest moment (${r3(ms[fastest].t)} s) has no tracked frames before it`, peak);
 
+    // A pump drill: the last top is the one the downswing starts from; the backswing is the first
+    // move up from address, and the pumps are the low points between the tops.
+    let backTop = top, pumps = [];
+    if (options && options.drill === "pump") {
+      let last = -1;
+      for (let i = 0; i < fastest; i++) {
+        if (ms[fastest].t - ms[i].t > PUMP_LAST_TOP_SECONDS) continue;
+        if (last < 0 || ms[i].hand.y < ms[last].hand.y) last = i;
+      }
+      const turns = last > 0 ? handTurns(ms, 0, last) : [];
+      const tops = turns.filter(x => x.top).map(x => x.i);
+      if (tops.length >= 2) {
+        top = last;
+        backTop = tops[0];
+        pumps = turns.filter(x => !x.top && x.i > backTop && x.i < last).map(x => x.i);
+      }
+    }
+
     // P1 address: the hands pause at the top too, so require a sustained still stretch, walking
     // back from the top.
     const still = ms[fastest].speed * 0.06;
     let address = 0, quietSince = -1;
-    for (let i = top; i >= 0; i--) {
+    for (let i = backTop; i >= 0; i--) {
       if (ms[i].speed <= still) {
         if (quietSince < 0) quietSince = i;
         if (ms[quietSince].t - ms[i].t >= 0.2) { address = quietSince; break; }
@@ -365,19 +417,22 @@
 
     // P3: the lead arm parallel to the ground going back (the forearm rising through level), then
     // P4, the top: where the hands start down, between P3 and impact.
-    let p3 = forearmLevel(ms, address + 1, impact, true);
-    if (p3 < 0) p3 = armParallel(ms, address + 1, top);
-    const turn = handsStartDown(frames, aspect, leadSide, p3 >= 0 ? ms[p3].t : ms[address].t, ms[impact].t);
+    let p3 = forearmLevel(ms, address + 1, pumps.length ? backTop : impact, true);
+    if (p3 < 0) p3 = armParallel(ms, address + 1, backTop);
+    const downFrom = pumps.length ? ms[pumps[pumps.length - 1]].t : p3 >= 0 ? ms[p3].t : ms[address].t;
+    const turn = handsStartDown(frames, aspect, leadSide, downFrom, ms[impact].t);
     if (turn != null) top = nearest(ms, turn);
+    if (!pumps.length) backTop = top;
 
-    // Not a swing (e.g. someone waving at the camera): the phases don't fit together.
-    const backswing = ms[top].t - ms[address].t, downswing = ms[impact].t - ms[top].t;
+    // Not a swing (e.g. someone waving at the camera): the phases don't fit together. With pumps
+    // the backswing is the first move to the top.
+    const backswing = ms[backTop].t - ms[address].t, downswing = ms[impact].t - ms[top].t;
     if (backswing < 0.3 || backswing > 2 || downswing < 0.15 || downswing > 0.6) {
       return noSwing("timing", `backswing ${r3(backswing)} s and downswing ${r3(downswing)} s don't fit a swing (0.3-2 s and 0.15-0.6 s)`,
                      { ...peak, addressT: r3(ms[address].t), topT: r3(ms[top].t), impactT: r3(ms[impact].t),
                        backswing: r3(backswing), downswing: r3(downswing) });
     }
-    if (p3 >= top) p3 = armParallel(ms, address + 1, top);
+    if (p3 >= backTop) p3 = armParallel(ms, address + 1, backTop);
 
     // P5: the lead arm parallel coming down (the forearm falling through level).
     let p5 = forearmLevel(ms, top + 1, impact, false);
@@ -386,7 +441,7 @@
     // P2, fallback when the shaft wasn't tracked: shaft parallel in the takeaway is roughly when the hands have travelled
     // about 1.2 shoulder widths from address (1.1-1.35 measured on real swings, face-on).
     let p2 = -1;
-    for (let i = address + 1; i <= top; i++) {
+    for (let i = address + 1; i <= backTop; i++) {
       const moved = Math.hypot(ms[i].hand.x - ms[address].hand.x, ms[i].hand.y - ms[address].hand.y);
       if (moved >= ms[address].shoulderWidth * 1.2) { p2 = i; break; }
     }
@@ -407,7 +462,7 @@
     // The shaft, where the server tracked it: the first horizontal after address, the last before
     // impact, the first after.
     const shaft = {
-      p2: shaftHorizontal(frames, ms[address].t, ms[top].t)[0],
+      p2: shaftHorizontal(frames, ms[address].t, ms[backTop].t)[0],
       p6: shaftHorizontal(frames, ms[impact].t - P6_BEFORE_IMPACT[1], ms[impact].t - P6_BEFORE_IMPACT[0]).pop(),
       p8: shaftHorizontal(frames, ms[impact].t, ms[impact].t + 0.4)[0],
     };
@@ -425,7 +480,7 @@
     // P1 address: the club at rest behind the ball, not already moving back. With the shaft
     // tracked, the takeaway is where it starts to turn away from its angle at rest; otherwise,
     // where the hands' quiet stretch ends. Either way P1 sits a little before that.
-    const until = shaft.p2 ? frames[shaft.p2.index].t : ms[top].t;
+    const until = shaft.p2 ? frames[shaft.p2.index].t : ms[backTop].t;
     // With the club model (the server's deep pass) the pose file also has the ray-cast shaft
     // (clubRay): steadier at address, where the model's angle wobbles a degree or two, so the rest
     // and the takeaway come from it. Same frames, so the indices hold.
@@ -442,6 +497,10 @@
     found.sort((a, b) => a.key.localeCompare(b.key));
     // For tempo: when the club starts back, and whether that came from the shaft.
     found.takeaway = { t: takeaway, fromShaft: restEnd >= 0 };
+    if (pumps.length) {
+      found.drill = "pump";
+      found.pumps = pumps.map(i => ({ t: ms[i].t, index: ms[i].index }));
+    }
     return found;
   }
 

@@ -290,6 +290,19 @@ which put that swing's down-the-line positions ~50 ms off. Since the sync uses a
 only when it fits the heard strike (`summary.js` `syncOffset`), the down-the-line impact on this
 swing is on your label and P5 within a frame.
 
+## Pump drill
+
+A swing recorded in drill mode for the pump drill (`drills.py`: to the top, the hands pumped down to
+the trail pocket and back up, twice, then through) has three tops. `detect(..., {drill: "pump"})`
+follows the hands' height as a zigzag (a turn counts once they've come back half a torso length,
+shoulders to hips; the owner's pumps travel ~1.2): P1-P3 and the takeaway come from the first move
+up from address, P4 is the highest the hands get in the last second before impact (then refined
+by where they start down, as usual), P5-P8 as for any swing, and `pumps` are the low points between
+the first top and the last. The backswing timing check uses the first backswing. On the 10 pump
+swings of Sep 30 all were found (before: all "timing"), with bottoms ~1.3 s apart and a 0.25 s
+downswing. With fewer than two tops (no pumps after all) the swing is read as an ordinary one.
+`tests/pump.test.js` holds one of them (`fixtures/real/pump`).
+
 ## Refreshing
 
 After labeling more swings and refreshing the fixtures (`fixtures_export.py`):

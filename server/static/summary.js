@@ -73,7 +73,7 @@
 
   /**
    * @param main the clip the swing is opened through (face-on, or a lone down-the-line one):
-   *   {name, strike, angle, aspect, frames, impact, ball}
+   *   {name, strike, angle, aspect, frames, impact, ball, drill (drills.py: "pump", or none)}
    * @param other its down-the-line partner in the same shape, or null
    * @param leadSide "left" for a right-handed golfer
    * @returns {positions, metrics (face-on) | null, dtl: the down-the-line clip | null,
@@ -83,7 +83,7 @@
     // A ball-gone that doesn't fit the heard strike isn't impact: impact then comes from the hands,
     // as when no ball was seen.
     const positions = Phases.detect(main.frames, main.aspect, leadSide, strikeWindow(main.name, main.strike),
-                                    impactCheck(main) === null ? main.impact : null);
+                                    impactCheck(main) === null ? main.impact : null, { drill: main.drill || null });
     const metrics = main.angle === "dtl" ? null : Metrics.compute(main.frames, main.aspect, leadSide, positions);
     const dtl = other || (main.angle === "dtl" ? main : null);
     const offset = other ? syncOffset(main, other) : 0;
@@ -94,7 +94,9 @@
     };
     const address = positions.length ? dtlIndex("p1") : null;
     const dtlMetrics = address == null ? null : Metrics.computeDTL(dtl.frames, dtl.aspect, address, dtl.ball);
-    return { positions, metrics, dtl, dtlMetrics, dtlIndex, offset };
+    // The down-the-line frame at a moment of the main clip (a pump's bottom).
+    const dtlIndexAt = (t, index) => !dtl ? null : dtl === main ? index : frameIndexAt(dtl.frames, t + offset);
+    return { positions, metrics, dtl, dtlMetrics, dtlIndex, dtlIndexAt, offset };
   }
 
   // The body numbers compared across a session: [key, label, unit, view, position, value key].
@@ -141,7 +143,8 @@
   /** The body numbers of one analyzed swing: {key: number | null}. */
   function bodyNumbers(a) {
     const out = {};
-    const tp = a.metrics && a.metrics.tempo;
+    // A pump drill's time from takeaway to the last top holds the pumps: not a backswing.
+    const tp = a.metrics && !a.positions.drill && a.metrics.tempo;
     out.tempo = tp ? tp.ratio : null;
     out.backswing = tp ? tp.back : null;
     out.downswing = tp ? tp.down : null;
@@ -160,6 +163,23 @@
       out[f.key] = finite(v && v[f.value]);
     }
     return out;
+  }
+
+  /**
+   * A drill swing's own checkpoints: for the pump drill, each pump's bottom with the P6 numbers
+   * there (the position the drill rehearses): {kind, pumps: [{t, handsPlane, shaftPlane, lag}]}, or
+   * null for a swing that isn't a drill (or whose pumps weren't found).
+   */
+  function drillNumbers(a) {
+    if (!a.positions.drill) return null;
+    const pumps = (a.positions.pumps || []).map(p => {
+      const face = a.metrics ? a.metrics.values[p.index] : null;
+      const i = a.dtlMetrics ? a.dtlIndexAt(p.t, p.index) : null;
+      const dtl = i == null ? null : a.dtlMetrics.values[i];
+      return { t: p.t, handsPlane: finite(dtl && dtl.handsPlane), shaftPlane: finite(dtl && dtl.shaftPlane),
+               lag: finite(face && face.lag) };
+    });
+    return { kind: a.positions.drill, pumps };
   }
 
   /** The launch monitor's numbers for a shot (or all null). */
@@ -378,6 +398,7 @@
     const p1 = pos("p1"), p6 = pos("p6");
     return {
       body: bodyNumbers(a),
+      drill: drillNumbers(a),
       // For the noise floor (trust.js): every per-frame number at the key positions the page shows,
       // and how much each moved while standing still at address, per camera.
       at: valuesAtPositions(a),
@@ -456,7 +477,7 @@
   }
 
   const api = { BODY, SHOT, NUMBER_POSITIONS, IMPACT_WINDOW, STRIKE_FALLBACK, frameIndexAt, syncOffset, aspectOf,
-                strikeWindow, impactCheck, analyze, bodyNumbers,
+                strikeWindow, impactCheck, analyze, bodyNumbers, drillNumbers,
                 shotNumbers, correlation, summarize, cameras, setupAdvice, positionTimes, frameAngles, noiseFloor,
                 cameraMoved };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
