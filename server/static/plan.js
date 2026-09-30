@@ -306,18 +306,21 @@
         const fromText = `${Math.round(h.from.median)} yd (${h.from.name} ${h.from.label.toLowerCase()})`;
         const toText = `${Math.round(h.to.median)} yd (${h.to.name} ${h.to.label.toLowerCase()})`;
         const gapText = `${Math.round(h.gap)} yd`;
+        // The Wedge ladder covers 40-100 yd; a hole beyond that is Distance control's (50-130 yd).
+        const ladder = (h.from.median + h.to.median) / 2 <= 100;
+        const game = ladder ? { name: "Wedge ladder", id: "wedges" } : { name: "Distance control", id: "distance" };
         scoringBlock = {
           id: "scoring",
-          title: "Scoring zone: Wedge ladder",
-          minutes: 12,
-          balls: 13,
-          why: `Wedge matrix has a ${gapText} gap between ${fromText} and ${toText} with no stock shot.`,
+          title: `Scoring zone: ${game.name}`,
+          minutes: ladder ? 12 : 15,
+          balls: ladder ? 13 : 15,
+          why: `Your wedge matrix jumps from ${fromText} to ${toText}: ${gapText} with no stock shot.`,
           drill: null,
           thought: null,
           button: {
             id: "game",
-            label: "Start Wedge ladder",
-            gameId: "wedges"
+            label: `Start ${game.name}`,
+            gameId: game.id
           }
         };
       } else {

@@ -172,7 +172,18 @@ test("scoring-zone block falls back to wedge matrix biggest hole when no Combine
   const sBlock = plan.blocks.find(b => b.id === "scoring");
   assert.strictEqual(sBlock.id, "scoring");
   assert.strictEqual(sBlock.button.gameId, "wedges");
-  assert.ok(sBlock.why.includes("Wedge matrix has a"));
+  assert.ok(sBlock.why.includes("with no stock shot"));
+});
+
+test("a wedge matrix hole past the Wedge ladder's 100 yd suggests Distance control", () => {
+  const clips = [];
+  for (let i = 0; i < 10; i++) clips.push(makeClip(`pw_full_${i}`, "PW", 115 + (i % 5), 0, 95));
+  for (let i = 0; i < 3; i++) clips.push(makeClip(`pw_3q_${i}`, "PW", 103 + i, 0, 0.85 * 95));
+  for (let i = 0; i < 10; i++) clips.push(makeClip(`gw_full_${i}`, "GW", 98 + (i % 3), 0, 90));
+  const plan = Plan.buildPlan({ gameLog: [], clips });
+  const sBlock = plan.blocks.find(b => b.id === "scoring");
+  assert.strictEqual(sBlock.button.gameId, "distance");
+  assert.ok(sBlock.title.includes("Distance control"));
 });
 
 test("finish block: Combine 10 days ago picks Combine", () => {
