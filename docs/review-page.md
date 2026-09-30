@@ -47,8 +47,14 @@ What the server works out for each swing and what each part of the review page s
   path, carry, offline, strike and so on). A scatter chart of any two, with the straight-line fit
   and r; a list ranking every number on the other side by how closely it goes with the chosen one;
   and a table of every swing. One club at a time by default. A link "stands out" when |r| is past
-  what chance gives with that many swings (p < 0.05); fewer than 5 swings, nothing is ranked. It
-  updates as swings arrive.
+  what chance gives with that many swings (p < 0.05); fewer than 5 swings, nothing is ranked. When
+  one club is picked (or the session has one club), a small **Good vs bad today** block
+  (`static/sessiondiff.js`) compares today's good shots against misses using your personal baseline
+  (`static/goodshots.js`): any body numbers whose 95% confidence interval clears zero are listed
+  with their difference in plain words, with coaching drills and swing thoughts from `static/coach.js`
+  folded underneath, and a **Compare best and worst** button opening today's best good shot and worst miss
+  side by side in Compare (`#compare=best,worst`); when nothing clearly separates them yet, one quiet
+  line notes that. It updates as swings arrive.
 - **Swing numbers on the server** (`swings.py`): once a swing's clips are analyzed, a background
   worker runs the page's own JavaScript (phases.js, metrics.js, summary.js, trust.js) in an embedded
   V8 (`mini-racer`) and keeps each swing's body numbers, what could be measured (ball found, down the
