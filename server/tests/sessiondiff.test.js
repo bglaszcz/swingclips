@@ -119,7 +119,7 @@ test("clear difference: good shots have less hands to trail pocket at P6", () =>
   assert.equal(top.coach.thought, "Hands drop to the trail pocket.");
 
   assert.equal(res.lines.length, 1);
-  assert.equal(res.lines[0], "Good 7 irons today (9 of 24): 4.1 in less hands to the trail pocket at P6 than your misses.");
+  assert.equal(res.lines[0], "Good 7 irons this session (9 of 24): 4.1 in less hands to the trail pocket at P6 than your misses.");
 });
 
 test("none: enough good and rest shots, but no body number clearly separates", () => {
@@ -148,7 +148,7 @@ test("none: enough good and rest shots, but no body number clearly separates", (
   assert.equal(res.nRest, 10);
   assert.equal(res.enough, true);
   assert.equal(res.separating.length, 0);
-  assert.deepEqual(res.lines, ["Nothing separates today's good and bad 7 irons clearly yet."]);
+  assert.match(res.lines[0], /^Nothing separates this session's good and bad 7 irons clearly \(\d+ good of \d+\)\.$/);
 });
 
 test("too few: fewer than minimum swings per side", () => {
@@ -180,7 +180,7 @@ test("too few: fewer than minimum swings per side", () => {
   assert.equal(res.nRest, 8);
   assert.equal(res.enough, false);
   assert.equal(res.separating.length, 0);
-  assert.deepEqual(res.lines, ["Too few good 7 irons today to compare (2 of 10)."]);
+  assert.deepEqual(res.lines, ["Too few good ones to compare: 2 good 7 irons of 10 this session."]);
 });
 
 test("no good shots: 0 good shots", () => {
@@ -201,7 +201,7 @@ test("no good shots: 0 good shots", () => {
 
   assert.equal(res.nGood, 0);
   assert.equal(res.nRest, 10);
-  assert.deepEqual(res.lines, ["No good 7 irons today (0 of 10)."]);
+  assert.deepEqual(res.lines, ["No good 7 irons this session (0 of 10)."]);
 });
 
 test("all good: 0 rest shots", () => {
@@ -222,7 +222,7 @@ test("all good: 0 rest shots", () => {
 
   assert.equal(res.nGood, 10);
   assert.equal(res.nRest, 0);
-  assert.deepEqual(res.lines, ["All 7 irons today were good (10 of 10)."]);
+  assert.deepEqual(res.lines, ["All 7 irons this session were good (10 of 10)."]);
 });
 
 test("best and worst picks: smallest offline share and furthest outside box", () => {
@@ -317,4 +317,35 @@ test("real-looking rows: verifies full swingRow data structures with shaky marki
   assert.equal(p6.dir, "less");
   assert.ok(res.best);
   assert.ok(res.worst);
+});
+
+test("pure noise: ~20 numbers tested per session rarely list one (Benjamini-Hochberg)", () => {
+  const Summary = require("../static/summary.js");
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const normal = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+  let listed = 0;
+  const SESSIONS = 100;
+  for (let s = 0; s < SESSIONS; s++) {
+    const rows = [];
+    for (let i = 0; i < 30; i++) {
+      const good = i < 10;
+      const shot = good ? { carry: 155, offline: 1, smash: 1.32 } : { carry: 130, offline: 20, smash: 1.2 };
+      const body = {};
+      for (const f of Summary.BODY) body[f.key] = normal();   // no difference between good and bad
+      rows.push(makeRow(`n${s}_${i}`, "I7", shot, body));
+    }
+    const res = SessionDiff.diff(rows, { club: "I7", baseline: BASELINE_7I, settings: DEFAULT_SETTINGS });
+    if (res.separating.length) listed++;
+  }
+  // Without a correction about two thirds of such sessions would list one; with it, about 1 in 20.
+  assert.ok(listed <= 10, `${listed} of ${SESSIONS} noise sessions listed a number`);
+});
+
+test("wedge plurals keep their capitals; too few misses says so", () => {
+  assert.equal(SessionDiff.formatClubPlural("PW"), "PWs");
+  assert.equal(SessionDiff.formatClubPlural("I7"), "7 irons");
+  assert.equal(SessionDiff.formatClubPlural("DR"), "drivers");
+  assert.deepEqual(SessionDiff.lines({ clubPlural: "7 irons", nGood: 8, nRest: 2, total: 10, leftOutCount: 0, enough: false, separating: [], minPerSide: 3 }),
+                   ["Too few misses to compare: 8 good 7 irons of 10 this session."]);
 });

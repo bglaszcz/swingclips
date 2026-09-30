@@ -341,7 +341,7 @@ function renderTrends() {
   renderTrendTable(rows, fx, fy);
 }
 
-/** "Good vs bad today" block in Trends: compares good shots vs misses for the club shown. */
+/** "Good vs bad this session" block in Trends: compares good shots vs misses for the club shown. */
 function renderSessionDiff(all, clubs, pickedClub) {
   const card = document.getElementById("t-good-bad");
   if (!card) return;
@@ -368,18 +368,14 @@ function renderSessionDiff(all, clubs, pickedClub) {
   if (!res.separating.length) {
     const quiet = document.createElement("div");
     quiet.className = "hint";
-    quiet.textContent = res.lines[0] || `Nothing separates today's good and bad ${res.clubPlural} clearly yet.`;
+    quiet.textContent = res.lines[0];
     bodyEl.append(quiet);
-    return;
   }
 
   res.separating.forEach((s, i) => {
     const lineDiv = document.createElement("div");
     lineDiv.className = "t-gb-line";
-    const phrase = `${s.amount} ${s.dir} ${s.fieldName} than your misses.`;
-    lineDiv.textContent = i === 0
-      ? `Good ${res.clubPlural} today (${res.nGood} of ${res.total}${res.leftOutCount > 0 ? `, ${res.leftOutCount} left out` : ""}): ${phrase}`
-      : `Also: ${phrase}`;
+    lineDiv.textContent = res.lines[i];
     bodyEl.append(lineDiv);
 
     if (s.coach) {

@@ -48,13 +48,14 @@ What the server works out for each swing and what each part of the review page s
   and r; a list ranking every number on the other side by how closely it goes with the chosen one;
   and a table of every swing. One club at a time by default. A link "stands out" when |r| is past
   what chance gives with that many swings (p < 0.05); fewer than 5 swings, nothing is ranked. When
-  one club is picked (or the session has one club), a small **Good vs bad today** block
-  (`static/sessiondiff.js`) compares today's good shots against misses using your personal baseline
-  (`static/goodshots.js`): any body numbers whose 95% confidence interval clears zero are listed
-  with their difference in plain words, with coaching drills and swing thoughts from `static/coach.js`
-  folded underneath, and a **Compare best and worst** button opening today's best good shot and worst miss
-  side by side in Compare (`#compare=best,worst`); when nothing clearly separates them yet, one quiet
-  line notes that. It updates as swings arrive.
+  one club is picked (or the session has one club), a small **Good vs bad this session** block
+  (`static/sessiondiff.js`) compares the session's good shots against misses using your personal baseline
+  (`static/goodshots.js`): body numbers that separate them are listed with their difference in plain
+  words (Hedges' g; with ~20 numbers tested, only those with a Benjamini-Hochberg q under 0.05, as
+  the What helps card: without it about half of all sessions would list one by chance), with coaching
+  drills and swing thoughts from `static/coach.js` folded underneath; when nothing clearly separates
+  them, one quiet line says so. A **Compare best and worst** button opens the session's straightest
+  good shot and the miss furthest outside the good-shot box side by side in Compare (`#compare=best,worst`). It updates as swings arrive.
 - **Swing numbers on the server** (`swings.py`): once a swing's clips are analyzed, a background
   worker runs the page's own JavaScript (phases.js, metrics.js, summary.js, trust.js) in an embedded
   V8 (`mini-racer`) and keeps each swing's body numbers, what could be measured (ball found, down the

@@ -1,8 +1,10 @@
-// Good vs bad today: on your good shots today vs your misses with one club, what was different?
+// Good vs bad this session: on your good shots vs your misses with one club, what was different?
 // Separates today's swings into good shots and the rest (SwingGoodShots.judgeShot against the club's
 // usual baseline, as Progress does), finds which body numbers (summary.js BODY) most separate them
-// (Hedges' g with a 95% confidence interval over today's swings), and picks today's best good shot
-// and worst miss to compare side by side.
+// (Hedges' g over today's swings; with ~20 numbers tested each session a 95% interval alone would
+// list one by chance most sessions, so a number is listed only when its Benjamini-Hochberg q over all
+// of them is under helps.js Q_CONFIRMED, as the What helps card does), and picks today's best good
+// shot and worst miss to compare side by side.
 //
 // Works in the browser (window.SwingSessionDiff) and in Node (module.exports).
 (function (root) {
@@ -10,6 +12,7 @@
   const GoodShots = root.SwingGoodShots || (typeof require !== "undefined" && require("./goodshots.js"));
   const Coach = root.SwingCoach || (typeof require !== "undefined" && require("./coach.js"));
   const Trust = root.SwingTrust || (typeof require !== "undefined" && require("./trust.js"));
+  const Helps = root.SwingHelps || (typeof require !== "undefined" && require("./helps.js"));
 
   // Minimum swings on each side (good vs rest) needed to compare: at least 3 swings per side
   // (matches spreadOf in trends.js and MIN_SWINGS in drillsets.js; allows small sessions while avoiding 1- or 2-swing flukes).
@@ -25,9 +28,9 @@
 
   function formatClubPlural(code) {
     if (!code) return "shots";
-    const name = clubName(code).toLowerCase();
-    if (name.endsWith("s")) return name;
-    return name + "s";
+    // "7 irons", "3 woods", "drivers"; wedge codes stay as they're written ("PWs").
+    const name = CLUB_NAMES[code] && CLUB_NAMES[code] === code ? code : clubName(code).toLowerCase();
+    return name.endsWith("s") ? name : name + "s";
   }
 
   const FRIENDLY_NAMES = {
@@ -145,11 +148,13 @@
         coach: coachMove ? { name: coachMove.name, drill: coachMove.drill, thought: coachMove.thought, how: coachMove.how } : null,
       };
 
+      // Two-sided p from g over its standard error (t with n - 2 degrees of freedom).
+      item.p = h && item.se > 0 ? Helps.tTwoSided(item.g / item.se, gVals.length + rVals.length - 2) : null;
       allDiffs.push(item);
-      if (item.enough && item.clear) {
-        separating.push(item);
-      }
     }
+    const tested = allDiffs.filter(x => x.enough && x.p != null);
+    Helps.bh(tested.map(x => x.p)).forEach((q, i) => { tested[i].q = q; });
+    for (const x of tested) if (x.clear && x.q < Helps.Q_CONFIRMED) separating.push(x);
 
     separating.sort((a, b) => Math.abs(b.g) - Math.abs(a.g));
 
@@ -213,6 +218,7 @@
       leftOut,
       leftOutCount,
       enough,
+      minPerSide,
       allDiffs,
       separating,
       best,
@@ -233,19 +239,20 @@
     const { clubPlural, nGood, nRest, total, leftOutCount, enough, separating } = result;
 
     if (total === 0) {
-      return [`No ${clubPlural} today to compare.`];
+      return [`No ${clubPlural} this session to compare.`];
     }
     if (nGood === 0) {
-      return [`No good ${clubPlural} today (0 of ${total}).`];
+      return [`No good ${clubPlural} this session (0 of ${total}).`];
     }
     if (nRest === 0) {
-      return [`All ${clubPlural} today were good (${nGood} of ${total}).`];
+      return [`All ${clubPlural} this session were good (${nGood} of ${total}).`];
     }
     if (!enough) {
-      return [`Too few good ${clubPlural} today to compare (${nGood} of ${total}).`];
+      const few = result.nGood < (result.minPerSide ?? MIN_PER_SIDE) ? "good ones" : "misses";
+      return [`Too few ${few} to compare: ${nGood} good ${clubPlural} of ${total} this session.`];
     }
     if (!separating || separating.length === 0) {
-      return [`Nothing separates today's good and bad ${clubPlural} clearly yet.`];
+      return [`Nothing separates this session's good and bad ${clubPlural} clearly (${nGood} good of ${total}).`];
     }
 
     const leftNote = leftOutCount > 0 ? `, ${leftOutCount} left out` : "";
@@ -253,7 +260,7 @@
     separating.forEach((s, i) => {
       const phrase = `${s.amount} ${s.dir} ${s.fieldName} than your misses.`;
       if (i === 0) {
-        out.push(`Good ${clubPlural} today (${nGood} of ${total}${leftNote}): ${phrase}`);
+        out.push(`Good ${clubPlural} this session (${nGood} of ${total}${leftNote}): ${phrase}`);
       } else {
         out.push(`Also: ${phrase}`);
       }
