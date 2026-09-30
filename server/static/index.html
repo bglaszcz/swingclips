@@ -2214,7 +2214,7 @@ async function buildPositions(name) {
   positionsBox.hidden = false;
   document.getElementById("pos-note").textContent = positions.length
     ? "~ = estimated (the club couldn't be seen clearly then)."
-    : "No swing found in this clip.";
+    : "No swing found in this clip" + (positions.why ? `: ${positions.why.text}.` : ".");
 
   // With both angles analyzed, each card shows the position from both.
   const other = partner && partner.pose;

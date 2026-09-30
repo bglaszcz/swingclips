@@ -290,16 +290,27 @@
    * @param impactWindow optional [from, to] clip seconds when the strike was heard
    * @param impactTime optional clip seconds of the first frame without the ball
    * @returns [{key, tag, label, t, index, estimated}] - index is into `frames` - with a `takeaway`
-   *   property: {t, fromShaft}, when the club starts back
+   *   property: {t, fromShaft}, when the club starts back. When no swing is found, an empty array
+   *   with a `why` property: {reason, text, and the numbers behind it} (see noSwing).
    */
   function detect(frames, aspect, leadSide = "left", impactWindow = null, impactTime = null) {
     const ms = metrics(frames, aspect, leadSide);
-    if (ms.length < 20) return [];
-
     // Impact must be in this window: around the ball leaving, else when the strike was heard,
     // else anywhere in the clip.
     const [from, to] = impactTime != null ? [impactTime - 0.02, impactTime + 0.02]
       : impactWindow || [-Infinity, Infinity];
+    const r3 = x => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : null);
+    // Why there's no swing, with what it was looking at, for the server's log (app.py noswing.jsonl).
+    const noSwing = (reason, text, extra = {}) => Object.assign([], { why: {
+      reason, text,
+      window: [r3(from), r3(to)], windowFrom: impactTime != null ? "ball" : impactWindow ? "strike" : "whole clip",
+      frames: frames.length, bodyFrames: ms.length,
+      bodySpan: ms.length ? [r3(ms[0].t), r3(ms[ms.length - 1].t)] : null,
+      ...extra,
+    } });
+    if (ms.length < 20) {
+      return noSwing("tracking", `the body (shoulders and hips) was tracked in only ${ms.length} of ${frames.length} frames (20 needed)`);
+    }
 
     // The hands move fastest around impact, and that's the one moment that stands out in any clip.
     // (A follow-through can be as fast, which is what the strike window guards against.)
@@ -308,7 +319,10 @@
       if (m.t < from - 0.1 || m.t > to + 0.1) return;
       if (fastest < 0 || m.speed > ms[fastest].speed) fastest = i;
     });
-    if (fastest < 0) return [];
+    if (fastest < 0) {
+      return noSwing("window", `no tracked frames around the strike window ${r3(from)}-${r3(to)} s (the body was tracked ${r3(ms[0].t)}-${r3(ms[ms.length - 1].t)} s)`);
+    }
+    const peak = { fastestT: r3(ms[fastest].t), peakSpeed: r3(ms[fastest].speed) };
 
     // Roughly the top for now: hands highest in the two seconds before that (see handsStartDown).
     let top = -1;
@@ -316,7 +330,7 @@
       if (ms[fastest].t - ms[i].t > 2) continue;
       if (top < 0 || ms[i].hand.y < ms[top].hand.y) top = i;
     }
-    if (top < 0) return [];
+    if (top < 0) return noSwing("no-backswing", `the hands' fastest moment (${r3(ms[fastest].t)} s) has no tracked frames before it`, peak);
 
     // P1 address: the hands pause at the top too, so require a sustained still stretch, walking
     // back from the top.
@@ -342,7 +356,12 @@
         : Math.hypot(ms[impact].hand.x - ms[address].hand.x, ms[impact].hand.y - ms[address].hand.y);
       if (gap < best) impact = i;
     }
-    if (impact <= top) return [];
+    if (impact <= top) {
+      return noSwing("impact-before-top", impact < 0
+        ? `no impact found after the top (${r3(ms[top].t)} s) inside the strike window`
+        : `impact (${r3(ms[impact].t)} s) came before the top (${r3(ms[top].t)} s)`,
+                     { ...peak, topT: r3(ms[top].t), impactT: impact >= 0 ? r3(ms[impact].t) : null });
+    }
 
     // P3: the lead arm parallel to the ground going back (the forearm rising through level), then
     // P4, the top: where the hands start down, between P3 and impact.
@@ -353,7 +372,11 @@
 
     // Not a swing (e.g. someone waving at the camera): the phases don't fit together.
     const backswing = ms[top].t - ms[address].t, downswing = ms[impact].t - ms[top].t;
-    if (backswing < 0.3 || backswing > 2 || downswing < 0.15 || downswing > 0.6) return [];
+    if (backswing < 0.3 || backswing > 2 || downswing < 0.15 || downswing > 0.6) {
+      return noSwing("timing", `backswing ${r3(backswing)} s and downswing ${r3(downswing)} s don't fit a swing (0.3-2 s and 0.15-0.6 s)`,
+                     { ...peak, addressT: r3(ms[address].t), topT: r3(ms[top].t), impactT: r3(ms[impact].t),
+                       backswing: r3(backswing), downswing: r3(downswing) });
+    }
     if (p3 >= top) p3 = armParallel(ms, address + 1, top);
 
     // P5: the lead arm parallel coming down (the forearm falling through level).

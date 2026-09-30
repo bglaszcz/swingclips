@@ -24,6 +24,7 @@ import bisect
 import glob
 import gzip
 import json
+import collections
 import logging
 import os
 import re
@@ -90,6 +91,85 @@ SWING_NAME = re.compile(r"^swing_(?:(face|dtl)_)?\d+x\d+_\d+fps_\d{10}(?:_(\d+)m
 # Two phones' clips of one swing are named after the strike each heard, on the server's clock
 # (each phone reads it from /api/time). Strikes are at least 3 s apart (the app's cooldown).
 PAIR_SLACK_S = 2.0
+
+# What happened when, for tracking down clips with no swing in them: each sentence sent to a phone to
+# say, each upload (and whether it came right after the other phone was sent something to say: its
+# voice may have set this phone off), and each clip where no swing was found, with why (phases.js).
+# One JSON object per line; trimmed to its newer half at start once it's over EVENTS_MAX_BYTES.
+EVENTS_FILE = Path(os.environ.get("SWINGCLIPS_EVENTS", CLIPS_DIR.parent / "events.jsonl"))
+EVENTS_MAX_BYTES = 5_000_000
+events_lock = threading.Lock()
+# Sentences sent to the phones lately: (server time sent, angle, text), for the upload check.
+recent_speech: collections.deque = collections.deque(maxlen=50)
+# Upload -> what the other phone was sent to say just before it (see speech_before), for the no-swing log.
+upload_notes: dict[str, dict] = {}
+# A phone starts talking a moment after it gets a sentence, talks ~0.4 s a word, and its room echo
+# lasts a little after (the capture app mutes its own listener 1.5 s past its speech).
+SPEECH_START_S, SPEECH_S_PER_WORD, SPEECH_TAIL_S = 0.5, 0.4, 2.0
+
+
+def log_event(kind: str, **fields) -> None:
+    """Appends one event to EVENTS_FILE; a failure to write is printed, never raised."""
+    line = json.dumps({"t": datetime.now().isoformat(timespec="milliseconds"), "kind": kind, **fields},
+                      separators=(",", ":"), default=str)
+    try:
+        with events_lock:
+            EVENTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(EVENTS_FILE, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+    except OSError as e:
+        print(f"Events: couldn't write {EVENTS_FILE}: {e}", flush=True)
+
+
+def trim_events() -> None:
+    """Keeps the newer half of EVENTS_FILE once it's grown past EVENTS_MAX_BYTES."""
+    try:
+        if EVENTS_FILE.stat().st_size <= EVENTS_MAX_BYTES:
+            return
+        lines = EVENTS_FILE.read_text(encoding="utf-8").splitlines()
+        EVENTS_FILE.write_text("\n".join(lines[len(lines) // 2:]) + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def sent_to_say(angle: str, text: str, via: str) -> None:
+    """A sentence went out to phone `angle` to say (via: "phone poll" or "practice")."""
+    now = time.time()
+    recent_speech.append((now, angle, text))
+    log_event("say", to=angle, text=text, via=via)
+
+
+def speech_before(angle: str, strike_t: float) -> dict | None:
+    """The sentence the OTHER phone was sent just before this phone heard a 'strike' at strike_t
+    (server clock, whole seconds as in the clip name), if the strike fell while it was probably
+    being said or echoing: {to, text, after (s from sent to strike)}."""
+    best = None
+    for sent, to, text in recent_speech:
+        if to == angle:
+            continue  # a phone doesn't hear itself: the capture app mutes its listener while it speaks
+        end = sent + SPEECH_START_S + SPEECH_S_PER_WORD * len(text.split()) + SPEECH_TAIL_S
+        # The name's time is cut to whole seconds, so the strike was up to 1 s later than strike_t.
+        if sent - 1.0 <= strike_t <= end:
+            best = {"to": to, "text": text, "after": round(max(0.0, strike_t - sent), 1)}
+    return best
+
+
+def note_no_swing(clip: dict, other: dict | None, record: dict, again: bool) -> None:
+    """Logs a swing where no swing was found in its main clip, with why (summary.js quality.noSwing).
+    `again`: worked out again (new JavaScript, a new partner), not new. Printed only when new."""
+    q = record.get("quality") or {}
+    if "error" in record or q.get("swingFound") is not False:
+        return
+    why = q.get("noSwing") or {}
+    echo = upload_notes.get(clip["name"])
+    log_event("noswing", clip=clip["name"], angle=clip["angle"], partner=other and other["name"],
+              lone=not clip.get("partner"), strike=clip.get("strike"), recorded=clip.get("recorded"),
+              again=again, why=why, afterSpeech=echo)
+    if not again:
+        tail = f' (a lone clip, heard {echo["after"]} s after the {status.NAMES[echo["to"]].lower()} phone was sent "{echo["text"]}")' \
+            if echo else " (a lone clip: the other phone didn't record)" if not clip.get("partner") else ""
+        print(f"No swing: {clip['name']}: {why.get('text', 'no reason given')}{tail}", flush=True)
+
 
 # Each swing's numbers for the trends (see swings.py), by the clip it's listed by; kept in SWINGS_FILE.
 SWINGS_FILE = Path(os.environ.get("SWINGCLIPS_SWINGS", CLIPS_DIR.parent / "swings.json"))
@@ -493,6 +573,7 @@ def swing_worker(stop: threading.Event):
                 except Exception:
                     record = {"error": traceback.format_exc(limit=2)}
                 record.update(code=swings_code, partner=other and other["name"], poseModel=made_by)
+                note_no_swing(c, other, record, again=old is not None)
                 with records_lock:
                     swing_records[c["name"]] = record
                 done += 1
@@ -884,7 +965,16 @@ async def upload(name: str, request: Request, shutter: str | None = Query(None, 
     finally:
         part.unlink(missing_ok=True)
     shot = f", {exposure} 1/{round(1e9 / exposure_ns)} s ISO {iso}" if exposure_ns else ""
-    print(f"Upload: {name} ({size / 1e6:.1f} MB{shot})", flush=True)
+    m, t = SWING_NAME.match(name), UNIX_TIME_SUFFIX.search(Path(name).stem)
+    angle = (m.group(1) or "face") if m else "face"
+    echo = speech_before(angle, float(t.group(1))) if t else None
+    if echo:
+        upload_notes[name] = echo
+        while len(upload_notes) > 200:
+            upload_notes.pop(next(iter(upload_notes)))
+    log_event("upload", clip=name, angle=angle, mb=round(size / 1e6, 1), afterSpeech=echo)
+    heard = f' - heard {echo["after"]} s after the {status.NAMES[echo["to"]].lower()} phone was sent "{echo["text"]}"' if echo else ""
+    print(f"Upload: {name} ({size / 1e6:.1f} MB{shot}){heard}", flush=True)
     return {"ok": True, "size": size}
 
 
@@ -1222,6 +1312,9 @@ async def practice_latest(since: int | None = None, angle: str | None = Query(No
                 {"id": e["id"], "text": e["text"], "age": round(time.time() - e["made"], 1), "status": None,
                  "clip": None} for e in games_state.latest(since)], key=lambda e: e["id"])
         if out["results"] or since is None or time.monotonic() >= give_up:
+            if angle in status.ANGLES:
+                for e in out["results"]:
+                    sent_to_say(angle, e["text"], "practice")
             return out
         await asyncio.sleep(0.25)
 
@@ -1521,6 +1614,7 @@ def status_tick() -> list[str]:
     said = session_status.health_step(swings_now)
     for text in said:
         print(f"Status: {text}", flush=True)
+        log_event("status", text=text)
     return said
 
 
@@ -1544,7 +1638,10 @@ async def phone_poll(angle: str, request: Request, wait: float = Query(0, ge=0, 
             # The phone hung up to report something new: keep what's waiting for its next poll.
             return Response(status_code=204)
         await asyncio.sleep(0.25)
-    return session_status.take(angle)
+    out = session_status.take(angle)
+    for x in out["say"]:
+        sent_to_say(angle, x["text"], "phone poll")
+    return out
 
 
 class PhoneCommand(BaseModel):
@@ -1662,6 +1759,8 @@ class QuietShutdown(logging.Filter):
 
 if __name__ == "__main__":
     print(f"Serving clips from {CLIPS_DIR}, pose results in {POSE_DIR}")
+    trim_events()
+    print(f"Events (what was said, uploads, no-swing clips and why): {EVENTS_FILE}")
     # Another body model (settings.cmd: set SWINGCLIPS_POSE_BACKEND=rtmpose-m): fetched once if missing.
     # Without it every new clip would fail, so MediaPipe carries on until it can be downloaded.
     backend = models.backend()

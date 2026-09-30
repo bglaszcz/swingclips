@@ -575,6 +575,19 @@ review page starts them and one of them does the talking.
   clear: no Square shot on 2 swings in a row, a missing clip on 2 in a row, the same camera problem
   on 3 in a row, a phone that stops answering while recording, 3+ clips waiting on a phone, a
   battery under 10%.
+- **No swing found**: said when key positions couldn't be found in a clip (phases.js). Why is on
+  the swing page ("No swing found in this clip: ...") and in the **events log**
+  (`D:\SwingClips\events.jsonl`, one JSON object per line), with the server window printing
+  `No swing: <clip>: <why>` for new ones. The reasons: `tracking` (shoulders and hips seen in under
+  20 frames: out of the picture, dark, or nobody there), `window` (nothing tracked around when the
+  strike was heard), `no-backswing`, `impact-before-top`, `timing` (backswing outside 0.3-2 s or
+  downswing outside 0.15-0.6 s: not a swing), each with the numbers behind it. The log also has
+  each sentence sent to a phone to say (`say`), each upload, and `afterSpeech` on an upload heard
+  while the **other** phone was probably saying something: the capture app mutes only the phone
+  that speaks, so its voice can set the other one off, recording a lone clip with nobody swinging.
+  An upload with `afterSpeech` and then a `noswing` with `lone: true` is that. Every clip with no
+  swing is logged again (`again: true`) when the swing numbers are worked out again, e.g. after an
+  update, so older clips get their reasons too.
 - **How**: each phone (while the app is open) posts `POST /api/phones/<angle>/poll?wait=10` with
   its state as JSON (recording, mode, shutter, shutterUsed, exposure, battery, charging, freeMb,
   version, pending, saved, practiceVoice, setupVoice, autoStart, busy, cameraError) and its answers
@@ -773,6 +786,7 @@ Settings can be set in `server\settings.cmd` (or the Windows environment). User-
 | `SWINGCLIPS_MODELS` | `public\models` | Folder where downloaded ONNX models are stored. |
 | `SWINGCLIPS_CALIB` | `D:\SwingClips\calib` | Calibration files for two-camera 3D. |
 | `SWINGCLIPS_EVAL` | `D:\SwingClips\eval` | Output folder for `eval.py` scorecard runs. |
+| `SWINGCLIPS_EVENTS` | `D:\SwingClips\events.jsonl` | Events log: what each phone was sent to say, uploads, clips with no swing and why (see "No swing found"). |
 | `SWINGCLIPS_POSE_BACKEND` | `mediapipe` (`rtmpose-m` in `settings.cmd`) | Body pose model: `mediapipe`, `rtmpose-m`, `rtmpose-l` or `rtmw`. |
 | `SWINGCLIPS_ORT_PROVIDER` | `cpu` | ONNX Runtime provider: `cpu`, `dml` (DirectX 12 / Intel GPU), `cuda` or `auto`. |
 | `SWINGCLIPS_ORT_DEVICE` | `0` | GPU device index for `dml` or `cuda`. |

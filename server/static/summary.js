@@ -384,6 +384,11 @@
       noise: addressNoise(a, main),
       quality: {
         swingFound: a.positions.length > 0,
+        // Why not (phases.js detect), with the strike and ball it went by: for the server's log.
+        noSwing: a.positions.length ? null : {
+          ...(a.positions.why || { reason: "unknown", text: "no reason given" }),
+          strike: main.strike ?? null, ball: main.impact ?? null, ballCheck: impactCheck(main),
+        },
         // Impact from the ball leaving the mat (frame-exact) rather than the heard strike.
         ballFace: main.angle === "dtl" ? null : main.impact != null,
         dtl: !!a.dtl, ballDtl: a.dtl ? a.dtl.impact != null : null,
