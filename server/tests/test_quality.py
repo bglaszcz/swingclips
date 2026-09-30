@@ -282,7 +282,7 @@ class Worker(unittest.TestCase):
 
 class RealClipNumbers(unittest.TestCase):
     """The warnings on the numbers quality.py v1 read from real clips (Galaxy S21, 1080p 240 fps, a
-    barn under LED bulbs); see HOME-SETUP.md."""
+    barn under LED bulbs); see docs/phones.md."""
 
     def q(self, brightness, noise, amplitude, banding, shutter):
         return {"brightness": brightness, "noise": noise, "banding": banding, "shutter": shutter,

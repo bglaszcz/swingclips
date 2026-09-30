@@ -107,7 +107,7 @@ def body_stride() -> int:
     return BODY_STRIDE_GPU if models.on_gpu() else BODY_STRIDE_CPU
 
 
-# ---- Keeping up: settings that trade work for time (HOME-SETUP.md, "Keeping up during a session") ----
+# ---- Keeping up: settings that trade work for time (docs/performance.md, "Keeping up during a session") ----
 # Read each time (tests set them), in the main process: the workers get them with their jobs.
 #
 # SWINGCLIPS_MP_STRIDE_AFTER: MediaPipe on every n-th frame after the swing (later than
@@ -1035,7 +1035,7 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
         clubm = str(models.club_model_path())
     if clubm:
         if not os.path.isfile(clubm):
-            raise FileNotFoundError(f"{clubm} is missing: train it (HOME-SETUP.md, \"Training the club model\") "
+            raise FileNotFoundError(f"{clubm} is missing: train it (docs/club-model.md, \"Training the club model\") "
                                     "or point SWINGCLIPS_CLUB_MODEL at it")
     speed = speed_settings()
     clock = time.perf_counter()

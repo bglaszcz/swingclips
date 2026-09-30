@@ -73,7 +73,7 @@ class Setup:
                 verdict.update(ok=True, codes=[], board=board_seen, text=board_seen["text"], say=board_seen["say"])
             verdict["lm"] = lm
             # With 3D on the phone sends its stills at full size: the mat board is too small to find
-            # in a ~960 px one (HOME-SETUP.md, 3D).
+            # in a ~960 px one (docs/3d.md).
             verdict["fullStill"] = calib.enabled()
             verdict["time"] = time.time()
             self.latest[angle] = {"verdict": verdict, "jpeg": upright.tobytes() if ok else jpeg}

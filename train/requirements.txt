@@ -1,5 +1,5 @@
 # The club model's training (club_train.py), on the gaming PC; not the server's.
-# PyTorch comes first, from PyTorch's own index for the GPU (see HOME-SETUP.md, "Training the club
+# PyTorch comes first, from PyTorch's own index for the GPU (see docs/club-model.md, "Training the club
 # model"): the torch on PyPI for Windows is CPU-only.
 ultralytics>=8.4.0,<9
 albumentations>=2.0,<3

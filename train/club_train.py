@@ -1,6 +1,6 @@
 """Trains the club model: YOLO11 pose with three keypoints (grip end, hosel, clubhead), on the dataset
 server/club_dataset.py makes from the hand labels, then exports it to ONNX for the server
-(SWINGCLIPS_CLUB_BACKEND=yolo, models.py). Meant for a PC with an NVIDIA GPU; see HOME-SETUP.md,
+(SWINGCLIPS_CLUB_BACKEND=yolo, models.py). Meant for a PC with an NVIDIA GPU; see docs/club-model.md,
 "Training the club model", for installing (an RTX 50xx needs a PyTorch build for CUDA 12.8 or newer).
 
   python club_train.py --data D:\\SwingClips\\club-dataset\\data.yaml
@@ -53,7 +53,7 @@ def check_device(device: str) -> None:
         print("Training on the CPU: fine for trying the script, far too slow for a real run.")
         return
     if not torch.cuda.is_available():
-        sys.exit(f"PyTorch {torch.__version__} sees no CUDA GPU. Install the CUDA build (HOME-SETUP.md, "
+        sys.exit(f"PyTorch {torch.__version__} sees no CUDA GPU. Install the CUDA build (docs/club-model.md, "
                  "\"Training the club model\"), or --device cpu to try the script.")
     i = int(device.split(",")[0]) if device[:1].isdigit() else 0
     major, minor = torch.cuda.get_device_capability(i)
@@ -61,7 +61,7 @@ def check_device(device: str) -> None:
     print(f"GPU: {torch.cuda.get_device_name(i)} ({arch}), PyTorch {torch.__version__}, CUDA {torch.version.cuda}")
     if arch not in torch.cuda.get_arch_list():
         sys.exit(f"This PyTorch build has no kernels for {arch} ({', '.join(torch.cuda.get_arch_list())}). "
-                 "An RTX 50xx (Blackwell, sm_120) needs a build for CUDA 12.8 or newer: see HOME-SETUP.md.")
+                 "An RTX 50xx (Blackwell, sm_120) needs a build for CUDA 12.8 or newer: see docs/club-model.md.")
 
 
 # ---- Another YOLO pose dataset, as a first pass ----

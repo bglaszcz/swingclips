@@ -27,7 +27,7 @@ and saved beside it as <clip>.quality.v<VERSION>.json:
   downswing, and the ratio then says nothing about the shutter.
 
 v2 retuned the warnings on real clips (Galaxy S21, 1080p 240 fps, a barn under LED bulbs; see
-HOME-SETUP.md): grain is judged against the golfer's brightness, flicker is "mild" on Auto and
+docs/phones.md): grain is judged against the golfer's brightness, flicker is "mild" on Auto and
 "matters" at a fixed shutter, and sharpness is only measured when impact is believable.
 """
 import av

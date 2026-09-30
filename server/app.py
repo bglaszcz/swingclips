@@ -14,7 +14,7 @@ goodshots.json next to the clips folder),
 SWINGCLIPS_3D=on (3D from both phones: calib.py, tri.py; off by default) and SWINGCLIPS_CALIB (its
 calibrations; default: a "calib" folder next to the clips folder),
 SWINGCLIPS_ORT_PROVIDER (where the ONNX body and club models run: cpu, the default, dml, cuda or auto;
-see models.py and HOME-SETUP.md, "Using a GPU").
+see models.py and docs/performance.md, "Using a GPU").
 Once a clip's pose is saved, the same worker measures its light, grain, flicker and sharpness (quality.py).
 The swing worker keeps each swing's numbers (swings.py) and the noise floor per number (noise.json),
 which the page's trust rules (static/trust.js) use.

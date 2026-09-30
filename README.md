@@ -106,7 +106,7 @@ cd /d D:\SwingClips\app\server
 
 :: How long a clip takes and where the time goes, with the speed settings as before and as set
 :: now; RTMPose and the club model on the CPU vs a GPU, if one is installed
-:: (HOME-SETUP.md, "Keeping up during a session" and "Using a GPU")
+:: (docs/performance.md, "Keeping up during a session" and "Using a GPU")
 .venv\Scripts\python.exe bench_models.py
 
 :: Do the speed settings score no worse on the labeled clips? (dev PC or server, with the clips)
@@ -115,11 +115,11 @@ cd /d D:\SwingClips\app\server
 
 - `settings.cmd` can also put the ONNX models on a GPU (`SWINGCLIPS_ORT_PROVIDER=dml` or `cuda`,
   with `SWINGCLIPS_REQUIREMENTS` naming the matching package file); off by default, see
-  HOME-SETUP.md, "Using a GPU".
+  docs/performance.md, "Using a GPU".
 - Less work a clip, so the server keeps up with a swing every ~20 s: MediaPipe on every 4th frame
   after the swing, a cheaper picture for it, the clip split between the workers by cost (on by
   default; `settings.cmd` can put each back), and a faster shaft search and empty scene (the same
-  numbers). See HOME-SETUP.md, "Keeping up during a session".
+  numbers). See docs/performance.md, "Keeping up during a session".
 - `Start server.cmd` runs the server in its window. Ctrl+C or closing the window stops it (answer
   Y to "Terminate batch job"). After a change of body model or of the analysis, the server
   analyzes older clips again in the background, newest first, while new swings go first.
@@ -188,7 +188,7 @@ node --test tests/*.test.js     # PowerShell: node --test (Get-ChildItem tests\*
 | `server/` | Home server (Windows) | Python/FastAPI. Stores clips; runs pose on every frame (MediaPipe, or RTMPose through ONNX, on the CPU or a GPU), finds the ball, impact and club shaft; works out key positions P1-P8 and swing numbers from both angles; clip quality; trust per number; good-shot ranges; practice mode; the labeling mode and scorecard (`eval.py`); two-camera 3D (off until calibrated). Serves the review page. |
 | `relay/` | Sim laptop | `square-watcher.ps1` reads new shots from Square Golf's local shot database and posts them to the server, which pairs each with its swing by time; `Start golf.cmd` starts Square's app and the watcher. `Start golf (GSPro).cmd` uses `shot-listener.ps1` instead, which stands in for GSPro so Square's GSPro connector sends shots (optional; carry worked out by `server/ballflight.py`). |
 | `train/` | Gaming PC (GPU) | Trains the club keypoint model (YOLO-pose) from labeled frames. |
-| `docs/` | | Reports, such as how the key positions are defined against the labels. |
+| `docs/` | | The details per part: phones, review page, scorecard, performance, club model, 3D, relay, key positions. |
 | `tools/` | Dev PC | `devproxy.js` (a checkout's pages with the server's real data) and `browser-check.js` (click-test a page in headless Edge). |
 | `public/` | Home server | The MediaPipe body model, and the downloaded ONNX models (`public/models`, not in git). |
 

@@ -20,7 +20,7 @@ scores its tracking takes.
 Both run on the CPU unless SWINGCLIPS_ORT_PROVIDER picks a GPU: cpu (the default), dml (DirectML:
 any DirectX 12 GPU on Windows, the Intel graphics built into the CPU too), cuda (NVIDIA) or auto (the
 first of cuda, dml, cpu that the installed ONNX Runtime has). The GPU ones need another ONNX Runtime
-package in place of the CPU one: requirements-dml.txt or requirements-cuda.txt (HOME-SETUP.md, "Using
+package in place of the CPU one: requirements-dml.txt or requirements-cuda.txt (docs/performance.md, "Using
 a GPU"). SWINGCLIPS_ORT_DEVICE picks the GPU by number (0, the default, is the first).
 """
 import hashlib
@@ -415,7 +415,7 @@ class ClubRunner:
     def __init__(self, path: Path | str | None = None, threads: int | None = None, where: str | None = None):
         self.path = Path(path) if path else club_model_path()
         if not self.path.is_file():
-            raise FileNotFoundError(f"{self.path} is missing: train it (HOME-SETUP.md, \"Training the club "
+            raise FileNotFoundError(f"{self.path} is missing: train it (docs/club-model.md, \"Training the club "
                                     "model\") or point SWINGCLIPS_CLUB_MODEL at it")
         self.session, self.provider = session(self.path, threads, where)
         _tell_loaded(self.path, self.provider)

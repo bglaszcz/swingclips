@@ -1,4 +1,4 @@
 # The server on the CPU (the default). With a GPU, requirements-dml.txt or requirements-cuda.txt
-# instead (HOME-SETUP.md, "Using a GPU"): each ONNX Runtime package replaces the others.
+# instead (docs/performance.md, "Using a GPU"): each ONNX Runtime package replaces the others.
 -r requirements-common.txt
 onnxruntime==1.30.0

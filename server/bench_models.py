@@ -17,7 +17,7 @@ requirements-dml.txt or requirements-cuda.txt is installed; or --providers):
    workers already up and the models loaded, is what counts, as on the server.
 3. The floor: the whole clip with no body model at all (MediaPipe only; the club as set). However
    fast a GPU runs the body model, a clip can't get below this: the rest stays on the CPU.
-4. Keeping up (pose.py's speed settings, HOME-SETUP.md "Keeping up during a session"): the whole clip
+4. Keeping up (pose.py's speed settings, docs/performance.md "Keeping up during a session"): the whole clip
    on the CPU with those settings as they were before them, next to the run as set now (1. and 2.
    run as set now too), and where each one's time went: milliseconds a frame for decoding,
    converting the picture, MediaPipe, the body model and the shaft search (and how many frames each
@@ -414,7 +414,7 @@ def verdict(result: dict) -> list[str]:
                          f"{quick['seconds']:.1f} s a clip, " + ("keeps up" if quick["seconds"] <= KEEP_UP_SECONDS
                                                                 else "doesn't keep up"))
         if best.get("label") and best is not now and best is not quick:
-            lines.append(f"  Fastest: {best['label']} (settings.cmd; see HOME-SETUP.md, \"Keeping up during a "
+            lines.append(f"  Fastest: {best['label']} (settings.cmd; see docs/performance.md, \"Keeping up during a "
                          "session\"), then bench_models.py --accuracy with it set")
         if best["where"] != "cpu":
             default = "" if best["default"] else f" and SWINGCLIPS_BODY_STRIDE={best['stride']}"
@@ -438,7 +438,7 @@ def verdict(result: dict) -> list[str]:
     if result["diffs"]:
         lines.append("  Small but not nothing: eval.py caches a GPU run apart, and --rerun --provider scores it.")
     if list(result["providers"]) == ["cpu"]:
-        lines.append("  Only the CPU here: install requirements-dml.txt (HOME-SETUP.md, \"Using a GPU\") to try the "
+        lines.append("  Only the CPU here: install requirements-dml.txt (docs/performance.md, \"Using a GPU\") to try the "
                      "built-in graphics.")
     return lines
 
@@ -625,7 +625,7 @@ def accuracy_verdict(before: dict, now: dict, joints: dict | None, tuned: dict, 
     lines.append("  No worse: " + ("yes" if not worse else "NO"))
     lines += [f"    {w}" for w in worse]
     if worse:
-        lines.append("  Put the setting(s) back one at a time (HOME-SETUP.md, \"Keeping up during a session\") and "
+        lines.append("  Put the setting(s) back one at a time (docs/performance.md, \"Keeping up during a session\") and "
                      "run this again to find which.")
     return lines
 

@@ -16,7 +16,7 @@ that body model instead, cached apart from MediaPipe's. With SWINGCLIPS_CLUB_BAC
 model finds the shaft (and the clubhead, scored in its own table) instead of the ray casting.
 With SWINGCLIPS_ORT_PROVIDER (or --provider dml|cuda|auto) those models run on a GPU for --rerun, cached
 apart from the CPU's: a GPU's results differ a little, so score it against the labels before the
-server uses it (HOME-SETUP.md, "Using a GPU"). pose.py's speed settings (HOME-SETUP.md, "Keeping up
+server uses it (docs/performance.md, "Using a GPU"). pose.py's speed settings (docs/performance.md, "Keeping up
 during a session") are cached apart too; bench_models.py --accuracy scores them against as before.
 
 The key positions and numbers are worked out by the review page's own JavaScript (as the server

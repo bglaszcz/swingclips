@@ -3,7 +3,9 @@
 Home golf swing system: two Android phones (`capture/`) record 240 fps clips when they hear the
 strike, a Windows home server (`server/`) analyzes them and serves the review page, and the sim
 laptop (`relay/`) sends Square Omni shots that pair with each swing. Goal: a single-digit handicap.
-README.md and HOME-SETUP.md describe the system; `docs/key-positions.md` the key-position rules.
+README.md and HOME-SETUP.md (the session, setup, settings, troubleshooting) describe the system;
+`docs/` has the details per part (phones, review page, scorecard, performance, club model, 3D, relay)
+and `docs/key-positions.md` the key-position rules. Update the doc for the part you change.
 
 ## Rules
 
@@ -36,4 +38,4 @@ node --test (Get-ChildItem tests\*.test.js).FullName
 | `server/static/` | The review page: `index.html` plus one JS file per feature, and `start.html` |
 | `capture/` | Android capture app (Kotlin) |
 | `relay/` | Sim laptop scripts (Square watcher, GSPro shot listener, `start-golf.ps1`) |
-| `train/`, `tools/`, `docs/` | Club model training; dev tools; key-position rules |
+| `train/`, `tools/`, `docs/` | Club model training; dev tools; the details behind HOME-SETUP.md (one file per part) |
