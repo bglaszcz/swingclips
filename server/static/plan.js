@@ -238,6 +238,9 @@
         why,
         drill: fix && fix.drill ? fix.drill : null,
         thought: fix && fix.thought ? fix.thought : null,
+        // A drill with its own recording mode (app.py /api/drill): the pump drill's pumps come
+        // seconds before the strike, so the phones keep more video and the swings stay out of trends.
+        drillMode: fix && fix.drill && /^Pump drill/.test(fix.drill) ? "pump" : null,
         button: {
           id: "practice",
           label: "Practice this",

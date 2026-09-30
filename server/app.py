@@ -45,6 +45,7 @@ from pydantic import BaseModel
 
 import ballflight
 import calib
+import drills
 import games
 import goodshots
 import labelcheck
@@ -845,7 +846,9 @@ def listed_clips(with_shots: bool = True, since: float | None = None) -> list[di
     by_name = {c["name"]: c for c in clips}
     excluded = set(load_excluded())
     for c in clips:
-        c["excluded"] = c["name"] in excluded or (c["partner"] or "") in excluded
+        # A drill swing (drills.py) is a rehearsal, not the usual swing: out of the trends too.
+        c["drill"] = drills_state.drill_at(c["_t"]) if SWING_NAME.match(c["name"]) else None
+        c["excluded"] = c["name"] in excluded or (c["partner"] or "") in excluded or bool(c["drill"])
     if not with_shots:
         for c in clips:
             c.pop("_t")
@@ -1379,6 +1382,40 @@ def get_noise():
     return noise_table
 
 
+# ---- Drill mode: longer lead-in on the phones, drill swings tagged and left out of trends (drills.py) ----
+DRILLS_FILE = Path(os.environ.get("SWINGCLIPS_DRILLS", CLIPS_DIR.parent / "drills.json"))
+drills_state = drills.Drills(DRILLS_FILE)
+
+
+def drills_tick() -> None:
+    """Ends a drill left on after the session, and keeps the phones' lead-in in step with it."""
+    drills_state.check(session_status.last_recording)
+    session_status.set_pre(drills_state.pre())
+
+
+@app.get("/api/drill")
+def get_drill():
+    """The drill that's on ({drill, from} or null), the drills there are, and recent drill stretches."""
+    drills_tick()
+    return drills_state.state()
+
+
+class DrillChoice(BaseModel):
+    drill: str | None = None
+
+
+@app.post("/api/drill")
+def set_drill(body: DrillChoice):
+    """Turns a drill on ({drill: "pump"}) or off ({drill: null})."""
+    try:
+        cur = drills_state.set(body.drill)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    drills_tick()
+    print(f"Drill: {drills.DRILLS[cur['drill']]['name'] if cur else 'off'}", flush=True)
+    return drills_state.state()
+
+
 # ---- Good shots: the rules for which shots count as good, per club (goodshots.py) ----
 # The page works out the personal ranges from them (static/goodshots.js).
 GOODSHOTS_FILE = Path(os.environ.get("SWINGCLIPS_GOODSHOTS", CLIPS_DIR.parent / "goodshots.json"))
@@ -1625,7 +1662,8 @@ async def phone_poll(angle: str, request: Request, wait: float = Query(0, ge=0, 
     """A capture phone (0.6 and later) reports in: its state as JSON, with its answers to commands
     ("acks"). Held open up to `wait` s until there's a command or something to say for it (a long
     poll): {commands: [{id, action}], say: [{id, text, flush}], ms (the server's clock),
-    quiet (s not to listen for strikes: the other phone is talking; 0 = listen again; only when new)}."""
+    quiet (s not to listen for strikes: the other phone is talking; 0 = listen again; only when new),
+    pre (s of video to keep before the strike, more during a drill; only when it should change)}."""
     if angle not in status.ANGLES:
         raise HTTPException(404, "No such camera angle")
     try:
@@ -1635,6 +1673,7 @@ async def phone_poll(angle: str, request: Request, wait: float = Query(0, ge=0, 
     if not isinstance(body, dict):
         raise HTTPException(400, "Expected the phone's state")
     session_status.heartbeat(angle, body)
+    drills_tick()
     give_up = time.monotonic() + wait
     while not session_status.has_mail(angle) and time.monotonic() < give_up:
         if await request.is_disconnected():
@@ -1647,6 +1686,8 @@ async def phone_poll(angle: str, request: Request, wait: float = Query(0, ge=0, 
         sent_to_say(angle, x["text"], "phone poll")
     if "quiet" in out:
         log_event("quiet", to=angle, s=out["quiet"])
+    if "pre" in out:
+        log_event("pre", to=angle, s=out["pre"])
     return out
 
 

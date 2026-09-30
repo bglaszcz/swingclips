@@ -23,6 +23,8 @@ class PhoneLink(
     private val say: (PhoneSay) -> Unit,
     /** Seconds not to listen for strikes from now: the other phone is talking (0 = listen again). */
     private val quiet: (Double) -> Unit = {},
+    /** Seconds of video to keep before the strike from now on (more while the server has a drill on). */
+    private val pre: (Double) -> Unit = {},
 ) {
     private val inbox = CommandInbox()
     @Volatile private var generation = 0
@@ -112,6 +114,7 @@ class PhoneLink(
                 first = false
                 failures = 0
                 if (reply.has("quiet")) quiet(reply.optDouble("quiet", 0.0))
+                if (reply.has("pre")) pre(reply.optDouble("pre", 2.0))
                 val says = reply.optJSONArray("say")
                 for (i in 0 until (says?.length() ?: 0)) {
                     val s = says!!.getJSONObject(i)

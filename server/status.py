@@ -90,7 +90,7 @@ PHONE_FIELDS = {
     "recording": bool, "mode": str, "shutter": str, "shutterUsed": str, "exposure": str,
     "battery": int, "charging": bool, "freeMb": int, "version": str, "pending": int,
     "practiceVoice": bool, "setupVoice": str, "autoStart": bool, "busy": str, "cameraError": str,
-    "saved": int, "closing": bool, "speaking": bool,
+    "saved": int, "closing": bool, "speaking": bool, "pre": int,
 }
 RELAY_FIELDS = {"source": str, "squareRunning": bool, "lastShotAt": str, "version": str,
                 "monitorConnected": bool, "monitorReady": bool}
@@ -374,6 +374,10 @@ class Status:
         # (when it reported it had stopped); quiet_sent: angle -> the quiet-until it was last told.
         self.talk: dict[str, dict] = {a: {"sent": 0.0, "words": 0, "stopped": 0.0} for a in ANGLES}
         self.quiet_sent: dict[str, float] = {a: 0.0 for a in ANGLES}
+        # Seconds each phone should keep before the strike (more during a drill, drills.py), and what
+        # each was last told; phones from 0.10 report theirs as "pre".
+        self.pre_wanted = 2
+        self.pre_sent: dict[str, int | None] = {a: None for a in ANGLES}
 
     def _id(self) -> int:
         self.last_id = max(self.last_id + 1, int(self.clock() * 1000))
@@ -402,8 +406,11 @@ class Status:
             # minute and comes back recording is the same session).
             before = now - self.last_recording <= SESSION_TAIL_S and any(
                 p["hb"].get("recording") and not p["hb"].get("closing") for p in self.phones.values())
-            was = self.phones.get(angle, {}).get("hb", {}).get("speaking")
+            old = self.phones.get(angle, {}).get("hb", {})
+            was = old.get("speaking")
             self.phones[angle] = {"hb": clean(body, PHONE_FIELDS), "seen": now}
+            if self.phones[angle]["hb"].get("pre") != old.get("pre"):
+                self.pre_sent[angle] = None   # it changed on its own (the app restarted): tell it again
             if was and not self.phones[angle]["hb"].get("speaking"):
                 self.talk[angle]["stopped"] = now
             for ack in body.get("acks") or []:
@@ -473,13 +480,28 @@ class Status:
             return q
         return None
 
+    def set_pre(self, seconds: int) -> None:
+        """How many seconds the phones should keep before the strike (drills.py); each is told on its poll."""
+        with self.lock:
+            if seconds != self.pre_wanted:
+                self.pre_wanted = seconds
+                self.pre_sent = {a: None for a in ANGLES}
+
+    def _pre_news(self, angle: str) -> int | None:
+        """The pre-strike seconds phone `angle` should switch to and hasn't been told (None if nothing)."""
+        p = self.phones.get(angle)
+        hb = p["hb"] if p else {}
+        if "pre" in hb and hb["pre"] != self.pre_wanted and self.pre_sent[angle] != self.pre_wanted:
+            return self.pre_wanted
+        return None
+
     def has_mail(self, angle: str) -> bool:
         now = self.clock()
         with self.lock:
             self._expire(now)
             return any(c["angle"] == angle and c["state"] == "queued" for c in self.commands) or \
                 any(now - x["made"] <= SAY_WITHIN_S for x in self.outbox[angle]) or \
-                self._quiet_news(angle, now) is not None
+                self._quiet_news(angle, now) is not None or self._pre_news(angle) is not None
 
     def take(self, angle: str) -> dict:
         """The commands and sentences for a phone's poll; each goes out once."""
@@ -500,6 +522,10 @@ class Status:
                 # Seconds from now (the phones' clocks aren't the server's); 0 = listen again.
                 self.quiet_sent[angle] = q
                 out["quiet"] = round(max(0.0, q - now), 2)
+            pre = self._pre_news(angle)
+            if pre is not None:
+                self.pre_sent[angle] = pre
+                out["pre"] = pre
             return out
 
     # ---- Commands from the review page ----

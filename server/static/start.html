@@ -318,7 +318,7 @@ function renderSwings(clips) {
 }
 
 // ---- 5. Today's plan ----
-let journalData = null, allClips = null, practiceConfig = null, swingRecords = null;
+let journalData = null, allClips = null, practiceConfig = null, swingRecords = null, drillState = null;
 
 function renderPlan() {
   if (typeof SwingPlan === "undefined") return;
@@ -419,7 +419,9 @@ function renderPlan() {
           commandGame("/api/game", { game: b.button.gameId });
         };
       }
-      act.append(btn, noteSpan);
+      act.append(btn);
+      if (b.drillMode) act.append(drillButton(b.drillMode));
+      act.append(noteSpan);
       card.append(act);
     }
 
@@ -429,13 +431,38 @@ function renderPlan() {
   box.replaceChildren(...cards);
 }
 
+/** Drill mode on/off (app.py /api/drill): the phones keep more video before the strike, and the swings are tagged. */
+function drillButton(id) {
+  const cur = drillState && drillState.current;
+  const on = !!cur && cur.drill === id;
+  const d = ((drillState && drillState.drills) || []).find(x => x.id === id);
+  const name = d ? d.name : id;
+  const btn = document.createElement("button");
+  btn.className = "plan-btn" + (on ? " on" : "");
+  btn.textContent = on ? `Recording ${name.toLowerCase()}s (stop)` : `Record ${name.toLowerCase()}s`;
+  btn.title = `While on, the phones keep ${d ? d.pre : 6} s before the strike so the pumps are in the clip; `
+    + "these swings are tagged and left out of your trends and good-shot ranges. Ends by itself 30 minutes after recording stops.";
+  btn.onclick = async () => {
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/drill", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ drill: on ? null : id }) });
+      if (res.ok) drillState = await res.json();
+    } catch { /* stays as it was */ }
+    renderPlan();
+  };
+  return btn;
+}
+
 async function loadPlanData() {
-  const [j, c, pr, s] = await Promise.all([
+  const [j, c, pr, s, d] = await Promise.all([
     getJson("/api/journal"),
     getJson("/api/clips"),
     getJson("/api/practice"),
-    getJson("/api/swings")
+    getJson("/api/swings"),
+    getJson("/api/drill")
   ]);
+  if (d) drillState = d;
   if (j) journalData = j;
   if (c) allClips = c;
   if (pr) practiceConfig = pr.config;

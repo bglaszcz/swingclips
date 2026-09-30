@@ -35,7 +35,9 @@ end).
    phones as soon as they connect, without the page.) Section 5 (**Today's plan**) lays out an
    ordered 45-minute practice session of 60-80 balls tailored to your data: warm-up wedge shots, your
    current focus with its drill and a "Practice this" button, a scoring-zone block based on your
-   worst Combine targets or wedge matrix gap, and a finishing test (Combine or weakest area). Section 6
+   worst Combine targets or wedge matrix gap, and a finishing test (Combine or weakest area). With the pump drill as your focus drill, "Record pump
+   drills" makes the phones keep 6 s before the strike (for the pumps) and keeps those swings out of your
+   trends until you stop it. Section 6
    (**Play a game**) starts or stops practice games with the current target shown large, for reading
    from the mat.
 5. **Hit balls** once Ready is green. After the first analyzed swing (about a minute) the speaking

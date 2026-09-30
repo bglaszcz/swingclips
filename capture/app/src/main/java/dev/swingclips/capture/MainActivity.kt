@@ -78,6 +78,8 @@ class MainActivity : Activity() {
     // one is: the strike listener ignores both, since a phone's voice set the other one recording.
     @Volatile private var speaking = false
     @Volatile private var otherTalksUntil = 0L
+    // Seconds kept before the strike: PRE_S, or more while the server has a drill on (its pumps come early).
+    @Volatile private var preS = PRE_S
     /** The camera's last error since it was opened (reported to the review page). */
     @Volatile private var cameraError: String? = null
     /** What the camera really used for exposure (e.g. "1/1000 s, ISO 800"), and how ("manual", "auto"...). */
@@ -143,6 +145,7 @@ class MainActivity : Activity() {
             onCommand = { cmd -> onMain(3000) { doCommand(cmd) } ?: CommandAck(cmd.id, false, "the phone didn't answer in time") },
             say = { s -> main.post { if (s.flush) cameraSetup.sayNow(s.text) else cameraSetup.say(s.text) } },
             quiet = { s -> otherTalksUntil = System.nanoTime() + (s * 1e9).toLong() },
+            pre = { s -> preS = s.coerceIn(PRE_S, PRE_MAX_S) },   // the next poll reports it
         )
         practiceVoice = PracticeVoice(::serverUrl, ::angle, ::practiceVoiceOn, { cameraSetup.say(it) }) { text ->
             main.post { practiceView.text = text }
@@ -207,7 +210,7 @@ class MainActivity : Activity() {
         cameraError = null
         shutterUsed = null
         exposureKind = null
-        recorder = ReplayRecorder(this, cam.cameraId, m, preview.holder.surface, PRE_S + POST_S + 2.0,
+        recorder = ReplayRecorder(this, cam.cameraId, m, preview.holder.surface, PRE_MAX_S + POST_S + 2.0,
             onError = { msg -> main.post { cameraError = msg; setStatus("Camera problem: $msg", Color.rgb(245, 158, 11)) } },
             shutter = shutter(),
             onExposure = { report -> main.post { showExposure(report, m) } },
@@ -262,7 +265,7 @@ class MainActivity : Activity() {
             val giveUp = System.currentTimeMillis() + ((POST_S + 3) * 1000).toLong()
             while ((rec.newestUs() ?: 0) < endUs && System.currentTimeMillis() < giveUp) Thread.sleep(100)
             val tmp = File(outbox, "swing_$wallMs.tmp")
-            val at = runCatching { rec.save(momentUs, (PRE_S * 1e6).toLong(), (POST_S * 1e6).toLong(), tmp) }
+            val at = runCatching { rec.save(momentUs, (preS * 1e6).toLong(), (POST_S * 1e6).toLong(), tmp) }
                 .onFailure { android.util.Log.e(ReplayRecorder.TAG, "save failed", it) }
                 .getOrNull()
             // e.g. swing_dtl_1280x720_240fps_1789123456_2137ms.mp4: the angle, the strike's time (server
@@ -395,6 +398,7 @@ class MainActivity : Activity() {
             "busy" to if (settingOpen) PhoneControl.BUSY_SETTING else null,
             "cameraError" to cameraError?.let { PhoneControl.cameraProblem(it) },
             "speaking" to speaking,
+            "pre" to preS.toInt(),
         )
     }
 
@@ -931,7 +935,7 @@ class MainActivity : Activity() {
             textSize = 12f
             setTextColor(MUTED)
             setPadding(0, dp(16), 0, 0)
-            text = "Each swing saves ${PRE_S.toInt()} s before and ${POST_S.toInt()} s after the strike and goes to the server by itself. " +
+            text = "Each swing saves ${PRE_S.toInt()} s (${PRE_MAX_S.toInt()} s during a drill) before and ${POST_S.toInt()} s after the strike and goes to the server by itself. " +
                 "Set the sensitivity so the white line sits just above the room's noise; the bar should jump past it on a strike."
         })
         val scroll = ScrollView(this).apply { addView(card) }
@@ -991,6 +995,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val PRE_S = 2.0
+        private const val PRE_MAX_S = 8.0
         private const val POST_S = 2.0
         // Android can't look up Windows PC names, so the home server's LAN address.
         private const val DEFAULT_SERVER = "http://192.168.86.250:8000"

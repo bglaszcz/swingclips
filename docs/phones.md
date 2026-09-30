@@ -222,7 +222,10 @@ review page starts them and one of them does the talking.
   the other phone doesn't listen either: the server tells it as it sends the sentence (before the
   voice starts), the speaking phone reports `speaking` and when it stops, and the other phone
   listens again 1.5 s after (`status.py TALK_*`; logged as `quiet`, seconds not to listen). With
-  an older speaking phone the whole sentence is estimated (0.4 s a word). Such a **phantom**
+  an older speaking phone the whole sentence is estimated (0.4 s a word). From 0.10 a phone reports
+  `pre`, the seconds it keeps before the strike (2), and the poll's answer carries a new `pre` while a
+  drill is on (6 for the pump drill, `drills.py`; logged as `pre`); the phone buffers 8 s before the
+  strike so it can switch at once, and goes back to 2 when the drill ends. Older apps are left at 2. Such a **phantom**
   (one phone alone, no swing found, no Square shot: `status.py phantom`) isn't treated as a swing:
   practice mode doesn't say "no reading" about it and the health check doesn't count it (logged as
   `check` with `ignored`). Before, each did speak, and that set off the next phantom: a loop that

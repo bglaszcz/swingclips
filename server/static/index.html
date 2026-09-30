@@ -2908,7 +2908,7 @@ function clipRow(c) {
   const other = c.partner && clips.find(x => x.name === c.partner);
   const angles = other ? "2 angles" : c.angle === "dtl" ? "down the line only" : "face-on only";
   const size = c.size + (other ? other.size : 0);
-  li.querySelector(".meta").textContent = [result ? time : "", angles, c.excluded ? "left out of trends" : ""]
+  li.querySelector(".meta").textContent = [result ? time : "", angles, leftOutText(c)]
     .filter(Boolean).join(" · ");
   li.title = [modeOf(c.name), fmtSize(size)].filter(Boolean).join(" · ");
   // The swing's analysis is as far along as its slower angle.
@@ -3041,7 +3041,7 @@ function renderSwingHead() {
   sub.className = "sh-sub";
   const partnerClip = c.partner && clipOf(c.partner);
   sub.textContent = [fmtWhen(c.recorded), partnerClip ? "face-on + down the line" : c.angle === "dtl" ? "down the line only" : "face-on only",
-    modeOf(c.name), c.excluded ? "left out of trends" : ""].filter(Boolean).join(" · ");
+    modeOf(c.name), leftOutText(c)].filter(Boolean).join(" · ");
   const text = document.createElement("div");
   text.className = "sh-text";
   text.append(title, sub);
@@ -3151,12 +3151,18 @@ function closeViewer() {
   history.replaceState(null, "", location.pathname);
 }
 
+/** Why a swing doesn't count in the trends: a drill swing (app.py /api/drill), or left out by hand. */
+function leftOutText(c) {
+  return c.drill ? `${c.drill} drill · left out of trends` : c.excluded ? "left out of trends" : "";
+}
+
 /** The Leave out button shows whether the open swing counts in the trends. */
 function updateExcludeButton() {
   renderSwingHead();
   const c = clips.find(c => c.name === current), b = document.getElementById("exclude");
   b.classList.toggle("on", !!(c && c.excluded));
-  b.textContent = c && c.excluded ? "Left out of trends (put back)" : "Leave out";
+  b.textContent = c && c.drill ? "Drill swing: left out of trends" : c && c.excluded ? "Left out of trends (put back)" : "Leave out";
+  b.disabled = !!(c && c.drill);
   // It's in the ⋯ menu, so say it on the menu's button too.
   document.getElementById("more-btn").textContent = c && c.excluded ? "Left out ⋯" : "⋯";
 }

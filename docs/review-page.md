@@ -327,3 +327,10 @@ toward the ball". The phones face away from you, so voice is the channel.
   a game (Combine if due for weekly benchmark >= 7 days, else a game targeting the weakest area like Driving
   for low fairway percentage or Distance control for wide carry spread). Pure logic in `static/plan.js`, tested
   in `tests/plan.test.js`.
+- **Drill mode** (`drills.py`, `/api/drill`): when the focus drill is the pump drill, the plan's focus
+  block has "Record pump drills". While it's on the phones (capture app 0.10) keep 6 s before the strike
+  instead of 2, so the pumps are in the clip, and every swing recorded is tagged with the drill (by time,
+  `drills.json`) and left out of the trends, good-shot ranges, noise table and labeling worklist: a
+  rehearsal isn't the usual swing. The swing list says "pump drill · left out of trends". It ends when
+  turned off, or 30 minutes after the phones stop recording. Key positions on drill swings aren't drill-aware
+  yet (next: pump checkpoints scored against the good P6 range, the final swing measured back from impact).
