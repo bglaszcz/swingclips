@@ -1239,9 +1239,9 @@ set SWINGCLIPS_CLUB_BACKEND=yolo
 - Not used, on purpose: the unofficial Bluetooth connector `brentyates/squaregolf-connector` was
   taken down by a DMCA notice (Sept 2026) alleging code taken from Square's private systems.
 
-### The original web app (`src/`)
-Danny's phone web app plus this fork's pose overlay and key-position stills, all on the phone.
-The phone's browser can't record above 30 fps, which is why the capture app exists.
+### The original web app
+Danny's phone web app (Next.js) was removed from this fork on 2026-09-30 (it's in the git history):
+the phone's browser can't record above 30 fps, which is why the capture app exists.
 
 ## Network notes
 - Android can't resolve Windows PC names, so the phone app uses the server's IP. Reserve

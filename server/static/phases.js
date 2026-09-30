@@ -1,5 +1,5 @@
 // The P1-P8 swing checkpoints, found from the pose track. Ported from the phone app
-// (src/utils/swingPhases.ts), with two changes for the server's clips:
+// (src/utils/swingPhases.ts, since removed; in the git history), with two changes for the server's clips:
 //  - impact is the first frame the ball is gone from the mat, when the server found the ball
 //    (see server/pose.py); otherwise it comes from the hand path;
 //  - 240 fps frames are ~4 ms apart, where raw hand speed is mostly tracking jitter, so positions

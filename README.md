@@ -171,7 +171,7 @@ adb connect 192.168.86.17:5555          # the down-the-line phone over Wi-Fi (af
 # Server tests (Python + the page's JavaScript)
 cd server
 .venv/Scripts/python.exe -m unittest discover tests
-node --test tests/compare.test.js tests/trust.test.js tests/goodshots.test.js
+node --test tests/*.test.js     # PowerShell: node --test (Get-ChildItem tests\*.test.js).FullName
 
 # Refresh the labeled swings in the repo from the server, then tune key positions on them
 .venv/Scripts/python.exe fixtures_export.py
@@ -179,8 +179,6 @@ node --test tests/compare.test.js tests/trust.test.js tests/goodshots.test.js
 ```
 
 - `adb` is in `%LOCALAPPDATA%\Android\Sdk\platform-tools`.
-- **The original web app:** `npm install`, then `npm run dev` and open http://localhost:3000.
-  Camera and microphone need HTTPS or localhost.
 
 ## What's in the repo
 
@@ -191,10 +189,12 @@ node --test tests/compare.test.js tests/trust.test.js tests/goodshots.test.js
 | `relay/` | Sim laptop | `square-watcher.ps1` reads new shots from Square Golf's local shot database and posts them to the server, which pairs each with its swing by time; `Start golf.cmd` starts Square's app and the watcher. `Start golf (GSPro).cmd` uses `shot-listener.ps1` instead, which stands in for GSPro so Square's GSPro connector sends shots (optional; carry worked out by `server/ballflight.py`). |
 | `train/` | Gaming PC (GPU) | Trains the club keypoint model (YOLO-pose) from labeled frames. |
 | `docs/` | | Reports, such as how the key positions are defined against the labels. |
-| `src/` | Phone browser | The original web app (Next.js), plus this fork's pose overlay and key-position stills. |
+| `tools/` | Dev PC | `devproxy.js` (a checkout's pages with the server's real data) and `browser-check.js` (click-test a page in headless Edge). |
+| `public/` | Home server | The MediaPipe body model, and the downloaded ONNX models (`public/models`, not in git). |
 
 ## Credits and license
 
 The original SwingClips web app, including its sound-triggered strike detection, is by
 [Danny](https://github.com/danny2p/swingclips) ([Garage Golf on YouTube](https://www.youtube.com/@garagegolfers)).
-MIT License.
+MIT License. The original web app itself (Next.js, `src/`) was removed from this fork on
+2026-09-30; it's in the git history before then.
