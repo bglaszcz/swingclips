@@ -126,3 +126,19 @@ test("faults get a phase, a severity from the distance past the threshold, and a
   assert.ok(res.faults[0].severity > res.faults[1].severity);
   assert.ok(res.faults.every(f => f.severity >= 1 && f.severity <= 3));
 });
+
+test("faults receive linkNote when a strong link matches another fault on this swing", () => {
+  const positions = [{ key: "p6", index: 15, t: 0.8 }, { key: "p7", index: 20, t: 0.9 }];
+  const faults = [
+    { key: "releaseArm", name: "casting", value: -15 },
+    { key: "earlyExt", name: "early extension", value: 4.5 },
+  ];
+  const strongLinks = [
+    { a: { name: "casting" }, b: { name: "early extension" }, label: "Strong" },
+  ];
+  const res = Scorecard.buildScorecard(positions, {}, {}, {}, faults, strongLinks);
+  const casting = res.faults.find(f => f.name === "casting");
+  const ee = res.faults.find(f => f.name === "early extension");
+  assert.strictEqual(casting.linkNote, "Often comes with early extension");
+  assert.strictEqual(ee.linkNote, "Often comes with casting");
+});

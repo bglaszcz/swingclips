@@ -13,7 +13,10 @@ const argv = process.argv.slice(2);
 args.url = argv.shift();
 for (let i = 0; i < argv.length; i += 2) {
   const k = argv[i].replace(/^--/, "");
-  if (k === "eval" || k === "init") args[k].push(argv[i + 1]); else args[k] = argv[i + 1];
+  if (k === "eval" || k === "init") args[k].push(argv[i + 1]);
+  else if (k === "init-file") args.init.push(fs.readFileSync(argv[i + 1], "utf8"));
+  else if (k === "eval-file") args.eval.push(fs.readFileSync(argv[i + 1], "utf8"));
+  else args[k] = argv[i + 1];
 }
 if (!args.url) { console.error("Usage: node tools/browser-check.js <url> [--width n] [--height n] [--wait ms] [--eval js]... [--shot file.png] [--shot-el selector]"); process.exit(1); }
 const W = Number(args.width || 1280), H = Number(args.height || 900), WAIT = Number(args.wait || 6000);
