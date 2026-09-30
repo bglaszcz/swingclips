@@ -123,6 +123,14 @@
   .prog-report textarea { width: 100%; min-height: 220px; margin-top: 8px; font: 12px/1.4 ui-monospace, Consolas, monospace;
                           background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
   .prog-report img { max-width: 100%; max-height: 420px; border-radius: 8px; margin-top: 8px; display: block; }
+  .prog-past-run { padding: 8px 10px; border-radius: 8px; background: var(--panel-2); margin-top: 6px; font-size: 13px; }
+  .prog-past-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .prog-past-head span { color: var(--muted); }
+  .prog-past-copy { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+  .prog-past-blocks { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 4px; font-size: 13px; }
+  .prog-past-blocks div { display: flex; align-items: center; gap: 6px; }
+  .prog-trend-box { margin: 8px 0; display: grid; gap: 4px; }
+  .prog-trend-box .plan-note { font-weight: 500; color: var(--text); background: var(--panel-2); padding: 8px 10px; border-radius: 6px; margin: 0; }
   @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; } }
 </style>
 <script src="/static/games.js"></script>
@@ -135,6 +143,7 @@
 <script src="/static/trust.js"></script>
 <script src="/static/drillsets.js"></script>
 <script src="/static/plan.js"></script>
+<script src="/static/programhistory.js"></script>
 </head>
 <body>
 <header>
@@ -187,6 +196,7 @@
         <button class="primary" id="prog-start">Start program</button>
       </div>
       <div class="prog-blocks" id="prog-plan"></div>
+      <div id="prog-history"></div>
     </div>
     <div id="prog-active" hidden>
       <div class="prog-head"><b id="prog-name"></b><span id="prog-used"></span></div>
@@ -633,6 +643,7 @@ function renderProgram(data) {
     $("prog-hint").textContent = cur ? `${cur.from}. ${cur.cap} swings at most (every swing counts, no-ball reps too); ${cur.clubs}.`
       : "No programs in programs.json.";
     $("prog-plan").replaceChildren(...(cur ? cur.blocks.map(b => blockLine(b)) : []));
+    renderProgramHistory(data);
     return;
   }
   $("prog-hint").textContent = "Drill blocks switch drill mode on (left out of your trends); Square's numbers still count for the gate and the report.";
@@ -697,17 +708,119 @@ function renderProgram(data) {
   $("prog-blocks").replaceChildren(...run.blocks.map(blockLine));
 }
 
-$("prog-select").onchange = () => renderProgram(programState);
-$("prog-start").onclick = () => programPost("/api/program", { program: $("prog-select").value });
-$("prog-next").onclick = () => programPost("/api/program/next");
-$("prog-stop").onclick = () => { if (confirm("Stop the program? It's saved as it stands.")) programPost("/api/program/stop"); };
-$("prog-copy").onclick = async () => {
-  const rep = await getJson("/api/program/report");
+function renderProgramHistory(data) {
+  const histBox = $("prog-history");
+  if (!histBox) return;
+  histBox.replaceChildren();
+  if (typeof SwingProgramHistory === "undefined" || !data) return;
+
+  const sel = $("prog-select");
+  const curId = sel ? sel.value : null;
+  if (!curId) return;
+
+  const curProg = (data.programs || []).find(p => p.id === curId);
+  const allRuns = SwingProgramHistory.runs(data.log || [], data.programs || []);
+  const runsForProg = allRuns.filter(r => r.id === curId);
+  if (!runsForProg.length) return;
+
+  // Plus the trend lines for each ball block when there are 2+ runs
+  const ballBlocks = (curProg?.blocks || []).filter(b => b.ball);
+  const trendLines = [];
+  for (const b of ballBlocks) {
+    const t = SwingProgramHistory.trend(runsForProg, curId, b.id);
+    if (t) {
+      trendLines.push(...SwingProgramHistory.lines(t));
+    }
+  }
+
+  if (trendLines.length) {
+    const tBox = document.createElement("div");
+    tBox.className = "prog-trend-box";
+    for (const l of trendLines) {
+      const d = document.createElement("div");
+      d.className = "plan-note prog-trend-line";
+      d.textContent = l;
+      tBox.append(d);
+    }
+    histBox.append(tBox);
+  }
+
+  // Past runs (last 5, newest first)
+  const pastRuns = runsForProg.slice(0, 5);
+  const listDiv = document.createElement("div");
+  listDiv.className = "prog-past-list";
+
+  for (const r of pastRuns) {
+    const row = document.createElement("div");
+    row.className = "prog-past-run";
+
+    const head = document.createElement("div");
+    head.className = "prog-past-head";
+
+    const dateEl = document.createElement("b");
+    dateEl.textContent = r.date || (r.day ? r.day.slice(0, 10) : "");
+
+    const swingsEl = document.createElement("span");
+    swingsEl.textContent = `${r.swingsUsed}/${r.cap} swings` + (r.how && r.how !== "done" ? ` (${r.how})` : "");
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "plan-btn prog-past-copy";
+    copyBtn.textContent = "Copy for coach";
+    copyBtn.onclick = () => copyProgramReport(r.started);
+
+    head.append(dateEl, swingsEl, copyBtn);
+    row.append(head);
+
+    const blocksDiv = document.createElement("div");
+    blocksDiv.className = "prog-past-blocks";
+
+    for (const b of r.blocks) {
+      const blkEl = document.createElement("div");
+      const tagCls = b.result === "passed" ? "tag ok" : b.result === "not passed" ? "tag bad" : "tag wait";
+      const tagText = b.result || "pending";
+      let gateCount = "";
+      if (b.result !== "skipped" && b.state) {
+        if (b.gate?.kind === "streak") {
+          gateCount = `${b.state.best ?? b.state.streak ?? 0}/${b.gate.need}`;
+        } else if (b.state.reps != null) {
+          gateCount = `${b.state.passes}/${b.state.reps}`;
+        }
+      }
+      blkEl.innerHTML = `<b>${esc(b.name)}</b> <span class="${tagCls}">${esc(tagText)}</span>` +
+        (gateCount ? ` <span>${esc(gateCount)}</span>` : "");
+      blocksDiv.append(blkEl);
+    }
+
+    row.append(blocksDiv);
+    listDiv.append(row);
+  }
+
+  if (runsForProg.length > 2) {
+    const details = document.createElement("details");
+    details.className = "prog-past-fold";
+    const summary = document.createElement("summary");
+    summary.style.cursor = "pointer";
+    summary.style.fontWeight = "600";
+    summary.style.margin = "8px 0 4px";
+    summary.textContent = `Past runs (${runsForProg.length})`;
+    details.append(summary, listDiv);
+    histBox.append(details);
+  } else {
+    const title = document.createElement("div");
+    title.style.fontWeight = "600";
+    title.style.margin = "8px 0 4px";
+    title.textContent = "Past runs";
+    histBox.append(title, listDiv);
+  }
+}
+
+async function copyProgramReport(started) {
+  const url = started != null ? `/api/program/report?started=${encodeURIComponent(started)}` : "/api/program/report";
+  const rep = await getJson(url);
   const ta = $("prog-report");
-  if (!rep) { $("prog-copied").textContent = "No program yet."; return; }
+  if (!rep) { $("prog-copied").textContent = "No program report yet."; return; }
   ta.hidden = false;
   ta.value = rep.text;
-  // The server is plain http on the home network: the clipboard API needs https, so select and copy.
   ta.select();
   let ok = false;
   try { ok = document.execCommand("copy"); } catch { ok = false; }
@@ -719,7 +832,14 @@ $("prog-copy").onclick = async () => {
     ? `<div class="plan-note">Down the line at impact (${esc(f.block)} ball swing): save the picture and attach it to the chat.</div>
        <a href="/api/still/${encodeURIComponent(clip)}" download="impact-dtl.jpg"><img src="/api/still/${encodeURIComponent(clip)}" alt="Down the line at impact"></a>`
     : `<div class="plan-note">The ${esc(f.block)} ball swing has no down-the-line clip.</div>`;
-};
+  $("prog-report-box").hidden = false;
+}
+
+$("prog-select").onchange = () => renderProgram(programState);
+$("prog-start").onclick = () => programPost("/api/program", { program: $("prog-select").value });
+$("prog-next").onclick = () => programPost("/api/program/next");
+$("prog-stop").onclick = () => { if (confirm("Stop the program? It's saved as it stands.")) programPost("/api/program/stop"); };
+$("prog-copy").onclick = () => copyProgramReport();
 
 let programTimer = 0;
 async function pollProgram() {
