@@ -158,6 +158,18 @@ class ProgramsTest(unittest.TestCase):
         self.assertIsNone(self.p.run)
         self.assertEqual(self.p.state()["log"][-1]["how"], "cap")
 
+    def test_finished_runs_come_judged(self):
+        self.p.start("lowpoint")
+        self.p.next_block()
+        self.p.next_block()
+        self.hit(shot(), mark=True)
+        self.hit(shot(attack=0.0), mark=True)
+        self.p.stop()
+        run = self.p.state()["log"][-1]
+        flush = next(b for b in run["blocks"] if b["id"] == "flush")
+        self.assertEqual([r["gate"] for r in flush["judged"]], [True, False])
+        self.assertEqual((flush["state"]["reps"], flush["state"]["passes"]), (2, 1))
+
     def test_undo_takes_back_the_last_tap(self):
         self.p.start("lowpoint")
         self.taps(True, False)

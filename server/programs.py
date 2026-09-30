@@ -181,6 +181,12 @@ def progress_text(block: dict, st: dict) -> str:
     return f"{st['passes']} of {st['reps']} passed, {g['need']} needed"
 
 
+def judged_blocks(p: dict, run: dict) -> list[dict]:
+    """Each block of a run (in play or finished) with its gate state, result and judged reps."""
+    return [{**b, "state": block_state(b, run["reps"], run["marks"]), "result": run["results"].get(b["id"]),
+             "judged": judged(b, run["reps"], run["marks"])} for b in p["blocks"]]
+
+
 class Programs:
     """The program in play, finished programs, and what the phone should say. Thread-safe.
     `on_block(drill or None)` is called when a block starts or the program ends (drill mode)."""
@@ -326,8 +332,12 @@ class Programs:
             return [e for e in self.said if e["id"] > since and now - e["made"] <= SPEAK_WITHIN_S]
 
     def state(self, log_limit: int = 20) -> dict:
+        """The program in play, the programs, and finished runs (newest last), each with its blocks
+        judged as the gates judged them ("blocks": id, name, result, state, judged reps)."""
         with self.lock:
-            return {"program": self._state(), "programs": self.catalog(), "log": self._log()[-log_limit:]}
+            log = [dict(x, blocks=judged_blocks(self.programs[x["id"]], x)) if x.get("id") in self.programs else x
+                   for x in self._log()[-log_limit:]]
+            return {"program": self._state(), "programs": self.catalog(), "log": log}
 
     def report(self, started: float | None = None) -> dict | None:
         """The report for the coach, of the program in play (or the finished one started at `started`,
@@ -418,12 +428,7 @@ class Programs:
         if not self.run:
             return None
         p, block = self._current()
-        blocks = []
-        for i, b in enumerate(p["blocks"]):
-            js = judged(b, self.run["reps"], self.run["marks"])
-            blocks.append({**b, "state": block_state(b, self.run["reps"], self.run["marks"]),
-                           "result": self.run["results"].get(b["id"]), "now": i == self.run["block"],
-                           "judged": js})
+        blocks = [{**b, "now": i == self.run["block"]} for i, b in enumerate(judged_blocks(p, self.run))]
         return {"id": p["id"], "name": p["name"], "started": self.run["started"], "cap": p["cap"],
                 "used": self._swings_used(), "block": self.run["block"], "blocks": blocks,
                 "progress": progress_text(block, block_state(block, self.run["reps"], self.run["marks"]))}
