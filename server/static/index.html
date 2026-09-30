@@ -438,6 +438,9 @@
   .p-alt { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
   .p-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .p-chips button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .p-drill-sets { margin-bottom: 8px; }
+  .p-drill-sets .drill-set-line { cursor: pointer; padding: 3px 6px; border-radius: 6px; margin: 1px -6px; }
+  .p-drill-sets .drill-set-line:hover { background: var(--panel-2); }
   .p-focus-line { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; }
   .p-focus-label { fill: var(--accent); font-size: 11px; }
   .p-link { border-bottom: 1px solid var(--line); padding: 6px 0 8px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
@@ -1172,6 +1175,7 @@
     <div class="p-step"><span class="p-step-n">3</span>Is it working?</div>
     <div class="t-card" id="p-chart">
       <div id="p-combine-line" class="note" style="margin-bottom: 8px;" hidden></div>
+      <div id="p-drill-sets" class="note p-drill-sets" style="margin-bottom: 8px;" hidden></div>
       <div class="p-chips" id="p-chips"></div>
       <svg role="img"></svg>
       <div id="p-tip" class="tip" hidden></div>
@@ -1284,6 +1288,7 @@
 <script src="/static/helps.js"></script>
 <script src="/static/coach.js"></script>
 <script src="/static/focus.js"></script>
+<script src="/static/drillsets.js"></script>
 <script src="/static/gapping.js"></script>
 <script src="/static/wedges.js"></script>
 <script src="/static/faults.js"></script>

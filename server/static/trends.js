@@ -642,8 +642,91 @@ function renderProgress() {
   renderGapping();
   renderWedges();
   renderProgressCombine();
+  renderProgressDrillSets(club);
   const latestHcp = journal.handicap[journal.handicap.length - 1];
   document.getElementById("p-hcp-now").textContent = latestHcp ? `${latestHcp.index.toFixed(1)} on ${dayOf(new Date(latestHcp.date + "T12:00"))}` : "";
+}
+
+function renderProgressDrillSets(club) {
+  const el = document.getElementById("p-drill-sets");
+  if (!el) return;
+  el.hidden = true;
+  el.replaceChildren();
+  if (typeof SwingDrillSets === "undefined") return;
+
+  const allSets = SwingDrillSets.sets(clips, swingRecords, { noiseTable });
+  const sets = allSets.filter(s => !club || s.club === club || (s.clubs && s.clubs.includes(club)));
+  if (!sets.length) return;
+
+  const latest = sets[0];
+  const range = goodRange(latest.club, "handsPlaneP6");
+  const verd = SwingDrillSets.verdict(latest, range);
+  const thought = SwingDrillSets.thoughtFor(latest, journal && journal.focus);
+
+  const block = document.createElement("div");
+  block.className = "drill-sets-block";
+
+  const title = document.createElement("div");
+  title.className = "drill-sets-title";
+  title.style.fontWeight = "600";
+  title.style.marginBottom = "4px";
+  title.textContent = "Drill sets";
+  block.append(title);
+
+  const lineEl = document.createElement("div");
+  lineEl.className = "drill-set-line latest";
+  lineEl.tabIndex = 0;
+  lineEl.role = "button";
+  lineEl.style.cursor = "pointer";
+  lineEl.title = "Tap to open this set's first drill swing";
+  lineEl.onclick = () => latest.firstClip && open(latest.firstClip);
+  lineEl.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); latest.firstClip && open(latest.firstClip); } };
+  lineEl.textContent = SwingDrillSets.formatSet(latest, verd);
+  block.append(lineEl);
+
+  if (thought) {
+    const thoughtEl = document.createElement("div");
+    thoughtEl.className = "drill-set-thought";
+    thoughtEl.style.color = "var(--muted)";
+    thoughtEl.style.fontSize = "13px";
+    thoughtEl.style.marginTop = "3px";
+    thoughtEl.textContent = `Swing thought: “${thought}”`;
+    block.append(thoughtEl);
+  }
+
+  if (sets.length > 1) {
+    const older = sets.slice(1);
+    const fold = document.createElement("details");
+    fold.className = "older-drill-sets";
+    fold.style.marginTop = "6px";
+    const sum = document.createElement("summary");
+    sum.style.fontSize = "13px";
+    sum.style.color = "var(--muted)";
+    sum.style.cursor = "pointer";
+    sum.textContent = `Older sets (${older.length})`;
+    fold.append(sum);
+
+    for (const s of older) {
+      const sRange = goodRange(s.club, "handsPlaneP6");
+      const sVerd = SwingDrillSets.verdict(s, sRange);
+      const row = document.createElement("div");
+      row.className = "drill-set-line older";
+      row.tabIndex = 0;
+      row.role = "button";
+      row.style.cursor = "pointer";
+      row.style.marginTop = "4px";
+      row.style.fontSize = "13px";
+      row.title = "Tap to open this set's first drill swing";
+      row.onclick = () => s.firstClip && open(s.firstClip);
+      row.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); s.firstClip && open(s.firstClip); } };
+      row.textContent = SwingDrillSets.formatSet(s, sVerd);
+      fold.append(row);
+    }
+    block.append(fold);
+  }
+
+  el.append(block);
+  el.hidden = false;
 }
 
 async function renderProgressCombine() {

@@ -105,6 +105,7 @@
 <script src="/static/coach.js"></script>
 <script src="/static/gapping.js"></script>
 <script src="/static/wedges.js"></script>
+<script src="/static/drillsets.js"></script>
 <script src="/static/plan.js"></script>
 </head>
 <body>
@@ -325,12 +326,16 @@ let journalData = null, allClips = null, practiceConfig = null, swingRecords = n
 
 function renderPlan() {
   if (typeof SwingPlan === "undefined") return;
+  const drillSets = typeof SwingDrillSets !== "undefined"
+    ? SwingDrillSets.sets(allClips || [], swingRecords || {})
+    : [];
   const plan = SwingPlan.buildPlan({
     focus: journalData ? journalData.focus : null,
     gameLog: gameState ? gameState.log : [],
     clips: allClips || [],
     swings: swingRecords,
-    games: gameState ? gameState.games : []
+    games: gameState ? gameState.games : [],
+    drillSet: drillSets[0] || null
   });
 
   const sumEl = $("plan-summary");
@@ -364,7 +369,7 @@ function renderPlan() {
     why.textContent = b.why;
     card.append(why);
 
-    if (b.drill || b.thought) {
+    if (b.drill || b.thought || b.drillSet) {
       const dt = document.createElement("div");
       dt.className = "plan-drill";
       if (b.drill) {
@@ -377,6 +382,13 @@ function renderPlan() {
         t.style.marginTop = "3px";
         t.innerHTML = `<b>Thought:</b> “${esc(b.thought)}”`;
         dt.append(t);
+      }
+      if (b.drillSet) {
+        const ds = document.createElement("div");
+        ds.className = "plan-drillset";
+        ds.style.marginTop = "3px";
+        ds.innerHTML = `<b>Last drill set:</b> ${esc(b.drillSet)}`;
+        dt.append(ds);
       }
       card.append(dt);
     }

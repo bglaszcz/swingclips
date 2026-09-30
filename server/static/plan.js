@@ -46,6 +46,7 @@
   const Coach = root.SwingCoach || (typeof require !== "undefined" && require("./coach.js"));
   const Wedges = root.SwingWedges || (typeof require !== "undefined" && require("./wedges.js"));
   const Gapping = root.SwingGapping || (typeof require !== "undefined" && require("./gapping.js"));
+  const DrillSets = root.SwingDrillSets || (typeof require !== "undefined" && require("./drillsets.js"));
 
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
@@ -230,6 +231,30 @@
 
       const range = computePracticeRange(focus, inputs);
 
+      // Latest drill set within the last 14 days
+      const dSet = inputs.drillSet || inputs.latestDrillSet || (inputs.drillSets && inputs.drillSets[0]) || null;
+      let drillSetLine = null;
+      if (dSet) {
+        const now = options.now ? new Date(options.now).getTime() : Date.now();
+        const setT = dSet.timestamp || (dSet.date ? new Date(dSet.date).getTime() : 0);
+        const ageMs = now - setT;
+        // Last 14 days (with a 1-day future grace period for clock skew)
+        if (setT > 0 && ageMs >= -86400000 && ageMs <= 14 * 86400000) {
+          if (typeof dSet.line === "string") {
+            drillSetLine = dSet.line;
+          } else if (DrillSets && typeof DrillSets.formatSet === "function") {
+            const verd = dSet.verdict || DrillSets.verdict(dSet);
+            drillSetLine = DrillSets.formatSet(dSet, verd);
+          } else {
+            const dateStr = dSet.dateFormatted || dSet.date || "";
+            const pumpsStr = dSet.pumps && dSet.pumps.handsPlane != null ? `pumps ${dSet.pumps.handsPlane.toFixed(1)} in` : "";
+            const afterStr = dSet.after && dSet.after.median != null ? `your swings after ${dSet.after.median.toFixed(1)} in` : "";
+            const vText = (dSet.verdict && dSet.verdict.text) || dSet.verdict || "no carry-over yet";
+            drillSetLine = `${dSet.drill === "pump" ? "Pump drill" : "Drill"}, ${dateStr}: ${[pumpsStr, afterStr].filter(Boolean).join(", ")}: ${vText}.`;
+          }
+        }
+      }
+
       focusBlock = {
         id: "focus",
         title,
@@ -238,6 +263,7 @@
         why,
         drill: fix && fix.drill ? fix.drill : null,
         thought: fix && fix.thought ? fix.thought : null,
+        drillSet: drillSetLine,
         // A drill with its own recording mode (app.py /api/drill): the pump drill's pumps come
         // seconds before the strike, so the phones keep more video and the swings stay out of trends.
         drillMode: fix && fix.drill && /^Pump drill/.test(fix.drill) ? "pump" : null,
