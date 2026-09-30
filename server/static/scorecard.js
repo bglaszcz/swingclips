@@ -1,6 +1,7 @@
 (function (root) {
   const Summary = root.SwingSummary || (typeof require !== "undefined" && require("./summary.js"));
   const Faults = root.SwingFaults || (typeof require !== "undefined" && require("./faults.js"));
+  const FaultLinks = root.SwingFaultLinks || (typeof require !== "undefined" && require("./faultlinks.js"));
   const GoodShots = root.SwingGoodShots || (typeof require !== "undefined" && require("./goodshots.js"));
 
   const PHASE_NAMES = {
@@ -32,7 +33,7 @@
    * @param goodRanges map of metrics to good ranges
    * @param swingFaults array of faults from SwingFaults.faultsOf
    */
-  function buildScorecard(positions, body, trust, goodRanges, swingFaults) {
+  function buildScorecard(positions, body, trust, goodRanges, swingFaults, strongLinks) {
     const phases = [];
     
     let nInside = 0;
@@ -129,11 +130,15 @@
         if (sm && sm.pos) phase = sm.pos;
         if (sf.key === 'releaseArm') phase = 'p6';
       }
+      const linkNote = (strongLinks && FaultLinks && typeof FaultLinks.scorecardNote === "function")
+        ? FaultLinks.scorecardNote(sf, strongLinks, swingFaults)
+        : null;
       return {
         ...sf,
         phase: phase,
         phaseName: PHASE_NAMES[phase] || phase,
-        severity: faultSeverity(fDef, sf.value)
+        severity: faultSeverity(fDef, sf.value),
+        linkNote: linkNote
       };
     }).sort((a, b) => b.severity - a.severity);
 

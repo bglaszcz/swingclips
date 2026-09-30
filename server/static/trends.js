@@ -136,6 +136,17 @@ function goodRange(club, key) {
   return c ? c.ranges[key] : null;
 }
 
+let faultLinksCache = { sig: null, value: null };
+/** Fault links across all readable swings stratified by club (SwingFaultLinks.links). */
+function faultLinksData() {
+  const sig = dataSig + "|" + clips.length;
+  if (faultLinksCache.sig === sig) return faultLinksCache.value;
+  if (typeof SwingFaultLinks === "undefined") return [];
+  const allRows = shownClips().filter(c => !c.excluded).map(swingRow);
+  faultLinksCache = { sig, value: SwingFaultLinks.links(allRows, isShaky) };
+  return faultLinksCache.value;
+}
+
 /** The page shows one view at a time: a swing, one session's trends, progress, camera setup, or the shutter test. */
 function showView(which) {
   if (window.Compare) Compare.close(true);
@@ -779,6 +790,27 @@ function renderTiles(sessions, club) {
     line.className = "p-faults";
     line.textContent = "Top faults: " + top.map(f => `${f.name} (${f.count} of ${f.total} swings)`).join(", ") + ".";
     head.append(line);
+
+    if (typeof SwingFaultLinks !== "undefined" && typeof faultLinksData === "function") {
+      const links = faultLinksData();
+      const seen = new Set();
+      for (let i = 0; i < top.length; i++) {
+        for (let j = i + 1; j < top.length; j++) {
+          const tA = top[i].name, tB = top[j].name;
+          const match = links.find(l => (l.a.name === tA && l.b.name === tB) || (l.a.name === tB && l.b.name === tA));
+          if (match && !seen.has(match)) {
+            seen.add(match);
+            const linkLine = document.createElement("div");
+            linkLine.className = "p-fault-link";
+            linkLine.textContent = match.sentence;
+            if (match.earlier && match.earlier.drill) {
+              linkLine.title = `Drill: ${match.earlier.drill}${match.earlier.thought ? " · Thought: " + match.earlier.thought : ""}`;
+            }
+            head.append(linkLine);
+          }
+        }
+      }
+    }
   }
   box.replaceChildren(...heads.map(tileEl));
   // The body numbers and the other spreads, only when asked for.

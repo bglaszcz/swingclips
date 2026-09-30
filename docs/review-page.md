@@ -67,7 +67,9 @@ What the server works out for each swing and what each part of the review page s
   half 65-80%; and the biggest carry hole between them (`static/wedges.js`).
   The page reads top to bottom as three steps (how did the last session go, what to work on, is it
   working: the chart opens on the focus move); step 1 also highlights the session's top faults under
-  the headline sentence; shot pattern, sessions, good-shot rules, gapping,
+  the headline sentence, along with any strong links between them (e.g. casting and early extension)
+  tested within clubs using Cochran-Mantel-Haenszel odds ratios and Benjamini-Hochberg correction (`static/faultlinks.js`);
+  shot pattern, sessions, good-shot rules, gapping,
   the wedge matrix and handicap are folded cards underneath.
 - **Compare** (Compare… or C on a swing; `static/compare.js`): this swing against another one,
   usually one of your own better ones. The picker lists every other swing with its date, club and
@@ -161,7 +163,9 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   number itself: green inside the middle 50%, amber outside ("outside: 4° more than usual", and
   "inside the 80% range" when it's between the two). The tempo line gets the same under it. Numbers
   with no reading get no band. Named swing faults (early extension, standing up, etc.) appear in a line
-  above the numbers with each fault's swing thought as its tooltip, only when present.
+  above the numbers with each fault's swing thought as its tooltip, only when present; the scorecard's
+  fault list also shows a short "often comes with X" when that link is strong and the other fault is also
+  on the swing.
   Casting comes from two face-on numbers (`metrics.js`): **Wrist hinge at P5**, the angle between the
   lead arm and the shaft (90 = an L) with the lead arm parallel coming down, and **Release point**,
   the lead arm's angle to horizontal when that hinge first drops under 70 degrees coming down (higher

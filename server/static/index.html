@@ -409,6 +409,8 @@
   .p-headline .better { color: var(--accent); font-weight: 600; }
   .p-headline .worse { color: var(--warn); font-weight: 600; }
   .p-headline .p-faults { margin-top: 4px; }
+  .p-headline .p-fault-link { margin-top: 4px; font-size: 13px; color: var(--text); }
+  .sc-link-sub { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; margin-left: 20px; font-weight: normal; }
   .p-tiles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-top: 8px; }
   details.p-more > summary { color: var(--accent); font-size: 13px; font-weight: 600; padding: 4px 0; }
   details.p-more[open] > summary { margin-bottom: 6px; }
@@ -1279,6 +1281,7 @@
 <script src="/static/gapping.js"></script>
 <script src="/static/wedges.js"></script>
 <script src="/static/faults.js"></script>
+<script src="/static/faultlinks.js"></script>
 <script src="/static/scorecard.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
@@ -2451,7 +2454,8 @@ function scEl(tag, cls, text) {
 function renderScorecard(body, trust, faults, ranges) {
   const box = document.getElementById("scorecard");
   if (typeof SwingScorecard === "undefined" || !positions.length) { box.hidden = true; return; }
-  const sc = SwingScorecard.buildScorecard(positions, body, trust, ranges, faults);
+  const strongLinks = typeof faultLinksData === "function" ? faultLinksData() : [];
+  const sc = SwingScorecard.buildScorecard(positions, body, trust, ranges, faults, strongLinks);
   window.currentScorecard = sc;
   if (!sc.phases.length) { box.hidden = true; return; }
   if (!sc.phases.some(p => p.key === scSelected)) scSelected = (sc.phases.find(p => p.metrics.length) || sc.phases[0]).key;
@@ -2483,7 +2487,9 @@ function renderScorecard(body, trust, faults, ranges) {
     const link = scEl("button", "sc-phase-link", `at ${f.phaseName.toLowerCase()}`);
     link.onclick = e => { e.preventDefault(); selectPhase(f.phase, true); };
     sum.append(link);
+    if (f.linkNote) sum.append(scEl("div", "sc-link-sub", f.linkNote.toLowerCase()));
     d.append(sum);
+    if (f.linkNote) d.append(scEl("div", "note", f.linkNote + "."));
     if (f.thought) d.append(scEl("div", "note", "Swing thought: " + f.thought));
     if (f.drill) d.append(scEl("div", "note", "Drill: " + f.drill));
     faultsBox.append(d);
