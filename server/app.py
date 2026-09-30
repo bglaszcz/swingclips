@@ -1614,7 +1614,8 @@ def status_tick() -> list[str]:
     said = session_status.health_step(swings_now)
     for text in said:
         print(f"Status: {text}", flush=True)
-        log_event("status", text=text)
+    for e in session_status.drain_events():
+        log_event(e.pop("kind"), **e)
     return said
 
 

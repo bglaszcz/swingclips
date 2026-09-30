@@ -585,7 +585,12 @@ review page starts them and one of them does the talking.
   each sentence sent to a phone to say (`say`), each upload, and `afterSpeech` on an upload heard
   while the **other** phone was probably saying something: the capture app mutes only the phone
   that speaks, so its voice can set the other one off, recording a lone clip with nobody swinging.
-  An upload with `afterSpeech` and then a `noswing` with `lone: true` is that. Every clip with no
+  An upload with `afterSpeech` and then a `noswing` with `lone: true` is that. Such a **phantom**
+  (one phone alone, no swing found, no Square shot: `status.py phantom`) isn't treated as a swing:
+  practice mode doesn't say "no reading" about it and the health check doesn't count it (logged as
+  `check` with `ignored`). Before, each did speak, and that set off the next phantom: a loop that
+  said "Square: no shot on the last 2 swings" over and over. The log also has each swing the health
+  check looked at (`check`: its problems, the streaks, what was said) and each session start. Every clip with no
   swing is logged again (`again: true`) when the swing numbers are worked out again, e.g. after an
   update, so older clips get their reasons too.
 - **How**: each phone (while the app is open) posts `POST /api/phones/<angle>/poll?wait=10` with

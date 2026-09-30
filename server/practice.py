@@ -18,6 +18,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from status import phantom
 from swings import Summarizer
 
 # Square numbers: a swing with no shot this long after the strike is spoken without one. Square's
@@ -283,6 +284,8 @@ class Practice:
                 if any(abs(t - d) <= PAIR_SLACK_S for d in done_times):
                     continue  # the other clip of a swing that's had its say
                 rec = records.get(s["name"])
+                if phantom(s, rec):
+                    continue  # nobody swung (an echo of a phone's voice): saying "no reading" would set off another
                 if metric["kind"] == "shot":
                     if not s.get("shot") and age < SHOT_GIVE_UP_S:
                         continue

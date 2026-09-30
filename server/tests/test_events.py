@@ -124,5 +124,54 @@ class Trim(unittest.TestCase):
             app.EVENTS_FILE, app.EVENTS_MAX_BYTES = was_file, was_max
 
 
+
+class HealthNotes(unittest.TestCase):
+    """Each swing the session check looks at is noted with what it found and the streaks after it."""
+
+    def swing(self, name, t, found=True, shot=True, angle="face"):
+        return {"name": name, "t": t, "angle": angle, "partner": "p" if angle == "face" else None, "pose": "done",
+                "partnerPose": "done" if angle == "face" else None, "shot": {"club": "I7"} if shot else None,
+                "record": {"quality": {"swingFound": found, "camera": {}}}, "quality": {angle: {}}}
+
+    def status(self):
+        import status
+        s = status.Status(clock=lambda: 1_000_000.0)
+        s.heartbeat("face", {"recording": True})
+        return s
+
+    def test_notes(self):
+        s = self.status()
+        h = s.health
+        t0 = h.start
+        # A lone down-the-line clip with no swing found, but with a Square shot: a real swing's problem.
+        lone = self.swing("lone", t0 + 30, found=False, angle="dtl")
+        h.step([self.swing("real", t0 + 1)], t0 + 300, expect_dtl=True, relay_ok=True)
+        h.step([self.swing("real", t0 + 1), lone], t0 + 330, expect_dtl=True, relay_ok=True)
+        notes = s.drain_events()
+        self.assertEqual([n["kind"] for n in notes], ["session", "check", "check"])
+        first, later = notes[1], notes[2]
+        self.assertTrue(first["first"])
+        self.assertTrue(first["said"][0].startswith("First swing"))
+        self.assertIn("camera:dtl:no swing found", later["problems"])
+        self.assertEqual(later["streaks"]["camera:dtl:no swing found"], 1)
+        self.assertEqual(later["said"], [])      # 3 in a row are needed
+        self.assertEqual(s.drain_events(), [])
+
+    def test_phantoms_are_not_swings(self):
+        # The other phone's voice set this one off: one clip, no swing, no Square shot. Counted, they
+        # made "Square: no shot on the last 2 swings" and the next phantom with it.
+        s = self.status()
+        h = s.health
+        t0 = h.start
+        real = self.swing("real", t0 + 1)
+        echoes = [self.swing(f"echo{i}", t0 + 30 + 20 * i, found=False, shot=False, angle="dtl") for i in range(4)]
+        said = h.step([real, *echoes], t0 + 200, expect_dtl=True, relay_ok=True)
+        self.assertEqual(len(said), 1)
+        self.assertTrue(said[0].startswith("First swing:"))
+        ignored = [n for n in s.drain_events() if n.get("ignored")]
+        self.assertEqual([n["clip"] for n in ignored], [e["name"] for e in echoes])
+        self.assertEqual(h.streaks, {})
+
+
 if __name__ == "__main__":
     unittest.main()

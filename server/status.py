@@ -180,6 +180,15 @@ def camera_problems(angle: str, codes: list | None, quality: dict | None) -> lis
     return said
 
 
+def phantom(swing: dict, record: dict | None) -> bool:
+    """A clip with nobody swinging: one phone alone recorded it (no partner), no swing was found in it
+    and Square has no shot for it. Usually the other phone speaking set this one off (its listener
+    heard the voice as a strike). Not a swing: practice mode doesn't speak about it and the health
+    check doesn't count it; each would speak, and set off the next one (a loop)."""
+    q = (record or {}).get("quality") or {}
+    return not swing.get("partner") and not swing.get("shot") and q.get("swingFound") is False
+
+
 def swing_findings(s: dict, expect_dtl: bool, relay_ok: bool, relay: str = "the Square watcher") -> dict:
     """What's wrong with one checked swing: {"cameras": {angle: [problems] or None when fine},
     "clip": angles with no clip, "square": None or the problem}. `s` as Health.step takes it."""
@@ -234,6 +243,9 @@ class Health:
         self.streaks: dict[str, int] = {}
         self.active: set[str] = set()       # problems said and still going on
         self.last: dict | None = None       # the latest checked swing's findings, for the panel
+        # Each swing checked, what was found, the streaks after it and what was said about it,
+        # for the server's events log (app.py drains it: Status.drain_events).
+        self.notes: list[dict] = []
 
     def new_session(self, t: float) -> None:
         self.start, self.first, self.last = t, None, None
@@ -274,19 +286,31 @@ class Health:
             if not self.ready(s, now, expect_dtl):
                 break  # in order: a later swing waits for this one
             self.checked.add(s["name"])
+            if phantom(s, s.get("record")):
+                # Not a swing: not said, not counted, and it doesn't clear a streak either.
+                self.notes.append({"kind": "check", "clip": s["name"], "angle": s.get("angle"),
+                                   "age": round(now - s["t"], 1), "ignored": "phantom: one phone, no swing, no Square shot"})
+                continue
             self.checked_times.append(s["t"])
             f = swing_findings(s, expect_dtl, relay_ok, relay)
             self.last = {"clip": s["name"], "t": s["t"], **f}
-            if self.first is None:
+            first = self.first is None
+            if first:
                 text = first_swing_sentence(f)
                 self.first = {"clip": s["name"], "t": s["t"], "text": text, "ok": text.startswith("First swing:")}
-                out.append(text)
+                said = [text]
                 # What was said just now isn't said again unless it clears and comes back.
                 for key in self._keys(f):
                     self.streaks[key] = STREAK_TO_SAY[key.split(":")[0]]
                     self.active.add(key)
-                continue
-            out += self._later(f)
+            else:
+                said = self._later(f)
+            out += said
+            self.notes.append({"kind": "check", "clip": s["name"], "angle": s.get("angle"),
+                               "partner": s.get("partner"), "shot": bool(s.get("shot")),
+                               "age": round(now - s["t"], 1), "first": first, "problems": list(self._keys(f)),
+                               "streaks": dict(self.streaks), "said": said})
+            del self.notes[:-200]
         return out
 
     @staticmethod
@@ -327,6 +351,7 @@ class Status:
         self.clock = clock
         self.lock = threading.Lock()
         self.phones: dict[str, dict] = {}    # angle -> {"hb": fields, "seen": t}
+        self.notes: list[dict] = []          # session starts, for the events log (drain_events)
         self.relays: dict[str, dict] = {}   # by source: {"hb": fields, "seen": t}
         self.commands: list[dict] = []
         self.outbox: dict[str, list[dict]] = {a: [] for a in ANGLES}
@@ -377,7 +402,16 @@ class Status:
             if self.phones[angle]["hb"].get("recording") and not self.phones[angle]["hb"].get("closing"):
                 if not before:
                     self.health.new_session(now)   # recording started: a new session
+                    self.notes.append({"kind": "session", "by": angle,
+                                       "sinceRecording": round(now - self.last_recording, 1) if self.last_recording else None})
                 self.last_recording = now
+
+    def drain_events(self) -> list[dict]:
+        """Session starts and each swing the health check looked at, since the last call (app.py logs them)."""
+        with self.lock:
+            out = self.notes + self.health.notes
+            self.notes, self.health.notes = [], []
+            return out
 
     def speaker(self, now: float | None = None) -> str | None:
         """The phone that speaks: the one with Practice voice on (face-on first), else any connected one."""

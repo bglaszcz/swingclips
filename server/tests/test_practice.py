@@ -173,6 +173,21 @@ class PracticeTest(unittest.TestCase):
         self.clock.t = T0 + 10 + practice.BODY_GIVE_UP_S + 1
         self.assertEqual(self.p.step(s, {})[0]["text"], "Tempo, no reading")
 
+    def test_phantom_clips_stay_quiet(self):
+        # One phone alone, no swing found, no Square shot: the other phone's voice set it off.
+        # "Tempo, no reading" about it would set off the next one.
+        self.turn_on()
+        self.clock.t = T0 + 40
+        phantom = swing(1, T0, name="swing_dtl_1.mp4", angle="dtl", partner=None, partnerPose=None)
+        rec = record(partner=None)
+        rec["quality"]["swingFound"] = False
+        self.assertEqual(self.p.step([phantom], {"swing_dtl_1.mp4": rec}), [])
+        # With a Square shot it was a real swing: said as before.
+        self.clock.t = T0 + 70
+        real = swing(2, T0 + 30, name="swing_dtl_2.mp4", angle="dtl", partner=None, partnerPose=None, shot=shot())
+        [e] = self.p.step([real], {"swing_dtl_2.mp4": rec})
+        self.assertEqual(e["clip"], "swing_dtl_2.mp4")
+
     def test_square_number_waits_for_the_shot(self):
         self.turn_on("path", -2, 2)
         self.clock.t = T0 + 10
