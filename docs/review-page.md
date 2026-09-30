@@ -66,7 +66,10 @@ What the server works out for each swing and what each part of the review page s
   speed against that wedge's full-swing speed (the 90th percentile of its club speeds): full 92%+, 3/4 80-92%,
   half 65-80%; and the biggest carry hole between them (`static/wedges.js`).
   The page reads top to bottom as three steps (how did the last session go, what to work on, is it
-  working: the chart opens on the focus move); step 1 also highlights the session's top faults under
+  working: the chart opens on the focus move; inside step 3, a short Drill sets block appears when
+  drill sets exist, showing the latest set's pumps, drill swings' P6, and normal swings before and
+  after with a verdict on whether the rehearsal carried over against wobble, with older sets folded
+  and tapping any set opening its first drill swing); step 1 also highlights the session's top faults under
   the headline sentence, along with any strong links between them (e.g. casting and early extension)
   tested within clubs using Cochran-Mantel-Haenszel odds ratios and Benjamini-Hochberg correction (`static/faultlinks.js`);
   shot pattern, sessions, good-shot rules, gapping,
@@ -326,7 +329,8 @@ toward the ball". The phones face away from you, so voice is the channel.
 - **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page (section 5)
   for quick setup in the barn. Lays out an ordered 45-minute practice session (60-80 balls) across 4 blocks:
   (1) Warm-up wedge shots, (2) Focus block with the active focus move, its coach.js drill and swing thought,
-  and a "Practice this" button that configures voice practice mode, (3) Scoring-zone block targeting the
+  the latest drill set line if recorded in the last 14 days, and a "Practice this" button that configures
+  voice practice mode, (3) Scoring-zone block targeting the
   weakest Combine yardage or the wedge matrix's biggest gap with a game suggestion, and (4) Finish with
   a game (Combine if due for weekly benchmark >= 7 days, else a game targeting the weakest area like Driving
   for low fairway percentage or Distance control for wide carry spread). Pure logic in `static/plan.js`, tested
