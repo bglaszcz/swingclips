@@ -18,6 +18,12 @@ numbers are in.
 
 Drill blocks switch drill mode on (drills.py), so their swings stay out of the trends; their Square
 numbers stay here for the gate and the report for the coach (report()).
+
+Square's strike height can shift as a whole (about -14 mm on every club between Sep 16 and Sep 23 2026,
+and on Aug 21 alone), so a program may set a "calibration": the median of the session's first readable
+shots with that club must sit near the usual value, or the strike checks are dropped for the session
+("calibration shifted") while attack and loft still gate. The golfer's setup notes (Omni moved, mat
+changed, an update) go with the run into the report, so a jump like that can be traced.
 """
 import json
 import math
@@ -76,6 +82,7 @@ def numbers_of(shot: dict | None) -> dict:
 
 def no_read(n: dict) -> str | None:
     """Why Square's shot can't be judged (None: it can)."""
+    # Checked before any gate compares numbers, so a missing reading is never taken as 0.
     if n["clubSpeed"] is None or n["clubSpeed"] == 0:
         return "no club speed"
     # Square's app flags a failed impact read (IsValidImpact*: the watcher sends null); its CSV export
@@ -201,8 +208,33 @@ def progress_text(block: dict, st: dict) -> str:
     return f"{st['passes']} of {st['reps']} passed, {g['need']} needed{meds}"
 
 
+def calibration(p: dict, run: dict) -> dict | None:
+    """The session's check of Square's strike frame (programs.json "calibration": key, club, center,
+    within, shots): {median, n, shots, shifted (None until enough shots)}, or None without one."""
+    c = p.get("calibration")
+    if not c:
+        return None
+    vals = [r["numbers"][c["key"]] for r in sorted(run["reps"], key=lambda r: r["t"])
+            if r["kind"] in ("shot", "ball") and r.get("club") == c["club"] and not r.get("noRead")
+            and r["numbers"].get(c["key"]) is not None][:c["shots"]]
+    med = statistics.median(vals) if vals else None
+    shifted = None if len(vals) < c["shots"] else abs(med - c["center"]) > c["within"]
+    return {"key": c["key"], "median": med, "n": len(vals), "shots": c["shots"], "center": c["center"],
+            "within": c["within"], "shifted": shifted}
+
+
+def effective(p: dict, run: dict) -> dict:
+    """The program as it gates this run: without its calibrated checks once the session's calibration shifted."""
+    cal = calibration(p, run)
+    if not cal or not cal["shifted"]:
+        return p
+    drop = lambda g: {**g, "checks": [c for c in g.get("checks", []) if c["key"] != cal["key"]]}
+    return {**p, "blocks": [{**b, "gate": drop(b["gate"])} if b.get("gate") else b for b in p["blocks"]]}
+
+
 def judged_blocks(p: dict, run: dict) -> list[dict]:
     """Each block of a run (in play or finished) with its gate state, result and judged reps."""
+    p = effective(p, run)
     return [{**b, "state": block_state(b, run["reps"], run["marks"]), "result": run["results"].get(b["id"]),
              "judged": judged(b, run["reps"], run["marks"])} for b in p["blocks"]]
 
@@ -282,6 +314,25 @@ class Programs:
             self._save()
             return self._state()
 
+    def note(self, text: str, started: float | None = None) -> dict:
+        """The golfer's setup notes (Omni moved, mat changed, an update) on the run in play, or on the
+        finished run started at `started` (the last one without it)."""
+        text = (text or "").strip()[:1000]
+        with self.lock:
+            if self.run and started in (None, self.run["started"]):
+                self.run["notes"] = text
+                self._save()
+                return {"started": self.run["started"], "notes": text}
+            logged = self._log()
+            i = next((i for i in range(len(logged) - 1, -1, -1) if started is None or logged[i]["started"] == started), None)
+            if i is None:
+                raise ValueError("No such run")
+            logged[i]["notes"] = text
+            tmp = self.log_file.with_suffix(".tmp")
+            tmp.write_text("".join(json.dumps(x, separators=(",", ":")) + "\n" for x in logged), encoding="utf-8")
+            tmp.replace(self.log_file)
+            return {"started": logged[i]["started"], "notes": text}
+
     def next_block(self) -> dict:
         """Ends the block in play as it stands and moves on."""
         with self.lock:
@@ -330,7 +381,10 @@ class Programs:
                              numbers=n, noRead=no_read(n))
                 self.run["reps"].append(r)
                 made.append(r)
+                if r["kind"] in ("shot", "ball"):
+                    self._calibration_check()
                 if r["kind"] == "shot":
+                    p, block = self._current()
                     self._say_shot(block, t)
                 elif r["kind"] == "noshot":
                     self._say("No Square numbers for that one: not counted.")
@@ -369,16 +423,24 @@ class Programs:
                 run = next((x for x in reversed(logged) if started is None or x["started"] == started), None)
             if run is None or run["id"] not in self.programs:
                 return None
-            return report(self.programs[run["id"]], run)
+            return report(effective(self.programs[run["id"]], run), run)
 
     # ---- Inside (lock held) ----
 
     def _current(self) -> tuple[dict, dict]:
-        p = self.programs[self.run["id"]]
+        p = effective(self.programs[self.run["id"]], self.run)
         return p, p["blocks"][self.run["block"]]
 
     def _swings_used(self) -> int:
         return len(self.run["reps"])
+
+    def _calibration_check(self) -> None:
+        cal = calibration(self.programs[self.run["id"]], self.run)
+        if cal and cal["shifted"] is not None and "calibration" not in self.run:
+            self.run["calibration"] = cal
+            if cal["shifted"]:
+                self._say(f"Calibration shifted: strike median {cal['median']:.0f} on the first {cal['n']} shots, "
+                          f"usual {cal['center']}. Strike isn't gated this session; attack and loft still are.")
 
     def _block_intro(self, block: dict, number: int) -> str:
         judge = ("Tap pass or miss on the Start page after each rep." if not block["ball"]
@@ -390,7 +452,7 @@ class Programs:
         r = next(x for x in js if x["t"] == t)
         st = block_state(block, self.run["reps"], self.run["marks"])
         if r.get("noRead"):
-            self._say(f"Square didn't read that one ({r['noRead']}): not counted.")
+            self._say(f"Invalid read ({r['noRead']}): not counted.")
             return
         keys = [c["key"] for c in block["gate"].get("checks", []) + block["gate"].get("medians", [])]
         nums = ", ".join(say_number(k, r["numbers"][k]) for k in keys if r["numbers"].get(k) is not None)
@@ -451,6 +513,7 @@ class Programs:
         p, block = self._current()
         blocks = [{**b, "now": i == self.run["block"]} for i, b in enumerate(judged_blocks(p, self.run))]
         return {"id": p["id"], "name": p["name"], "started": self.run["started"], "cap": p["cap"],
+                "notes": self.run.get("notes", ""), "calibration": calibration(p, self.run),
                 "used": self._swings_used(), "block": self.run["block"], "blocks": blocks,
                 "progress": progress_text(block, block_state(block, self.run["reps"], self.run["marks"]))}
 
@@ -549,6 +612,13 @@ def report(p: dict, run: dict) -> dict:
         else:
             order.append([c, 1])
     lines.append("Club order: " + (", ".join(f"{c} x{n}" for c, n in order) if order else "no ball shots"))
+    lines.append("Setup notes: " + (run.get("notes") or "none (nothing changed)"))
+    cal = calibration(p, run)
+    if cal and cal["n"]:
+        verdict = ("not enough shots yet" if cal["shifted"] is None else
+                   "SHIFTED: strike not gated this session" if cal["shifted"] else "normal")
+        lines.append(f"Strike calibration: median {cal['median']:+.1f} on the first {cal['n']} readable {club_word(p['calibration']['club'])} "
+                     f"(usual {cal['center']:+} ± {cal['within']}): {verdict}.")
     frame = None
     for b in p["blocks"]:
         res = run["results"].get(b["id"])
@@ -593,7 +663,7 @@ def report(p: dict, run: dict) -> dict:
             continue
         n = r0["numbers"]
         nums = " / ".join(fmt(k, n[k]) for k in ("attack", "loft", "faceToPath", "strikeV"))
-        verdict = ("not read (" + r0["noRead"] + ")" if r0.get("noRead") else
+        verdict = ("invalid read, not counted (" + r0["noRead"] + ")" if r0.get("noRead") else
                    "pass" if r.get("gate") else "miss" if r.get("gate") is False else "")
         if r.get("mark") is not None:
             verdict += (", " if verdict else "") + ("mark ahead" if r["mark"] else "mark behind")

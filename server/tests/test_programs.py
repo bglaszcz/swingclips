@@ -130,7 +130,7 @@ class ProgramsTest(unittest.TestCase):
         self.hit(shot(v=5.0), mark=True)             # miss: strike high
         self.hit(shot(), mark=False)                 # miss: mark behind
         self.hit(shot(h=0.0, v=0.0))                 # not read: not counted
-        self.assertIn("didn't read", self.said()[-1])
+        self.assertIn("Invalid read", self.said()[-1])
         for _ in range(5):
             self.hit(shot(), mark=True)              # 6 passes
         self.hit(shot())
@@ -154,7 +154,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertIn("Shots 11 on", rep["text"])  # 12 flush shots: 11 read + the one not read
         self.assertIn("Club order: 7i x", rep["text"])
         self.assertIn("mark behind", rep["text"])
-        self.assertIn("not read (strike not read)", rep["text"])
+        self.assertIn("invalid read, not counted (strike not read)", rep["text"])
         self.assertEqual(rep["frame"]["block"], "Lead foot only")
         self.assertTrue(rep["frame"]["partner"].startswith("swing_dtl_"))
 
@@ -225,6 +225,50 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(self.p.state()["log"][-1]["results"], {"cold": "not passed"})
         self.assertIn("median attack angle -2.7", self.p.report()["text"].replace("−", "-") + programs.progress_text(
             self.p.programs["retention"]["blocks"][0], self.p.state()["log"][-1]["blocks"][0]["state"]))
+
+    def flush(self):
+        self.p.start("lowpoint")
+        self.p.next_block()
+        self.p.next_block()
+
+    def test_null_strike_is_left_out_of_both_sides_of_the_count(self):
+        self.flush()
+        self.hit(shot())
+        self.hit(shot(h=None, v=None))   # Square flagged the impact read invalid
+        st = self.p.state()["program"]["blocks"][2]["state"]
+        self.assertEqual((st["passes"], st["reps"]), (1, 1))
+        self.assertIn("Invalid read", " ".join(self.said()))
+
+    def test_calibration_shift_stops_the_strike_gate_for_the_session(self):
+        self.flush()
+        for _ in range(9):
+            self.hit(shot(v=-2.0))         # the whole frame moved (Square read about +11 mm higher)
+        self.assertIsNone(self.p.state()["program"]["calibration"]["shifted"])
+        self.assertEqual(self.p.state()["program"]["blocks"][2]["state"]["passes"], 0)
+        self.hit(shot(v=-2.0))             # the 10th 7 iron decides: median -2, usual -13 +- 4
+        self.assertIn("Calibration shifted", " ".join(self.said()))
+        st = self.p.state()["program"]
+        flush = next(b for b in st["blocks"] if b["id"] == "flush")
+        self.assertEqual(flush["result"], "passed")   # judged on attack alone (+ mark): all 10 pass
+        self.assertEqual(st["blocks"][st["block"]]["id"], "transfer")
+        self.assertIn("SHIFTED", self.p.report()["text"])
+
+    def test_calibration_normal_keeps_the_strike_gate(self):
+        self.flush()
+        for _ in range(10):
+            self.hit(shot(v=-15.0))
+        self.assertIn("Strike calibration: median -15.0", self.p.report()["text"])
+        self.assertNotIn("Calibration shifted", " ".join(self.said()))
+
+    def test_setup_notes_go_into_the_report(self):
+        self.flush()
+        self.p.note("Omni moved 2 in back")
+        self.hit(shot())
+        self.p.stop()
+        self.assertIn("Setup notes: Omni moved 2 in back", self.p.report()["text"])
+        self.p.note("Omni moved 2 in back; Square app updated")      # on the finished run
+        self.assertIn("Square app updated", self.p.report()["text"])
+        self.assertEqual(self.p.state()["log"][-1]["notes"], "Omni moved 2 in back; Square app updated")
 
     def test_undo_takes_back_the_last_tap(self):
         self.p.start("lowpoint")

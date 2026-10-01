@@ -208,6 +208,11 @@
       </div>
     </div>
     <div class="prog-report" id="prog-report-box">
+      <label class="plan-note" for="prog-notes" id="prog-notes-label">Setup notes for this run (Omni moved, mat changed, an app or firmware update): they go into Copy for coach.</label>
+      <div class="plan-act" style="margin-top: 4px;">
+        <input id="prog-notes" class="game-select" style="flex: 1 1 260px; font-size: 14px;" maxlength="1000" placeholder="Nothing changed">
+        <button class="plan-btn on" id="prog-notes-save">Save notes</button>
+      </div>
       <div class="plan-act">
         <button class="plan-btn" id="prog-copy">Copy for coach</button>
         <span class="plan-note" id="prog-copied"></span>
@@ -662,6 +667,16 @@ function renderProgram(data) {
   gate.className = "gate";
   gate.textContent = `Gate: ${gateText(b)}. Now: ${run.progress}`;
   box.append(h, how, gate);
+  const cal = run.calibration;
+  if (cal && cal.n) {
+    const c = document.createElement("div");
+    c.className = "plan-note";
+    c.textContent = cal.shifted === true
+      ? `Calibration shifted: strike median ${cal.median.toFixed(0)} on the first ${cal.n} 7 irons (usual ${cal.center} ± ${cal.within}). Strike isn't gated this session; attack and loft still are.`
+      : cal.shifted === false ? `Strike calibration normal (median ${cal.median.toFixed(0)}, usual ${cal.center} ± ${cal.within}).`
+      : `Strike calibration: ${cal.n} of ${cal.shots} 7 irons so far (median ${cal.median.toFixed(0)}, usual ${cal.center} ± ${cal.within}).`;
+    box.append(c);
+  }
   if (b.extraBall) {
     const x = document.createElement("div");
     x.className = "plan-note";
@@ -841,6 +856,24 @@ async function copyProgramReport(started) {
   $("prog-report-box").hidden = false;
 }
 
+function fillNotes(data) {
+  const el = $("prog-notes");
+  if (!data || document.activeElement === el) return;
+  const run = data.program || (data.log || [])[(data.log || []).length - 1];
+  $("prog-notes-label").textContent = data.program
+    ? "Setup notes for this run (Omni moved, mat changed, an app or firmware update): they go into Copy for coach."
+    : "Setup notes for your last run: they go into its Copy for coach.";
+  const v = (run && run.notes) || "";
+  if (el.dataset.shown !== v) { el.value = v; el.dataset.shown = v; }
+}
+$("prog-notes-save").onclick = async () => {
+  const data = programState || {};
+  const run = data.program || (data.log || [])[(data.log || []).length - 1];
+  await programPost("/api/program/note", { text: $("prog-notes").value, started: run ? run.started : null });
+  $("prog-notes").dataset.shown = "";
+  $("prog-copied").textContent = "Notes saved.";
+};
+
 $("prog-select").onchange = () => renderProgram(programState);
 $("prog-start").onclick = () => programPost("/api/program", { program: $("prog-select").value });
 $("prog-next").onclick = () => programPost("/api/program/next");
@@ -850,7 +883,9 @@ $("prog-copy").onclick = () => copyProgramReport();
 let programTimer = 0;
 async function pollProgram() {
   clearTimeout(programTimer);
-  renderProgram(await getJson("/api/program"));
+  const data = await getJson("/api/program");
+  renderProgram(data);
+  fillNotes(data);
   programTimer = setTimeout(pollProgram, document.hidden ? 20000 : 2000);
 }
 

@@ -344,7 +344,13 @@ toward the ball". The phones face away from you, so voice is the channel.
   `faceToPath`, `loft`, ...: min/max), plus `mark` for the golfer's tap on what they saw. A gate can also check the block's
   medians (`medians`: e.g. median attack -3 or steeper, the retention check). Square's strike height is
   spoken as the number it gives ("strike minus 12"): its 0 isn't the owner's sweet spot (7 iron median
-  about -13, best carry at -20..-8), so gates use the owner's own band. No-ball reps are
+  about -13, best carry at -20..-8), so gates use the owner's own band. Square's strike frame has jumped as a whole (about
+  -14 mm on every club between Sep 16 and Sep 23 2026, and on Aug 21 alone), so a program's `calibration`
+  (strike, 7 iron, usual -13 within 4, 10 shots) checks the median of the session's first 10 readable 7
+  irons: outside it, the phone says "Calibration shifted" and strike stops gating for that run (attack and
+  loft still gate). Invalid reads (Square's null, or the CSV's H0.0 / club speed 0) are checked before any
+  comparison and left out of both sides of the count ("invalid read, not counted"). **Setup notes** (Omni
+  moved, mat changed, an update) are saved on the run in play or the last one and go into Copy for coach. No-ball reps are
   tapped Pass/Miss on the page (clips the phones record during them are ignored). Ball shots are judged
   once the shot pairs; a shot Square didn't read (club speed 0, or strike across the face exactly 0.0, whose
   up-down number is filler) is left out of the gate. Face to path = face minus path. The phone says each

@@ -98,7 +98,14 @@
             ]
           }
         }
-      ]
+      ],
+      "calibration": {
+        "key": "strikeV",
+        "club": "I7",
+        "center": -13,
+        "within": 4,
+        "shots": 10
+      }
     },
     {
       "id": "retention",
@@ -137,7 +144,14 @@
             ]
           }
         }
-      ]
+      ],
+      "calibration": {
+        "key": "strikeV",
+        "club": "I7",
+        "center": -13,
+        "within": 4,
+        "shots": 10
+      }
     }
   ]
 }

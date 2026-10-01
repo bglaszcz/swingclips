@@ -41,7 +41,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import ballflight
 import calib
@@ -1604,6 +1604,20 @@ def program_tap(body: ProgramTap):
         return programs_state.tap(body.ok)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+class ProgramNote(BaseModel):
+    text: str = Field("", max_length=1000)
+    started: float | None = None
+
+
+@app.post("/api/program/note")
+def program_note(body: ProgramNote):
+    """The golfer's setup notes (Omni moved, mat changed, an update) on the run in play or the last one."""
+    try:
+        return programs_state.note(body.text, body.started)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
 
 
 @app.post("/api/program/undo")
