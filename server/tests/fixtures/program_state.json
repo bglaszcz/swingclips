@@ -1,0 +1,4503 @@
+{
+  "program": null,
+  "programs": [
+    {
+      "id": "lowpoint",
+      "name": "Low point forward",
+      "from": "Golf coach chat, Sep 30 2026: stop casting by getting pressure and the low point forward",
+      "cap": 40,
+      "clubs": "7 iron only, no driver",
+      "bringBack": "Attack angle, dynamic loft and face to path for each block, the shot order, and one down-the-line frame at impact from a toe-tap swing.",
+      "blocks": [
+        {
+          "id": "toetap",
+          "name": "Lead foot only",
+          "drill": "toetap",
+          "ball": false,
+          "reps": 10,
+          "how": "Pull the trail foot back so only its toe touches the mat. 3/4 swings, no ball, brush the mat.",
+          "ask": "Brush at or ahead of the ball spot?",
+          "extraBall": "Hit one toe-tap swing with a ball for the down-the-line impact frame your coach asked for.",
+          "gate": {
+            "kind": "streak",
+            "need": 10
+          }
+        },
+        {
+          "id": "stepthrough",
+          "name": "Step through",
+          "drill": "stepthrough",
+          "ball": false,
+          "reps": 10,
+          "how": "Feet together, swing back, step the lead foot toward the target as the downswing starts. The hands follow the step. No ball.",
+          "ask": "Belt buckle open and all your weight on the lead foot?",
+          "gate": {
+            "kind": "count",
+            "need": 10
+          }
+        },
+        {
+          "id": "flush",
+          "name": "Flush line",
+          "drill": "flush",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "how": "Foot spray or a dry-erase line from the ball toward the target (no tape). 7 iron at 3/4 speed; read where the mark starts.",
+          "ask": "Mark starts at or ahead of the ball?",
+          "gate": {
+            "kind": "count",
+            "need": 7,
+            "mark": true,
+            "checks": [
+              {
+                "key": "strikeV",
+                "max": 3,
+                "min": -8
+              },
+              {
+                "key": "attack",
+                "max": -2
+              }
+            ]
+          }
+        },
+        {
+          "id": "transfer",
+          "name": "Transfer",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "requires": "flush",
+          "how": "Full-speed 7 iron, one ball, full routine, no do-overs. Drop the step, keep the feel.",
+          "gate": {
+            "kind": "streak",
+            "need": 5,
+            "checks": [
+              {
+                "key": "strikeV",
+                "max": 3,
+                "min": -8
+              },
+              {
+                "key": "attack",
+                "max": -2
+              },
+              {
+                "key": "faceToPath",
+                "min": -2,
+                "max": 2
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "log": [
+    {
+      "id": "lowpoint",
+      "name": "Low point forward",
+      "started": 1790244000.0,
+      "block": 2,
+      "blockStarted": 1790244300.0,
+      "reps": [
+        {
+          "t": 1790244015.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790244030.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790244045.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790244060.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790244075.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790244090.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790244105.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790244120.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790244135.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790244150.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790244165.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790244180.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790244195.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790244210.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790244225.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790244240.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790244255.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790244270.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790244285.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790244300.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790244325.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244325_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244325_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.2,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790244365.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244365_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244365_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.1,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790244405.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244405_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244405_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 3.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790244445.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244445_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244445_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.5,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 3.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790244485.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244485_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244485_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.4,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 4.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790244525.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244525_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244525_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -3.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 15.9,
+            "strikeH": 0.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": "strike not read"
+        },
+        {
+          "t": 1790244565.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244565_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244565_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.4,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 4.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790244605.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244605_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244605_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.3,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 4.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790244645.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244645_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244645_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.2,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 5.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790244685.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244685_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244685_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.1,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 5.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790244725.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790244725_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790244725_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 5.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        }
+      ],
+      "marks": [
+        {
+          "t": 1790244328.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790244368.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790244408.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790244448.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790244488.0,
+          "block": "flush",
+          "ok": false
+        },
+        {
+          "t": 1790244528.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790244568.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790244608.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790244648.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790244688.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790244728.0,
+          "block": "flush",
+          "ok": true
+        }
+      ],
+      "results": {
+        "toetap": "not passed",
+        "stepthrough": "not passed",
+        "flush": "not passed",
+        "transfer": "skipped"
+      },
+      "ignored": [],
+      "ended": 1790244740.0,
+      "how": "done",
+      "spoken": "31 swings, no gate passed yet. The report for your coach is on the Start page.",
+      "day": "2026-09-24T05:00:00",
+      "blocks": [
+        {
+          "id": "toetap",
+          "name": "Lead foot only",
+          "drill": "toetap",
+          "ball": false,
+          "reps": 10,
+          "how": "Pull the trail foot back so only its toe touches the mat. 3/4 swings, no ball, brush the mat.",
+          "ask": "Brush at or ahead of the ball spot?",
+          "extraBall": "Hit one toe-tap swing with a ball for the down-the-line impact frame your coach asked for.",
+          "gate": {
+            "kind": "streak",
+            "need": 10
+          },
+          "state": {
+            "reps": 10,
+            "passes": 5,
+            "streak": 0,
+            "best": 1,
+            "passed": false,
+            "done": true
+          },
+          "result": "not passed",
+          "judged": [
+            {
+              "t": 1790244015.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244030.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244045.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244060.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244075.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244090.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244105.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244120.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244135.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244150.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            }
+          ]
+        },
+        {
+          "id": "stepthrough",
+          "name": "Step through",
+          "drill": "stepthrough",
+          "ball": false,
+          "reps": 10,
+          "how": "Feet together, swing back, step the lead foot toward the target as the downswing starts. The hands follow the step. No ball.",
+          "ask": "Belt buckle open and all your weight on the lead foot?",
+          "gate": {
+            "kind": "count",
+            "need": 10
+          },
+          "state": {
+            "reps": 10,
+            "passes": 5,
+            "streak": 0,
+            "best": 2,
+            "passed": false,
+            "done": true
+          },
+          "result": "not passed",
+          "judged": [
+            {
+              "t": 1790244165.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244180.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244195.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244210.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244225.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244240.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244255.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244270.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244285.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790244300.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            }
+          ]
+        },
+        {
+          "id": "flush",
+          "name": "Flush line",
+          "drill": "flush",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "how": "Foot spray or a dry-erase line from the ball toward the target (no tape). 7 iron at 3/4 speed; read where the mark starts.",
+          "ask": "Mark starts at or ahead of the ball?",
+          "gate": {
+            "kind": "count",
+            "need": 7,
+            "mark": true,
+            "checks": [
+              {
+                "key": "strikeV",
+                "max": 3,
+                "min": -8
+              },
+              {
+                "key": "attack",
+                "max": -2
+              }
+            ]
+          },
+          "state": {
+            "reps": 10,
+            "passes": 3,
+            "streak": 0,
+            "best": 3,
+            "passed": false,
+            "done": true
+          },
+          "result": "not passed",
+          "judged": [
+            {
+              "t": 1790244325.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244325_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244325_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.2,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790244365.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244365_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244365_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.1,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790244405.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244405_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244405_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 3.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790244445.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244445_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244445_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.5,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 3.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790244485.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244485_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244485_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.4,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 4.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": false,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790244525.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244525_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244525_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -3.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 15.9,
+                "strikeH": 0.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": "strike not read",
+              "gate": null,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790244565.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244565_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244565_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.4,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 4.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790244605.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244605_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244605_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.3,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 4.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790244645.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244645_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244645_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.2,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 5.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790244685.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244685_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244685_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.1,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 5.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790244725.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790244725_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790244725_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 5.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "name": "Transfer",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "requires": "flush",
+          "how": "Full-speed 7 iron, one ball, full routine, no do-overs. Drop the step, keep the feel.",
+          "gate": {
+            "kind": "streak",
+            "need": 5,
+            "checks": [
+              {
+                "key": "strikeV",
+                "max": 3,
+                "min": -8
+              },
+              {
+                "key": "attack",
+                "max": -2
+              },
+              {
+                "key": "faceToPath",
+                "min": -2,
+                "max": 2
+              }
+            ]
+          },
+          "state": {
+            "reps": 0,
+            "passes": 0,
+            "streak": 0,
+            "best": 0,
+            "passed": false,
+            "done": false
+          },
+          "result": "skipped",
+          "judged": []
+        }
+      ]
+    },
+    {
+      "id": "lowpoint",
+      "name": "Low point forward",
+      "started": 1790416800.0,
+      "block": 2,
+      "blockStarted": 1790417100.0,
+      "reps": [
+        {
+          "t": 1790416815.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790416830.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790416845.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790416860.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790416875.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790416890.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790416905.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790416920.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790416935.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790416950.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790416965.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790416980.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790416995.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790417010.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790417025.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790417040.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790417055.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790417070.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790417085.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790417100.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": false
+        },
+        {
+          "t": 1790417125.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417125_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417125_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.2,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790417165.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417165_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417165_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.1,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790417205.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417205_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417205_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790417245.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417245_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417245_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 3.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790417285.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417285_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417285_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 3.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790417325.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417325_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417325_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -3.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 0.0,
+            "strikeH": 0.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": "strike not read"
+        },
+        {
+          "t": 1790417365.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417365_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417365_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.9,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 3.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790417405.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417405_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417405_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.9,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 3.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790417445.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417445_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417445_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.8,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 3.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790417485.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417485_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417485_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.8,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 4.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790417525.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790417525_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790417525_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.7,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 4.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        }
+      ],
+      "marks": [
+        {
+          "t": 1790417128.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790417168.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790417208.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790417248.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790417288.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790417328.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790417368.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790417408.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790417448.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790417488.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790417528.0,
+          "block": "flush",
+          "ok": true
+        }
+      ],
+      "results": {
+        "toetap": "not passed",
+        "stepthrough": "not passed",
+        "flush": "not passed",
+        "transfer": "skipped"
+      },
+      "ignored": [],
+      "ended": 1790417540.0,
+      "how": "done",
+      "spoken": "31 swings, no gate passed yet. The report for your coach is on the Start page.",
+      "day": "2026-09-26T05:00:00",
+      "blocks": [
+        {
+          "id": "toetap",
+          "name": "Lead foot only",
+          "drill": "toetap",
+          "ball": false,
+          "reps": 10,
+          "how": "Pull the trail foot back so only its toe touches the mat. 3/4 swings, no ball, brush the mat.",
+          "ask": "Brush at or ahead of the ball spot?",
+          "extraBall": "Hit one toe-tap swing with a ball for the down-the-line impact frame your coach asked for.",
+          "gate": {
+            "kind": "streak",
+            "need": 10
+          },
+          "state": {
+            "reps": 10,
+            "passes": 6,
+            "streak": 0,
+            "best": 3,
+            "passed": false,
+            "done": true
+          },
+          "result": "not passed",
+          "judged": [
+            {
+              "t": 1790416815.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416830.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416845.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416860.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416875.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416890.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416905.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416920.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416935.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416950.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            }
+          ]
+        },
+        {
+          "id": "stepthrough",
+          "name": "Step through",
+          "drill": "stepthrough",
+          "ball": false,
+          "reps": 10,
+          "how": "Feet together, swing back, step the lead foot toward the target as the downswing starts. The hands follow the step. No ball.",
+          "ask": "Belt buckle open and all your weight on the lead foot?",
+          "gate": {
+            "kind": "count",
+            "need": 10
+          },
+          "state": {
+            "reps": 10,
+            "passes": 7,
+            "streak": 0,
+            "best": 4,
+            "passed": false,
+            "done": true
+          },
+          "result": "not passed",
+          "judged": [
+            {
+              "t": 1790416965.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416980.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790416995.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790417010.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790417025.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790417040.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790417055.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790417070.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790417085.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790417100.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": false,
+              "gate": false,
+              "mark": null,
+              "fails": []
+            }
+          ]
+        },
+        {
+          "id": "flush",
+          "name": "Flush line",
+          "drill": "flush",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "how": "Foot spray or a dry-erase line from the ball toward the target (no tape). 7 iron at 3/4 speed; read where the mark starts.",
+          "ask": "Mark starts at or ahead of the ball?",
+          "gate": {
+            "kind": "count",
+            "need": 7,
+            "mark": true,
+            "checks": [
+              {
+                "key": "strikeV",
+                "max": 3,
+                "min": -8
+              },
+              {
+                "key": "attack",
+                "max": -2
+              }
+            ]
+          },
+          "state": {
+            "reps": 10,
+            "passes": 5,
+            "streak": 0,
+            "best": 5,
+            "passed": false,
+            "done": true
+          },
+          "result": "not passed",
+          "judged": [
+            {
+              "t": 1790417125.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417125_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417125_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.2,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790417165.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417165_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417165_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.1,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790417205.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417205_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417205_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790417245.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417245_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417245_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 3.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790417285.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417285_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417285_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 3.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790417325.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417325_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417325_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -3.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 0.0,
+                "strikeH": 0.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": "strike not read",
+              "gate": null,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790417365.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417365_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417365_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.9,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 3.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790417405.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417405_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417405_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.9,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 3.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790417445.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417445_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417445_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.8,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 3.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790417485.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417485_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417485_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.8,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 4.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790417525.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790417525_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790417525_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.7,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 4.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "name": "Transfer",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "requires": "flush",
+          "how": "Full-speed 7 iron, one ball, full routine, no do-overs. Drop the step, keep the feel.",
+          "gate": {
+            "kind": "streak",
+            "need": 5,
+            "checks": [
+              {
+                "key": "strikeV",
+                "max": 3,
+                "min": -8
+              },
+              {
+                "key": "attack",
+                "max": -2
+              },
+              {
+                "key": "faceToPath",
+                "min": -2,
+                "max": 2
+              }
+            ]
+          },
+          "state": {
+            "reps": 0,
+            "passes": 0,
+            "streak": 0,
+            "best": 0,
+            "passed": false,
+            "done": false
+          },
+          "result": "skipped",
+          "judged": []
+        }
+      ]
+    },
+    {
+      "id": "lowpoint",
+      "name": "Low point forward",
+      "started": 1790589600.0,
+      "block": 3,
+      "blockStarted": 1790590300.0,
+      "reps": [
+        {
+          "t": 1790589615.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589630.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589645.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589660.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589675.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589690.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589705.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589720.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589735.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589750.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589765.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589780.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589795.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589810.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589825.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589840.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589855.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589870.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589885.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589900.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790589925.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790589925_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790589925_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.7,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790589965.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790589965_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790589965_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.6,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590005.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790590005_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590005_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.5,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590045.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790590045_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590045_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.5,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590085.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790590085_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590085_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.4,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590125.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790590125_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590125_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.4,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590165.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790590165_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590165_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.3,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590205.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790590205_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590205_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.9,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 3.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590245.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790590245_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590245_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.8,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 3.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590285.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790590285_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590285_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.7,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 4.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590325.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790590325_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590325_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.5,
+            "loft": 24.0,
+            "faceToPath": 0.0,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590362.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790590362_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590362_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.4,
+            "loft": 24.0,
+            "faceToPath": 1.0,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590399.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790590399_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590399_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.5,
+            "loft": 24.0,
+            "faceToPath": 3.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590436.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790590436_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590436_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.5,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590473.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790590473_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590473_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.6,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590510.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790590510_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590510_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.5,
+            "loft": 24.0,
+            "faceToPath": 0.0,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590547.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790590547_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590547_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.4,
+            "loft": 24.0,
+            "faceToPath": 3.0,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590584.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790590584_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590584_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.5,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590621.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790590621_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590621_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.5,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790590658.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790590658_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790590658_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.5,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        }
+      ],
+      "marks": [
+        {
+          "t": 1790589928.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790589968.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790590008.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790590048.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790590088.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790590128.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790590168.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790590208.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790590248.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790590288.0,
+          "block": "flush",
+          "ok": true
+        }
+      ],
+      "results": {
+        "toetap": "passed",
+        "stepthrough": "passed",
+        "flush": "passed",
+        "transfer": "not passed"
+      },
+      "ignored": [],
+      "ended": 1790590670.0,
+      "how": "cap",
+      "spoken": "40 swings, gates passed: Lead foot only, Step through, Flush line. The report for your coach is on the Start page.",
+      "day": "2026-09-28T05:00:00",
+      "blocks": [
+        {
+          "id": "toetap",
+          "name": "Lead foot only",
+          "drill": "toetap",
+          "ball": false,
+          "reps": 10,
+          "how": "Pull the trail foot back so only its toe touches the mat. 3/4 swings, no ball, brush the mat.",
+          "ask": "Brush at or ahead of the ball spot?",
+          "extraBall": "Hit one toe-tap swing with a ball for the down-the-line impact frame your coach asked for.",
+          "gate": {
+            "kind": "streak",
+            "need": 10
+          },
+          "state": {
+            "reps": 10,
+            "passes": 10,
+            "streak": 10,
+            "best": 10,
+            "passed": true,
+            "done": true
+          },
+          "result": "passed",
+          "judged": [
+            {
+              "t": 1790589615.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589630.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589645.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589660.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589675.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589690.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589705.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589720.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589735.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589750.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            }
+          ]
+        },
+        {
+          "id": "stepthrough",
+          "name": "Step through",
+          "drill": "stepthrough",
+          "ball": false,
+          "reps": 10,
+          "how": "Feet together, swing back, step the lead foot toward the target as the downswing starts. The hands follow the step. No ball.",
+          "ask": "Belt buckle open and all your weight on the lead foot?",
+          "gate": {
+            "kind": "count",
+            "need": 10
+          },
+          "state": {
+            "reps": 10,
+            "passes": 10,
+            "streak": 10,
+            "best": 10,
+            "passed": true,
+            "done": true
+          },
+          "result": "passed",
+          "judged": [
+            {
+              "t": 1790589765.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589780.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589795.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589810.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589825.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589840.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589855.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589870.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589885.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790589900.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            }
+          ]
+        },
+        {
+          "id": "flush",
+          "name": "Flush line",
+          "drill": "flush",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "how": "Foot spray or a dry-erase line from the ball toward the target (no tape). 7 iron at 3/4 speed; read where the mark starts.",
+          "ask": "Mark starts at or ahead of the ball?",
+          "gate": {
+            "kind": "count",
+            "need": 7,
+            "mark": true,
+            "checks": [
+              {
+                "key": "strikeV",
+                "max": 3,
+                "min": -8
+              },
+              {
+                "key": "attack",
+                "max": -2
+              }
+            ]
+          },
+          "state": {
+            "reps": 10,
+            "passes": 7,
+            "streak": 0,
+            "best": 7,
+            "passed": true,
+            "done": true
+          },
+          "result": "passed",
+          "judged": [
+            {
+              "t": 1790589925.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790589925_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790589925_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.7,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790589965.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790589965_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790589965_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.6,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790590005.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790590005_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590005_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.5,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790590045.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790590045_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590045_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.5,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790590085.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790590085_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590085_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.4,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790590125.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790590125_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590125_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.4,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790590165.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790590165_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590165_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.3,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790590205.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790590205_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590205_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.9,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 3.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790590245.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790590245_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590245_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.8,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 3.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790590285.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790590285_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590285_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.7,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 4.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "name": "Transfer",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "requires": "flush",
+          "how": "Full-speed 7 iron, one ball, full routine, no do-overs. Drop the step, keep the feel.",
+          "gate": {
+            "kind": "streak",
+            "need": 5,
+            "checks": [
+              {
+                "key": "strikeV",
+                "max": 3,
+                "min": -8
+              },
+              {
+                "key": "attack",
+                "max": -2
+              },
+              {
+                "key": "faceToPath",
+                "min": -2,
+                "max": 2
+              }
+            ]
+          },
+          "state": {
+            "reps": 10,
+            "passes": 8,
+            "streak": 3,
+            "best": 3,
+            "passed": false,
+            "done": true
+          },
+          "result": "not passed",
+          "judged": [
+            {
+              "t": 1790590325.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790590325_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590325_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.5,
+                "loft": 24.0,
+                "faceToPath": 0.0,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790590362.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790590362_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590362_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.4,
+                "loft": 24.0,
+                "faceToPath": 1.0,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790590399.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790590399_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590399_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.5,
+                "loft": 24.0,
+                "faceToPath": 3.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": null,
+              "fails": [
+                {
+                  "key": "faceToPath",
+                  "min": -2,
+                  "max": 2
+                }
+              ]
+            },
+            {
+              "t": 1790590436.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790590436_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590436_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.5,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790590473.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790590473_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590473_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.6,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790590510.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790590510_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590510_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.5,
+                "loft": 24.0,
+                "faceToPath": 0.0,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790590547.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790590547_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590547_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.4,
+                "loft": 24.0,
+                "faceToPath": 3.0,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": null,
+              "fails": [
+                {
+                  "key": "faceToPath",
+                  "min": -2,
+                  "max": 2
+                }
+              ]
+            },
+            {
+              "t": 1790590584.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790590584_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590584_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.5,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790590621.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790590621_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590621_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.5,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790590658.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790590658_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790590658_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.5,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lowpoint",
+      "name": "Low point forward",
+      "started": 1790762400.0,
+      "block": 3,
+      "blockStarted": 1790763100.0,
+      "reps": [
+        {
+          "t": 1790762415.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762430.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762445.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762460.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762475.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762490.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762505.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762520.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762535.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762550.0,
+          "block": "toetap",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762565.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762580.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762595.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762610.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762625.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762640.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762655.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762670.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762685.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762700.0,
+          "block": "stepthrough",
+          "kind": "tap",
+          "pass": true
+        },
+        {
+          "t": 1790762725.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790762725_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790762725_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -3.2,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 0.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790762765.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790762765_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790762765_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -3.1,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 0.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790762805.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790762805_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790762805_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -3.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790762845.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790762845_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790762845_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.9,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790762885.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790762885_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790762885_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.8,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790762925.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790762925_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790762925_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.8,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790762965.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790762965_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790762965_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.7,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790763005.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790763005_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790763005_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -2.6,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 3.5,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790763045.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790763045_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790763045_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.8,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 2.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790763085.0,
+          "block": "flush",
+          "clip": "swing_face_1920x1080_240fps_1790763085_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790763085_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -1.7,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 4.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790763125.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790763125_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790763125_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -3.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790763162.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790763162_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790763162_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -3.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790763199.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790763199_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790763199_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -3.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790763236.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790763236_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790763236_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -3.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        },
+        {
+          "t": 1790763273.0,
+          "block": "transfer",
+          "clip": "swing_face_1920x1080_240fps_1790763273_2000ms.mp4",
+          "partner": "swing_dtl_1920x1080_240fps_1790763273_2000ms.mp4",
+          "kind": "shot",
+          "club": "I7",
+          "numbers": {
+            "attack": -3.0,
+            "loft": 24.0,
+            "faceToPath": 0.5,
+            "strikeV": 1.0,
+            "strikeH": 4.0,
+            "clubSpeed": 80.0,
+            "carry": 150.0
+          },
+          "noRead": null
+        }
+      ],
+      "marks": [
+        {
+          "t": 1790762728.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790762768.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790762808.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790762848.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790762888.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790762928.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790762968.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790763008.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790763048.0,
+          "block": "flush",
+          "ok": true
+        },
+        {
+          "t": 1790763088.0,
+          "block": "flush",
+          "ok": true
+        }
+      ],
+      "results": {
+        "toetap": "passed",
+        "stepthrough": "passed",
+        "flush": "passed",
+        "transfer": "passed"
+      },
+      "ignored": [],
+      "ended": 1790763285.0,
+      "how": "done",
+      "spoken": "35 swings, gates passed: Lead foot only, Step through, Flush line, Transfer. The report for your coach is on the Start page.",
+      "day": "2026-09-30T05:00:00",
+      "blocks": [
+        {
+          "id": "toetap",
+          "name": "Lead foot only",
+          "drill": "toetap",
+          "ball": false,
+          "reps": 10,
+          "how": "Pull the trail foot back so only its toe touches the mat. 3/4 swings, no ball, brush the mat.",
+          "ask": "Brush at or ahead of the ball spot?",
+          "extraBall": "Hit one toe-tap swing with a ball for the down-the-line impact frame your coach asked for.",
+          "gate": {
+            "kind": "streak",
+            "need": 10
+          },
+          "state": {
+            "reps": 10,
+            "passes": 10,
+            "streak": 10,
+            "best": 10,
+            "passed": true,
+            "done": true
+          },
+          "result": "passed",
+          "judged": [
+            {
+              "t": 1790762415.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762430.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762445.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762460.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762475.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762490.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762505.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762520.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762535.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762550.0,
+              "block": "toetap",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            }
+          ]
+        },
+        {
+          "id": "stepthrough",
+          "name": "Step through",
+          "drill": "stepthrough",
+          "ball": false,
+          "reps": 10,
+          "how": "Feet together, swing back, step the lead foot toward the target as the downswing starts. The hands follow the step. No ball.",
+          "ask": "Belt buckle open and all your weight on the lead foot?",
+          "gate": {
+            "kind": "count",
+            "need": 10
+          },
+          "state": {
+            "reps": 10,
+            "passes": 10,
+            "streak": 10,
+            "best": 10,
+            "passed": true,
+            "done": true
+          },
+          "result": "passed",
+          "judged": [
+            {
+              "t": 1790762565.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762580.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762595.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762610.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762625.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762640.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762655.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762670.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762685.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790762700.0,
+              "block": "stepthrough",
+              "kind": "tap",
+              "pass": true,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            }
+          ]
+        },
+        {
+          "id": "flush",
+          "name": "Flush line",
+          "drill": "flush",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "how": "Foot spray or a dry-erase line from the ball toward the target (no tape). 7 iron at 3/4 speed; read where the mark starts.",
+          "ask": "Mark starts at or ahead of the ball?",
+          "gate": {
+            "kind": "count",
+            "need": 7,
+            "mark": true,
+            "checks": [
+              {
+                "key": "strikeV",
+                "max": 3,
+                "min": -8
+              },
+              {
+                "key": "attack",
+                "max": -2
+              }
+            ]
+          },
+          "state": {
+            "reps": 10,
+            "passes": 7,
+            "streak": 0,
+            "best": 7,
+            "passed": true,
+            "done": true
+          },
+          "result": "passed",
+          "judged": [
+            {
+              "t": 1790762725.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790762725_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790762725_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -3.2,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 0.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790762765.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790762765_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790762765_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -3.1,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 0.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790762805.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790762805_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790762805_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -3.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790762845.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790762845_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790762845_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.9,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790762885.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790762885_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790762885_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.8,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790762925.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790762925_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790762925_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.8,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790762965.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790762965_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790762965_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.7,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": true,
+              "fails": []
+            },
+            {
+              "t": 1790763005.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790763005_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790763005_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -2.6,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 3.5,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                }
+              ]
+            },
+            {
+              "t": 1790763045.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790763045_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790763045_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.8,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 2.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            },
+            {
+              "t": 1790763085.0,
+              "block": "flush",
+              "clip": "swing_face_1920x1080_240fps_1790763085_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790763085_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -1.7,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 4.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": false,
+              "mark": true,
+              "fails": [
+                {
+                  "key": "strikeV",
+                  "max": 3,
+                  "min": -8
+                },
+                {
+                  "key": "attack",
+                  "max": -2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "transfer",
+          "name": "Transfer",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "requires": "flush",
+          "how": "Full-speed 7 iron, one ball, full routine, no do-overs. Drop the step, keep the feel.",
+          "gate": {
+            "kind": "streak",
+            "need": 5,
+            "checks": [
+              {
+                "key": "strikeV",
+                "max": 3,
+                "min": -8
+              },
+              {
+                "key": "attack",
+                "max": -2
+              },
+              {
+                "key": "faceToPath",
+                "min": -2,
+                "max": 2
+              }
+            ]
+          },
+          "state": {
+            "reps": 5,
+            "passes": 5,
+            "streak": 5,
+            "best": 5,
+            "passed": true,
+            "done": true
+          },
+          "result": "passed",
+          "judged": [
+            {
+              "t": 1790763125.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790763125_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790763125_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -3.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790763162.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790763162_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790763162_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -3.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790763199.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790763199_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790763199_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -3.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790763236.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790763236_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790763236_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -3.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            },
+            {
+              "t": 1790763273.0,
+              "block": "transfer",
+              "clip": "swing_face_1920x1080_240fps_1790763273_2000ms.mp4",
+              "partner": "swing_dtl_1920x1080_240fps_1790763273_2000ms.mp4",
+              "kind": "shot",
+              "club": "I7",
+              "numbers": {
+                "attack": -3.0,
+                "loft": 24.0,
+                "faceToPath": 0.5,
+                "strikeV": 1.0,
+                "strikeH": 4.0,
+                "clubSpeed": 80.0,
+                "carry": 150.0
+              },
+              "noRead": null,
+              "gate": true,
+              "mark": null,
+              "fails": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

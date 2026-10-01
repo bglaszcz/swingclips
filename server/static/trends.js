@@ -727,9 +727,76 @@ function renderProgress() {
   renderGapping();
   renderWedges();
   renderProgressCombine();
+  renderProgressPrograms();
   renderProgressDrillSets(club);
   const latestHcp = journal.handicap[journal.handicap.length - 1];
   document.getElementById("p-hcp-now").textContent = latestHcp ? `${latestHcp.index.toFixed(1)} on ${dayOf(new Date(latestHcp.date + "T12:00"))}` : "";
+}
+
+async function renderProgressPrograms() {
+  const el = document.getElementById("p-program-trends");
+  if (!el) return;
+  el.hidden = true;
+  el.replaceChildren();
+  if (typeof SwingProgramHistory === "undefined") return;
+
+  try {
+    const res = await fetch("/api/program");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.log || !data.log.length) return;
+
+    const allRuns = SwingProgramHistory.runs(data.log, data.programs);
+    const programs = data.programs || [];
+
+    const blocksToRender = [];
+    for (const prog of programs) {
+      const progRuns = allRuns.filter(r => r.id === prog.id);
+      if (progRuns.length < 2) continue;
+
+      const ballBlocks = (prog.blocks || []).filter(b => b.ball);
+      const linesForProg = [];
+      for (const b of ballBlocks) {
+        const t = SwingProgramHistory.trend(progRuns, prog.id, b.id);
+        if (t) {
+          linesForProg.push(...SwingProgramHistory.lines(t));
+        }
+      }
+
+      if (linesForProg.length) {
+        blocksToRender.push({ prog, progRuns, lines: linesForProg });
+      }
+    }
+
+    if (!blocksToRender.length) return;
+
+    for (const item of blocksToRender) {
+      const fold = document.createElement("details");
+      fold.className = "explain prog-trend-fold";
+      fold.style.marginBottom = "6px";
+
+      const sum = document.createElement("summary");
+      sum.style.cursor = "pointer";
+      sum.style.fontSize = "13px";
+      const strong = document.createElement("strong");
+      strong.textContent = `Coach program: ${item.prog.name}`;
+      sum.append(strong, ` (${item.progRuns.length} runs)`);
+      fold.append(sum);
+
+      const content = document.createElement("div");
+      content.className = "note";
+      content.style.marginTop = "4px";
+      for (const line of item.lines) {
+        const lineEl = document.createElement("div");
+        lineEl.textContent = line;
+        content.append(lineEl);
+      }
+      fold.append(content);
+      el.append(fold);
+    }
+
+    el.hidden = false;
+  } catch {}
 }
 
 function renderProgressDrillSets(club) {

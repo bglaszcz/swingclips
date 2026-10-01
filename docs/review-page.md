@@ -348,11 +348,18 @@ toward the ball". The phones face away from you, so voice is the channel.
   shot's verdict through the practice feed (practice voice and games are turned off; one voice at a time).
   A block ends when its reps are in or its streak is made, then the next starts (`requires`: skipped unless
   that block passed); the program ends after the last block, at its cap (every swing counts, taps too), or
-  45 minutes idle, and is logged to `programs-log.jsonl`. **Copy for coach** (`/api/program/report`): per
+  45 minutes idle, and is logged to `programs-log.jsonl`. **Program history and trends**
+  (`static/programhistory.js`, `SwingProgramHistory`, Start page section 5, Progress step 3): under the
+  program picker on the Start page, **Past runs** lists up to 5 finished runs (newest first: date, swings used
+  out of cap, and for each block its passed / not passed / skipped tag and gate count) with a **Copy for coach**
+  button per run (`/api/program/report?started=<run.started>`). Folded under `<details>` "Past runs" when more
+  than 2 runs exist. For ball blocks with 2+ runs with read shots, trend lines show gate progression and launch
+  monitor medians moving toward the gate, away, or about the same. In Progress step 3 ("Is it working?"),
+  each program with 2+ runs gets a folded trend line. **Copy for coach** (`/api/program/report`): per
   block the gate result and medians (range) of attack angle, dynamic loft and face to path for shots 1-10
   and 11 on, the club order, every shot in order with its verdict, and the impact frame
   (`/api/still/{clip}`) of the first ball swing hit in a no-ball block (the toe-tap swing). Tested in
-  `tests/test_programs.py`.
+  `tests/test_programs.py` and `tests/programhistory.test.js`.
 - **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page (section 6)
   for quick setup in the barn. Lays out an ordered 45-minute practice session (60-80 balls) across 4 blocks:
   (1) Warm-up wedge shots, (2) Focus block with the active focus move, its coach.js drill and swing thought,
