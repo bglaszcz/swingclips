@@ -260,6 +260,14 @@ class ProgramsTest(unittest.TestCase):
         self.assertIn("Strike calibration: median -15.0", self.p.report()["text"])
         self.assertNotIn("Calibration shifted", " ".join(self.said()))
 
+    def test_report_has_the_camera_numbers(self):
+        self.flush()
+        self.hit(shot())
+        self.hit(shot())
+        bodies = {s["name"]: {"handsAhead": v} for s, v in zip(self.swings, (1.2, 2.0))}
+        self.assertIn("hands ahead of ball at impact +1.6 in (camera, 2 swings)", self.p.report(body=bodies.get)["text"])
+        self.assertNotIn("hands ahead", self.p.report()["text"])
+
     def test_setup_notes_go_into_the_report(self):
         self.flush()
         self.p.note("Omni moved 2 in back")

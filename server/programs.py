@@ -413,7 +413,7 @@ class Programs:
                    for x in self._log()[-log_limit:]]
             return {"program": self._state(), "programs": self.catalog(), "log": log}
 
-    def report(self, started: float | None = None) -> dict | None:
+    def report(self, started: float | None = None, body=None) -> dict | None:
         """The report for the coach, of the program in play (or the finished one started at `started`,
         or the last finished): {text, frame (the toe-tap ball swing's clips, for its impact frame)}."""
         with self.lock:
@@ -423,7 +423,7 @@ class Programs:
                 run = next((x for x in reversed(logged) if started is None or x["started"] == started), None)
             if run is None or run["id"] not in self.programs:
                 return None
-            return report(effective(self.programs[run["id"]], run), run)
+            return report(effective(self.programs[run["id"]], run), run, body)
 
     # ---- Inside (lock held) ----
 
@@ -596,7 +596,11 @@ def carry_spread(values: list) -> str:
     return f"carry {statistics.median(v):.0f} yd{sd}"
 
 
-def report(p: dict, run: dict) -> dict:
+# Camera numbers reported per block when the swings have them (summary.js BODY key: label, unit).
+BODY_REPORT = {"handsAhead": ("hands ahead of ball at impact", "in")}
+
+
+def report(p: dict, run: dict, body=None) -> dict:
     """The text to paste back to the coach: per block the gate, the medians (and range) of attack
     angle, dynamic loft and face to path split into shots 1-10 and 11 on, and every swing in order."""
     day = datetime.fromtimestamp(run["started"])
@@ -642,8 +646,13 @@ def report(p: dict, run: dict) -> dict:
             for name, g in groups:
                 if g:
                     read = [r for r in g if r["numbers"]["clubSpeed"]]
+                    cams = []
+                    for k, (label, unit) in BODY_REPORT.items():
+                        v = [x for x in ((body(r["clip"]) or {}).get(k) if body else None for r in g) if x is not None]
+                        if v:
+                            cams.append(f"{label} {statistics.median(v):+.1f} {unit} (camera, {len(v)} swings)")
                     lines.append(f"  {name}: " + "; ".join([spread(k, [r["numbers"][k] for r in read]) for k in REPORT_KEYS]
-                                                           + [carry_spread([r["numbers"]["carry"] for r in read])]))
+                                                           + [carry_spread([r["numbers"]["carry"] for r in read])] + cams))
         for r in shots:
             if r["kind"] == "ball":
                 lines.append(f"  Ball swing ({club_word(r.get('club'))}): " + ", ".join(

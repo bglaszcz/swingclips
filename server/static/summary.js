@@ -86,7 +86,7 @@
     const positions = Phases.detect(main.frames, main.aspect, leadSide, strikeWindow(main.name, main.strike),
                                     impactCheck(main) === null ? main.impact : null,
                                     { drill: main.drill || null, clubOnset: main.clubOnset ?? null });
-    const metrics = main.angle === "dtl" ? null : Metrics.compute(main.frames, main.aspect, leadSide, positions);
+    const metrics = main.angle === "dtl" ? null : Metrics.compute(main.frames, main.aspect, leadSide, positions, main.ball);
     const dtl = other || (main.angle === "dtl" ? main : null);
     const offset = other ? syncOffset(main, other) : 0;
     const dtlIndex = key => {
@@ -111,6 +111,7 @@
     ["pelvisTop", "Pelvis turn at top", "°", "face", "p4", "pelvisTurn"],
     ["xFactor", "X-factor at top", "°", "face", "p4", "separation"],
     ["hipSway", "Hip sway at impact", "in", "face", "p7", "hipSway"],
+    ["handsAhead", "Hands ahead of ball at impact", "in", "face", "p7", "handsBall"],
     ["headSway", "Head sway at impact", "in", "face", "p7", "headSway"],
     ["headRise", "Head rise at impact", "in", "face", "p7", "headRise"],
     ["spineTiltImpact", "Spine tilt at impact", "°", "face", "p7", "spineTilt"],

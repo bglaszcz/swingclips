@@ -3,7 +3,8 @@
 // golfer (the trends assume one, swings.py LEAD_SIDE).
 //
 // Signs, as metrics.js measures them (summary.js BODY):
-//   face-on: hipSway / headSway + toward the target, headRise + up, spineTiltImpact + tilted away
+//   face-on: hipSway / headSway + toward the target, handsAhead + hands toward the target of the
+//     ball at impact, headRise + up, spineTiltImpact + tilted away
 //     from the target (trail shoulder lower); turns + more turned; lagP5 + more wrist hinge (lead
 //     arm to shaft, 90 = an L) with the lead arm parallel coming down; releaseArm + the lead arm
 //     higher when the hinge goes (an earlier release: casting).
@@ -97,6 +98,17 @@
         how: "The hips slide less toward the target and turn more: the body stays centred and the club can swing out in front.",
         drill: "Stick-outside-lead-hip drill: stick 1-2 inches outside your lead hip at address; swing without touching it, turning the belt buckle to the target. 10 balls.",
         thought: "Belt buckle to the target, not to the side." },
+    },
+    handsAhead: {
+      what: "hands ahead of the ball at impact (toward the target)",
+      more: { name: "hands further ahead of the ball at impact",
+        how: "The hands lead the clubhead into the ball: the shaft leans toward the target and the club comes in on a more downward strike, the low point moving ahead of the ball.",
+        drill: "Lead foot only: trail foot back on its toe, 3/4 swings brushing the mat at or ahead of the ball. 10 reps, then 10 balls the same way.",
+        thought: "Hands to the lead thigh." },
+      less: { name: "hands level with or behind the ball at impact (flipping)", fault: true,
+        how: "The clubhead passes the hands before the ball: the wrists flip, adding loft and moving the low point back.",
+        drill: "Impact bag or towel: half swings stopping at impact with the hands over the lead thigh and the shaft leaning forward. 10 reps, then 10 balls.",
+        thought: "Handle first." },
     },
     headSway: {
       what: "head movement toward the target at impact",

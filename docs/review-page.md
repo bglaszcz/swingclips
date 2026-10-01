@@ -183,7 +183,14 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   Casting comes from two face-on numbers (`metrics.js`): **Wrist hinge at P5**, the angle between the
   lead arm and the shaft (90 = an L) with the lead arm parallel coming down, and **Release point**,
   the lead arm's angle to horizontal when that hinge first drops under 70 degrees coming down (higher
-  = an earlier release). Named casting when the release point is above -22 degrees. The ranges come
+  = an earlier release). Named casting when the release point is above -22 degrees.
+  **Hands ahead of ball at impact** (face-on, `handsBall` in `metrics.js`, inches, + toward the target):
+  the wrists' middle against where the ball sat, at P7. On 289 of the owner's swings (Sep 23 - Oct 1
+  2026) more of it went with a steeper attack angle within each club (about 0.7 degrees per inch,
+  r -0.42, the same way on 8 of 10 clubs; ball position held constant), but not with dynamic loft.
+  Oct 1 (the low point drill day) read +2.0 in on 7 irons against about +0.6 before. Copy for coach
+  reports its median per block. Shaft lean at impact was tried and isn't measured: at 240 fps the shaft
+  turns ~8 degrees a frame near impact and is often a blur, and it showed no link to dynamic loft. The ranges come
   from the trends' data (`/api/swings`), loaded when the first swing is opened and again when it's over a
   minute old.
 - **Compare**: a **My good shots** table with each number's middle 50% and 80% for the open swing's

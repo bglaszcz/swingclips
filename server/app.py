@@ -1640,7 +1640,12 @@ def program_next():
 @app.get("/api/program/report")
 def program_report(started: float | None = None):
     """The report to paste back to the coach, of the program in play or a finished one."""
-    got = programs_state.report(started)
+    def body(clip: str) -> dict | None:
+        # The swing's camera numbers, once analyzed (swings.py records, by the face-on clip).
+        with records_lock:
+            rec = swing_records.get(clip)
+        return rec.get("body") if rec else None
+    got = programs_state.report(started, body)
     if got is None:
         raise HTTPException(404, "No program yet")
     return got

@@ -12,7 +12,12 @@
 //
 // Signs, for either hand: turns are positive going back (closed), negative once open to the
 // target; tilts are positive when the lead side is higher / the spine leans away from the target;
-// sway and head drift are positive toward the target (and up).
+// sway and head drift are positive toward the target (and up); hands to ball is the hands (the
+// wrists' middle) toward the target (+) of where the ball sat, in inches. On 289 of the owner's
+// swings (Sep 23-Oct 1 2026) more of it at impact went with a steeper attack angle within a club
+// (about 0.7 degrees per inch, r -0.42; ball position held constant) but not with dynamic loft.
+// Shaft lean at impact isn't measured: at 240 fps the shaft turns ~8 degrees a frame there and is
+// often a blur, and it showed no link to dynamic loft.
 //
 // Works in the browser (window.SwingMetrics) and in Node (module.exports) for testing.
 (function (root) {
@@ -86,6 +91,8 @@
     out.head = { x: ears.reduce((a, p) => a + p.x, 0) / 3, y: ears.reduce((a, p) => a + p.y, 0) / 3 };
     out.hips = hip2;
     out.grip = mid(px(I.L_INDEX), px(I.R_INDEX));
+    // The wrists' middle: both models place the wrists (RTMPose leaves the fingers to MediaPipe).
+    out.wrists = mid(px(I.L_WRIST), px(I.R_WRIST));
     return out;
   }
 
@@ -151,10 +158,11 @@
    * @param aspect picture width / height
    * @param leadSide "left" for a right-handed golfer
    * @param positions from SwingPhases.detect (P1 is the reference for "vs address")
+   * @param ball optional {x, y} where the server found the ball at address (picture fractions)
    * @returns {values: [per-frame values | null], address: frame index, scale, tempo: {back, down,
    *   ratio} | null}
    */
-  function compute(frames, aspect, leadSide, positions) {
+  function compute(frames, aspect, leadSide, positions, ball) {
     const s = sides(leadSide);
     const raw = frames.map(f => frameValues(f, aspect, s));
     const find = key => (positions || []).find(p => p.key === key);
@@ -180,6 +188,7 @@
         r.headSway = s.m * (v.head.x - base.head.x) * inch;
         r.headRise = -(v.head.y - base.head.y) * inch;
         r.hipSway = s.m * (v.hips.x - base.hips.x) * inch;
+        if (ball && Number.isFinite(ball.x)) r.handsBall = s.m * (v.wrists.x - ball.x * aspect) * inch;
       }
       return r;
     });
