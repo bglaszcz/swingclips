@@ -32,3 +32,11 @@ The Square watcher, the GSPro-connector option, and the ball-flight fill-in. (Mo
   practice says "not in the shot" for them.
 - Not used, on purpose: the unofficial Bluetooth connector `brentyates/squaregolf-connector` was
   taken down by a DMCA notice (Sept 2026) alleging code taken from Square's private systems.
+
+## Checking Square's CSV export against the database
+
+`python tools/square_compare.py <Square CSV export> <Dropbox\SwingClips\square-shots-DATE.jsonl>` matches
+the same session's shots (by club and order, confirmed on carry and ball speed) and prints new (database)
+minus old (CSV) for impact height and toe/heel, attack, face to path and dynamic loft, with a straight-line
+fit (offset, scale, r), and every failed impact read in either source (CSV: `H0.0` with a filler height;
+database: null, from Square's `IsValidImpact*` flags).

@@ -78,7 +78,9 @@ def no_read(n: dict) -> str | None:
     """Why Square's shot can't be judged (None: it can)."""
     if n["clubSpeed"] is None or n["clubSpeed"] == 0:
         return "no club speed"
-    if n["strikeH"] == 0.0:
+    # Square's app flags a failed impact read (IsValidImpact*: the watcher sends null); its CSV export
+    # wrote 0.0 across the face with a filler height instead.
+    if n["strikeH"] is None or n["strikeV"] is None or n["strikeH"] == 0.0:
         return "strike not read"
     return None
 
@@ -170,16 +172,15 @@ def block_state(block: dict, reps: list[dict], marks: list[dict]) -> dict:
     for r in js:
         streak = streak + 1 if r["gate"] else 0
         best = max(best, streak)
-    if gate["kind"] == "streak":
-        passed = best >= gate["need"]
-        done = passed or len(js) >= block["reps"]
-    else:
-        passed = passes >= gate["need"]
-        done = len(js) >= block["reps"]
     # A gate on the block's medians too ("median attack -3 or steeper"): checked over the shots judged.
     meds = medians_of(block, js)
-    if meds:
-        passed = passed and all(check(meds, c) for c in gate["medians"])
+    meds_ok = all(check(meds, c) for c in gate.get("medians", []))
+    if gate["kind"] == "streak":
+        passed = best >= gate["need"] and meds_ok
+        done = passed or len(js) >= block["reps"]
+    else:
+        passed = passes >= gate["need"] and meds_ok
+        done = len(js) >= block["reps"]
     return {"reps": len(js), "passes": passes, "streak": streak, "best": best, "passed": passed, "done": done,
             **({"medians": meds} if meds else {})}
 
@@ -194,9 +195,9 @@ def gate_text(block: dict) -> str:
 
 def progress_text(block: dict, st: dict) -> str:
     g = block["gate"]
-    if g["kind"] == "streak":
-        return f"{st['streak']} in a row" + (f", best {st['best']}" if st["best"] > st["streak"] else "")
     meds = "".join(f", median {NUMBERS[k][0].lower()} {fmt(k, v)}" for k, v in (st.get("medians") or {}).items() if v is not None)
+    if g["kind"] == "streak":
+        return f"{st['streak']} in a row" + (f", best {st['best']}" if st["best"] > st["streak"] else "") + meds
     return f"{st['passes']} of {st['reps']} passed, {g['need']} needed{meds}"
 
 
@@ -520,7 +521,16 @@ def spread(key: str, values: list) -> str:
     return f"{NUMBERS[key][0].lower()} {fmt(key, med)}{NUMBERS[key][1]}{rng}"
 
 
-REPORT_KEYS = ("attack", "loft", "faceToPath")
+REPORT_KEYS = ("attack", "loft", "faceToPath", "strikeV")
+
+
+def carry_spread(values: list) -> str:
+    """Carry's median and standard deviation: reported, not gated (the coach's call, Oct 1)."""
+    v = [x for x in values if x is not None]
+    if not v:
+        return "carry –"
+    sd = f", SD {statistics.stdev(v):.0f} yd" if len(v) > 1 else ""
+    return f"carry {statistics.median(v):.0f} yd{sd}"
 
 
 def report(p: dict, run: dict) -> dict:
@@ -562,7 +572,8 @@ def report(p: dict, run: dict) -> dict:
             for name, g in groups:
                 if g:
                     read = [r for r in g if r["numbers"]["clubSpeed"]]
-                    lines.append(f"  {name}: " + "; ".join(spread(k, [r["numbers"][k] for r in read]) for k in REPORT_KEYS))
+                    lines.append(f"  {name}: " + "; ".join([spread(k, [r["numbers"][k] for r in read]) for k in REPORT_KEYS]
+                                                           + [carry_spread([r["numbers"]["carry"] for r in read])]))
         for r in shots:
             if r["kind"] == "ball":
                 lines.append(f"  Ball swing ({club_word(r.get('club'))}): " + ", ".join(

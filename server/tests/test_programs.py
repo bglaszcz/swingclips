@@ -72,6 +72,32 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(programs.no_read(programs.numbers_of(shot(speed=0.0))), "no club speed")
         self.assertIsNone(programs.no_read(programs.numbers_of(shot())))
 
+    def test_square_flagged_strike_is_not_read(self):
+        # Square's app flags a failed impact read; the watcher sends null (56 of 321 shots, Sep 23-Oct 1).
+        n = programs.numbers_of(shot(h=None, v=None))
+        self.assertEqual(programs.no_read(n), "strike not read")
+
+    def test_transfer_needs_the_loft_median_too(self):
+        self.p.start("lowpoint")
+        self.p.programs["lowpoint"]["blocks"][3]["requires"] = None
+        for _ in range(3):
+            self.p.next_block()
+        for _ in range(5):
+            self.hit(shot(loft=28.0))   # 5 in a row on the checks, but median loft 28 > 26.5
+        self.assertIsNotNone(self.p.run)
+        self.assertIn("median dynamic loft 28.0", self.p.state()["program"]["progress"])
+        for _ in range(5):
+            self.hit(shot(loft=24.0))   # median now 26.0
+        self.assertEqual(self.p.state()["log"][-1]["results"]["transfer"], "passed")
+
+    def test_report_has_carry_spread(self):
+        self.p.start("lowpoint")
+        self.p.next_block()
+        self.p.next_block()
+        self.hit(shot())
+        self.hit(shot())
+        self.assertIn("carry 150 yd, SD 0 yd", self.p.report()["text"])
+
     def test_strike_gate_is_one_sided_with_a_floor(self):
         c = {"key": "strikeV", "max": 3, "min": -8}
         self.assertTrue(programs.check({"strikeV": 3.0}, c))
