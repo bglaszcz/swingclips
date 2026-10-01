@@ -100,6 +100,7 @@
     const lim = v => formatLimit(v, check.key !== "attack");
     let gate;
     if (check.min != null && check.max != null && check.min === -check.max) gate = `±${check.max}${info.unit}`;
+    else if (check.min != null && check.max != null) gate = `${check.min} to ${check.max}${info.unit}`;
     else if (check.max != null) gate = `${lim(check.max)}${info.unit} or ${check.key === "attack" ? "steeper" : "lower"}`;
     else gate = `${lim(check.min)}${info.unit} or higher`;
     return `${movement === "moved toward the gate" ? "toward" : "away from"} ${gate}`;

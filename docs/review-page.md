@@ -341,7 +341,10 @@ toward the ball". The phones face away from you, so voice is the channel.
   ladder as data: blocks in order, each with its drill (drill mode, so rehearsals stay out of the trends;
   a block without one, like the transfer block, counts as normal swings), ball or no ball, reps, and a gate
   (`count`: need of reps, or `streak`: need in a row) of checks on Square's numbers (`strikeV`, `attack`,
-  `faceToPath`, `loft`, ...: min/max), plus `mark` for the golfer's tap on what they saw. No-ball reps are
+  `faceToPath`, `loft`, ...: min/max), plus `mark` for the golfer's tap on what they saw. A gate can also check the block's
+  medians (`medians`: e.g. median attack -3 or steeper, the retention check). Square's strike height is
+  spoken as the number it gives ("strike minus 12"): its 0 isn't the owner's sweet spot (7 iron median
+  about -13, best carry at -20..-8), so gates use the owner's own band. No-ball reps are
   tapped Pass/Miss on the page (clips the phones record during them are ignored). Ball shots are judged
   once the shot pairs; a shot Square didn't read (club speed 0, or strike across the face exactly 0.0, whose
   up-down number is filler) is left out of the gate. Face to path = face minus path. The phone says each

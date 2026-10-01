@@ -599,10 +599,12 @@ const pgNum = (v, d = 1) => v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(d
 function gateText(b) {
   const g = b.gate, checks = (g.checks || []).map(c => {
     const name = { strikeV: "strike", attack: "attack", faceToPath: "face to path" }[c.key] || c.key;
-    if (c.min != null && c.max != null && c.min === -c.max) return `${name} within ±${c.max}`;
-    if (c.key === "strikeV") return `strike ≤ +${c.max} mm` + (c.min != null ? ` (not below ${c.min})` : "");
-    return c.max != null ? `${name} ≤ ${c.max}` : `${name} ≥ ${c.min}`;
+    const unit = c.key === "strikeV" ? " mm" : "°";
+    if (c.min != null && c.max != null && c.min === -c.max) return `${name} within ±${c.max}${unit}`;
+    if (c.min != null && c.max != null) return `${name} ${c.min} to ${c.max}${unit}`;
+    return c.max != null ? `${name} ≤ ${c.max}${unit}` : `${name} ≥ ${c.min}${unit}`;
   });
+  for (const c of g.medians || []) checks.push(`median ${c.key === "attack" ? "attack" : c.key} ${c.max != null ? "≤ " + c.max : "≥ " + c.min}${c.key === "strikeV" ? " mm" : "°"}`);
   if (g.mark) checks.push("mark at or ahead");
   const count = g.kind === "streak" ? `${g.need} in a row` : `${g.need} of ${b.reps}`;
   return count + (checks.length ? ": " + checks.join(", ") : "");

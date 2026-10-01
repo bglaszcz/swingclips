@@ -3,7 +3,7 @@
     {
       "id": "lowpoint",
       "name": "Low point forward",
-      "from": "Golf coach chat, Sep 30 2026: stop casting by getting pressure and the low point forward",
+      "from": "Golf coach chat, Sep 30 2026: stop casting by getting pressure and the low point forward. Gates reset Oct 1 to the owner's numbers: strike -20 to -8 (Square's reading), attack -3 to -6",
       "cap": 40,
       "clubs": "7 iron only, no driver",
       "bringBack": "Attack angle, dynamic loft and face to path for each block, the shot order, and one down-the-line frame at impact from a toe-tap swing.",
@@ -17,7 +17,10 @@
           "how": "Pull the trail foot back so only its toe touches the mat. 3/4 swings, no ball, brush the mat.",
           "ask": "Brush at or ahead of the ball spot?",
           "extraBall": "Hit one toe-tap swing with a ball for the down-the-line impact frame your coach asked for.",
-          "gate": { "kind": "streak", "need": 10 }
+          "gate": {
+            "kind": "streak",
+            "need": 10
+          }
         },
         {
           "id": "stepthrough",
@@ -27,7 +30,10 @@
           "reps": 10,
           "how": "Feet together, swing back, step the lead foot toward the target as the downswing starts. The hands follow the step. No ball.",
           "ask": "Belt buckle open and all your weight on the lead foot?",
-          "gate": { "kind": "count", "need": 10 }
+          "gate": {
+            "kind": "count",
+            "need": 10
+          }
         },
         {
           "id": "flush",
@@ -39,10 +45,20 @@
           "how": "Foot spray or a dry-erase line from the ball toward the target (no tape). 7 iron at 3/4 speed; read where the mark starts.",
           "ask": "Mark starts at or ahead of the ball?",
           "gate": {
-            "kind": "count", "need": 7, "mark": true,
+            "kind": "count",
+            "need": 7,
+            "mark": true,
             "checks": [
-              { "key": "strikeV", "max": 3, "min": -8 },
-              { "key": "attack", "max": -2 }
+              {
+                "key": "strikeV",
+                "min": -20,
+                "max": -8
+              },
+              {
+                "key": "attack",
+                "min": -6,
+                "max": -3
+              }
             ]
           }
         },
@@ -55,11 +71,59 @@
           "requires": "flush",
           "how": "Full-speed 7 iron, one ball, full routine, no do-overs. Drop the step, keep the feel.",
           "gate": {
-            "kind": "streak", "need": 5,
+            "kind": "streak",
+            "need": 5,
             "checks": [
-              { "key": "strikeV", "max": 3, "min": -8 },
-              { "key": "attack", "max": -2 },
-              { "key": "faceToPath", "min": -2, "max": 2 }
+              {
+                "key": "strikeV",
+                "min": -20,
+                "max": -8
+              },
+              {
+                "key": "attack",
+                "min": -6,
+                "max": -3
+              },
+              {
+                "key": "faceToPath",
+                "min": -2,
+                "max": 2
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "retention",
+      "name": "Low point retention check",
+      "from": "Golf coach chat, Oct 1 2026: does the steeper strike hold with no drill? After a day off, first 7 irons of the session; again after a second day off before retiring the drill",
+      "cap": 12,
+      "clubs": "7 iron only, cold: right after the test ball, no drills or warm-up swings first",
+      "bringBack": "Median attack angle, dynamic loft and strike, and how many shots landed in the strike band.",
+      "blocks": [
+        {
+          "id": "cold",
+          "name": "Cold 7 irons",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "how": "10 full 7 irons, full routine, no drill and no rehearsal swings. Just hit.",
+          "gate": {
+            "kind": "count",
+            "need": 6,
+            "checks": [
+              {
+                "key": "strikeV",
+                "min": -20,
+                "max": -8
+              }
+            ],
+            "medians": [
+              {
+                "key": "attack",
+                "max": -3
+              }
             ]
           }
         }

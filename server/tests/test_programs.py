@@ -20,7 +20,7 @@ class Clock:
         return self.t
 
 
-def shot(attack=-3.0, v=1.0, face=0.5, path=0.0, h=4.0, speed=80.0, loft=24.0, club="I7"):
+def shot(attack=-4.0, v=-12.0, face=0.5, path=0.0, h=4.0, speed=80.0, loft=24.0, club="I7"):
     return {"club": club, "ball": {"carry": 150.0, "side": 1.0},
             "clubData": {"speed": speed, "angleOfAttack": attack, "faceToTarget": face, "path": path,
                          "loft": loft, "faceImpactH": h, "faceImpactV": v}}
@@ -177,6 +177,28 @@ class ProgramsTest(unittest.TestCase):
         flush = next(b for b in run["blocks"] if b["id"] == "flush")
         self.assertEqual([r["gate"] for r in flush["judged"]], [True, False])
         self.assertEqual((flush["state"]["reps"], flush["state"]["passes"]), (2, 1))
+
+    def test_band_misses_say_which_way(self):
+        self.p.start("lowpoint")
+        self.p.next_block()
+        self.p.next_block()
+        self.hit(shot(v=-4.0, attack=-7.0))
+        self.assertIn("Miss: needs strike minus 8 or lower and attack angle minus 6 or shallower. You had strike minus 4, attack angle minus 7.",
+                      self.said()[-1])
+
+    def test_retention_median_gate(self):
+        self.p.start("retention")
+        self.assertIsNone(self.drills[-1])  # cold swings are normal swings: they count in the trends
+        for a in (-2.0, -2.5, -4.0, -3.5, -2.0, -4.0, -3.2, -1.0, -3.4, -3.6):
+            self.hit(shot(attack=a))       # all 10 in the strike band, median attack -3.3
+        done = self.p.state()["log"][-1]
+        self.assertEqual(done["results"], {"cold": "passed"})
+        self.p.start("retention")
+        for a in (-2.0, -2.5, -4.0, -2.9, -2.0, -4.0, -3.2, -1.0, -2.4, -3.6):
+            self.hit(shot(attack=a))       # median attack -2.7: shallower than -3
+        self.assertEqual(self.p.state()["log"][-1]["results"], {"cold": "not passed"})
+        self.assertIn("median attack angle -2.7", self.p.report()["text"].replace("−", "-") + programs.progress_text(
+            self.p.programs["retention"]["blocks"][0], self.p.state()["log"][-1]["blocks"][0]["state"]))
 
     def test_undo_takes_back_the_last_tap(self):
         self.p.start("lowpoint")

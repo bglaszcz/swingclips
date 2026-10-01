@@ -97,26 +97,37 @@ def load_programs(path: Path = PROGRAMS_FILE) -> dict:
 
 
 def say_number(key: str, v: float) -> str:
-    if key == "strikeV":
-        mm = round(v)
-        return "strike center" if mm == 0 else f"strike {abs(mm)} millimeter{'s' if abs(mm) != 1 else ''} {'high' if mm > 0 else 'low'}"
+    # Square's strike height is said as the number it gives: its 0 isn't the owner's sweet spot
+    # (7 iron median about -13, best carry -20..-8), so "high" and "low" would mislead.
     dec = NUMBERS[key][2]
     s = f"{abs(v):.{dec}f}".rstrip("0").rstrip(".") if dec else f"{abs(round(v))}"
-    sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath") and s != "0" else ""
-    return f"{NUMBERS[key][0].lower()} {sign}{s}"
+    sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath", "strikeV") and s != "0" else ""
+    name = "strike" if key == "strikeV" else NUMBERS[key][0].lower()
+    return f"{name} {sign}{s}"
+
+
+# Which way past a check's max / min reads, in words: (past max, past min).
+LIMIT_WORDS = {"attack": ("or steeper", "or shallower"), "strikeV": ("or lower", "or higher")}
 
 
 def say_limit(c: dict, v: float) -> str:
     """What a failed check (value v) wanted, in words for the phone."""
     key, lo, hi = c["key"], c.get("min"), c.get("max")
-    if key == "strikeV":
-        return f"strike no higher than {hi:g} millimeters" if hi is not None and v > hi \
-            else f"strike no lower than {abs(lo):g} millimeters low"
     if lo is not None and hi is not None and lo == -hi:
         return f"{NUMBERS[key][0].lower()} within {hi:g}"
+    down, up = LIMIT_WORDS.get(key, ("or less", "or more"))
     if hi is not None and v > hi:
-        return say_number(key, hi) + (" or steeper" if key == "attack" else " or less")
-    return say_number(key, lo) + " or more"
+        return f"{say_number(key, hi)} {down}"
+    return f"{say_number(key, lo)} {up}"
+
+
+def medians_of(block: dict, js: list[dict]) -> dict:
+    """The median of each number a block's median gate checks, over its judged shots."""
+    out = {}
+    for c in block["gate"].get("medians", []):
+        v = sorted(r["numbers"][c["key"]] for r in js if r.get("numbers") and r["numbers"].get(c["key"]) is not None)
+        out[c["key"]] = statistics.median(v) if v else None
+    return out
 
 
 # ---- Judging a block (pure: used live and again for the report) ----
@@ -165,20 +176,28 @@ def block_state(block: dict, reps: list[dict], marks: list[dict]) -> dict:
     else:
         passed = passes >= gate["need"]
         done = len(js) >= block["reps"]
-    return {"reps": len(js), "passes": passes, "streak": streak, "best": best, "passed": passed, "done": done}
+    # A gate on the block's medians too ("median attack -3 or steeper"): checked over the shots judged.
+    meds = medians_of(block, js)
+    if meds:
+        passed = passed and all(check(meds, c) for c in gate["medians"])
+    return {"reps": len(js), "passes": passes, "streak": streak, "best": best, "passed": passed, "done": done,
+            **({"medians": meds} if meds else {})}
 
 
 def gate_text(block: dict) -> str:
     g = block["gate"]
     what = "in a row" if g["kind"] == "streak" else f"of {block['reps']}"
-    return f"{g['need']} {what}"
+    meds = [f"median {NUMBERS[c['key']][0].lower()} " + (f"{c['max']:g} or {LIMIT_WORDS.get(c['key'], ('or less',))[0].split()[-1]}"
+            if c.get("max") is not None else f"{c['min']:g} or more") for c in g.get("medians", [])]
+    return f"{g['need']} {what}" + "".join(f", {m}" for m in meds)
 
 
 def progress_text(block: dict, st: dict) -> str:
     g = block["gate"]
     if g["kind"] == "streak":
         return f"{st['streak']} in a row" + (f", best {st['best']}" if st["best"] > st["streak"] else "")
-    return f"{st['passes']} of {st['reps']} passed, {g['need']} needed"
+    meds = "".join(f", median {NUMBERS[k][0].lower()} {fmt(k, v)}" for k, v in (st.get("medians") or {}).items() if v is not None)
+    return f"{st['passes']} of {st['reps']} passed, {g['need']} needed{meds}"
 
 
 def judged_blocks(p: dict, run: dict) -> list[dict]:
@@ -372,7 +391,7 @@ class Programs:
         if r.get("noRead"):
             self._say(f"Square didn't read that one ({r['noRead']}): not counted.")
             return
-        keys = [c["key"] for c in block["gate"].get("checks", [])]
+        keys = [c["key"] for c in block["gate"].get("checks", []) + block["gate"].get("medians", [])]
         nums = ", ".join(say_number(k, r["numbers"][k]) for k in keys if r["numbers"].get(k) is not None)
         if r["gate"] is None:
             self._say(f"{nums}.")
