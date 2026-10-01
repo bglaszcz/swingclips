@@ -45,6 +45,7 @@ from pydantic import BaseModel, Field
 
 import ballflight
 import calib
+import calibrun
 import drills
 import games
 import goodshots
@@ -912,8 +913,10 @@ def listed_clips(with_shots: bool = True, since: float | None = None) -> list[di
     excluded = set(load_excluded())
     for c in clips:
         # A drill swing (drills.py) is a rehearsal, not the usual swing: out of the trends too.
-        c["drill"] = drills_state.drill_at(c["_t"]) if SWING_NAME.match(c["name"]) else None
-        c["excluded"] = c["name"] in excluded or (c["partner"] or "") in excluded or bool(c["drill"])
+        # So is a clip of a calibration board (calibrun.py).
+        c["calib"] = calib_runs.kind_at(c["_t"]) if SWING_NAME.match(c["name"]) else None
+        c["drill"] = drills_state.drill_at(c["_t"]) if SWING_NAME.match(c["name"]) and not c["calib"] else None
+        c["excluded"] = c["name"] in excluded or (c["partner"] or "") in excluded or bool(c["drill"] or c["calib"])
     if not with_shots:
         for c in clips:
             c.pop("_t")
@@ -1457,9 +1460,11 @@ drills_state = drills.Drills(DRILLS_FILE)
 
 
 def drills_tick() -> None:
-    """Ends a drill left on after the session, and keeps the phones' lead-in in step with it."""
+    """Ends a drill (or calibration recording) left on after the session, and keeps the phones'
+    lead-in in step with it."""
     drills_state.check(session_status.last_recording)
-    session_status.set_pre(drills_state.pre())
+    calib_runs.check(session_status.last_recording)
+    session_status.set_pre(calib_runs.pre() or drills_state.pre())
 
 
 @app.get("/api/drill")
@@ -1820,22 +1825,123 @@ def get_3d(name: str):
 
 @app.get("/api/calib")
 def calib_status():
-    """Whether 3D from both phones is on, and what's calibrated: lenses, the latest session."""
-    if not calib.enabled():
-        return {"enabled": False}
+    """Whether 3D from both phones is on, and what's calibrated: lenses, the latest session; and
+    the calibration page's recording and run (calibrun.py)."""
+    drills_tick()
+    run = calib_runs.state()
     lenses = []
     for f in sorted(calib.CALIB_DIR.glob("*-*.json")):
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
-            lenses.append({"name": f.stem, "rms": d.get("rms"), "good": d.get("good"), "coverage": d.get("coverage")})
+            lenses.append({"name": f.stem, "phone": d.get("phone"), "mode": d.get("mode"), "created": d.get("created"),
+                           "rms": d.get("rms"), "good": d.get("good"), "coverage": d.get("coverage")})
         except (OSError, ValueError):
             continue
     s = calib.sessions()
     latest = s[-1] if s else None
-    return {"enabled": True, "phones": calib.phones(), "lenses": lenses,
+    return {"enabled": calib.enabled(), "phones": calib.phones(), "lenses": lenses,
+            "recording": run["current"], "job": run["job"],
+            # The latest recording's clips: each phone's of the lens board, and both of the mat board.
+            "clips": {"face": calib_clips("lens", "face"), "dtl": calib_clips("lens", "dtl"), "mat": calib_clips("mat", None)},
+            # Every calibration clip still in the clips folder (any recording but the one on), for the trash.
+            "leftover": calib_leftover(),
             "session": latest and {"id": latest["id"], "created": latest["created"],
                                    "cameras": {k: {"position": v["position"], "rms": v.get("rms"), "warnings": v.get("warnings", [])}
                                                for k, v in latest["cameras"].items()}}}
+
+
+# ---- The 3D calibration page (static/calibrate.html, calibrun.py): record the boards, run calib.py ----
+calib_runs = calibrun.Runs(calib.CALIB_DIR / "recordings.json")
+
+
+def calib_clips(kind: str, angle: str | None) -> list[dict]:
+    """The clips of the latest calibration recording of this kind (lens: for that phone), oldest first:
+    both phones', since a clap makes both record."""
+    rec = calib_runs.latest(kind, angle)
+    if not rec:
+        return []
+    out = []
+    for p in clip_paths():
+        m = SWING_NAME.match(p.name)
+        if not m or p.name in pending_trash:
+            continue
+        a = m.group(1) or "face"
+        t = recorded_at(p)
+        if t >= rec["from"] - calibrun.START_SLACK_S and t <= rec.get("until", float("inf"))                 and calib_runs.kind_at(t) == kind:
+            out.append({"name": p.name, "angle": a, "t": t})
+    return sorted(out, key=lambda c: c["t"])
+
+
+def calib_leftover() -> list[str]:
+    """The calibration clips still in the clips folder, but those of the recording that's on."""
+    cur = calib_runs.state()["current"]
+    out = []
+    for p in clip_paths():
+        if not SWING_NAME.match(p.name) or p.name in pending_trash:
+            continue
+        t = recorded_at(p)
+        if calib_runs.kind_at(t) and not (cur and t >= cur["from"]):
+            out.append(p.name)
+    return out
+
+
+class CalibRecording(BaseModel):
+    kind: str | None = None    # "lens" | "mat", or None to stop
+    angle: str | None = None   # lens: the phone, "face" | "dtl"
+
+
+@app.post("/api/calib/record")
+def calib_record(body: CalibRecording):
+    """Starts a calibration recording ({kind: "lens", angle} or {kind: "mat"}) or stops it ({kind: null})."""
+    try:
+        cur = calib_runs.record(body.kind, body.angle)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    drills_tick()
+    print(f"Calibration recording: {cur['kind'] + (' ' + cur['angle'] if cur['angle'] else '') if cur else 'off'}", flush=True)
+    return calib_status()
+
+
+class CalibRun(BaseModel):
+    kind: str                       # "lens" | "mat"
+    angle: str | None = None        # lens: "face" | "dtl"
+    phone: str | None = None        # lens: a name for the phone (default: phones.json's, else "<angle>-phone")
+    squareMm: float | None = None   # mat: the mat board's square as printed, if not 150 mm
+
+
+@app.post("/api/calib/run")
+def calib_run(body: CalibRun):
+    """Runs calib.py on the latest recording's clips (ending the recording); poll /api/calib for the result."""
+    if body.kind == "lens":
+        if body.angle not in calibrun.ANGLES:
+            raise HTTPException(400, "Which phone? angle face or dtl")
+        phone = re.sub(r"[^A-Za-z0-9_-]", "", body.phone or "") or calib.phones().get(body.angle) or f"{body.angle}-phone"
+        clips = [c for c in calib_clips("lens", body.angle) if c["angle"] == body.angle]
+        if not clips:
+            raise HTTPException(400, "No clips of the lens board from that phone yet")
+        args = ["lens", "--phone", phone, "--angle", body.angle] + [str(CLIPS_DIR / c["name"]) for c in clips]
+    elif body.kind == "mat":
+        clips = calib_clips("mat", None)
+        newest = {a: next((c for c in reversed(clips) if c["angle"] == a), None) for a in calibrun.ANGLES}
+        missing = [{"face": "the face-on phone", "dtl": "the down-the-line phone"}[a] for a, c in newest.items() if not c]
+        if missing:
+            raise HTTPException(400, "No clip of the mat board from " + " or ".join(missing) + " yet")
+        clips = [newest["face"], newest["dtl"]]
+        args = ["session", str(CLIPS_DIR / clips[0]["name"]), str(CLIPS_DIR / clips[1]["name"])]
+        if body.squareMm:
+            args += ["--square-mm", f"{body.squareMm:g}"]
+    else:
+        raise HTTPException(400, "Unknown calibration")
+    cur = calib_runs.state()["current"]
+    if cur and cur["kind"] == body.kind:
+        calib_runs.record(None)
+        drills_tick()
+    try:
+        calib_runs.run(body.kind, args, [c["name"] for c in clips])
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    print("Calibration: calib.py " + " ".join(args[:4]) + f" ... ({len(clips)} clip(s))", flush=True)
+    return calib_status()
 
 
 # ---- Session status: the phones and the Square watcher report in (see status.py) ----
@@ -2029,6 +2135,12 @@ def start_page():
     return FileResponse(STATIC_DIR / "start.html")
 
 
+@app.get("/calibrate")
+def calibrate_page():
+    """The 3D calibration page: record the lens and mat boards and run calib.py (calibrun.py)."""
+    return FileResponse(STATIC_DIR / "calibrate.html")
+
+
 class QuietPolling(logging.Filter):
     """Leaves out the requests every open review page (and phone) makes every second or few."""
 
@@ -2037,7 +2149,7 @@ class QuietPolling(logging.Filter):
         # The phones' setup stills come every second; so do the Camera setup page's checks.
         return not any(path in message for path in ('"GET /api/clips ', '"GET /api/time ', " /api/setup",
                                                          " /api/practice/latest", " /api/phones/",
-                                                         '"GET /api/status ', " /api/relay/heartbeat"))
+                                                         '"GET /api/status ', '"GET /api/calib ', " /api/relay/heartbeat"))
 
 
 class QuietShutdown(logging.Filter):

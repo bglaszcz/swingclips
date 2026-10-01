@@ -388,7 +388,7 @@ class SwingWorkerTest(unittest.TestCase):
             except (ImportError, RuntimeError):
                 return
             c = TestClient(self.app.app)
-            self.assertEqual(c.get("/api/calib").json(), {"enabled": False})
+            self.assertFalse(c.get("/api/calib").json()["enabled"])
 
 
 if __name__ == "__main__":

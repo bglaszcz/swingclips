@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1712">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<title>SwingClips 3D calibration</title>
+<!-- The 3D calibration page (/calibrate), for a phone in the shed: record the lens board in front of
+     each phone and the mat board on the mat, and run calib.py on those clips (app.py /api/calib,
+     calibrun.py). Calibration clips are left out of the trends; move them to the trash after. -->
+<style>
+  :root { color-scheme: light dark; }
+  :root {
+    --bg: #f3f5f3; --panel: #ffffff; --panel-2: #f7f9f7; --text: #111a14; --muted: #5a685f;
+    --line: #e0e6e2; --accent: #16803f; --accent-text: #ffffff; --accent-soft: #e4f4ea;
+    --warn: #b45309; --warn-soft: #fdf1e3; --bad: #dc2626; --bad-soft: #fde8e8; --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b100d; --panel: #131a16; --panel-2: #17201a; --text: #e7ede8; --muted: #8e9f95;
+      --line: #223029; --accent: #34c26f; --accent-text: #04130a; --accent-soft: #143322;
+      --warn: #f59e0b; --warn-soft: #2d2110; --bad: #f87171; --bad-soft: #2d1414;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--panel);
+           border-bottom: 1px solid var(--line); }
+  header strong { font-size: 18px; }
+  header a { margin-left: auto; color: var(--accent); font-weight: 600; text-decoration: none; }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  h2 { margin: 0 0 10px; font-size: 16px; display: flex; align-items: center; gap: 10px; }
+  h2 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; flex: none;
+          background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; }
+  h2 .n.ok { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  ol { margin: 0 0 12px; padding-left: 20px; }
+  li { margin: 3px 0; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0; }
+  button { font: inherit; font-size: 17px; font-weight: 700; padding: 13px 22px; border-radius: 10px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button.small { font-size: 14px; padding: 8px 14px; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  label { font-size: 14px; color: var(--muted); }
+  input { font: inherit; font-size: 15px; padding: 8px 10px; border-radius: 8px; width: 9em;
+          border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  .state { font-weight: 600; }
+  .state.on { color: var(--accent); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .tag.ok { background: var(--accent-soft); color: var(--accent); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .tag.bad { background: var(--bad-soft); color: var(--bad); }
+  .tag.wait { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+  .result { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+  .result.ok { border-color: var(--accent); } .result.bad { border-color: var(--warn); background: var(--warn-soft); }
+  .result b { display: block; margin-bottom: 4px; font-size: 16px; }
+  pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.4 ui-monospace, Consolas, monospace; }
+  .note { padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); border: 1px solid var(--warn); font-size: 14px; }
+  @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } }
+</style>
+</head>
+<body>
+<header>
+  <img src="/static/icon.svg" alt="" width="28" height="28">
+  <strong>3D calibration</strong>
+  <a href="/start">Start page →</a>
+</header>
+<main>
+  <section>
+    <h2><span class="n" id="n0">0</span>Phones recording</h2>
+    <div class="hint">Both phones need to be recording: they save a clip when they hear a clap. The clips taken
+      here are left out of your trends.</div>
+    <div class="row">
+      <button class="primary" id="rec-start">Start recording</button>
+      <span class="state" id="rec-state"></span>
+    </div>
+    <div class="note" id="off-note" hidden>3D is off on the server, so swings won't get 3D numbers yet. You can still
+      calibrate here. To turn it on, add <code>set SWINGCLIPS_3D=on</code> to <code>server\settings.cmd</code> on the
+      server and restart it.</div>
+  </section>
+
+  <section id="sec-face"></section>
+  <section id="sec-dtl"></section>
+
+  <section>
+    <h2><span class="n" id="n-mat">3</span>Camera positions (mat board)</h2>
+    <div class="hint">Every session, once the tripods are in place. Do the lens of both phones first.</div>
+    <ol>
+      <li>Lay the mat board flat with its centre on the ball spot, the <b>x arrow at the target</b> and the
+        <b>y arrow away from you</b>.</li>
+      <li>Tap <b>Start</b>, step out of both pictures, clap once and wait 5 seconds.</li>
+      <li>Tap <b>Calibrate</b>.</li>
+    </ol>
+    <div class="row">
+      <button id="mat-start">Start</button>
+      <button class="primary" id="mat-run">Calibrate</button>
+      <label>Square size <input id="mat-mm" type="number" inputmode="decimal" placeholder="150" min="50" max="300"> mm</label>
+    </div>
+    <div class="row"><span class="state" id="mat-state"></span></div>
+    <div id="mat-result"></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const NAMES = { face: "Face-on phone", dtl: "Down-the-line phone" };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+let state = null, status = null, note = { face: "", dtl: "", mat: "" };
+
+for (const [i, a] of [[1, "face"], [2, "dtl"]]) {
+  $("sec-" + a).innerHTML = `
+    <h2><span class="n" id="n-${a}">${i}</span>${NAMES[a]}: lens (lens board)</h2>
+    <div class="hint">Once per phone. Hold the lens board 0.4 to 1 m from this phone.</div>
+    <ol>
+      <li>Tap <b>Start</b>.</li>
+      <li>Wave the board <b>slowly</b> for about 5 seconds: tilted every way, and into every corner and edge of the
+        picture. Then clap (or knock hard on the board). The phone saves the seconds before the clap.</li>
+      <li>Do that 3 times, then tap <b>Calibrate</b>.</li>
+    </ol>
+    <div class="row">
+      <button id="${a}-start">Start</button>
+      <button class="primary" id="${a}-run">Calibrate</button>
+      <label>Phone name <input id="${a}-phone" autocomplete="off"></label>
+    </div>
+    <div class="row"><span class="state" id="${a}-state"></span></div>
+    <div id="${a}-result"></div>`;
+}
+
+async function post(url, body, key) {
+  note[key] = "";
+  try {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) note[key] = d.detail || `The server said ${r.status}`;
+    else if (d.recording !== undefined) state = d;
+  } catch { note[key] = "Can't reach the server"; }
+  render();
+  poll();
+}
+
+for (const a of ["face", "dtl"]) {
+  $(a + "-start").onclick = () => post("/api/calib/record", { kind: "lens", angle: a }, a);
+  $(a + "-run").onclick = () => post("/api/calib/run", { kind: "lens", angle: a, phone: $(a + "-phone").value.trim() || null }, a);
+}
+$("mat-start").onclick = () => post("/api/calib/record", { kind: "mat" }, "mat");
+$("mat-run").onclick = () => post("/api/calib/run", { kind: "mat", squareMm: parseFloat($("mat-mm").value) || null }, "mat");
+$("rec-start").onclick = async () => {
+  $("rec-start").disabled = true;
+  try {
+    await fetch("/api/phones/command", { method: "POST", headers: { "Content-Type": "application/json" },
+                                         body: JSON.stringify({ action: "start", angle: "both" }) });
+  } catch {}
+  poll();
+};
+
+async function trash(names, key) {
+  if (!confirm(`Move ${names.length} calibration clip(s) to the trash?`)) return;
+  try {
+    const r = await fetch("/api/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names }) });
+    note[key] = r.ok ? `Moved ${(await r.json()).moved.length} clip(s) to the trash.` : `The server said ${r.status}`;
+  } catch { note[key] = "Can't reach the server"; }
+  poll();
+}
+
+// The job's result, in words: calib.py's exit code 0 = good, 2 = lens not good enough, else failed.
+function renderJob(key, job) {
+  const box = $(key + "-result");
+  if (!job) { box.innerHTML = ""; box.className = ""; return; }
+  const running = job.code === null;
+  const ok = job.code === 0;
+  const head = running ? "Calibrating… (a minute or two)" : ok ? (job.kind === "lens" ? "Lens calibrated: good" : "Camera positions saved")
+    : job.code === 2 ? "Not good enough: record again" : "It didn't work";
+  // Every calibration clip still in the clips folder, both phones' (a clap makes both record), earlier takes too.
+  const left = state.leftover || [];
+  box.className = "result" + (running ? "" : ok ? " ok" : " bad");
+  box.innerHTML = `<b>${esc(head)}</b><pre>${esc(job.output.trim() || "…")}</pre>` +
+    (!running && left.length ? `<div class="row"><button class="small" id="${key}-trash">Move the ${left.length} calibration clip(s) to the trash</button></div>` : "");
+  if (!running && left.length) $(key + "-trash").onclick = () => trash(left, key);
+}
+
+function render() {
+  if (!state) return;
+  const phones = status ? ["face", "dtl"].map(a => status.phones[a] || {}) : [];
+  const rec = phones.filter(p => p.recording).length, up = phones.filter(p => p.connected).length;
+  $("rec-start").disabled = !status || rec === 2 || up === 0;
+  $("rec-state").textContent = !status ? "" : rec === 2 ? "● Recording on both phones" : rec === 1 ? "● Recording on one phone only"
+    : up ? `Not recording (${up} of 2 phones connected)` : "No phone connected: open the capture app on both";
+  $("rec-state").className = "state" + (rec === 2 ? " on" : "");
+  $("n0").className = "n" + (rec === 2 ? " ok" : "");
+  $("off-note").hidden = state.enabled;
+
+  const cur = state.recording, job = state.job, busy = job && job.code === null;
+  for (const key of ["face", "dtl", "mat"]) {
+    const on = cur && (key === "mat" ? cur.kind === "mat" : cur.kind === "lens" && cur.angle === key);
+    const clips = (state.clips[key] || []).filter(c => key === "mat" || c.angle === key);
+    $(key + "-start").textContent = on ? "Recording…" : clips.length ? "Start again" : "Start";
+    $(key + "-start").disabled = on || busy;
+    $(key + "-run").disabled = busy || !clips.length || (key === "mat" && !(clips.some(c => c.angle === "face") && clips.some(c => c.angle === "dtl")));
+    const bits = [];
+    if (on) bits.push(key === "mat" ? "Recording: clap once." : `Recording: ${clips.length} of 3 clips so far.`);
+    else if (clips.length) bits.push(`${clips.length} clip(s) from the last recording.`);
+    if (key === "mat" && on && clips.length) bits.push(`Face-on ${clips.some(c => c.angle === "face") ? "✓" : "–"}, down the line ${clips.some(c => c.angle === "dtl") ? "✓" : "–"}.`);
+    if (note[key]) bits.push(note[key]);
+    $(key + "-state").textContent = bits.join(" ");
+    $(key + "-state").className = "state" + (on ? " on" : "");
+    renderJob(key, job && (job.kind === "mat" ? key === "mat" : job.angle === key) ? job : null);
+  }
+  for (const a of ["face", "dtl"]) {
+    const phone = state.phones[a];
+    const input = $(a + "-phone");
+    if (!input.value && document.activeElement !== input) input.value = phone || (a === "face" ? "face-phone" : "dtl-phone");
+    const lens = phone && state.lenses.find(l => l.phone === phone);
+    $("n-" + a).className = "n" + (lens && lens.good ? " ok" : "");
+  }
+  $("n-mat").className = "n" + (state.session && Date.now() / 1000 - state.session.created < 12 * 3600 ? " ok" : "");
+}
+
+let timer = 0;
+async function poll() {
+  clearTimeout(timer);
+  const get = async url => { try { const r = await fetch(url, { cache: "no-store" }); return r.ok ? await r.json() : null; } catch { return null; } };
+  const [c, s] = await Promise.all([get("/api/calib"), get("/api/status")]);
+  if (c) state = c;
+  status = s;
+  render();
+  timer = setTimeout(poll, document.hidden ? 15000 : 1500);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+poll();
+</script>
+</body>
+</html>

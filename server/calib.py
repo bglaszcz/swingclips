@@ -368,8 +368,8 @@ def main(argv=None) -> int:
         if not mode:
             ap.error("no mode in the clip's name: give --mode, e.g. 1920x1080_240fps")
         print(f"Looking for the lens board in {len(args.clips)} clip(s) ...", flush=True)
-        views, size = lens_views(args.clips, every=args.every)
         try:
+            views, size = lens_views(args.clips, every=args.every)
             c = calibrate(views, size)
         except ValueError as e:
             print(f"Lens calibration failed: {e}")
