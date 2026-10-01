@@ -400,8 +400,9 @@ class Programs:
             return True
         if block["ball"] and block["gate"].get("mark"):
             js = [r for r in judged(block, self.run["reps"], self.run["marks"]) if r["kind"] == "shot"]
-            if js and js[-1]["mark"] is None and now - js[-1]["t"] < SHOT_GIVE_UP_S + MARK_WAIT_S:
-                return True  # the last shot's mark may still come
+            tapping = any(m["block"] == block["id"] for m in self.run["marks"])
+            if tapping and js and js[-1]["mark"] is None and now - js[-1]["t"] < SHOT_GIVE_UP_S + MARK_WAIT_S:
+                return True  # the last shot's mark may still come (only when the golfer taps marks)
         self._end_block(p, block, st)
         return self.run is not None
 

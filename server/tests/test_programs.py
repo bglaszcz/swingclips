@@ -132,6 +132,14 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(rep["frame"]["block"], "Lead foot only")
         self.assertTrue(rep["frame"]["partner"].startswith("swing_dtl_"))
 
+    def test_no_wait_for_marks_nobody_taps(self):
+        self.p.start("lowpoint")
+        self.p.next_block()
+        self.p.next_block()
+        for _ in range(10):
+            self.hit(shot())   # no mark taps at all: the block ends on the 10th shot, not 35 s later
+        self.assertEqual(self.block(), "transfer")
+
     def test_transfer_skipped_when_flush_not_passed(self):
         self.p.start("lowpoint")
         self.p.next_block()

@@ -436,7 +436,7 @@ class HealthTest(unittest.TestCase):
         sw.append(swing(4, t + 90, shot=False))
         self.assertEqual(self.step(sw, t + 130), [])                                  # no repeat
         sw.append(swing(5, t + 120))
-        self.assertEqual(self.step(sw, t + 160), [])                                  # cleared
+        self.assertEqual(self.step(sw, t + 160), ["Square paired now."])               # cleared, said once
         sw += [swing(6, t + 150, shot=False), swing(7, t + 180, shot=False)]
         self.assertEqual(self.step(sw, t + 230), ["Square: no shot on the last 2 swings."])
 
@@ -445,6 +445,15 @@ class HealthTest(unittest.TestCase):
         self.step([swing(1, t, shot=False)], t + 40)
         sw = [swing(1, t, shot=False), swing(2, t + 30, shot=False)]
         self.assertEqual(self.step(sw, t + 70), [])
+
+    def test_a_first_swing_problem_that_clears_is_said(self):
+        # Square's app not ready for the first ball, ready for the second (Oct 1).
+        t = self.start + 10
+        self.step([swing(1, t, shot=False, dtl_codes=["noball"])], t + 40)
+        sw = [swing(1, t, shot=False, dtl_codes=["noball"]), swing(2, t + 30)]
+        self.assertEqual(self.step(sw, t + 70), ["Square paired now.", "Down the line looks good now."])
+        sw.append(swing(3, t + 60))
+        self.assertEqual(self.step(sw, t + 100), [])
 
     def test_camera_problem_needs_three_in_a_row(self):
         t = self.start + 10

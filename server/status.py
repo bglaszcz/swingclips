@@ -345,7 +345,15 @@ class Health:
         for key in list(self.streaks):
             if key not in keys:
                 self.streaks.pop(key)
-                self.active.discard(key)
+                if key in self.active:
+                    self.active.discard(key)
+                    # A problem said (on the first swing or later) that's gone: say so once.
+                    if key == "square":
+                        out.append("Square paired now.")
+                    elif not any(k.split(":")[:2] == key.split(":")[:2] for k in keys):
+                        good = f"{NAMES[key.split(':')[1]]} looks good now."
+                        if good not in out:
+                            out.append(good)
         for key, text in keys.items():
             n = self.streaks.get(key, 0) + 1
             self.streaks[key] = n
