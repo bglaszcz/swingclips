@@ -89,7 +89,8 @@ def main(csv_path, log_path):
             return num(r["ImpactVertical"])[1], c.get("faceImpactV")
         if key == "H":
             letter, v = num(r["ImpactHorizontal"])
-            return (v if v == 0 else (v if letter == "H" else -v) if letter else v), c.get("faceImpactH")
+            # The database's + is the CSV's T (checked on the Oct 1 export: r = 1.000 this way round).
+            return (v if v == 0 else (v if letter == "T" else -v) if letter else v), c.get("faceImpactH")
         if key == "attack":
             return num(r["Attack Angle"])[1], c.get("angleOfAttack")
         if key == "loft":
@@ -101,7 +102,7 @@ def main(csv_path, log_path):
             new = (c["faceToTarget"] - c["path"]) if c.get("faceToTarget") is not None and c.get("path") is not None else None
             return (fv - pv if fv is not None and pv is not None else None), new
 
-    names = {"V": "Impact height (ImpactVertical)", "H": "Impact toe/heel (ImpactHorizontal; CSV T/H as + for H)",
+    names = {"V": "Impact height (ImpactVertical)", "H": "Impact toe/heel (ImpactHorizontal; CSV T as +)",
              "attack": "Attack angle", "faceToPath": "Face to path", "loft": "Dynamic loft"}
     for key, name in names.items():
         both = [(o, n) for o, n in (old_new(key, r, s) for r, s in pairs) if o is not None and n is not None]
