@@ -736,14 +736,15 @@ function renderProgress() {
 async function renderProgressPrograms() {
   const el = document.getElementById("p-program-trends");
   if (!el) return;
-  el.hidden = true;
-  el.replaceChildren();
   if (typeof SwingProgramHistory === "undefined") return;
 
   try {
     const res = await fetch("/api/program");
     if (!res.ok) return;
     const data = await res.json();
+    // Cleared after the fetch: two renders close together would otherwise both append.
+    el.hidden = true;
+    el.replaceChildren();
     if (!data || !data.log || !data.log.length) return;
 
     const allRuns = SwingProgramHistory.runs(data.log, data.programs);

@@ -708,14 +708,18 @@ function renderProgram(data) {
   $("prog-blocks").replaceChildren(...run.blocks.map(blockLine));
 }
 
+let historyShown = "";
 function renderProgramHistory(data) {
   const histBox = $("prog-history");
-  if (!histBox) return;
-  histBox.replaceChildren();
-  if (typeof SwingProgramHistory === "undefined" || !data) return;
-
+  if (!histBox || typeof SwingProgramHistory === "undefined" || !data) return;
   const sel = $("prog-select");
   const curId = sel ? sel.value : null;
+  // Drawn again only when a run finishes or another program is picked: the poll every 2 s would
+  // close the Past runs fold.
+  const key = `${curId}|${(data.log || []).map(r => r.started).join(",")}`;
+  if (key === historyShown) return;
+  historyShown = key;
+  histBox.replaceChildren();
   if (!curId) return;
 
   const curProg = (data.programs || []).find(p => p.id === curId);

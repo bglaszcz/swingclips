@@ -73,37 +73,13 @@
   function evaluateMovement(check, firstMed, lastMed) {
     if (firstMed == null || lastMed == null) return null;
     const threshold = SAME_THRESHOLDS[check.key] ?? DEFAULT_SAME_THRESHOLD;
-    const diff = lastMed - firstMed;
-    if (Math.abs(diff) <= threshold) {
-      return "about the same";
-    }
-
-    // Two-sided band check (e.g. faceToPath: min -2, max 2). Floor min -8 on strikeV is not a band.
-    const isBand = check.min != null && check.max != null && check.min > -5;
-    if (isBand) {
-      const distToBand = v => {
-        if (v < check.min) return check.min - v;
-        if (v > check.max) return v - check.max;
-        const center = (check.min + check.max) / 2;
-        return Math.abs(v - center) * 0.001; // tiny inside penalty so moving toward center is toward
-      };
-      const d1 = distToBand(firstMed);
-      const d2 = distToBand(lastMed);
-      if (Math.abs(d1 - d2) <= threshold * 0.001) return "about the same";
-      return d2 < d1 ? "moved toward the gate" : "moved away";
-    }
-
-    // Max check: passing requires v <= check.max (e.g. attack <= -2, strikeV <= 3)
-    if (check.max != null) {
-      return diff < 0 ? "moved toward the gate" : "moved away";
-    }
-
-    // Min check: passing requires v >= check.min (e.g. carry >= 150)
-    if (check.min != null) {
-      return diff > 0 ? "moved toward the gate" : "moved away";
-    }
-
-    return "about the same";
+    // How far outside the gate's limits (0 inside): the same rule for one-sided checks, a band
+    // (face to path within 2) and a limit with a floor (strike <= +3, not below -8).
+    const outside = v => Math.max(check.min != null ? check.min - v : 0, check.max != null ? v - check.max : 0, 0);
+    const d1 = outside(firstMed), d2 = outside(lastMed);
+    if (d1 === 0 && d2 === 0) return "inside the gate";
+    if (Math.abs(lastMed - firstMed) <= threshold || d1 === d2) return "about the same";
+    return d2 < d1 ? "moved toward the gate" : "moved away";
   }
 
   const CHECK_ORDER = ["attack", "loft", "faceToPath", "strikeV", "strikeH", "clubSpeed", "carry"];
@@ -119,42 +95,14 @@
    * Describes the target / direction of a gate check in plain words.
    */
   function targetPhrase(check, movement) {
-    const isBand = check.min != null && check.max != null && check.min > -5;
-    const info = NUMBERS[check.key] || { decimals: 1, signed: true };
-
-    if (movement === "about the same") {
-      return "about the same";
-    }
-
-    if (isBand) {
-      const minStr = formatLimit(check.min, true);
-      const maxStr = formatLimit(check.max, true);
-      const unit = info.unit || "";
-      return movement === "moved toward the gate"
-        ? `toward ${minStr} to ${maxStr}${unit}`
-        : `away from ${minStr} to ${maxStr}${unit}`;
-    }
-
-    if (check.max != null) {
-      const maxStr = formatLimit(check.max, check.key !== "attack");
-      if (check.key === "attack") {
-        return movement === "moved toward the gate"
-          ? `toward the ${maxStr} gate`
-          : `away from the ${maxStr} gate`;
-      }
-      return movement === "moved toward the gate"
-        ? `toward ${maxStr} or lower`
-        : `away from ${maxStr} or lower`;
-    }
-
-    if (check.min != null) {
-      const minStr = formatLimit(check.min, true);
-      return movement === "moved toward the gate"
-        ? `toward ${minStr} or higher`
-        : `away from ${minStr} or higher`;
-    }
-
-    return movement;
+    if (movement === "about the same" || movement === "inside the gate") return movement;
+    const info = NUMBERS[check.key] || { unit: "" };
+    const lim = v => formatLimit(v, check.key !== "attack");
+    let gate;
+    if (check.min != null && check.max != null && check.min === -check.max) gate = `±${check.max}${info.unit}`;
+    else if (check.max != null) gate = `${lim(check.max)}${info.unit} or ${check.key === "attack" ? "steeper" : "lower"}`;
+    else gate = `${lim(check.min)}${info.unit} or higher`;
+    return `${movement === "moved toward the gate" ? "toward" : "away from"} ${gate}`;
   }
 
   /**
@@ -333,11 +281,11 @@
       if (t.gate?.kind === "streak") {
         const v1 = firstRun.state.best ?? firstRun.state.streak ?? firstRun.state.passes;
         const v2 = lastRun.state.best ?? lastRun.state.streak ?? lastRun.state.passes;
-        gateProg = `streak ${v1} -> ${v2} passed`;
+        gateProg = `best streak ${v1} → ${v2} (gate ${t.gate.need} in a row)`;
       } else if (firstRun.state.reps != null && lastRun.state.reps != null) {
-        gateProg = `gate ${firstRun.state.passes}/${firstRun.state.reps} -> ${lastRun.state.passes}/${lastRun.state.reps} passed`;
+        gateProg = `passed ${firstRun.state.passes}/${firstRun.state.reps} → ${lastRun.state.passes}/${lastRun.state.reps} (gate ${t.gate.need})`;
       } else if (firstRun.state.streak != null) {
-        gateProg = `streak ${firstRun.state.best || firstRun.state.streak} -> ${lastRun.state.best || lastRun.state.streak} passed`;
+        gateProg = `best streak ${firstRun.state.best || firstRun.state.streak} → ${lastRun.state.best || lastRun.state.streak}`;
       }
     }
 
@@ -347,7 +295,7 @@
       const v1Str = formatNum(c.firstMedian, c.decimals, c.signed);
       const v2Str = formatNum(c.lastMedian, c.decimals, c.signed);
       const target = targetPhrase(c.check, c.movement);
-      checkParts.push(`${c.name} ${v1Str} -> ${v2Str}${c.unit} (${target}).`);
+      checkParts.push(`${c.name} ${v1Str} → ${v2Str}${c.unit} (${target}).`);
     }
 
     const prefix = `${t.blockName}, ${t.runs.length} runs:`;

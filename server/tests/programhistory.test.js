@@ -70,7 +70,7 @@ test("fixture runs: 4 runs of lowpoint, newest first with medians and state", ()
   assert.equal(summaryLines.length, 1);
   assert.equal(
     summaryLines[0],
-    "Flush line, 4 runs: gate 3/10 -> 7/10 passed. Attack -1.4 -> -2.8° (toward the -2 gate). Strike +4 -> +1 mm (toward +3 or lower)."
+    "Flush line, 4 runs: passed 3/10 → 7/10 (gate 7). Attack -1.4 → -2.8° (toward -2° or steeper). Strike +4 → +1 mm (toward +3 mm or lower)."
   );
 });
 
@@ -190,8 +190,8 @@ test("min-and-max check: face to path evaluates toward, away, and about the same
   // Moved away from gate: inside (+0.5) moving outside (+3.0)
   assert.equal(History.evaluateMovement(check, 0.5, 3.0), "moved away");
   // About the same: change <= 0.2 threshold
-  assert.equal(History.evaluateMovement(check, 0.5, 0.6), "about the same");
-  assert.equal(History.evaluateMovement(check, -1.0, -1.1), "about the same");
+  assert.equal(History.evaluateMovement(check, 0.5, 0.6), "inside the gate");
+  assert.equal(History.evaluateMovement(check, -1.0, -1.1), "inside the gate");
 
   // Trend and lines with faceToPath check
   const makeFaceRun = (t, date, med, streak) => ({
@@ -221,7 +221,7 @@ test("min-and-max check: face to path evaluates toward, away, and about the same
   const lToward = History.lines(tToward);
   assert.equal(
     lToward[0],
-    "Transfer, 2 runs: streak 2 -> 5 passed. Face to path +3.2 -> +0.5° (toward -2 to +2°)."
+    "Transfer, 2 runs: best streak 2 → 5 (gate 5 in a row). Face to path +3.2 → +0.5° (toward ±2°)."
   );
 
   const runsAway = [
@@ -232,7 +232,7 @@ test("min-and-max check: face to path evaluates toward, away, and about the same
   const lAway = History.lines(tAway);
   assert.equal(
     lAway[0],
-    "Transfer, 2 runs: streak 5 -> 1 passed. Face to path +0.5 -> +3.5° (away from -2 to +2°)."
+    "Transfer, 2 runs: best streak 5 → 1 (gate 5 in a row). Face to path +0.5 → +3.5° (away from ±2°)."
   );
 
   const runsSame = [
@@ -243,6 +243,6 @@ test("min-and-max check: face to path evaluates toward, away, and about the same
   const lSame = History.lines(tSame);
   assert.equal(
     lSame[0],
-    "Transfer, 2 runs: streak 3 -> 4 passed. Face to path +0.5 -> +0.6° (about the same)."
+    "Transfer, 2 runs: best streak 3 → 4 (gate 5 in a row). Face to path +0.5 → +0.6° (inside the gate)."
   );
 });
