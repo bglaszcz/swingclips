@@ -2310,6 +2310,16 @@ async function show3d(name) {
   const c = clips.find(c => c.name === name);
   View3D.show(box, { doc, positions, metrics2d: metrics, leadSide, club: c && c.shot ? c.shot.club : null });
   View3D.draw(video.currentTime);
+  if (doc && typeof SwingMetrics3D !== "undefined" && typeof swingRecords !== "undefined") {
+    if (!swingRecords[name]) swingRecords[name] = {};
+    if (!swingRecords[name].body3d) {
+      const b3 = SwingMetrics3D.summarize3d(pose, partner ? partner.pose : null, leadSide, doc, c && c.shot ? c.shot.club : null);
+      if (b3) {
+        swingRecords[name].body3d = b3;
+        showNumbers();
+      }
+    }
+  }
 }
 
 /**
@@ -2386,7 +2396,9 @@ function showNumbers() {
       trust[b.key] = j;
       if (j && j.level === "none") body[b.key] = null;
     }
-    const openRow = { ...body, trust };
+    const rec = (typeof swingRecords !== "undefined" && current && swingRecords[current]) || null;
+    const body3d = (rec && rec.body3d) || null;
+    const openRow = { ...body, trust, body3d, rec };
     const faults = typeof SwingFaults !== "undefined"
       ? SwingFaults.faultsOf(openRow, (r, k) => r.trust && r.trust[k] && r.trust[k].level === "shaky")
       : [];
