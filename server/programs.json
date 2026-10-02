@@ -152,6 +152,42 @@
         "within": 4,
         "shots": 10
       }
+    },
+    {
+      "id": "sequence1",
+      "name": "Sequence: Tier 1 (no ball)",
+      "from": "Golf coach chat, Oct 2 2026: the 3D showed the arms peaking ~50 ms before impact and the pelvis ~33 ms after it, hips square at impact, on all 40 swings. Tier 1 of 3 (Tier 2: blocked 3/4 7 irons, Tier 3: full speed, both gated on the 3D, not built yet). The coach's own Tier 1 gate is 10 in a row with the pelvis peak 20 ms or more before the arm peak; with no ball nothing is filmed, so the golfer judges by feel here.",
+      "cap": 20,
+      "clubs": "7 iron, no ball, no driver",
+      "bringBack": "Whether the lead hip started the downswing on its own on the pause reps, or the arms went with it, and how many in a row.",
+      "blocks": [
+        {
+          "id": "stepfire",
+          "name": "Step and fire",
+          "drill": "stepfire",
+          "ball": false,
+          "reps": 5,
+          "how": "Feet together, swing back, step the lead foot toward the target, and as it lands turn the belt buckle to the target. The hands follow. No ball.",
+          "ask": "Buckle turned to the target as the foot landed, hands following?",
+          "gate": {
+            "kind": "count",
+            "need": 5
+          }
+        },
+        {
+          "id": "pausetop",
+          "name": "Pause at the top",
+          "drill": "pausetop",
+          "ball": false,
+          "reps": 15,
+          "how": "Pause one second at the top, then start the downswing with the lead hip alone: the arms wait and fall. No added effort. No ball.",
+          "ask": "Did the lead hip start on its own, with the arms waiting (not together)?",
+          "gate": {
+            "kind": "streak",
+            "need": 10
+          }
+        }
+      ]
     }
   ]
 }

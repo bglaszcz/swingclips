@@ -20,6 +20,9 @@ DRILLS = {
     "toetap": {"name": "Lead foot only", "pre": 2},
     "stepthrough": {"name": "Step through", "pre": 2},
     "flush": {"name": "Flush line", "pre": 2},
+    # Sequence Tier 1 (no ball: nothing should record, but a stray clip stays out of the trends).
+    "stepfire": {"name": "Step and fire", "pre": 2},
+    "pausetop": {"name": "Pause at the top", "pre": 2},
 }
 # The phones' usual seconds before the strike (capture app MainActivity PRE_S).
 PRE_S = 2
