@@ -348,7 +348,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   ladder as data: blocks in order, each with its drill (drill mode, so rehearsals stay out of the trends;
   a block without one, like the transfer block, counts as normal swings), ball or no ball, reps, and a gate
   (`count`: need of reps, or `streak`: need in a row) of checks on Square's numbers (`strikeV`, `attack`,
-  `faceToPath`, `loft`, ...: min/max), plus `mark` for the golfer's tap on what they saw. A gate can also check the block's
+  `faceToPath`, `loft`, ...: min/max) and 3D kinematic numbers (`pelvisPeakMs`, `pelvisOpen`, `armAfterPelvis`, `pelvisStartMs`), plus `mark` for the golfer's tap on what they saw. A gate can also check the block's
   medians (`medians`: e.g. median attack -3 or steeper, the retention check). Square's strike height is
   spoken as the number it gives ("strike minus 12"): its 0 isn't the owner's sweet spot (7 iron median
   about -13, best carry at -20..-8), so gates use the owner's own band. Square's strike frame has jumped as a whole (about
@@ -356,7 +356,18 @@ toward the ball". The phones face away from you, so voice is the channel.
   (strike, 7 iron, usual -13 within 4, 10 shots) checks the median of the session's first 10 readable 7
   irons: outside it, the phone says "Calibration shifted" and strike stops gating for that run (attack and
   loft still gate). Invalid reads (Square's null, or the CSV's H0.0 / club speed 0) are checked before any
-  comparison and left out of both sides of the count ("invalid read, not counted"). **Setup notes** (Omni
+  comparison and left out of both sides of the count ("invalid read, not counted"). For 3D blocks (like Tier 2
+  and Tier 3 of `sequence`), 3D kinematics arrive after both phone angles are analyzed; until then a rep is
+  marked "waiting for 3D (n)" on the Start page, never counted as a miss. If 3D fails to arrive within 90 s
+  (`BODY3D_GIVE_UP_S`) or is flagged invalid ("camera moved"), it is left out of the gate as an invalid read.
+  **Moving Tier 3 pelvis stages:** In the `sequence` program, Tier 3's pelvis peak check starts at `max: -30`
+  (peaking at least 30 ms before impact). The coach progresses this in stages:
+  1. After impact: `{"key": "pelvisPeakMs", "max": 30}` (peaking within 30 ms after impact)
+  2. At impact: `{"key": "pelvisPeakMs", "max": 0}` (peaking at or before impact)
+  3. Before impact (initial): `{"key": "pelvisPeakMs", "max": -30}` (peaking at least 30 ms before impact)
+  4. Final target: `{"key": "pelvisPeakMs", "max": -100}` (peaking 100 ms before impact).
+  To advance the stage, edit the `pelvisPeakMs` check's `max` in `server/programs.json` under program `sequence`, block `tier3`.
+  **Setup notes** (Omni
   moved, mat changed, an update) are saved on the run in play or the last one and go into Copy for coach. No-ball reps are
   tapped Pass/Miss on the page (clips the phones record during them are ignored). Ball shots are judged
   once the shot pairs; a shot Square didn't read (club speed 0, or strike across the face exactly 0.0, whose
@@ -373,7 +384,8 @@ toward the ball". The phones face away from you, so voice is the channel.
   monitor medians moving toward the gate, away, or about the same. In Progress step 3 ("Is it working?"),
   each program with 2+ runs gets a folded trend line. **Copy for coach** (`/api/program/report`): per
   block the gate result and medians (range) of attack angle, dynamic loft and face to path for shots 1-10
-  and 11 on, the club order, every shot in order with its verdict, and the impact frame
+  and 11 on, the club order, every shot in order with its verdict and bring-back metrics (pelvis peak ms,
+  arm peak ms, pelvis open at impact, pelvis turn start vs top), and the impact frame
   (`/api/still/{clip}`) of the first ball swing hit in a no-ball block (the toe-tap swing). Tested in
   `tests/test_programs.py` and `tests/programhistory.test.js`.
 - **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page (section 6)

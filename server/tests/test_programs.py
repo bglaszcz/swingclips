@@ -26,6 +26,25 @@ def shot(attack=-4.0, v=-12.0, face=0.5, path=0.0, h=4.0, speed=80.0, loft=24.0,
                          "loft": loft, "faceImpactH": h, "faceImpactV": v}}
 
 
+def body3d(pelvis_peak=-10, arm_peak=-50, pelvis_open=18.0, pelvis_start=-100.0):
+    p7_t = 100.0
+    pelvis_t = p7_t + pelvis_peak / 1000.0
+    arm_t = p7_t + arm_peak / 1000.0
+    return {
+        "numbers": {
+            "pelvisOpenImpact": pelvis_open,
+            "pelvisStartMs": pelvis_start,
+        },
+        "sequence": {
+            "segments": [
+                {"key": "pelvis", "t": pelvis_t, "beforeImpact": -pelvis_peak, "afterImpact": pelvis_peak > 0},
+                {"key": "arm", "t": arm_t, "beforeImpact": -arm_peak, "afterImpact": arm_peak > 0},
+            ],
+            "armsFirst": arm_t < pelvis_t,
+        }
+    }
+
+
 class ProgramsTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -43,12 +62,13 @@ class ProgramsTest(unittest.TestCase):
     def said(self):
         return [e["text"] for e in self.p.latest(0)]
 
-    def hit(self, s, dt=30, mark=None):
+    def hit(self, s, dt=30, mark=None, body3d=None, why3d=None):
         """A ball swing now, its shot in (so step takes it), and the mark tapped, if any."""
         self.clock.t += dt
         t = self.clock.t
         name = f"swing_face_1920x1080_240fps_{int(t)}_2000ms.mp4"
-        self.swings.append({"t": t, "name": name, "partner": name.replace("face", "dtl"), "shot": s})
+        self.swings.append({"t": t, "name": name, "partner": name.replace("face", "dtl"),
+                            "shot": s, "body3d": body3d, "why3d": why3d})
         if mark is not None:
             self.clock.t += 3
             self.p.tap(mark)
@@ -301,6 +321,110 @@ class ProgramsTest(unittest.TestCase):
                     self.assertIn(c["key"], programs.NUMBERS)
                 if b.get("requires"):
                     self.assertIn(b["requires"], ids[:ids.index(b["id"])])
+
+    def test_sequence_tier2_pass_and_fail(self):
+        self.p.start("sequence")
+        # Tier 1: 10 taps in a row passes the block
+        self.taps(*[True] * 10)
+        self.assertEqual(self.block(), "tier2")
+        # Pass: pelvis peak before impact (<= 0) and pelvis open >= 15 deg
+        self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=18))
+        self.assertIn("Pass:", self.said()[-1])
+        # Miss: pelvis peak after impact
+        self.hit(shot(), body3d=body3d(pelvis_peak=20, pelvis_open=18))
+        self.assertIn("Miss: needs pelvis peak 0 or earlier", self.said()[-1])
+        # Miss: pelvis not open enough
+        self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=10))
+        self.assertIn("Miss: needs pelvis open 15 or more", self.said()[-1])
+        # Hit 6 more passes to reach 7 passes out of 10
+        for _ in range(6):
+            self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=18))
+        # 10th rep deciding block (1 pass + 2 misses + 6 passes = 9 reps, hit 1 more)
+        self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=18))
+        self.assertEqual(self.block(), "tier3")
+
+    def test_waiting_for_3d_and_late_arrival(self):
+        self.p.start("sequence")
+        self.taps(*[True] * 10)
+        self.assertEqual(self.block(), "tier2")
+        # Shot arrives without 3D
+        self.hit(shot())
+        self.assertEqual(self.p.state()["program"]["waiting3d"], 1)
+        st = self.p.state()["program"]["blocks"][1]["state"]
+        self.assertEqual(st["reps"], 0)  # waiting rep is not in judged gate count yet
+        # Late 3D arrives
+        self.swings[-1]["body3d"] = body3d(pelvis_peak=-20, pelvis_open=22)
+        self.p.step(self.swings)
+        self.assertEqual(self.p.state()["program"]["waiting3d"], 0)
+        st = self.p.state()["program"]["blocks"][1]["state"]
+        self.assertEqual(st["reps"], 1)
+        self.assertEqual(st["passes"], 1)
+        self.assertIn("Pass:", self.said()[-1])
+
+    def test_3d_never_arrived_timeout_and_why3d(self):
+        self.p.start("sequence")
+        self.taps(*[True] * 10)
+        self.assertEqual(self.block(), "tier2")
+        # Shot arrives without 3D
+        self.hit(shot())
+        self.assertEqual(self.p.state()["program"]["waiting3d"], 1)
+        # 95 seconds later: timeout
+        self.clock.t += 95
+        self.p.step(self.swings)
+        self.assertEqual(self.p.state()["program"]["waiting3d"], 0)
+        self.assertIn("Invalid read (no 3D): not counted.", self.said()[-1])
+        # Camera moved failure
+        self.hit(shot(), why3d="camera moved")
+        self.assertIn("Invalid read (camera moved): not counted.", self.said()[-1])
+
+    def test_tier3_locked_until_tier2_passes(self):
+        self.p.start("sequence")
+        self.taps(*[True] * 10)
+        self.assertEqual(self.block(), "tier2")
+        # 10 misses in Tier 2
+        for _ in range(10):
+            self.hit(shot(), body3d=body3d(pelvis_peak=20, pelvis_open=10))
+        self.assertIsNone(self.p.run)
+        done = self.p.state()["log"][-1]
+        self.assertEqual(done["results"]["tier2"], "not passed")
+        self.assertEqual(done["results"]["tier3"], "skipped")
+        self.assertIn("Skip Tier 3: full speed, no pause", " ".join(self.said()))
+
+    def test_tier3_streak_gate_and_bring_back_report(self):
+        self.p.start("sequence")
+        self.taps(*[True] * 10)
+        for _ in range(7):
+            self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=18))
+        for _ in range(3):
+            self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=18))
+        self.assertEqual(self.block(), "tier3")
+        # Tier 3 checks: pelvisPeakMs <= -30, armAfterPelvis: true, attack [-6, -3], faceToPath [-2, 2], median loft <= 26.5
+        # Miss 1: pelvis peak not early enough (-20 > -30)
+        self.hit(shot(attack=-4.0, loft=24.0, face=0.0, path=0.0), body3d=body3d(pelvis_peak=-20, arm_peak=-10, pelvis_open=20))
+        self.assertIn("pelvis peak minus 30 or earlier", self.said()[-1])
+        # Miss 2: arm before pelvis
+        self.hit(shot(attack=-4.0, loft=24.0, face=0.0, path=0.0), body3d=body3d(pelvis_peak=-40, arm_peak=-50, pelvis_open=20))
+        self.assertIn("arm peak after pelvis", self.said()[-1])
+        # 5 passes in a row
+        for _ in range(5):
+            self.hit(shot(attack=-4.0, loft=24.0, face=0.0, path=0.0), body3d=body3d(pelvis_peak=-40, arm_peak=-20, pelvis_open=20, pelvis_start=-110))
+        self.assertIsNone(self.p.run)
+        done = self.p.state()["log"][-1]
+        self.assertEqual(done["results"]["tier3"], "passed")
+        rep = self.p.report()
+        self.assertIn("Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height | 3D: pelvis peak / arm peak / pelvis open / pelvis start, verdict):", rep["text"])
+        self.assertIn("pelvis peak -40 ms, arm peak -20 ms, pelvis open +20°, pelvis start -110 ms, pass", rep["text"])
+
+    def test_sequence_cap_40(self):
+        self.p.start("sequence")
+        # 10 taps in Tier 1 passes to Tier 2
+        self.taps(*[True] * 10)
+        self.assertEqual(self.block(), "tier2")
+        # 30 shots with unread strike in Tier 2: not counted in gate, but count toward 40 swing cap
+        for _ in range(30):
+            self.hit(shot(h=0.0, v=0.0))
+        self.assertIsNone(self.p.run)
+        self.assertEqual(self.p.state()["log"][-1]["how"], "cap")
 
 
 if __name__ == "__main__":

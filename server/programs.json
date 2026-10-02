@@ -188,6 +188,91 @@
           }
         }
       ]
+    },
+    {
+      "id": "sequence",
+      "name": "Sequence: Tiers 1-3",
+      "from": "Golf coach chat, Oct 2 2026: 3D kinematics found lead arm fastest ~50 ms before impact, pelvis ~33 ms after impact, hips square at impact. 3-tier sequence ladder to lead downswing with pelvis uncoiling first.",
+      "cap": 40,
+      "clubs": "7 iron, no driver",
+      "bringBack": "Pelvis peak time and arm peak time vs impact (ms), pelvis open at impact vs address, pelvis rotation start vs top of swing, and attack, loft, face to path, strike height, with shot order.",
+      "blocks": [
+        {
+          "id": "tier1",
+          "name": "Tier 1: pause at the top",
+          "drill": "pausetop",
+          "ball": false,
+          "reps": 15,
+          "how": "Pause one second at the top, then start the downswing with the lead hip alone: the arms wait and fall. No added effort. No ball.",
+          "ask": "Did the lead hip start on its own, with the arms waiting (not together)?",
+          "gate": {
+            "kind": "streak",
+            "need": 10
+          }
+        },
+        {
+          "id": "tier2",
+          "name": "Tier 2: blocked 3/4 7 iron",
+          "drill": "pausetop",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "how": "Blocked, 3/4 speed, 7 iron. Pause for half a second at the top, then fire. Hit the ball without changing the feel. Attack -3 to -6 as a result check (reported, not gated).",
+          "gate": {
+            "kind": "count",
+            "need": 7,
+            "checks": [
+              {
+                "key": "pelvisPeakMs",
+                "max": 0
+              },
+              {
+                "key": "pelvisOpen",
+                "min": 15
+              }
+            ]
+          }
+        },
+        {
+          "id": "tier3",
+          "name": "Tier 3: full speed, no pause",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "requires": "tier2",
+          "how": "Full speed, no pause. One ball, full routine, no do-overs. Drop the pause, keep the feel.",
+          "gate": {
+            "kind": "streak",
+            "need": 5,
+            "checks": [
+              {
+                "key": "pelvisPeakMs",
+                "max": -30
+              },
+              {
+                "key": "armAfterPelvis",
+                "equals": true
+              },
+              {
+                "key": "attack",
+                "min": -6,
+                "max": -3
+              },
+              {
+                "key": "faceToPath",
+                "min": -2,
+                "max": 2
+              }
+            ],
+            "medians": [
+              {
+                "key": "loft",
+                "max": 26.5
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

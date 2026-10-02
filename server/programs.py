@@ -38,6 +38,8 @@ import swings
 PROGRAMS_FILE = Path(__file__).parent / "programs.json"
 # A swing with no shot this long after the strike never gets one (games.py SHOT_GIVE_UP_S).
 SHOT_GIVE_UP_S = 25.0
+# A swing with no 3D this long after the strike never gets one (down-the-line phone catchup).
+BODY3D_GIVE_UP_S = 90.0
 # Two clips of one swing are at most this far apart (app.py PAIR_SLACK_S).
 PAIR_SLACK_S = 2.0
 # The phone doesn't speak sentences older than this (practice.py SPEAK_WITHIN_S).
@@ -48,6 +50,8 @@ MARK_WAIT_S = 10.0
 IDLE_END_S = 45 * 60
 # The report splits each block's shots here: the first ones (cold?) and the rest.
 SPLIT_AT = 10
+
+BODY3D_KEYS = {"pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs", "armAfterPelvis"}
 
 
 def _finite(v):
@@ -63,21 +67,63 @@ NUMBERS = {
     "strikeH": ("Strike toe/heel", " mm", 0),
     "clubSpeed": ("Club speed", " mph", 0),
     "carry": ("Carry", " yd", 0),
+    "pelvisPeakMs": ("Pelvis peak vs impact", " ms", 0),
+    "armPeakMs": ("Arm peak vs impact", " ms", 0),
+    "pelvisOpen": ("Pelvis open at impact", "°", 0),
+    "pelvisStartMs": ("Pelvis turn start vs top", " ms", 0),
+    "armAfterPelvis": ("Arm peak after pelvis", "", 0),
 }
 
 
-def numbers_of(shot: dict | None) -> dict:
-    """A Square shot's numbers for the gates and the report. Face to path is face minus path (face
-    +0.7, path +4.6 -> -3.9: closed to the path, the draw/hook side)."""
+def body3d_numbers(body3d: dict | None) -> dict:
+    """Extracts 3D kinematic numbers for gates and reports from summarize3d() output."""
+    if not body3d:
+        return {"pelvisPeakMs": None, "armPeakMs": None, "pelvisOpen": None,
+                "pelvisStartMs": None, "armAfterPelvis": None}
+    nums = body3d.get("numbers") or {}
+    seq = body3d.get("sequence") or {}
+    segs = seq.get("segments") or []
+    pelvis_seg = next((s for s in segs if s.get("key") == "pelvis"), None)
+    arm_seg = next((s for s in segs if s.get("key") == "arm"), None)
+
+    pelvis_peak = round(-pelvis_seg["beforeImpact"]) if pelvis_seg and pelvis_seg.get("beforeImpact") is not None else None
+    arm_peak = round(-arm_seg["beforeImpact"]) if arm_seg and arm_seg.get("beforeImpact") is not None else None
+    arm_after_pelvis = (arm_seg["t"] > pelvis_seg["t"]) if (pelvis_seg and arm_seg and pelvis_seg.get("t") is not None and arm_seg.get("t") is not None) else None
+
+    return {
+        "pelvisPeakMs": pelvis_peak,
+        "armPeakMs": arm_peak,
+        "pelvisOpen": _finite(nums.get("pelvisOpenImpact")),
+        "pelvisStartMs": _finite(nums.get("pelvisStartMs")),
+        "armAfterPelvis": arm_after_pelvis,
+    }
+
+
+def block_needs_3d(block: dict) -> bool:
+    """Whether a block requires 3D kinematic numbers for its gate."""
+    if not block.get("ball"):
+        return False
+    if block.get("needs3d"):
+        return True
+    gate = block.get("gate") or {}
+    checks = gate.get("checks", []) + gate.get("medians", [])
+    return any(c.get("key") in BODY3D_KEYS for c in checks)
+
+
+def numbers_of(shot: dict | None, body3d: dict | None = None) -> dict:
+    """A Square shot's and 3D kinematics numbers for the gates and the report. Face to path is face
+    minus path (face +0.7, path +4.6 -> -3.9: closed to the path, the draw/hook side)."""
     c = (shot or {}).get("clubData") or {}
     b = (shot or {}).get("ball") or {}
     face, path = _finite(c.get("faceToTarget")), _finite(c.get("path"))
-    return {
+    out = {
         "attack": _finite(c.get("angleOfAttack")), "loft": _finite(c.get("loft")),
         "faceToPath": round(face - path, 2) if face is not None and path is not None else None,
         "strikeV": _finite(c.get("faceImpactV")), "strikeH": _finite(c.get("faceImpactH")),
         "clubSpeed": _finite(c.get("speed")), "carry": _finite(b.get("carry")),
     }
+    out.update(body3d_numbers(body3d))
+    return out
 
 
 def no_read(n: dict) -> str | None:
@@ -93,10 +139,18 @@ def no_read(n: dict) -> str | None:
 
 
 def check(n: dict, c: dict) -> bool | None:
-    """One gate check ({key, min, max}) on a shot's numbers; None when the number is missing."""
+    """One gate check ({key, min, max, equals}) on a shot's numbers; None when the number is missing."""
     v = n.get(c["key"])
     if v is None:
         return None
+    if "equals" in c:
+        return v == c["equals"]
+    if isinstance(v, bool):
+        if c.get("min") is True or c.get("min") == 1:
+            return v is True
+        if c.get("max") is False or c.get("max") == 0:
+            return v is False
+        return v == c.get("val", True)
     return (c.get("min") is None or v >= c["min"]) and (c.get("max") is None or v <= c["max"])
 
 
@@ -105,27 +159,47 @@ def load_programs(path: Path = PROGRAMS_FILE) -> dict:
     return {p["id"]: p for p in doc["programs"]}
 
 
-def say_number(key: str, v: float) -> str:
+def say_number(key: str, v) -> str:
     # Square's strike height is said as the number it gives: its 0 isn't the owner's sweet spot
     # (7 iron median about -13, best carry -20..-8), so "high" and "low" would mislead.
+    if isinstance(v, bool):
+        return "arm after pelvis" if v else "arm before pelvis"
     dec = NUMBERS[key][2]
     s = f"{abs(v):.{dec}f}".rstrip("0").rstrip(".") if dec else f"{abs(round(v))}"
     sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath", "strikeV") and s != "0" else ""
-    name = "strike" if key == "strikeV" else NUMBERS[key][0].lower()
+    if key == "pelvisPeakMs":
+        name = "pelvis peak"
+    elif key == "armPeakMs":
+        name = "arm peak"
+    elif key == "pelvisOpen":
+        name = "pelvis open"
+    elif key == "pelvisStartMs":
+        name = "pelvis turn start"
+    elif key == "strikeV":
+        name = "strike"
+    else:
+        name = NUMBERS[key][0].lower()
     return f"{name} {sign}{s}"
 
 
 # Which way past a check's max / min reads, in words: (past max, past min).
-LIMIT_WORDS = {"attack": ("or steeper", "or shallower"), "strikeV": ("or lower", "or higher")}
+LIMIT_WORDS = {
+    "attack": ("or steeper", "or shallower"),
+    "strikeV": ("or lower", "or higher"),
+    "pelvisPeakMs": ("or earlier", "or later"),
+    "pelvisOpen": ("or less", "or more"),
+}
 
 
-def say_limit(c: dict, v: float) -> str:
+def say_limit(c: dict, v) -> str:
     """What a failed check (value v) wanted, in words for the phone."""
     key, lo, hi = c["key"], c.get("min"), c.get("max")
+    if key == "armAfterPelvis":
+        return "arm peak after pelvis"
     if lo is not None and hi is not None and lo == -hi:
         return f"{NUMBERS[key][0].lower()} within {hi:g}"
     down, up = LIMIT_WORDS.get(key, ("or less", "or more"))
-    if hi is not None and v > hi:
+    if hi is not None and (v is None or v > hi):
         return f"{say_number(key, hi)} {down}"
     return f"{say_number(key, lo)} {up}"
 
@@ -155,17 +229,18 @@ def judged(block: dict, reps: list[dict], marks: list[dict]) -> list[dict]:
             if not block["ball"]:
                 r["gate"] = bool(r["pass"])
         elif r["kind"] == "shot" and block["ball"]:
-            if block["gate"].get("mark"):
-                # The golfer's tap for this swing: the first one from its strike to the next swing.
-                later = [t for t in swings_t if t > r["t"] + PAIR_SLACK_S]
-                until = later[0] if later else math.inf
-                m = next((m for m in my_marks if r["t"] - PAIR_SLACK_S <= m["t"] < until), None)
-                r["mark"] = m["ok"] if m else None
-            if not r.get("noRead"):
-                results = [(c, check(r["numbers"], c)) for c in block["gate"].get("checks", [])]
-                r["fails"] = [c for c, ok in results if ok is False]
-                if all(ok is not None for _, ok in results):
-                    r["gate"] = not r["fails"] and r["mark"] is not False
+            if not r.get("waiting3d"):
+                if block["gate"].get("mark"):
+                    # The golfer's tap for this swing: the first one from its strike to the next swing.
+                    later = [t for t in swings_t if t > r["t"] + PAIR_SLACK_S]
+                    until = later[0] if later else math.inf
+                    m = next((m for m in my_marks if r["t"] - PAIR_SLACK_S <= m["t"] < until), None)
+                    r["mark"] = m["ok"] if m else None
+                if not r.get("noRead"):
+                    results = [(c, check(r["numbers"], c)) for c in block["gate"].get("checks", [])]
+                    r["fails"] = [c for c, ok in results if ok is False]
+                    if all(ok is not None for _, ok in results):
+                        r["gate"] = not r["fails"] and r["mark"] is not False
         out.append(r)
     return out
 
@@ -348,12 +423,44 @@ class Programs:
 
     def step(self, swings_now: list[dict]) -> list[dict]:
         """Adds each new swing of the program once its shot is in (or never came). `swings_now`:
-        listed swings with "t" (strike, unix s), "name", "partner" and "shot". Returns the reps made."""
+        listed swings with "t" (strike, unix s), "name", "partner", "shot", "body3d", "why3d". Returns the reps made."""
         with self.lock:
             if not self.run:
                 return []
             p, _ = self._current()
             now = self.clock()
+
+            # Check existing reps that are waiting for 3D
+            by_name = {s["name"]: s for s in swings_now}
+            for r in self.run["reps"]:
+                if not r.get("waiting3d"):
+                    continue
+                s = by_name.get(r.get("clip"))
+                if not s:
+                    s = next((s for s in swings_now if abs(s["t"] - r["t"]) <= PAIR_SLACK_S), None)
+                if s and s.get("body3d"):
+                    r["waiting3d"] = False
+                    r["numbers"].update(body3d_numbers(s["body3d"]))
+                    p, block = self._current()
+                    if block["id"] == r["block"]:
+                        self._say_shot(block, r["t"])
+                        self._settle(p, now)
+                elif s and s.get("why3d"):
+                    r["waiting3d"] = False
+                    r["noRead"] = s["why3d"]
+                    self._say(f"Invalid read ({r['noRead']}): not counted.")
+                    p, block = self._current()
+                    self._settle(p, now)
+                elif now - r["t"] >= BODY3D_GIVE_UP_S:
+                    r["waiting3d"] = False
+                    r["noRead"] = "no 3D"
+                    self._say("Invalid read (no 3D): not counted.")
+                    p, block = self._current()
+                    self._settle(p, now)
+
+            if not self.run:
+                return []
+
             done_t = [r["t"] for r in self.run["reps"] if r["kind"] != "tap"] + self.run.setdefault("ignored", [])
             last = max(done_t + [self.run["started"] - PAIR_SLACK_S])
             block_was = self.run["block"]
@@ -376,16 +483,29 @@ class Programs:
                 if not s.get("shot"):
                     r["kind"] = "noshot"
                 else:
-                    n = numbers_of(s["shot"])
+                    n = numbers_of(s["shot"], s.get("body3d"))
+                    nr = no_read(n)
+                    needs_3d = block_needs_3d(block)
+                    waiting = False
+                    if not nr and needs_3d:
+                        if s.get("body3d"):
+                            pass
+                        elif s.get("why3d"):
+                            nr = s["why3d"]
+                        elif now - t < BODY3D_GIVE_UP_S:
+                            waiting = True
+                        else:
+                            nr = "no 3D"
                     r.update(kind="shot" if block["ball"] else "ball", club=s["shot"].get("club"),
-                             numbers=n, noRead=no_read(n))
+                             numbers=n, noRead=nr, waiting3d=waiting)
                 self.run["reps"].append(r)
                 made.append(r)
-                if r["kind"] in ("shot", "ball"):
+                if r["kind"] in ("shot", "ball") and not r.get("waiting3d"):
                     self._calibration_check()
                 if r["kind"] == "shot":
-                    p, block = self._current()
-                    self._say_shot(block, t)
+                    if not r.get("waiting3d"):
+                        p, block = self._current()
+                        self._say_shot(block, t)
                 elif r["kind"] == "noshot":
                     self._say("No Square numbers for that one: not counted.")
                 if not self._settle(p, now):
@@ -511,10 +631,14 @@ class Programs:
         if not self.run:
             return None
         p, block = self._current()
-        blocks = [{**b, "now": i == self.run["block"]} for i, b in enumerate(judged_blocks(p, self.run))]
+        waiting_count = sum(1 for r in self.run["reps"] if r.get("waiting3d"))
+        blocks = [{**b, "now": i == self.run["block"],
+                   "waiting3d": sum(1 for r in b["judged"] if r.get("waiting3d"))}
+                  for i, b in enumerate(judged_blocks(p, self.run))]
         return {"id": p["id"], "name": p["name"], "started": self.run["started"], "cap": p["cap"],
                 "notes": self.run.get("notes", ""), "calibration": calibration(p, self.run),
                 "used": self._swings_used(), "block": self.run["block"], "blocks": blocks,
+                "waiting3d": waiting_count,
                 "progress": progress_text(block, block_state(block, self.run["reps"], self.run["marks"]))}
 
     def _say(self, text: str) -> None:
@@ -571,8 +695,10 @@ def club_word(code: str | None) -> str:
 def fmt(key: str, v) -> str:
     if v is None:
         return "–"
+    if isinstance(v, bool):
+        return "yes" if v else "no"
     dec = NUMBERS[key][2]
-    return f"{v:+.{dec}f}" if key in ("attack", "faceToPath", "strikeV", "strikeH") else f"{v:.{dec}f}"
+    return f"{v:+.{dec}f}" if key in ("attack", "faceToPath", "strikeV", "strikeH", "pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs") else f"{v:.{dec}f}"
 
 
 def spread(key: str, values: list) -> str:
@@ -660,7 +786,12 @@ def report(p: dict, run: dict, body=None) -> dict:
                 if frame is None:
                     frame = {"clip": r["clip"], "partner": r.get("partner"), "block": b["name"]}
     lines.append("")
-    lines.append("Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height, verdict):")
+    has_any_3d = (any(r.get("numbers", {}).get("pelvisPeakMs") is not None for r in reps if r.get("numbers"))
+                  or any(block_needs_3d(b) for b in p["blocks"]))
+    if has_any_3d:
+        lines.append("Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height | 3D: pelvis peak / arm peak / pelvis open / pelvis start, verdict):")
+    else:
+        lines.append("Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height, verdict):")
     by_block = {b["id"]: {r["t"]: r for r in judged(b, run["reps"], run["marks"])} for b in p["blocks"]}
     names = {b["id"]: b["name"] for b in p["blocks"]}
     for i, r0 in enumerate(reps, 1):
@@ -672,7 +803,14 @@ def report(p: dict, run: dict, body=None) -> dict:
             continue
         n = r0["numbers"]
         nums = " / ".join(fmt(k, n[k]) for k in ("attack", "loft", "faceToPath", "strikeV"))
+        if any(n.get(k) is not None for k in ("pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs")):
+            d3 = (f"pelvis peak {fmt('pelvisPeakMs', n.get('pelvisPeakMs'))} ms, "
+                  f"arm peak {fmt('armPeakMs', n.get('armPeakMs'))} ms, "
+                  f"pelvis open {fmt('pelvisOpen', n.get('pelvisOpen'))}°, "
+                  f"pelvis start {fmt('pelvisStartMs', n.get('pelvisStartMs'))} ms")
+            nums = f"{nums} | 3D: {d3}"
         verdict = ("invalid read, not counted (" + r0["noRead"] + ")" if r0.get("noRead") else
+                   "waiting for 3D" if r.get("waiting3d") else
                    "pass" if r.get("gate") else "miss" if r.get("gate") is False else "")
         if r.get("mark") is not None:
             verdict += (", " if verdict else "") + ("mark ahead" if r["mark"] else "mark behind")

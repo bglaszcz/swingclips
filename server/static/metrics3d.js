@@ -38,6 +38,8 @@
   // THORAX_JUMP degrees within JUMP_SECONDS from P3 to the top (P4; the chest turns slowly there, unlike
   // in the downswing) marks its speed unreliable, and its top turn is the most closed one there.
   const THORAX_JUMP = 25, JUMP_SECONDS = 0.05;
+  // Pelvis rotation start: speed toward target (deg/s) held for at least this long (s) after P3.
+  const PELVIS_START_SPEED = 20, PELVIS_START_SECONDS = 0.03;
   // Hands to clubhead is the club's length less the grip above the hands (inches), and counts as
   // agreeing within CLUB_TOLERANCE of it.
   const GRIP_ABOVE_HANDS = 4.5, CLUB_TOLERANCE = 0.1;
@@ -235,6 +237,30 @@
       };
     }
 
+    // Pelvis rotation start: when the pelvis starts turning toward the target relative to the top (P4), in ms.
+    // The first moment from P3 on after which pelvisSpeed stays above PELVIS_START_SPEED for PELVIS_START_SECONDS.
+    let pelvisStartMs = null;
+    if (p3 && p4) {
+      for (let i = 0; i < values.length; i++) {
+        const v = values[i];
+        if (v.t < p3.t || v.pelvisSpeed == null) continue;
+        if (v.pelvisSpeed >= PELVIS_START_SPEED) {
+          let ok = true, j = i;
+          while (j < values.length && values[j].t - v.t < PELVIS_START_SECONDS) {
+            if (values[j].pelvisSpeed == null || values[j].pelvisSpeed < PELVIS_START_SPEED) {
+              ok = false;
+              break;
+            }
+            j++;
+          }
+          if (ok && j > i) {
+            pelvisStartMs = Math.round((v.t - p4.t) * 1000);
+            break;
+          }
+        }
+      }
+    }
+
     // The club against its known length, where the clubhead was triangulated.
     let clubCheck = null;
     const reach = raw.map(v => v.clubReach).filter(v => v != null).sort((a, b) => a - b);
@@ -246,7 +272,7 @@
                     diffPct: expected ? 100 * (measured - expected) / expected : null,
                     ok: expected ? Math.abs(measured - expected) <= CLUB_TOLERANCE * expected : null };
     }
-    return { values, address: ai, sequence, clubCheck, thoraxTop };
+    return { values, address: ai, sequence, clubCheck, thoraxTop, pelvisStartMs };
   }
 
   /** The numbers at key positions: {p1: values, p4: ..., p6, p7} (nearest 3D frame to each). */
@@ -296,11 +322,12 @@
       const v = at[pos] && at[pos][value];
       numbers[key] = typeof v === "number" && Number.isFinite(v) ? sign * v : null;
     }
+    numbers.pelvisStartMs = typeof r.pelvisStartMs === "number" && Number.isFinite(r.pelvisStartMs) ? r.pelvisStartMs : null;
     return { numbers, sequence: r.sequence, clubCheck: r.clubCheck, reprojection: doc.reprojection,
              boneSpreadPct: doc.boneSpreadPct };
   }
 
-  const api = { compute, atPositions, summarize3d, frameValues, SEGMENTS, CLUB_LENGTH };
+  const api = { compute, atPositions, summarize3d, frameValues, SEGMENTS, CLUB_LENGTH, PELVIS_START_SPEED, PELVIS_START_SECONDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingMetrics3D = api;
 })(typeof window !== "undefined" ? window : globalThis);

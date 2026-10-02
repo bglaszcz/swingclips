@@ -829,14 +829,18 @@ def practice_worker(stop: threading.Event):
 
 def swings_since(since: float) -> list[dict]:
     """The swings as listed (by the face-on clip, or a lone one) struck after `since`, with the strike's
-    time ("t") and the partner clip's pose state."""
+    time ("t"), partner clip's pose state, and 3D kinematics record."""
     clips = listed_clips(since=since - PAIR_SLACK_S)
     by_name = {c["name"]: c for c in clips}
     swings_now = [dict(c) for c in clips
                   if SWING_NAME.match(c["name"]) and not (c["partner"] and c["angle"] != "face")]
-    for s in swings_now:
-        s["t"] = recorded_at(CLIPS_DIR / s["name"])
-        s["partnerPose"] = by_name[s["partner"]]["pose"] if s["partner"] in by_name else None
+    with records_lock:
+        for s in swings_now:
+            s["t"] = recorded_at(CLIPS_DIR / s["name"])
+            s["partnerPose"] = by_name[s["partner"]]["pose"] if s["partner"] in by_name else None
+            rec = swing_records.get(s["name"]) or {}
+            s["body3d"] = rec.get("body3d")
+            s["why3d"] = rec.get("why3d")
     return swings_now
 
 

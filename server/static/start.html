@@ -116,6 +116,7 @@
                     background: var(--panel); border: 1px solid var(--line); color: var(--muted); }
   .prog-reps span.y { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
   .prog-reps span.n { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
+  .prog-reps span.wait { background: var(--panel-2); color: var(--muted); border-color: var(--line); }
   .prog-blocks { display: grid; gap: 6px; margin: 8px 0; font-size: 14px; }
   .prog-blocks div { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
   .prog-blocks b { min-width: 9em; }
@@ -605,13 +606,20 @@ const pgNum = (v, d = 1) => v == null ? "–" : (v > 0 ? "+" : "") + v.toFixed(d
 
 function gateText(b) {
   const g = b.gate, checks = (g.checks || []).map(c => {
-    const name = { strikeV: "strike", attack: "attack", faceToPath: "face to path" }[c.key] || c.key;
-    const unit = c.key === "strikeV" ? " mm" : "°";
+    if (c.key === "armAfterPelvis") return "arm peak after pelvis";
+    const name = { strikeV: "strike", attack: "attack", faceToPath: "face to path",
+                   pelvisPeakMs: "pelvis peak", pelvisOpen: "pelvis open",
+                   pelvisStartMs: "pelvis start" }[c.key] || c.key;
+    const unit = c.key === "strikeV" ? " mm" : (c.key.endsWith("Ms") ? " ms" : "°");
     if (c.min != null && c.max != null && c.min === -c.max) return `${name} within ±${c.max}${unit}`;
     if (c.min != null && c.max != null) return `${name} ${c.min} to ${c.max}${unit}`;
     return c.max != null ? `${name} ≤ ${c.max}${unit}` : `${name} ≥ ${c.min}${unit}`;
   });
-  for (const c of g.medians || []) checks.push(`median ${c.key === "attack" ? "attack" : c.key} ${c.max != null ? "≤ " + c.max : "≥ " + c.min}${c.key === "strikeV" ? " mm" : "°"}`);
+  for (const c of g.medians || []) {
+    const name = { strikeV: "strike", attack: "attack", loft: "dynamic loft" }[c.key] || c.key;
+    const unit = c.key === "strikeV" ? " mm" : (c.key.endsWith("Ms") ? " ms" : "°");
+    checks.push(`median ${name} ${c.max != null ? "≤ " + c.max : "≥ " + c.min}${unit}`);
+  }
   if (g.mark) checks.push("mark at or ahead");
   const count = g.kind === "streak" ? `${g.need} in a row` : `${g.need} of ${b.reps}`;
   return count + (checks.length ? ": " + checks.join(", ") : "");
@@ -667,8 +675,16 @@ function renderProgram(data) {
   how.textContent = b.how;
   const gate = document.createElement("div");
   gate.className = "gate";
-  gate.textContent = `Gate: ${gateText(b)}. Now: ${run.progress}`;
+  const waitCount = (b.judged || []).filter(r => r.waiting3d).length;
+  const waitText = waitCount > 0 ? ` (waiting for 3D: ${waitCount})` : "";
+  gate.textContent = `Gate: ${gateText(b)}. Now: ${run.progress}${waitText}`;
   box.append(h, how, gate);
+  if (waitCount > 0) {
+    const w = document.createElement("div");
+    w.className = "plan-note";
+    w.textContent = `waiting for 3D (${waitCount})`;
+    box.append(w);
+  }
   const cal = run.calibration;
   if (cal && cal.n) {
     const c = document.createElement("div");
@@ -689,9 +705,11 @@ function renderProgram(data) {
   const reps = document.createElement("div");
   reps.className = "prog-reps";
   reps.append(...judged.map((r, i) => Object.assign(document.createElement("span"), {
-    className: r.gate === true ? "y" : r.gate === false ? "n" : "",
-    textContent: r.gate === true ? "✓" : r.gate === false ? "✗" : "?",
-    title: r.numbers ? `attack ${pgNum(r.numbers.attack)}, strike ${pgNum(r.numbers.strikeV, 0)} mm, face to path ${pgNum(r.numbers.faceToPath)}` +
+    className: r.waiting3d ? "wait" : r.gate === true ? "y" : r.gate === false ? "n" : "",
+    textContent: r.waiting3d ? "…" : r.gate === true ? "✓" : r.gate === false ? "✗" : "?",
+    title: r.waiting3d ? `rep ${i + 1}: waiting for 3D` : r.numbers ? `attack ${pgNum(r.numbers.attack)}, strike ${pgNum(r.numbers.strikeV, 0)} mm, face to path ${pgNum(r.numbers.faceToPath)}` +
+      (r.numbers.pelvisPeakMs != null ? `, pelvis peak ${pgNum(r.numbers.pelvisPeakMs, 0)} ms` : "") +
+      (r.numbers.pelvisOpen != null ? `, pelvis open ${pgNum(r.numbers.pelvisOpen, 0)}°` : "") +
       (r.noRead ? ` (not counted: ${r.noRead})` : "") + (r.mark === false ? ", mark behind" : "") : `rep ${i + 1}`
   })));
   box.append(reps);
@@ -720,8 +738,12 @@ function renderProgram(data) {
   if (last && b.ball) {
     const n = last.numbers, x = document.createElement("div");
     x.className = "plan-note";
-    x.textContent = `Last shot: attack ${pgNum(n.attack)}°, strike ${pgNum(n.strikeV, 0)} mm, face to path ${pgNum(n.faceToPath)}°, dynamic loft ${n.loft == null ? "–" : n.loft.toFixed(1)}°` +
-      (last.noRead ? ` (not counted: ${last.noRead})` : "");
+    let txt = `Last shot: attack ${pgNum(n.attack)}°, strike ${pgNum(n.strikeV, 0)} mm, face to path ${pgNum(n.faceToPath)}°, dynamic loft ${n.loft == null ? "–" : n.loft.toFixed(1)}°`;
+    if (n.pelvisPeakMs != null) txt += `, pelvis peak ${pgNum(n.pelvisPeakMs, 0)} ms`;
+    if (n.pelvisOpen != null) txt += `, pelvis open ${pgNum(n.pelvisOpen, 0)}°`;
+    if (last.waiting3d) txt += " (waiting for 3D)";
+    else if (last.noRead) txt += ` (not counted: ${last.noRead})`;
+    x.textContent = txt;
     box.append(x);
   }
   $("prog-blocks").replaceChildren(...run.blocks.map(blockLine));

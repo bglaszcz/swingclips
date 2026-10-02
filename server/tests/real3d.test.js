@@ -26,6 +26,10 @@ const PELVIS_OPEN_IMPACT_MAX = 15;
 const ARM_PEAK_BEFORE_IMPACT_MIN = 20;
 const ARM_PEAK_BEFORE_IMPACT_MAX = 80;
 
+// Pelvis rotation start relative to P4 (top): starts near top or slightly before/at top (-180 to 20 ms).
+const PELVIS_START_MIN = -180;
+const PELVIS_START_MAX = 20;
+
 const FIXTURES_DIR = path.join(__dirname, "fixtures", "real3d");
 const FIXTURE_FILES = fs.readdirSync(FIXTURES_DIR)
   .filter(f => f.startsWith("swing_") && f.endsWith(".json.gz"))
@@ -53,6 +57,16 @@ test("real 3D swings regression: kinematic sequence, thorax turn and pelvis impa
     assert.ok(
       r.numbers.pelvisOpenImpact >= PELVIS_OPEN_IMPACT_MIN && r.numbers.pelvisOpenImpact <= PELVIS_OPEN_IMPACT_MAX,
       `${file}: pelvisOpenImpact (${r.numbers.pelvisOpenImpact}) outside [${PELVIS_OPEN_IMPACT_MIN}, ${PELVIS_OPEN_IMPACT_MAX}]`
+    );
+
+    // Pelvis rotation start timing in band -180 to 20 ms relative to P4 (top)
+    assert.ok(
+      typeof r.numbers.pelvisStartMs === "number",
+      `${file}: pelvisStartMs must be a number`
+    );
+    assert.ok(
+      r.numbers.pelvisStartMs >= PELVIS_START_MIN && r.numbers.pelvisStartMs <= PELVIS_START_MAX,
+      `${file}: pelvisStartMs (${r.numbers.pelvisStartMs}) outside [${PELVIS_START_MIN}, ${PELVIS_START_MAX}] ms`
     );
 
     // Kinematic sequence findings
