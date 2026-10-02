@@ -5,6 +5,10 @@
 (function (root) {
   const Coach = root.SwingCoach || (typeof require !== "undefined" && require("./coach.js"));
 
+  // Arms-led downswing (from 3D): pelvis reaches peak speed after impact (bodyLate) and hips are under
+  // PELVIS_OPEN_IMPACT_MAX open at impact (the owner's first session was 0-9 deg open vs good players' 30-45 deg).
+  const PELVIS_OPEN_IMPACT_MAX = 20;
+
   // Thresholds: named on roughly the owner's worst quarter of swings or fewer (on his 178 swings to
   // Sep 28: early extension 23%, standing up 24%, over the top 16%, the rest under 10%). Textbook
   // limits would name nearly every swing from these 2D numbers, which says nothing.
@@ -26,6 +30,20 @@
     { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more", threshold: -22, test: v => v > -22 },
     // Head lift: head height rises at impact vs address (in) > 1.0
     { key: "headRise", name: "head lift", move: "headRise", dir: "more", threshold: 1.0, test: v => v > 1.0 },
+    // Arms-led downswing: from 3D (pelvis reaches peak speed after impact, hips under 20 deg open at impact)
+    {
+      key: "armsLed",
+      name: "arms-led downswing",
+      move: "armsLed",
+      dir: "more",
+      threshold: PELVIS_OPEN_IMPACT_MAX,
+      test: (v, row) => {
+        if (v == null || v >= PELVIS_OPEN_IMPACT_MAX) return false;
+        if (!row) return true;
+        const b3 = row.body3d || (row.rec && row.rec.body3d);
+        return !b3 || !!(b3.sequence && b3.sequence.bodyLate);
+      },
+    },
   ];
 
   // Minimum swings and minimum share of readable swings for a fault to count as "top" in a session.
@@ -41,12 +59,26 @@
 
   function valueOf(row, key) {
     if (!row) return null;
+    if (key === "armsLed") {
+      const b3 = row.body3d || (row.rec && row.rec.body3d);
+      if (b3 && b3.numbers && b3.numbers.pelvisOpenImpact != null) {
+        return finite(b3.numbers.pelvisOpenImpact) ? b3.numbers.pelvisOpenImpact : null;
+      }
+      return finite(row[key]) ? row[key] : null;
+    }
     const v = row.shown && row.shown[key] != null ? row.shown[key] : row[key];
     return finite(v) ? v : null;
   }
 
   function isReadable(row, key, shaky) {
     if (!row) return false;
+    if (key === "armsLed") {
+      const b3 = row.body3d || (row.rec && row.rec.body3d);
+      if (b3) {
+        return !!(b3.sequence && typeof b3.sequence.bodyLate === "boolean" && valueOf(row, key) != null);
+      }
+      return finite(row[key]);
+    }
     const v = valueOf(row, key);
     if (v == null) return false;
     if (row.trust && row.trust[key] && row.trust[key].level === "none") return false;
@@ -71,7 +103,7 @@
     for (const f of FAULTS) {
       if (!isReadable(row, f.key, shaky)) continue;
       const v = valueOf(row, f.key);
-      if (f.test(v)) {
+      if (f.test(v, row)) {
         const ce = coachEntry(f.move, f.dir);
         out.push({
           key: f.key,
@@ -101,7 +133,7 @@
         if (!isReadable(r, f.key, shaky)) continue;
         total++;
         const v = valueOf(r, f.key);
-        if (f.test(v)) count++;
+        if (f.test(v, r)) count++;
       }
       const share = total > 0 ? count / total : 0;
       const top = count >= MIN_TOP_SWINGS && share >= MIN_TOP_SHARE;
@@ -122,7 +154,7 @@
     return results;
   }
 
-  const api = { FAULTS, faultsOf, sessionFaults, MIN_TOP_SWINGS, MIN_TOP_SHARE };
+  const api = { FAULTS, faultsOf, sessionFaults, MIN_TOP_SWINGS, MIN_TOP_SHARE, PELVIS_OPEN_IMPACT_MAX };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingFaults = api;
 })(typeof window !== "undefined" ? window : globalThis);

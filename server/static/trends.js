@@ -108,6 +108,7 @@ function swingRow(c) {
     .some(code => SwingTrust.BAD_CAMERA.includes(code));
   const unseen = ["face", "dtl"].filter(bad);
   return { c, t: new Date(c.recorded).getTime(), club: c.shot ? c.shot.club : null, rec, body, shown, trust, unseen,
+           body3d: (rec && rec.body3d) || null,
            ...SwingSummary.shotNumbers(c.shot), ...(body || {}) };
 }
 

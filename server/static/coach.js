@@ -253,6 +253,17 @@
         drill: "In-front drill: rehearse backswings keeping the grip in front of your sternum; stop and check, then hit 5.",
         thought: "Hands in front of the chest." },
     },
+    armsLed: {
+      what: "downswing sequence: arms leading the downswing before the body",
+      more: { name: "an arms-led downswing", fault: true,
+        how: "The arms start down before the lower body: the club comes from the outside, steep, and the low point moves back.",
+        drill: "Step-through drill (or pause at the top, then start down by turning the belt buckle to the target before the arms move): step the trail foot through after impact. 10 balls.",
+        thought: "Buckle to the target first." },
+      less: { name: "a body-led downswing (pelvis first)",
+        how: "The pelvis turns toward the target before the arms start down, leading the downswing.",
+        drill: "Step-through drill: step into the lead side as the downswing starts. 10 balls.",
+        thought: "Buckle to the target first." },
+    },
   };
 
   // result key -> {more, less}: what the ball does, that way, in golf terms; target: where the

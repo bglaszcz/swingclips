@@ -61,3 +61,16 @@ test("faults are never offered as a fix", () => {
   assert.equal(C.coach(link({ move: "handsPlaneP6", result: "path", effect: -1.4, median: -1.6 }), "I7").fix.name,
                C.MOVES.handsPlaneP6.less.name);
 });
+
+test("arms-led downswing coaching: fault name, drill, thought and ball effect", () => {
+  const m = C.MOVES.armsLed;
+  assert.ok(m, "armsLed move exists");
+  assert.equal(m.more.fault, true);
+  assert.equal(m.more.name, "an arms-led downswing");
+  assert.ok(m.more.drill.includes("Step-through drill"));
+  assert.ok(m.more.drill.includes("belt buckle to the target"));
+  assert.equal(m.more.thought, "Buckle to the target first.");
+  assert.ok(m.more.how.includes("outside"));
+  assert.ok(m.more.how.includes("steep"));
+  assert.ok(m.more.how.includes("low point moves back"));
+});
