@@ -1,9 +1,14 @@
 // Today's practice plan for the Start page: builds a short, ordered practice session
 // of about 45 minutes / 60-80 balls from the golfer's current data:
 //
+// 0. Coach program block (if any coach program is in progress): the current block of the
+//    active program, with its time and ball count from the program's cap, placed first so
+//    the program comes before free practice blocks. Skipped when no program is running.
 // 1. Warm-up: a few easy wedge shots (fixed block, short).
 // 2. Focus block: the current focus (if any) with its drill and swing thought from coach.js,
 //    a ball count, and parameters to turn on practice mode for that move (Practice this).
+//    When no focus is set, the top session fault from faults.js feeds the block automatically
+//    (arms-led downswing from 3D data is the primary candidate).
 // 3. Scoring-zone block: from the latest Combines' worst targets (combineBreakdown worst), or,
 //    with no Combine yet, from the wedge matrix's biggest hole; a suggested game with start button.
 // 4. Finish with a game: Combine if the last one was 7 or more days ago (the weekly score),
@@ -19,7 +24,12 @@
 //       clips?: Array<object>,
 //       rows?: Array<object>,
 //       swings?: Object<string, object>,
-//       games?: Array<object>
+//       games?: Array<object>,
+//       program?: object | null,         // active program run from /api/program
+//       programs?: Array<object>,        // program catalog (to look up blocks from id)
+//       programState?: object,           // /api/program response { program, programs }
+//       sessionFaults?: Array<object>,   // pre-computed faults.sessionFaults() result
+//       topFault?: object                // override: a specific fault to feed focus
 //     }
 //     options?: {
 //       now?: number | Date,
@@ -29,13 +39,21 @@
 //     totalMinutes: number,
 //     totalBalls: number,
 //     blocks: Array<{
-//       id: "warmup" | "focus" | "scoring" | "finish",
+//       id: "program" | "warmup" | "focus" | "scoring" | "finish",
 //       title: string,
 //       minutes: number,
 //       balls: number,
 //       why: string,
 //       drill: string | null,
 //       thought: string | null,
+//       needs: {             // hardware/environment prerequisites for this block
+//         phones: boolean,   // both cameras connected and recording
+//         square: boolean,   // Square launch monitor running
+//         body3d: boolean,   // 3D calibration required
+//         "3d": boolean,     // alias for body3d
+//         ball: boolean,     // ball shots (false = no-ball drill)
+//         noball: boolean    // alias for !ball
+//       },
 //       button: { id, label, disabled?, title?, gameId?, params? } | null
 //     }>
 //   }
@@ -47,8 +65,141 @@
   const Wedges = root.SwingWedges || (typeof require !== "undefined" && require("./wedges.js"));
   const Gapping = root.SwingGapping || (typeof require !== "undefined" && require("./gapping.js"));
   const DrillSets = root.SwingDrillSets || (typeof require !== "undefined" && require("./drillsets.js"));
+  const Faults = root.SwingFaults || (typeof require !== "undefined" && require("./faults.js"));
 
   const finite = v => typeof v === "number" && Number.isFinite(v);
+
+  const BODY3D_KEYS = new Set([
+    "pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs", "armAfterPelvis", "armsLed"
+  ]);
+
+  /** Builds a prerequisite object declaring what hardware/environment a block needs. */
+  function makeNeeds({ phones = false, square = false, body3d = false, ball = true } = {}) {
+    const isNoBall = !ball;
+    return {
+      phones: !!phones,
+      square: !!square,
+      body3d: !!body3d,
+      "3d": !!body3d,
+      ball: !!ball,
+      noball: isNoBall
+    };
+  }
+
+  /** Declares prerequisites for a coach program block. */
+  function getBlockNeeds(block) {
+    if (!block) return makeNeeds();
+    const ball = block.ball !== false;
+    let body3d = false;
+    if (block.gate) {
+      const checks = (block.gate.checks || []).concat(block.gate.medians || []);
+      if (checks.some(c => BODY3D_KEYS.has(c.key))) {
+        body3d = true;
+      }
+    }
+    if (block.needs3d || (block.drill && (block.drill.includes("sequence") || block.drill === "tier2" || block.drill === "tier3"))) {
+      body3d = true;
+    }
+    return makeNeeds({ phones: ball, square: ball, body3d, ball });
+  }
+
+  /** Extracts 3D kinematic reading from body3d summary object. */
+  function extract3dVal(b3, move) {
+    if (!b3) return null;
+    const nums = b3.numbers || {};
+    if (move === "armsLed" || move === "pelvisOpen") {
+      return finite(nums.pelvisOpenImpact) ? nums.pelvisOpenImpact : null;
+    }
+    if (move === "pelvisStartMs") {
+      return finite(nums.pelvisStartMs) ? nums.pelvisStartMs : null;
+    }
+    if (b3.sequence && Array.isArray(b3.sequence.segments)) {
+      if (move === "pelvisPeakMs") {
+        const s = b3.sequence.segments.find(x => x.key === "pelvis");
+        return s && finite(s.beforeImpact) ? Math.round(-s.beforeImpact) : null;
+      }
+      if (move === "armPeakMs") {
+        const s = b3.sequence.segments.find(x => x.key === "arm");
+        return s && finite(s.beforeImpact) ? Math.round(-s.beforeImpact) : null;
+      }
+    }
+    return finite(nums[move]) ? nums[move] : null;
+  }
+
+  /** Summarizes 3D downswing sequence across swing rows. */
+  function extractSequenceSummary(rows, swings) {
+    const list = rows || [];
+    const pelvisOpenVals = [];
+    const pelvisPeakVals = [];
+    const armPeakVals = [];
+    let bodyLateCount = 0;
+    let total3d = 0;
+
+    for (const r of list) {
+      if (!r || r.excluded || (r.c && r.c.excluded)) continue;
+      const name = r.name || (r.c && r.c.name);
+      const partner = r.partner || (r.c && r.c.partner);
+      const rec = (swings && ((name && swings[name]) || (partner && swings[partner]))) || null;
+      const b3 = r.body3d || (rec && rec.body3d) || null;
+      if (!b3) continue;
+
+      total3d++;
+      if (b3.sequence && b3.sequence.bodyLate) bodyLateCount++;
+
+      const nums = b3.numbers || {};
+      if (finite(nums.pelvisOpenImpact)) pelvisOpenVals.push(nums.pelvisOpenImpact);
+
+      if (b3.sequence && Array.isArray(b3.sequence.segments)) {
+        const pSeg = b3.sequence.segments.find(s => s.key === "pelvis");
+        const aSeg = b3.sequence.segments.find(s => s.key === "arm");
+        if (pSeg && finite(pSeg.beforeImpact)) pelvisPeakVals.push(Math.round(-pSeg.beforeImpact));
+        if (aSeg && finite(aSeg.beforeImpact)) armPeakVals.push(Math.round(-aSeg.beforeImpact));
+      }
+    }
+
+    if (total3d === 0) return null;
+
+    const med = arr => {
+      if (!arr.length) return null;
+      const s = [...arr].sort((a, b) => a - b);
+      return s[Math.floor(s.length / 2)];
+    };
+
+    return {
+      total: total3d,
+      bodyLateCount,
+      pelvisOpenMed: med(pelvisOpenVals),
+      pelvisPeakMed: med(pelvisPeakVals),
+      armPeakMed: med(armPeakVals)
+    };
+  }
+
+  /** Finds the active stage/block of a coach program run. */
+  function getActiveProgramBlock(prog) {
+    if (!prog || !Array.isArray(prog.blocks) || prog.blocks.length === 0) return null;
+    if (typeof prog.block === "number" && prog.blocks[prog.block]) {
+      return { block: prog.blocks[prog.block], index: prog.block };
+    }
+    const nowIdx = prog.blocks.findIndex(b => b && b.now === true);
+    if (nowIdx >= 0) {
+      return { block: prog.blocks[nowIdx], index: nowIdx };
+    }
+    if (prog.results && typeof prog.results === "object") {
+      for (let i = 0; i < prog.blocks.length; i++) {
+        const b = prog.blocks[i];
+        if (prog.results[b.id] !== "passed" && prog.results[b.id] !== "skipped") {
+          return { block: b, index: i };
+        }
+      }
+    }
+    for (let i = 0; i < prog.blocks.length; i++) {
+      const b = prog.blocks[i];
+      if (b && b.result !== "passed" && b.result !== "skipped") {
+        return { block: b, index: i };
+      }
+    }
+    return { block: prog.blocks[0], index: 0 };
+  }
 
   // Suggested range parameters for focus practice mode
   const PR_SUGGEST_N = 30;
@@ -58,7 +209,8 @@
   function metricDecimals(key) {
     if (key === "backswing" || key === "downswing" || key === "smash") return 2;
     if (key === "spineTiltImpact" || key === "bendLoss" || key === "shaftPlaneP6"
-        || key === "carry" || key === "offline" || key === "clubSpeed" || key === "ballSpeed") return 0;
+        || key === "carry" || key === "offline" || key === "clubSpeed" || key === "ballSpeed"
+        || key === "pelvisPeakMs" || key === "armPeakMs" || key === "pelvisOpen" || key === "pelvisStartMs" || key === "armsLed") return 0;
     return 1;
   }
 
@@ -91,13 +243,21 @@
         const name = r.name || (r.c && r.c.name);
         const partner = r.partner || (r.c && r.c.partner);
         const rec = (name && swings[name]) || (partner && swings[partner]);
-        if (rec && rec.body && finite(rec.body[focus.move])) {
-          val = rec.body[focus.move];
+        if (rec) {
+          if (rec.body && finite(rec.body[focus.move])) {
+            val = rec.body[focus.move];
+          } else if (rec.body3d) {
+            val = extract3dVal(rec.body3d, focus.move);
+          }
         }
       }
       // 3. Body object on clip/row
       else if (r.body && finite(r.body[focus.move])) {
         val = r.body[focus.move];
+      }
+      // 4. Body3D on clip/row
+      else if (r.body3d) {
+        val = extract3dVal(r.body3d, focus.move);
       }
       // 4. Shot metric from launch monitor
       else if (shot) {
@@ -183,6 +343,60 @@
       : (Array.isArray(inputs.rows) ? inputs.rows : []);
 
     // -------------------------------------------------------------
+    // 0. Coach program block (if any coach program in progress)
+    // -------------------------------------------------------------
+    const rawProg = inputs.program !== undefined
+      ? inputs.program
+      : (inputs.programState && inputs.programState.program ? inputs.programState.program : null);
+
+    let programBlock = null;
+    if (rawProg && !rawProg.ended && rawProg.how !== "done" && rawProg.how !== "cap") {
+      let prog = rawProg;
+      if (!Array.isArray(prog.blocks) && (inputs.programs || inputs.programState?.programs)) {
+        const catalog = inputs.programs || inputs.programState?.programs;
+        const found = catalog.find(p => p.id === prog.id);
+        if (found) prog = { ...found, ...prog };
+      }
+      if (Array.isArray(prog.blocks) && prog.blocks.length > 0) {
+        const active = getActiveProgramBlock(prog);
+        const curBlock = active ? active.block : prog.blocks[0];
+        const isBall = curBlock.ball !== false;
+        const cap = prog.cap || 40;
+        const balls = isBall ? cap : 0;
+        const minutes = Math.round(cap * 0.75);
+        const needs = getBlockNeeds(curBlock);
+
+        let thought = curBlock.thought || null;
+        if (!thought && Coach && Coach.MOVES) {
+          if (prog.id && prog.id.includes("sequence") && Coach.MOVES.armsLed) {
+            thought = Coach.MOVES.armsLed.more.thought;
+          } else if (Coach.MOVES[curBlock.drill]) {
+            thought = Coach.MOVES[curBlock.drill].more?.thought || Coach.MOVES[curBlock.drill].less?.thought || null;
+          }
+        }
+
+        programBlock = {
+          id: "program",
+          programId: prog.id,
+          blockId: curBlock.id,
+          title: `Program: ${curBlock.name}`,
+          minutes,
+          balls,
+          why: curBlock.how || `Current block in ${prog.name}.`,
+          drill: curBlock.how || curBlock.name,
+          thought,
+          needs,
+          button: {
+            id: "program",
+            label: `Start ${curBlock.name}`,
+            programId: prog.id,
+            blockId: curBlock.id
+          }
+        };
+      }
+    }
+
+    // -------------------------------------------------------------
     // 1. Warm-up block
     // -------------------------------------------------------------
     const warmupBlock = {
@@ -193,14 +407,46 @@
       why: "A few easy wedge shots to loosen up and find the center of the face before working on technique.",
       drill: "Half and 3/4 swings with your sand or gap wedge, focusing on rhythm and clean contact.",
       thought: "Smooth tempo, crisp contact.",
+      needs: makeNeeds({ phones: false, square: false, body3d: false, ball: true }),
       button: null
     };
 
     // -------------------------------------------------------------
     // 2. Focus block
     // -------------------------------------------------------------
+    let effectiveFocus = focus;
+    let autoFault = null;
+    let seqSummary = null;
+
+    if (!effectiveFocus || !effectiveFocus.move) {
+      let sFaults = Array.isArray(inputs.sessionFaults) ? inputs.sessionFaults : null;
+      if (!sFaults && Faults && typeof Faults.sessionFaults === "function" && clips.length > 0) {
+        sFaults = Faults.sessionFaults(clips);
+      }
+      if (inputs.topFault) {
+        autoFault = inputs.topFault;
+      } else if (sFaults && sFaults.length > 0) {
+        const top = sFaults.find(f => f && f.top) || (sFaults[0].count >= 3 ? sFaults[0] : null);
+        if (top) autoFault = top;
+      }
+
+      if (autoFault) {
+        effectiveFocus = {
+          move: autoFault.move || autoFault.key,
+          aim: autoFault.dir || (autoFault.key === "armsLed" ? "more" : "less"),
+          fromFault: true,
+          fault: autoFault
+        };
+        if (autoFault.key === "armsLed") {
+          const swings = inputs.swings && typeof inputs.swings === "object" && !Array.isArray(inputs.swings)
+            ? inputs.swings : null;
+          seqSummary = extractSequenceSummary(clips, swings);
+        }
+      }
+    }
+
     let focusBlock;
-    if (!focus || !focus.move) {
+    if (!effectiveFocus || !effectiveFocus.move) {
       focusBlock = {
         id: "focus",
         title: "Focus block",
@@ -209,27 +455,51 @@
         why: "No focus set yet: choose a move to work on from the Progress page (step 2).",
         drill: null,
         thought: null,
+        needs: makeNeeds({ phones: false, square: false, body3d: false, ball: false }),
         button: null
       };
     } else {
-      const mv = Coach && Coach.MOVES ? Coach.MOVES[focus.move] : null;
-      const fix = mv && focus.aim ? mv[focus.aim] : null;
-      const clubName = focus.club ? nameFn(focus.club) : "";
+      const mv = Coach && Coach.MOVES ? Coach.MOVES[effectiveFocus.move] : null;
+      const aimKey = effectiveFocus.aim || (mv && mv.more ? "more" : "less");
+      const fix = mv && aimKey ? mv[aimKey] : null;
+      const clubName = effectiveFocus.club ? nameFn(effectiveFocus.club) : "";
       const clubLower = clubName ? clubName.toLowerCase() : "";
 
-      const title = fix
-        ? `Focus: ${fix.name}`
-        : `Focus: ${focus.move} (${focus.aim || "active"})`;
+      let title;
+      if (autoFault) {
+        title = `Focus: ${fix ? fix.name : autoFault.name}`;
+      } else if (fix) {
+        title = `Focus: ${fix.name}`;
+      } else {
+        title = `Focus: ${effectiveFocus.move} (${effectiveFocus.aim || "active"})`;
+      }
 
-      const resultNames = focus.results && focus.results.length && Coach && Coach.RESULTS
-        ? focus.results.map(r => (Coach.RESULTS[r] && Coach.RESULTS[r].name) || r).join(", ")
+      const resultNames = effectiveFocus.results && effectiveFocus.results.length && Coach && Coach.RESULTS
+        ? effectiveFocus.results.map(r => (Coach.RESULTS[r] && Coach.RESULTS[r].name) || r).join(", ")
         : "";
 
-      const why = fix
-        ? `Your current focus is to work on ${fix.name}${clubLower ? ` with the ${clubLower}` : ""}${resultNames ? ` to improve ${resultNames}` : ""}.`
-        : `Work on ${focus.move} (${focus.aim || "active"})${clubLower ? ` with the ${clubLower}` : ""}${resultNames ? ` to improve ${resultNames}` : ""}.`;
+      let why;
+      if (autoFault) {
+        if (autoFault.key === "armsLed") {
+          let seqDetail = "";
+          if (seqSummary) {
+            const parts = [];
+            if (seqSummary.pelvisPeakMed != null) parts.push(`pelvis peak ${seqSummary.pelvisPeakMed > 0 ? "+" : ""}${seqSummary.pelvisPeakMed} ms`);
+            if (seqSummary.armPeakMed != null) parts.push(`arm peak ${seqSummary.armPeakMed > 0 ? "+" : ""}${seqSummary.armPeakMed} ms`);
+            if (seqSummary.pelvisOpenMed != null) parts.push(`hips ${Math.round(seqSummary.pelvisOpenMed)}° open at impact`);
+            if (parts.length) seqDetail = ` (${parts.join(", ")})`;
+          }
+          why = `3D kinematics show an arms-led downswing on ${autoFault.count} of ${autoFault.total} swings${seqDetail}: the arms start down before the lower body.`;
+        } else {
+          why = `Fault in your swings: ${autoFault.name} on ${autoFault.count} of ${autoFault.total} swings.`;
+        }
+      } else if (fix) {
+        why = `Your current focus is to work on ${fix.name}${clubLower ? ` with the ${clubLower}` : ""}${resultNames ? ` to improve ${resultNames}` : ""}.`;
+      } else {
+        why = `Work on ${effectiveFocus.move} (${effectiveFocus.aim || "active"})${clubLower ? ` with the ${clubLower}` : ""}${resultNames ? ` to improve ${resultNames}` : ""}.`;
+      }
 
-      const range = computePracticeRange(focus, inputs);
+      const range = computePracticeRange(effectiveFocus, inputs);
 
       // Latest drill set within the last 14 days
       const dSet = inputs.drillSet || inputs.latestDrillSet || (inputs.drillSets && inputs.drillSets[0]) || null;
@@ -249,6 +519,8 @@
         }
       }
 
+      const focusNeeds3d = !!(effectiveFocus.move === "armsLed" || BODY3D_KEYS.has(effectiveFocus.move) || ["pelvisTop", "shoulderTop", "xFactor"].includes(effectiveFocus.move));
+
       focusBlock = {
         id: "focus",
         title,
@@ -261,16 +533,17 @@
         // A drill with its own recording mode (app.py /api/drill): the pump drill's pumps come
         // seconds before the strike, so the phones keep more video and the swings stay out of trends.
         drillMode: fix && fix.drill && /^Pump drill/.test(fix.drill) ? "pump" : null,
+        needs: makeNeeds({ phones: true, square: true, body3d: focusNeeds3d, ball: true }),
         button: {
           id: "practice",
-          label: "Practice this",
+          label: autoFault && autoFault.key === "armsLed" ? "Practice sequence" : "Practice this",
           disabled: !range,
           title: range
-            ? `In range = ${focus.aim === "more" ? "more" : "less"} than usual (${range.min} to ${range.max})`
+            ? `In range = ${effectiveFocus.aim === "more" ? "more" : "less"} than usual (${range.min} to ${range.max})`
             : "Not enough recent swings with this club to set a range",
           params: {
-            metric: focus.move,
-            club: focus.club || null,
+            metric: effectiveFocus.move,
+            club: effectiveFocus.club || null,
             min: range ? range.min : null,
             max: range ? range.max : null,
             cue: fix && fix.thought ? fix.thought : "",
@@ -299,6 +572,7 @@
           why: `Combines show you lose ${Math.abs(worst.sgPerShot).toFixed(2)} strokes a shot at ${worst.target} yards (${sgStr} vs tour); dial in wedge distance control.`,
           drill: null,
           thought: null,
+          needs: makeNeeds({ phones: true, square: true, body3d: false, ball: true }),
           button: {
             id: "game",
             label: "Start Wedge ladder",
@@ -314,6 +588,7 @@
           why: `Combines show you lose ${Math.abs(worst.sgPerShot).toFixed(2)} strokes a shot at ${worst.target} yards (${sgStr} vs tour); dial in carry control.`,
           drill: null,
           thought: null,
+          needs: makeNeeds({ phones: true, square: true, body3d: false, ball: true }),
           button: {
             id: "game",
             label: "Start Distance control",
@@ -340,6 +615,7 @@
           why: `Your wedge matrix jumps from ${fromText} to ${toText}: ${gapText} with no stock shot.`,
           drill: null,
           thought: null,
+          needs: makeNeeds({ phones: true, square: true, body3d: false, ball: true }),
           button: {
             id: "game",
             label: `Start ${game.name}`,
@@ -356,6 +632,7 @@
           why: "Hit targets from 40 to 100 yards and back down to build your scoring-zone yardages.",
           drill: null,
           thought: null,
+          needs: makeNeeds({ phones: true, square: true, body3d: false, ball: true }),
           button: {
             id: "game",
             label: "Start Wedge ladder",
@@ -392,6 +669,7 @@
         why,
         drill: null,
         thought: null,
+        needs: makeNeeds({ phones: true, square: true, body3d: false, ball: true }),
         button: {
           id: "game",
           label: "Start Combine",
@@ -445,6 +723,7 @@
           why: `Driver fairway rate is ${Math.round(drStats.rate * 100)}% (${drStats.hits} of ${drStats.total} in fairway): test tee accuracy with 14 drives.`,
           drill: null,
           thought: null,
+          needs: makeNeeds({ phones: true, square: true, body3d: false, ball: true }),
           button: {
             id: "game",
             label: "Start Driving",
@@ -460,6 +739,7 @@
           why: `${nameFn(ironSpread.club)} carry spread is ${Math.round(ironSpread.iqr)} yards (${Math.round(ironSpread.q25)} to ${Math.round(ironSpread.q75)} yd): dial in carry consistency.`,
           drill: null,
           thought: null,
+          needs: makeNeeds({ phones: true, square: true, body3d: false, ball: true }),
           button: {
             id: "game",
             label: "Start Distance control",
@@ -475,6 +755,7 @@
           why: "Test your target adaptation with 20 random yardages from 40 to 150 yards.",
           drill: null,
           thought: null,
+          needs: makeNeeds({ phones: true, square: true, body3d: false, ball: true }),
           button: {
             id: "game",
             label: "Start Random pick",
@@ -484,7 +765,9 @@
       }
     }
 
-    const blocks = [warmupBlock, focusBlock, scoringBlock, finishBlock];
+    const blocks = programBlock
+      ? [programBlock, warmupBlock, focusBlock, scoringBlock, finishBlock]
+      : [warmupBlock, focusBlock, scoringBlock, finishBlock];
     const totalMinutes = blocks.reduce((sum, b) => sum + (b.minutes || 0), 0);
     const totalBalls = blocks.reduce((sum, b) => sum + (b.balls || 0), 0);
 
@@ -498,7 +781,9 @@
   const api = {
     buildPlan,
     computePracticeRange,
-    extractMetricValues
+    extractMetricValues,
+    makeNeeds,
+    getBlockNeeds
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

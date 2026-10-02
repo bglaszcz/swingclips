@@ -301,3 +301,219 @@ test("focus block includes drill set from last 14 days, leaves out older sets", 
   assert.strictEqual(fOld.drillSet, null);
 });
 
+
+// ---- Part 4 tests: program block, block needs, armsLed fault ----
+
+// Helper to build a minimal fake program state (as returned by /api/program)
+function makeProgramState(id, blockIndex, blockDefs, cap = 40) {
+  const blocks = blockDefs.map((b, i) => ({
+    id: b.id,
+    name: b.name,
+    ball: b.ball !== false,
+    how: b.how || `Do ${b.name}.`,
+    gate: b.gate || { kind: "count", need: 10 },
+    now: i === blockIndex,
+    judged: [],
+    result: i < blockIndex ? "passed" : undefined,
+    ...(b.extra || {})
+  }));
+  return {
+    id,
+    name: `Test program ${id}`,
+    cap,
+    block: blockIndex,
+    blocks,
+    used: 0,
+    waiting3d: 0
+  };
+}
+
+test("coach program in progress comes first in the plan", () => {
+  const progState = makeProgramState("sequence", 1, [
+    { id: "pausetop", name: "Pause at the top", ball: false },
+    { id: "blocked", name: "Blocked 3/4 7 irons", ball: true,
+      gate: { kind: "count", need: 10, checks: [{ key: "pelvisPeakMs", max: 0 }, { key: "pelvisOpen", min: 15 }] } }
+  ], 40);
+
+  const plan = Plan.buildPlan({ program: progState });
+
+  assert.strictEqual(plan.blocks[0].id, "program");
+  assert.ok(plan.blocks[0].title.includes("Blocked 3/4 7 irons"));
+  assert.strictEqual(plan.blocks[0].balls, 40);
+  assert.strictEqual(plan.blocks[0].minutes, 30);
+  assert.strictEqual(plan.blocks[1].id, "warmup");
+  assert.strictEqual(plan.blocks.length, 5);
+});
+
+test("coach program block (no-ball) shows 0 balls and needs no phones/square", () => {
+  const progState = makeProgramState("sequence", 0, [
+    { id: "pausetop", name: "Pause at the top", ball: false }
+  ], 20);
+
+  const plan = Plan.buildPlan({ program: progState });
+
+  const pb = plan.blocks[0];
+  assert.strictEqual(pb.id, "program");
+  assert.strictEqual(pb.balls, 0);
+  assert.strictEqual(pb.needs.ball, false);
+  assert.strictEqual(pb.needs.phones, false);
+  assert.strictEqual(pb.needs.square, false);
+});
+
+test("no program present -> 4 standard blocks (no program block)", () => {
+  const plan = Plan.buildPlan({});
+  assert.strictEqual(plan.blocks.length, 4);
+  assert.ok(plan.blocks.every(b => b.id !== "program"));
+});
+
+test("all blocks declare needs (phones, square, body3d, ball, noball keys)", () => {
+  const focus = { move: "handsPlaneP6", aim: "less", club: "I7" };
+  const clips = Array.from({ length: 6 }, (_, i) =>
+    makeClip(`c${i}`, "I7", 150, 0, 85, { body: { handsPlaneP6: 2.0 + i * 0.1 } }));
+
+  const plan = Plan.buildPlan({ focus, clips });
+  for (const b of plan.blocks) {
+    assert.ok(b.needs, `Block ${b.id} missing needs`);
+    assert.ok("phones" in b.needs, `Block ${b.id} missing needs.phones`);
+    assert.ok("square" in b.needs, `Block ${b.id} missing needs.square`);
+    assert.ok("body3d" in b.needs, `Block ${b.id} missing needs.body3d`);
+    assert.ok("ball" in b.needs, `Block ${b.id} missing needs.ball`);
+    assert.ok("noball" in b.needs, `Block ${b.id} missing needs.noball`);
+  }
+});
+
+test("warmup block declares no phones/square/3d needed", () => {
+  const plan = Plan.buildPlan({});
+  const wu = plan.blocks.find(b => b.id === "warmup");
+  assert.ok(wu);
+  assert.strictEqual(wu.needs.phones, false);
+  assert.strictEqual(wu.needs.square, false);
+  assert.strictEqual(wu.needs.body3d, false);
+  assert.strictEqual(wu.needs.ball, true);
+});
+
+test("scoring and finish blocks declare phones + square needed", () => {
+  const plan = Plan.buildPlan({});
+  const scoring = plan.blocks.find(b => b.id === "scoring");
+  const finish = plan.blocks.find(b => b.id === "finish");
+  assert.ok(scoring.needs.phones && scoring.needs.square);
+  assert.ok(finish.needs.phones && finish.needs.square);
+});
+
+test("getBlockNeeds: 3D gate check sets body3d=true", () => {
+  const block = {
+    id: "tier2",
+    name: "Tier 2",
+    ball: true,
+    gate: { kind: "count", need: 10, checks: [{ key: "pelvisPeakMs", max: 0 }, { key: "pelvisOpen", min: 15 }] }
+  };
+  const needs = Plan.getBlockNeeds(block);
+  assert.strictEqual(needs.body3d, true);
+  assert.strictEqual(needs["3d"], true);
+  assert.strictEqual(needs.phones, true);
+  assert.strictEqual(needs.ball, true);
+});
+
+test("getBlockNeeds: no-ball block with no 3D gate -> phones=false, ball=false, noball=true", () => {
+  const block = {
+    id: "pausetop",
+    name: "Pause at the top",
+    ball: false,
+    gate: { kind: "streak", need: 10 }
+  };
+  const needs = Plan.getBlockNeeds(block);
+  assert.strictEqual(needs.phones, false);
+  assert.strictEqual(needs.square, false);
+  assert.strictEqual(needs.body3d, false);
+  assert.strictEqual(needs.ball, false);
+  assert.strictEqual(needs.noball, true);
+});
+
+test("armsLed fault feeds focus block when no focus is set and it is the top fault", () => {
+  const makeArmsLedClip = (name, pelvisOpen) => ({
+    name,
+    recorded: "2026-09-29T14:00:00",
+    shot: makeShot("I7", 150, 0, 85),
+    body: null,
+    excluded: false,
+    body3d: {
+      numbers: { pelvisOpenImpact: pelvisOpen },
+      sequence: {
+        bodyLate: true,
+        segments: [
+          { key: "pelvis", beforeImpact: 33, t: 1.06 },
+          { key: "arm",    beforeImpact: 50, t: 1.0 }
+        ]
+      }
+    }
+  });
+
+  const clips = [
+    makeArmsLedClip("s1",  5),
+    makeArmsLedClip("s2",  8),
+    makeArmsLedClip("s3",  3),
+    makeArmsLedClip("s4", 12),
+    makeArmsLedClip("s5",  7)
+  ];
+
+  const plan = Plan.buildPlan({ clips });
+  const fBlock = plan.blocks.find(b => b.id === "focus");
+
+  assert.ok(fBlock, "focus block not found");
+  assert.ok(
+    fBlock.title.toLowerCase().includes("arms") || fBlock.title.toLowerCase().includes("downswing"),
+    `Focus title should mention arms-led, got: "${fBlock.title}"`
+  );
+  assert.ok(fBlock.drill, "focus block should have a drill from coach.js armsLed");
+  assert.ok(fBlock.thought, "focus block should have a thought from coach.js armsLed");
+  assert.ok(
+    fBlock.why.includes("arms") || fBlock.why.includes("3D"),
+    `Focus why should mention arms or 3D, got: "${fBlock.why}"`
+  );
+  assert.ok(
+    fBlock.drill.includes("Step and fire") || fBlock.drill.includes("step") || fBlock.drill.includes("Pause"),
+    `Focus drill should be the sequence drill, got: "${fBlock.drill}"`
+  );
+});
+
+test("armsLed focus block needs body3d=true", () => {
+  const makeArmsLedClip = (name) => ({
+    name,
+    recorded: "2026-09-29T14:00:00",
+    shot: makeShot("I7", 150, 0, 85),
+    excluded: false,
+    body3d: {
+      numbers: { pelvisOpenImpact: 5 },
+      sequence: { bodyLate: true, segments: [
+        { key: "pelvis", beforeImpact: 33, t: 1.06 },
+        { key: "arm",    beforeImpact: 50, t: 1.0 }
+      ]}
+    }
+  });
+  const clips = Array.from({ length: 4 }, (_, i) => makeArmsLedClip(`s${i}`));
+  const plan = Plan.buildPlan({ clips });
+  const fBlock = plan.blocks.find(b => b.id === "focus");
+  assert.ok(fBlock && fBlock.needs && fBlock.needs.body3d,
+    "armsLed focus block should declare body3d needed");
+});
+
+test("explicit focus overrides auto-fault detection", () => {
+  const focus = { move: "handsPlaneP6", aim: "less", club: "I7" };
+  const clips = Array.from({ length: 5 }, (_, i) => ({
+    name: `s${i}`,
+    recorded: "2026-09-29T14:00:00",
+    shot: makeShot("I7", 150, 0, 85),
+    excluded: false,
+    body3d: {
+      numbers: { pelvisOpenImpact: 5 },
+      sequence: { bodyLate: true, segments: [] }
+    }
+  }));
+
+  const plan = Plan.buildPlan({ focus, clips });
+  const fBlock = plan.blocks.find(b => b.id === "focus");
+  assert.ok(
+    !fBlock.title.toLowerCase().includes("arms-led"),
+    `Explicit focus should win over auto-fault. Title: "${fBlock.title}"`
+  );
+});
