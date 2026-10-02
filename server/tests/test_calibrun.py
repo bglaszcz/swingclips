@@ -135,5 +135,39 @@ class Api(unittest.TestCase):
             app.drills_tick()
 
 
+class TripodSpotApi(unittest.TestCase):
+    """The tripod setup page's saved spot: the camera's latest still kept, a new one replaces it and
+    the old one goes to the trash folder."""
+
+    def test_save_and_replace(self):
+        from fastapi.testclient import TestClient
+        import app
+        app.TRIPOD_DIR = TMP / "tripods"
+        client = TestClient(app.app)
+        saved_latest = dict(app.camera_setup.latest)
+        try:
+            app.camera_setup.latest.pop("dtl", None)
+            self.assertEqual(client.post("/api/tripods/dtl", json={}).status_code, 409)
+            self.assertEqual(client.post("/api/tripods/nope", json={}).status_code, 404)
+            lm = [0.5] * 99
+            app.camera_setup.latest["dtl"] = {"verdict": {"lm": lm, "ok": True, "time": time.time()},
+                                              "jpeg": b"small", "big": b"big one"}
+            self.assertEqual(client.get("/api/setup/dtl.jpg?big=1").content, b"big one")
+            self.assertEqual(client.get("/api/setup/dtl.jpg").content, b"small")
+            out = client.post("/api/tripods/dtl", json={"note": "40 in high"}).json()
+            self.assertEqual(out["dtl"]["note"], "40 in high")
+            self.assertEqual(out["dtl"]["lm"], lm)
+            self.assertIsNone(out["face"] if "face" not in saved_latest else None)
+            self.assertEqual(client.get("/api/tripods/dtl.jpg").content, b"big one")
+            app.camera_setup.latest["dtl"]["big"] = b"newer"
+            client.post("/api/tripods/dtl", json={})
+            self.assertEqual(client.get("/api/tripods/dtl.jpg").content, b"newer")
+            self.assertTrue(list((app.TRASH_DIR / "tripods").glob("dtl_*.jpg")))
+            self.assertEqual(client.get("/tripods").status_code, 200)
+        finally:
+            app.camera_setup.latest.clear()
+            app.camera_setup.latest.update(saved_latest)
+
+
 if __name__ == "__main__":
     unittest.main()

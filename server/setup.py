@@ -22,6 +22,8 @@ ANGLES = ("face", "dtl")
 BOARD_PAIR_SECONDS = 60
 # The pose model works on a small input anyway; stills are scaled to this height first.
 HEIGHT = 640
+# A sharper copy is kept for the tripod setup page's zoom (up to this height, never bigger than sent).
+BIG_HEIGHT = 1280
 
 
 class Setup:
@@ -57,6 +59,10 @@ class Setup:
         if rotation in pose.ROTATE_CW:
             img = cv2.rotate(img, pose.ROTATE_CW[rotation])
         board_seen = self._board(angle, img)
+        big = img
+        if big.shape[0] > BIG_HEIGHT:
+            big = cv2.resize(big, None, fx=BIG_HEIGHT / big.shape[0], fy=BIG_HEIGHT / big.shape[0], interpolation=cv2.INTER_AREA)
+        ok_big, big_jpeg = cv2.imencode(".jpg", big, [cv2.IMWRITE_JPEG_QUALITY, 85])
         if img.shape[0] > HEIGHT:
             img = cv2.resize(img, None, fx=HEIGHT / img.shape[0], fy=HEIGHT / img.shape[0], interpolation=cv2.INTER_AREA)
         ok, upright = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -76,7 +82,8 @@ class Setup:
             # in a ~960 px one (docs/3d.md).
             verdict["fullStill"] = calib.enabled()
             verdict["time"] = time.time()
-            self.latest[angle] = {"verdict": verdict, "jpeg": upright.tobytes() if ok else jpeg}
+            self.latest[angle] = {"verdict": verdict, "jpeg": upright.tobytes() if ok else jpeg,
+                                  "big": big_jpeg.tobytes() if ok_big else jpeg}
         return verdict
 
     def _board(self, angle: str, img) -> dict | None:
@@ -125,9 +132,10 @@ class Setup:
             return {a: ({**self.latest[a]["verdict"], "age": round(now - self.latest[a]["verdict"]["time"], 1)}
                         if a in self.latest else None) for a in ANGLES}
 
-    def picture(self, angle: str) -> bytes | None:
+    def picture(self, angle: str, big: bool = False) -> bytes | None:
+        """The latest still, upright: the small one (as the pose model saw it) or the sharper copy."""
         with self.lock:
-            return self.latest[angle]["jpeg"] if angle in self.latest else None
+            return self.latest[angle]["big" if big else "jpeg"] if angle in self.latest else None
 
     def close(self) -> None:
         with self.lock:

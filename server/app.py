@@ -1856,11 +1856,66 @@ def setup_status():
 
 
 @app.get("/api/setup/{angle}.jpg")
-def setup_picture(angle: str):
-    jpeg = camera_setup.picture(angle)
+def setup_picture(angle: str, big: bool = False):
+    """A camera's latest setup still, upright; big=1: the sharper copy (the tripod setup page's zoom)."""
+    jpeg = camera_setup.picture(angle, big)
     if jpeg is None:
         raise HTTPException(404, "No picture from that camera yet")
     return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+# ---- Tripod setup page (static/tripods.html): a saved spot per camera to put the tripods back on ----
+TRIPOD_DIR = Path(os.environ.get("SWINGCLIPS_TRIPODS", CLIPS_DIR.parent / "tripods"))
+
+
+def tripod_spot(angle: str) -> dict | None:
+    try:
+        return json.loads((TRIPOD_DIR / f"{angle}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+@app.get("/api/tripods")
+def tripod_spots():
+    """Each camera's saved spot: {face: {saved, lm, note} or null, dtl: ...}."""
+    return {a: tripod_spot(a) for a in setup.ANGLES}
+
+
+class TripodSpot(BaseModel):
+    note: str | None = Field(None, max_length=200)    # e.g. "32 in high, 11 ft from the ball"
+
+
+@app.post("/api/tripods/{angle}")
+def save_tripod_spot(angle: str, body: TripodSpot):
+    """Keeps the camera's latest still (and where the golfer is in it) as its saved spot. The one it
+    replaces goes to the trash folder."""
+    if angle not in setup.ANGLES:
+        raise HTTPException(404, "No such camera angle")
+    jpeg = camera_setup.picture(angle, big=True)
+    verdict = camera_setup.status().get(angle)
+    if jpeg is None or not verdict:
+        raise HTTPException(409, "No picture from that camera yet: open SwingClips on the phone (not recording)")
+    TRIPOD_DIR.mkdir(parents=True, exist_ok=True)
+    old = TRIPOD_DIR / f"{angle}.jpg"
+    if old.is_file():
+        (TRASH_DIR / "tripods").mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        for f in (old, TRIPOD_DIR / f"{angle}.json"):
+            if f.is_file():
+                f.replace(TRASH_DIR / "tripods" / f"{f.stem}_{stamp}{f.suffix}")
+    old.write_bytes(jpeg)
+    doc = {"angle": angle, "saved": time.time(), "lm": verdict.get("lm"), "note": body.note}
+    (TRIPOD_DIR / f"{angle}.json").write_text(json.dumps(doc), encoding="utf-8")
+    print(f"Tripods: saved the {angle} spot", flush=True)
+    return tripod_spots()
+
+
+@app.get("/api/tripods/{angle}.jpg")
+def tripod_picture(angle: str):
+    path = TRIPOD_DIR / f"{angle}.jpg"
+    if angle not in setup.ANGLES or not path.is_file():
+        raise HTTPException(404, "No saved spot for that camera")
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/3d/{name}")
@@ -2232,6 +2287,12 @@ def index():
 def start_page():
     """The session start page for the sim laptop: checks, both cameras' pictures, Start/Stop, the last swings."""
     return FileResponse(STATIC_DIR / "start.html")
+
+
+@app.get("/tripods")
+def tripods_page():
+    """The tripod setup page: what each camera sees, framing meters, line tools, a saved spot to match."""
+    return FileResponse(STATIC_DIR / "tripods.html")
 
 
 @app.get("/calibrate")

@@ -60,6 +60,13 @@ plan", "Plan steps", "Drill mode").
   **Down the line**: behind the golfer on the target line (through the hands or the
   ball), at about hand height, also portrait. In the app's **Settings**, set one to **Face-on** and
   the other to **Down the line**; the server address is `http://192.168.86.250:8000`.
+- **Finding the spots**: the **Tripod setup** page (`/tripods`, linked from the Start page) shows
+  what each phone sees (the setup stills, while not recording) with a grid, your outline, and
+  meters for size, room above and below, and centring. Its line tools check the phone is level
+  side to side (tap an upright edge) and that the tripod is on an alignment stick's line (a stick
+  pointing at the phone looks upright only from right on its line; it says which way to move and
+  about how many inches). **Save this spot** keeps the picture; next time, **Saved spot** shows it
+  over the live one and says when you're back on it.
 - **Repeatable spots**: tape marks on the floor for each tripod foot (and a note of the height).
   Moving a phone shifts the body numbers; Progress notices ("camera moved") and only compares that
   camera's numbers since then. The first swing check tells you whether the framing is right.

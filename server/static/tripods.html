@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1712">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<title>SwingClips Tripod setup</title>
+<!-- The tripod setup page (/tripods), for a phone on the mat: what each camera sees (the setup stills
+     the phones send while not recording, /api/setup), with a grid and the golfer's outline, framing
+     meters, line tools (phone level side to side; tripod on the line of an alignment stick), and a
+     saved spot per camera shown as a ghost to put the tripods back (/api/tripods). -->
+<style>
+  :root { color-scheme: light dark; }
+  :root {
+    --bg: #f3f5f3; --panel: #ffffff; --panel-2: #f7f9f7; --text: #111a14; --muted: #5a685f;
+    --line: #e0e6e2; --accent: #16803f; --accent-text: #ffffff; --accent-soft: #e4f4ea;
+    --warn: #b45309; --warn-soft: #fdf1e3; --bad: #dc2626; --bad-soft: #fde8e8; --radius: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b100d; --panel: #131a16; --panel-2: #17201a; --text: #e7ede8; --muted: #8e9f95;
+      --line: #223029; --accent: #34c26f; --accent-text: #04130a; --accent-soft: #143322;
+      --warn: #f59e0b; --warn-soft: #2d2110; --bad: #f87171; --bad-soft: #2d1414;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased;
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--panel);
+           border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header strong { font-size: 18px; }
+  header a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  header a.first { margin-left: auto; }
+  main { max-width: 1300px; margin: 0 auto; padding: 12px 16px 24px; display: grid; gap: 12px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  button { font: inherit; font-size: 15px; font-weight: 600; padding: 9px 14px; border-radius: 10px; cursor: pointer;
+           border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  button.on { background: var(--accent); color: var(--accent-text); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  label { font-size: 14px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  input[type=number], input[type=text] { font: inherit; font-size: 15px; padding: 7px 9px; border-radius: 8px; width: 5em;
+          border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  input[type=text] { width: 14em; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .note { padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); border: 1px solid var(--warn); font-size: 14px; }
+  .cams { display: grid; gap: 12px; grid-template-columns: 1fr; }
+  .cams.both { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 760px) { .cams.both { grid-template-columns: 1fr; } }
+  .cam { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; min-width: 0; }
+  .cam .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+  .cam .top strong { font-size: 16px; }
+  .cam .top span { color: var(--muted); font-size: 13px; }
+  .stage { position: relative; overflow: hidden; background: #000; border-radius: 8px; touch-action: manipulation;
+           display: grid; place-items: center; min-height: 160px; }
+  .zoomer { position: relative; transition: transform 0.15s; max-width: 100%; }
+  .zoomer img { display: block; max-width: 100%; max-height: 78vh; }
+  .zoomer img.ghost { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .zoomer canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .stage.stale .live { opacity: 0.45; }
+  .stage .empty { color: #9aa; padding: 24px; text-align: center; }
+  .meters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+  .meter { padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; }
+  .meter b { display: block; font-size: 15px; }
+  .meter.ok { border-color: var(--accent); } .meter.ok b { color: var(--accent); }
+  .meter.warn { border-color: var(--warn); background: var(--warn-soft); } .meter.warn b { color: var(--warn); }
+  .result { margin-top: 8px; padding: 9px 11px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); font-size: 14px; }
+  .result.ok { border-color: var(--accent); } .result.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details ol { margin: 8px 0 4px; padding-left: 20px; } details li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<header>
+  <img src="/static/icon.svg" alt="" width="28" height="28">
+  <strong>Tripod setup</strong>
+  <a class="first" href="/calibrate">3D calibration</a>
+  <a href="/start">Start page →</a>
+</header>
+<main>
+  <div class="note" id="rec-note" hidden>
+    <span id="rec-text">A phone is recording: its pictures pause while it records.</span>
+    <button id="stop">Stop recording</button>
+  </div>
+
+  <div class="bar">
+    <span class="seg" id="views">
+      <button data-v="face">Face on</button><button data-v="dtl">Down the line</button><button data-v="both">Both</button>
+    </span>
+    <span class="seg" id="tools">
+      <button data-t="zoom">Tap: zoom</button><button data-t="level">Tap: level</button><button data-t="stick">Tap: stick</button>
+    </span>
+    <label><input type="checkbox" id="grid" checked> Grid</label>
+    <label><input type="checkbox" id="outline" checked> Outline</label>
+    <label><input type="checkbox" id="ghost"> Saved spot</label>
+    <label id="ghost-amt" hidden>see-through <input type="range" id="ghost-alpha" min="10" max="90" value="45"></label>
+  </div>
+  <div class="hint" id="tool-hint"></div>
+
+  <div class="cams" id="cams"></div>
+
+  <details>
+    <summary>How to find the perfect spot</summary>
+    <ol>
+      <li><b>Stand at the ball at address</b> with a 7 iron: the outline and meters below each picture judge where
+        you are in it. Pictures come about once a second while the phones aren't recording.</li>
+      <li><b>Distance:</b> move the tripod until <i>Size</i> is in the green: big enough to measure, with room above
+        your head for the club at the top and the finish.</li>
+      <li><b>Level the phone side to side</b> (3D needs it): choose <i>Tap: level</i> and tap the bottom and top of
+        something upright in the picture (a door frame, a post, the edge of the net frame). Turn the phone the way
+        it says until it reads level.</li>
+      <li><b>On the line:</b> lay an alignment stick on the mat pointing straight at the phone. Down the line: along
+        the target line through the ball (or along your hand line, if that's where you want the phone). Face on:
+        from the ball, square to the target line (lay a second stick on the target line to square it up). Choose
+        <i>Tap: stick</i> and tap the stick's near and far ends: it looks perfectly upright only when the phone is
+        right on its line. Move the tripod the way it says. Type each phone's lens height for the inches.</li>
+      <li><b>Aim:</b> the stick should also run up the middle of the picture (the grid's centre line), with you
+        framed as the meters like.</li>
+      <li><b>Save this spot</b> for each phone, then tape the tripod's feet. Next time, tick <i>Saved spot</i>:
+        the saved picture shows over the live one, and the match line says when you're back on it (the same check
+        the server uses to notice a moved camera).</li>
+    </ol>
+  </details>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const NAMES = { face: "Face on", dtl: "Down the line" };
+const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 24], [23, 24],
+               [23, 25], [25, 27], [24, 26], [26, 28], [0, 11], [0, 12]];
+const STALE_S = 4;
+// Framing: nose to ankles as a share of the picture height. Under 0.28 the numbers don't hold up
+// (summary.js cameraCheck), and bigger measures better; over ~0.6 the club at the top or the finish
+// can leave the picture.
+const SIZE_SMALL = 0.28, SIZE_MIN = 0.35, SIZE_MAX = 0.60;
+// Room above the nose for the clubhead at the top (a share of the golfer's nose-to-ankles size),
+// and below the ankles for the feet.
+const HEAD_ROOM = 0.33, FEET_ROOM = 0.05;
+// A camera counts as moved (summary.js cameraMoved): size by 6 %, place by 0.02 picture heights.
+const MOVED_SIZE = 0.06, MOVED_SHIFT = 0.02;
+const LEVEL_OK = 0.5, STICK_OK = 0.6;   // degrees
+
+const store = (k, v) => { try { if (v === undefined) return localStorage.getItem("tripods." + k); localStorage.setItem("tripods." + k, v); } catch {} return null; };
+let view = store("view") || "face", tool = "zoom";
+let setup = null, spots = {}, status = null;
+const cams = {};   // per angle: {zoom, origin, taps: {level: [], stick: []}, aspect}
+
+function buildCards() {
+  const angles = view === "both" ? ["face", "dtl"] : [view];
+  $("cams").className = "cams" + (view === "both" ? " both" : "");
+  $("cams").innerHTML = angles.map(a => `
+    <div class="cam" id="cam-${a}">
+      <div class="top"><strong>${NAMES[a]}</strong><span class="age"></span></div>
+      <div class="stage">
+        <div class="zoomer"><img class="live" alt="${NAMES[a]} camera"><img class="ghost" alt="" hidden><canvas></canvas></div>
+        <div class="empty">No picture yet. Open SwingClips on this phone (not recording).</div>
+      </div>
+      <div class="meters"></div>
+      <div class="result tool-out" hidden></div>
+      <div class="result match" hidden></div>
+      <div class="row">
+        <label>Lens height <input type="number" class="height" inputmode="decimal" min="10" max="90"> in</label>
+        <input type="text" class="spot-note" placeholder="note, e.g. 11 ft from the ball">
+        <button class="save">Save this spot</button>
+      </div>
+      <div class="hint spot-info"></div>
+    </div>`).join("");
+  for (const a of angles) {
+    cams[a] = cams[a] || { zoom: 1, origin: [50, 50], taps: { level: [], stick: [] } };
+    const card = $("cam-" + a);
+    card.querySelector(".height").value = store("height." + a) || (a === "face" ? 32 : 40);
+    card.querySelector(".height").oninput = e => { store("height." + a, e.target.value); render(); };
+    card.querySelector(".stage").onclick = e => tap(a, e);
+    card.querySelector(".save").onclick = () => saveSpot(a);
+    card.querySelector(".live").onload = () => render();
+    const ghost = card.querySelector(".ghost");
+    ghost.onload = () => render();
+    card.querySelector(".zoomer").style.transform = `scale(${cams[a].zoom})`;
+    card.querySelector(".zoomer").style.transformOrigin = cams[a].origin.map(v => v + "%").join(" ");
+  }
+  for (const b of $("views").children) b.classList.toggle("on", b.dataset.v === view);
+  render();
+}
+
+function setTool(t) {
+  tool = t;
+  for (const b of $("tools").children) b.classList.toggle("on", b.dataset.t === t);
+  $("tool-hint").textContent = t === "zoom" ? "Tap a picture to zoom in there; tap again to zoom out."
+    : t === "level" ? "Tap the bottom, then the top, of something upright in the picture (a door frame, a post)."
+    : "Tap the near end, then the far end, of the alignment stick on the mat (it points at the phone).";
+}
+
+// Where in the picture a tap landed, 0-1 each way (the zoom included).
+function tapPoint(a, e) {
+  const img = $("cam-" + a).querySelector(".live");
+  const r = img.getBoundingClientRect();
+  if (!r.width) return null;
+  const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? [x, y] : null;
+}
+
+function tap(a, e) {
+  const c = cams[a], p = tapPoint(a, e);
+  if (!p) return;
+  if (tool === "zoom") {
+    if (c.zoom > 1) c.zoom = 1;
+    else { c.zoom = 3; c.origin = [p[0] * 100, p[1] * 100]; }
+    const z = $("cam-" + a).querySelector(".zoomer");
+    z.style.transformOrigin = c.origin.map(v => v + "%").join(" ");
+    z.style.transform = `scale(${c.zoom})`;
+  } else {
+    const taps = c.taps[tool];
+    if (taps.length >= 2) taps.length = 0;
+    taps.push(p);
+  }
+  render();
+}
+
+// ---- What the meters say ----
+function frameOf(lm, aspect) {
+  if (!lm) return null;
+  const x = i => lm[i * 3], y = i => lm[i * 3 + 1];
+  return { x: (x(23) + x(24)) / 2 * aspect, y: (y(23) + y(24)) / 2, h: Math.max(y(27), y(28)) - y(0),
+           nose: y(0), ankles: Math.max(y(27), y(28)), hipsX: (x(23) + x(24)) / 2 };
+}
+
+function meters(a, v, aspect) {
+  const f = v && frameOf(v.lm, aspect);
+  if (!f) return `<div class="meter warn"><b>Can't see you</b>Stand at the ball at address.</div>`;
+  const out = [];
+  const m = (ok, title, text) => out.push(`<div class="meter ${ok ? "ok" : "warn"}"><b>${esc(title)}</b>${esc(text)}</div>`);
+  const pct = x => Math.round(x * 100) + "%";
+  m(f.h >= SIZE_MIN && f.h <= SIZE_MAX, `Size ${pct(f.h)}`,
+    f.h < SIZE_SMALL ? "too small to measure: move the tripod closer"
+      : f.h < SIZE_MIN ? "OK, but closer measures better" : f.h > SIZE_MAX ? "move the tripod back"
+      : `good (${pct(SIZE_MIN)}-${pct(SIZE_MAX)} of the height)`);
+  const head = f.nose - HEAD_ROOM * f.h;
+  m(head >= 0.02, "Room above", head >= 0.02 ? "the club at the top fits" : "tilt the phone up a little, or move back");
+  const feet = 1 - f.ankles;
+  m(feet >= FEET_ROOM, "Room below", feet >= FEET_ROOM ? "feet in the picture" : "tilt the phone down a little");
+  // Down the line, the phone is on the target line, not on the golfer: off centre is fine there.
+  const side = f.hipsX, edge = a === "dtl" ? 0.12 : 0.35;   // 0.12: summary.js EDGE
+  m(side >= edge && side <= 1 - edge, "Centred", side < edge ? "you're left of centre: aim the phone a little left"
+    : side > 1 - edge ? "you're right of centre: aim the phone a little right" : `hips at ${pct(side)} across`);
+  return out.join("");
+}
+
+// Angle of a tapped line from upright, degrees: + when its top leans right.
+function lean(taps, w, h) {
+  const [p, q] = taps;
+  const top = p[1] < q[1] ? p : q, bottom = top === p ? q : p;
+  return Math.atan2((top[0] - bottom[0]) * w, (bottom[1] - top[1]) * h) * 180 / Math.PI;
+}
+
+function toolResult(a, w, h) {
+  const c = cams[a];
+  const level = c.taps.level, stick = c.taps.stick;
+  const lines = [];
+  let ok = true;
+  if (level.length === 2) {
+    const d = lean(level, w, h);
+    if (Math.abs(d) <= LEVEL_OK) lines.push(`Level side to side ✓ (${d.toFixed(1)}°)`);
+    else { ok = false; lines.push(`Not level: turn the phone about ${Math.abs(d).toFixed(1)}° ${d > 0 ? "clockwise" : "counter-clockwise"} (as you look at its screen from behind).`); }
+  } else if (tool === "level") lines.push(level.length ? "Now tap the top of the upright." : "");
+  if (stick.length === 2) {
+    const d = lean(stick, w, h);
+    const hin = parseFloat($("cam-" + a).querySelector(".height").value) || 0;
+    const inches = hin * Math.tan(Math.abs(d) * Math.PI / 180);
+    // A stick on the floor in line with the phone looks upright; off to one side, its near end
+    // points that way, by about lens height x tan(lean).
+    if (Math.abs(d) <= STICK_OK) lines.push(`On the stick's line ✓ (${d.toFixed(1)}°)`);
+    else {
+      ok = false;
+      lines.push(`Off the line by ${Math.abs(d).toFixed(1)}°: move the tripod ${d > 0 ? "left" : "right"}` +
+                 (hin ? ` about ${inches < 1 ? inches.toFixed(1) : Math.round(inches)} in` : "") + " (level the phone first).");
+    }
+    const mid = (stick[0][0] + stick[1][0]) / 2;
+    if (Math.abs(mid - 0.5) > 0.08) lines.push(`The stick is ${mid < 0.5 ? "left" : "right"} of the middle: aim the phone a little ${mid < 0.5 ? "left" : "right"} if you want it centred.`);
+  } else if (tool === "stick") lines.push(stick.length ? "Now tap the far end of the stick." : "");
+  const box = $("cam-" + a).querySelector(".tool-out");
+  const text = lines.filter(Boolean);
+  box.hidden = !text.length;
+  box.className = "result tool-out" + (level.length === 2 || stick.length === 2 ? (ok ? " ok" : " warn") : "");
+  box.innerHTML = text.map(esc).join("<br>");
+}
+
+function matchResult(a, v, aspect) {
+  const box = $("cam-" + a).querySelector(".match");
+  const spot = spots[a];
+  const now = v && frameOf(v.lm, aspect), then = spot && frameOf(spot.lm, aspect);
+  if (!$("ghost").checked || !spot) { box.hidden = true; return; }
+  box.hidden = false;
+  if (!now || !then) { box.className = "result match warn"; box.textContent = "Stand at the ball at address to compare with the saved spot."; return; }
+  const size = (now.h - then.h) / then.h, dx = now.x - then.x, dy = now.y - then.y;
+  const tips = [];
+  if (Math.abs(size) > MOVED_SIZE / 2) tips.push(size > 0 ? `you look ${Math.round(size * 100)}% bigger: move the tripod back` : `you look ${Math.round(-size * 100)}% smaller: move the tripod closer`);
+  if (Math.abs(dx) > MOVED_SHIFT / 2) tips.push(`you're ${dx > 0 ? "right" : "left"} of the saved spot: aim the phone a little ${dx > 0 ? "right" : "left"}`);
+  if (Math.abs(dy) > MOVED_SHIFT / 2) tips.push(`you're ${dy > 0 ? "lower" : "higher"}: tilt the phone ${dy > 0 ? "down" : "up"} a little`);
+  const moved = Math.abs(size) > MOVED_SIZE || Math.abs(dx) > MOVED_SHIFT || Math.abs(dy) > MOVED_SHIFT;
+  box.className = "result match " + (tips.length ? "warn" : "ok");
+  box.textContent = !tips.length ? "Matches the saved spot ✓" : (moved ? "Not on the saved spot: " : "Close to the saved spot: ") + tips.join("; ") + ".";
+}
+
+// ---- Drawing ----
+function draw(a, v, img, canvas) {
+  const w = img.clientWidth, h = img.clientHeight;
+  if (!w) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const lw = 1 / cams[a].zoom;
+  if ($("grid").checked) {
+    ctx.strokeStyle = "rgba(255,255,255,0.28)"; ctx.lineWidth = lw;
+    for (let i = 1; i < 10; i++) {
+      ctx.beginPath(); ctx.moveTo(w * i / 10, 0); ctx.lineTo(w * i / 10, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, h * i / 10); ctx.lineTo(w, h * i / 10); ctx.stroke();
+    }
+    ctx.strokeStyle = "rgba(255,230,0,0.85)"; ctx.lineWidth = 1.5 * lw;
+    ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+  }
+  const skeleton = (lm, color, dash) => {
+    if (!lm) return;
+    ctx.strokeStyle = color; ctx.lineWidth = 3 * lw; ctx.lineCap = "round"; ctx.setLineDash(dash ? [6 * lw, 6 * lw] : []);
+    for (const [p, q] of BONES) {
+      ctx.beginPath(); ctx.moveTo(lm[p * 3] * w, lm[p * 3 + 1] * h); ctx.lineTo(lm[q * 3] * w, lm[q * 3 + 1] * h); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  };
+  if ($("outline").checked) {
+    if ($("ghost").checked && spots[a]) skeleton(spots[a].lm, "rgba(96,165,250,0.95)", true);
+    skeleton(v && v.lm, v && v.ok ? "#22c55e" : "#f59e0b", false);
+  }
+  for (const [kind, color] of [["level", "#38bdf8"], ["stick", "#f472b6"]]) {
+    const taps = cams[a].taps[kind];
+    ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 2.5 * lw;
+    for (const [x, y] of taps) { ctx.beginPath(); ctx.arc(x * w, y * h, 6 * lw, 0, 2 * Math.PI); ctx.fill(); }
+    if (taps.length === 2) {
+      ctx.beginPath(); ctx.moveTo(taps[0][0] * w, taps[0][1] * h); ctx.lineTo(taps[1][0] * w, taps[1][1] * h); ctx.stroke();
+      // Where upright would be, from the lower tap.
+      const bottom = taps[0][1] > taps[1][1] ? taps[0] : taps[1];
+      ctx.setLineDash([5 * lw, 5 * lw]); ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1.5 * lw;
+      ctx.beginPath(); ctx.moveTo(bottom[0] * w, bottom[1] * h); ctx.lineTo(bottom[0] * w, 0); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+}
+
+function render() {
+  const angles = view === "both" ? ["face", "dtl"] : [view];
+  for (const a of angles) {
+    const card = $("cam-" + a);
+    if (!card) continue;
+    const v = setup && setup[a];
+    const img = card.querySelector(".live"), ghost = card.querySelector(".ghost"), canvas = card.querySelector("canvas");
+    const live = v && v.age <= STALE_S;
+    const recording = status && status.phones && status.phones[a] && status.phones[a].recording;
+    card.querySelector(".age").textContent = !v ? "" : live ? "live" : recording ? "paused: recording" : `picture from ${Math.round(v.age)} s ago`;
+    card.querySelector(".stage").classList.toggle("stale", !!v && !live);
+    card.querySelector(".empty").hidden = !!v;
+    img.hidden = !v;
+    if (v && img.dataset.t !== String(v.time)) {
+      img.dataset.t = String(v.time);
+      img.src = `/api/setup/${a}.jpg?big=1&t=${v.time}`;
+    }
+    const showGhost = $("ghost").checked && spots[a];
+    ghost.hidden = !showGhost || !v;
+    if (showGhost && ghost.dataset.t !== String(spots[a].saved)) {
+      ghost.dataset.t = String(spots[a].saved);
+      ghost.src = `/api/tripods/${a}.jpg?t=${spots[a].saved}`;
+    }
+    ghost.style.opacity = $("ghost-alpha").value / 100;
+    const W = img.naturalWidth || 9, H = img.naturalHeight || 16;
+    const aspect = W / H;
+    card.querySelector(".meters").innerHTML = v ? meters(a, v, aspect) : "";
+    toolResult(a, W, H);
+    matchResult(a, v, aspect);
+    const spot = spots[a];
+    card.querySelector(".spot-info").textContent = spot
+      ? `Saved spot: ${new Date(spot.saved * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}${spot.note ? " · " + spot.note : ""}`
+      : "No saved spot yet.";
+    card.querySelector(".save").disabled = !live;
+    if (v) draw(a, v, img, canvas);
+  }
+  $("ghost-amt").hidden = !$("ghost").checked;
+  const rec = status && ["face", "dtl"].filter(a => status.phones && status.phones[a] && status.phones[a].recording);
+  $("rec-note").hidden = !rec || !rec.length;
+  if (rec && rec.length) $("rec-text").textContent = `${rec.length === 2 ? "Both phones are" : NAMES[rec[0]] + " is"} recording: pictures pause while recording.`;
+}
+
+async function saveSpot(a) {
+  const card = $("cam-" + a);
+  const note = card.querySelector(".spot-note").value.trim() || `lens ${card.querySelector(".height").value} in high`;
+  if (spots[a] && !confirm(`Replace the saved ${NAMES[a]} spot? (The old one goes to the trash folder.)`)) return;
+  try {
+    const r = await fetch(`/api/tripods/${a}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ note }) });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) { spots = d; card.querySelector(".spot-note").value = ""; }
+    else alert(d.detail || `The server said ${r.status}`);
+  } catch { alert("Can't reach the server"); }
+  render();
+}
+
+$("views").onclick = e => { const v = e.target.dataset.v; if (v) { view = v; store("view", v); buildCards(); } };
+$("tools").onclick = e => { const t = e.target.dataset.t; if (t) { setTool(t); render(); } };
+for (const id of ["grid", "outline", "ghost", "ghost-alpha"]) $(id).oninput = () => render();
+$("stop").onclick = async () => {
+  try { await fetch("/api/phones/command", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "stop", angle: "both" }) }); } catch {}
+};
+addEventListener("resize", () => render());
+
+const getJson = async url => { try { const r = await fetch(url, { cache: "no-store" }); return r.ok ? await r.json() : null; } catch { return null; } };
+let timer = 0, slow = 0;
+async function poll() {
+  clearTimeout(timer);
+  const s = await getJson("/api/setup");
+  if (s) setup = s;
+  if (slow++ % 3 === 0) {
+    const [st, sp] = await Promise.all([getJson("/api/status"), getJson("/api/tripods")]);
+    status = st;
+    if (sp) spots = sp;
+  }
+  render();
+  timer = setTimeout(poll, document.hidden ? 10000 : 1000);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+setTool("zoom");
+buildCards();
+poll();
+</script>
+</body>
+</html>
