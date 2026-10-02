@@ -102,6 +102,22 @@ RELAY_FIELDS = {"source": str, "squareRunning": bool, "lastShotAt": str, "versio
 # The shot listener's heartbeat source (relay/shot-listener.ps1): shots from Square's GSPro connector.
 LISTENER = "shot-listener"
 
+# The sim laptop launcher agent (relay/golf-agent.ps1).
+AGENT_FIELDS = {
+    "squareRunning": bool, "watcherRunning": bool, "connectorRunning": bool,
+    "listenerRunning": bool, "source": str, "version": str, "computer": str,
+    "lastAction": str, "lastResult": str,
+}
+# Fixed named actions the server may queue for the laptop agent.
+AGENT_ACTIONS = {
+    "start_square", "stop_square", "start_watcher", "stop_watcher",
+    "switch_source", "start_gspro", "stop_gspro", "open_start",
+}
+# Agent seen within this many seconds is considered live.
+AGENT_TIMEOUT_S = 30.0
+# Agent command waiting without answer is marked failed after this many seconds.
+AGENT_COMMAND_TIMEOUT_S = 30.0
+
 
 def relay_name(hb: dict | None) -> str:
     return "the shot listener" if hb and hb.get("source") == LISTENER else "the Square watcher"
@@ -370,10 +386,12 @@ class Status:
 
     def __init__(self, clock=time.time):
         self.clock = clock
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.phones: dict[str, dict] = {}    # angle -> {"hb": fields, "seen": t}
         self.notes: list[dict] = []          # session starts, for the events log (drain_events)
         self.relays: dict[str, dict] = {}   # by source: {"hb": fields, "seen": t}
+        self.agent: dict | None = None       # sim laptop launcher agent: {"hb": fields, "seen": t}
+        self.agent_commands: list[dict] = []
         self.commands: list[dict] = []
         self.outbox: dict[str, list[dict]] = {a: [] for a in ANGLES}
         self.voice = CombinedVoice()
@@ -642,6 +660,89 @@ class Status:
     def relay_ok(self, now: float) -> bool:
         return self.relay is not None and now - self.relay["seen"] <= RELAY_GONE_S
 
+    # ---- The sim laptop launcher agent ----
+
+    def agent_heartbeat(self, body: dict) -> dict:
+        now = self.clock()
+        with self.lock:
+            hb = clean(body, AGENT_FIELDS)
+            self.agent = {"hb": hb, "seen": now}
+            self._expire_agent(now)
+            if hb.get("lastAction"):
+                for c in self.agent_commands:
+                    if c["action"] == hb["lastAction"] and c["state"] == "sent":
+                        c.update(state="completed", result=hb.get("lastResult"))
+            return dict(hb)
+
+    def has_agent_mail(self) -> bool:
+        now = self.clock()
+        with self.lock:
+            self._expire_agent(now)
+            return any(c["state"] == "queued" for c in self.agent_commands)
+
+    def take_agent_mail(self) -> dict:
+        now = self.clock()
+        with self.lock:
+            self._expire_agent(now)
+            cmds = []
+            for c in self.agent_commands:
+                if c["state"] == "queued":
+                    c["state"], c["sent"] = "sent", now
+                    cmd_dict = {"id": c["id"], "action": c["action"]}
+                    if c.get("params"):
+                        cmd_dict.update(c["params"])
+                    cmds.append(cmd_dict)
+            return {"commands": cmds, "ms": int(now * 1000)}
+
+    def agent_command(self, action: str, **params) -> dict:
+        if action not in AGENT_ACTIONS:
+            raise ValueError(f"Unknown or disallowed action: {action!r}")
+        if action == "switch_source" and params.get("source"):
+            if params["source"] not in ("square", "gspro"):
+                raise ValueError(f"Invalid shot source: {params['source']!r}")
+        now = self.clock()
+        with self.lock:
+            self._expire_agent(now)
+            cid = str(self._id())
+            c = {
+                "id": cid,
+                "action": action,
+                "params": {k: v for k, v in params.items() if k in ("source",) and v is not None},
+                "state": "queued",
+                "made": now,
+                "sent": None,
+                "error": None,
+            }
+            for old in self.agent_commands:
+                if old["state"] == "queued" and old["action"] == action:
+                    old.update(state="superseded", error="replaced by newer command")
+            self.agent_commands.append(c)
+            self.agent_commands = self.agent_commands[-COMMANDS_KEPT:]
+            return {"id": cid, "action": action, "state": "queued"}
+
+    def _expire_agent(self, now: float) -> None:
+        for c in self.agent_commands:
+            if c["state"] in ("queued", "sent") and now - c["made"] > AGENT_COMMAND_TIMEOUT_S:
+                c.update(state="failed", error="no answer from the launcher agent")
+
+    def _agent_snapshot(self, now: float) -> dict:
+        self._expire_agent(now)
+        a = self.agent
+        connected = bool(a and (now - a["seen"] <= AGENT_TIMEOUT_S))
+        hb = dict(a["hb"]) if a else {}
+        age = round(now - a["seen"], 1) if a else None
+        cmds = [{k: c[k] for k in ("id", "action", "state", "error") if k in c} for c in self.agent_commands[-5:]]
+        return {
+            **hb,
+            "connected": connected,
+            "age": age,
+            "commands": cmds,
+        }
+
+    def agent_snapshot(self, now: float) -> dict:
+        with self.lock:
+            return self._agent_snapshot(now)
+
     # ---- Camera setup ----
 
     def setup_verdicts(self, verdicts: dict) -> str | None:
@@ -763,6 +864,7 @@ class Status:
                 "headline": "Ready" if level == "ok" else f"{first_bad['label']}: {first_bad.get('problem') or first_bad['text']}",
                 "rows": rows, "phones": phones, "speaker": speaker,
                 "relay": (relay := self.relay) and {**relay["hb"], "age": round(now - relay["seen"], 1)},
+                "agent": self._agent_snapshot(now),
                 "combined": self.combined and {**self.combined, "age": round(now - self.combined["t"], 1)},
                 "session": {"start": self.health.start, "first": self.health.first, "last": self.health.last,
                             "spoken": [{**s, "age": round(now - s["t"], 1)} for s in self.spoken]},
@@ -822,6 +924,11 @@ class Status:
                 pass
         shot = f"last shot {ago(now - last_shot)}" if last_shot else "no shots yet"
         if relay is None:
+            if self.agent and (now - self.agent["seen"] <= AGENT_TIMEOUT_S):
+                ahb = self.agent["hb"]
+                if not ahb.get("watcherRunning") and not ahb.get("listenerRunning"):
+                    return {**row, "level": "bad", "text": f"launcher agent connected, watcher not started · {shot}",
+                            "problem": "Square watcher not started"}
             return {**row, "level": "warn", "text": f"no heartbeat from the laptop yet · {shot}"}
         hb, age = relay["hb"], now - relay["seen"]
         if hb.get("source") == LISTENER:

@@ -188,10 +188,33 @@
 
   <details id="sec-manual-setup" class="wiz-manual-fold">
     <summary>Camera pictures & hardware setup (manual controls) ▼</summary>
-    <section>
+    <section id="sec-hardware">
       <h2><span class="n" id="n1">1</span>Everything connected</h2>
-      <p class="hint">Open SwingClips on both phones. Start golf opens Square's app and the Square watcher on this laptop.</p>
+      <p class="hint">Open SwingClips on both phones. The laptop launcher controls Square's app and watcher from the browser.</p>
       <div class="checks" id="checks"></div>
+      <div class="launcher-panel" id="launcher-panel" style="margin-top: 14px; padding: 12px; background: #161b22; border: 1px solid #30363d; border-radius: 8px;">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px;">
+          <div>
+            <strong style="color: #c9d1d9; font-size: 14px;">Sim laptop launcher</strong>
+            <span id="launcher-agent-status" style="margin-left: 8px; font-size: 13px; color: #8b949e;">Waiting for agent…</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; font-size: 13px;">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              <input type="radio" name="shot-source" value="square" id="src-square" checked> Square app (default)
+            </label>
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
+              <input type="radio" name="shot-source" value="gspro" id="src-gspro"> GSPro connector
+            </label>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+          <button class="plan-btn on" id="btn-launch-square">Launch Square Golf</button>
+          <button class="plan-btn on" id="btn-launch-watcher">Start Square Watcher</button>
+          <button class="plan-btn on" id="btn-launch-gspro">Start GSPro Connector & Listener</button>
+          <button class="plan-btn disabled" id="btn-launch-gspro-game" disabled title="GSPro game is not installed yet (placeholder)" style="opacity: 0.5; cursor: not-allowed;">GSPro Game (placeholder)</button>
+          <span id="launcher-cmd-status" style="font-size: 12px; color: #58a6ff;"></span>
+        </div>
+      </div>
     </section>
 
     <section>
@@ -317,12 +340,84 @@ function renderChecks(s) {
   }
   const square = s.rows.find(r => r.key === "square") || { level: "warn", label: "Square", text: "" };
   const server = s.rows.find(r => r.key === "server") || { level: "ok", text: "" };
+  const agent = s.agent || {};
+  const agentText = agent.connected
+    ? `${agent.computer || 'laptop'}: running · shots from ${agent.source || 'square'}`
+    : "agent not running (start Golf agent.cmd on laptop)";
   const items = [phoneCheck("face", s), phoneCheck("dtl", s),
                  { level: square.level, title: square.label, text: square.text },
-                 { level: server.level, title: "Server", text: server.text }];
+                 { level: server.level, title: "Server", text: server.text },
+                 { level: agent.connected ? "ok" : "off", title: "Laptop launcher", text: agentText }];
   $("checks").innerHTML = items.map(i => `<div class="check ${i.level}"><span class="dot ${i.level}"></span>
     <div><b>${esc(i.title)}</b><span>${esc(i.text)}</span></div></div>`).join("");
-  $("n1").className = "n" + (items.every(i => i.level === "ok") ? " ok" : "");
+  $("n1").className = "n" + (items.every(i => i.level === "ok" || i.level === "off") ? " ok" : "");
+}
+
+async function sendRelayCommand(action, params = {}) {
+  const statusEl = $("launcher-cmd-status");
+  if (statusEl) statusEl.textContent = `Sending ${action}…`;
+  try {
+    const res = await fetch("/api/relay/command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...params })
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      if (statusEl) statusEl.textContent = `Failed: ${err}`;
+      return;
+    }
+    const data = await res.json();
+    if (statusEl) statusEl.textContent = `Sent (${data.result?.id || 'ok'})`;
+    setTimeout(pollStatus, 500);
+  } catch (e) {
+    if (statusEl) statusEl.textContent = `Error: ${e.message}`;
+  }
+}
+
+function renderLauncher(s) {
+  const agent = s?.agent;
+  const statusEl = $("launcher-agent-status");
+  const sqBtn = $("btn-launch-square");
+  const watchBtn = $("btn-launch-watcher");
+  const gsproBtn = $("btn-launch-gspro");
+  const srcSquare = $("src-square");
+  const srcGspro = $("src-gspro");
+
+  if (!agent || !agent.connected) {
+    if (statusEl) statusEl.textContent = "Agent not connected (run Golf agent.cmd on laptop)";
+    if (sqBtn) sqBtn.textContent = "Launch Square Golf";
+    if (watchBtn) watchBtn.textContent = "Start Square Watcher";
+    return;
+  }
+
+  const comp = agent.computer ? `${agent.computer}: ` : "";
+  const parts = [];
+  parts.push(agent.squareRunning ? "Square: open" : "Square: closed");
+  parts.push(agent.watcherRunning ? "watcher: running" : "watcher: stopped");
+  if (agent.source) parts.push(`shots: ${agent.source}`);
+  if (statusEl) statusEl.textContent = `${comp}${parts.join(" · ")}`;
+
+  if (sqBtn) {
+    sqBtn.textContent = agent.squareRunning ? "Square Golf (open)" : "Launch Square Golf";
+  }
+  if (watchBtn) {
+    watchBtn.textContent = agent.watcherRunning ? "Watcher (running)" : "Start Square Watcher";
+  }
+  if (gsproBtn) {
+    const gsproOn = agent.connectorRunning || agent.listenerRunning;
+    gsproBtn.textContent = gsproOn ? "GSPro Connector (running)" : "Start GSPro Connector & Listener";
+  }
+
+  if (agent.source === "gspro" && srcGspro && !srcGspro.checked) {
+    srcGspro.checked = true;
+  } else if (agent.source === "square" && srcSquare && !srcSquare.checked) {
+    srcSquare.checked = true;
+  }
+
+  if (agent.lastResult && $("launcher-cmd-status") && !$("launcher-cmd-status").textContent.startsWith("Sending")) {
+    $("launcher-cmd-status").textContent = agent.lastResult;
+  }
 }
 
 // ---- 2. Cameras ----
@@ -1159,13 +1254,21 @@ function makeSquareStep() {
     check: () => {
       const sqRow = (status?.rows || []).find(r => r.key === "square");
       const ok = sqRow && sqRow.level === "ok";
+      const agent = status?.agent || {};
       let text = "";
+      let extraHtml = "";
       if (ok) {
         text = sqRow.text || "Square watcher and app running.";
+      } else if (agent.connected && !agent.squareRunning) {
+        text = "Square's app isn't open: ";
+        extraHtml = `<button class="plan-btn on" id="wiz-open-square-btn" style="padding: 2px 10px; font-size: 13px; margin-top: 6px;">Open it</button>`;
       } else {
         text = sqRow ? (sqRow.text || "Square not running") : "Waiting for Square watcher heartbeat on sim laptop.";
+        if (agent.connected && !agent.watcherRunning) {
+          extraHtml = `<button class="plan-btn on" id="wiz-start-watcher-btn" style="padding: 2px 10px; font-size: 13px; margin-top: 6px;">Start watcher</button>`;
+        }
       }
-      return { ok, text };
+      return { ok, text, extraHtml };
     },
     actionText: "Square ready ✓"
   };
@@ -1426,7 +1529,10 @@ function renderWizard() {
         <span class="wiz-step-icon">${isOk ? '✓' : '⏳'}</span>
         <div>
           <b>${esc(step.checkTitle)}</b>
-          <div style="font-size: 13px; margin-top: 2px; color: ${isOk ? 'var(--text)' : 'var(--muted)'};">${esc(checkRes.text)}</div>
+          <div style="font-size: 13px; margin-top: 2px; color: ${isOk ? 'var(--text)' : 'var(--muted)'};">
+            ${esc(checkRes.text)}
+            ${checkRes.extraHtml ? `<div style="margin-top: 4px;">${checkRes.extraHtml}</div>` : ''}
+          </div>
         </div>
       </div>
       <div class="wiz-step-actions">
@@ -1436,6 +1542,25 @@ function renderWizard() {
       </div>
     </div>
   `;
+
+  const openSqBtn = $("wiz-open-square-btn");
+  if (openSqBtn) {
+    openSqBtn.onclick = async () => {
+      openSqBtn.disabled = true;
+      openSqBtn.textContent = "Opening…";
+      await sendRelayCommand("start_square");
+      setTimeout(pollStatus, 1000);
+    };
+  }
+  const startWatchBtn = $("wiz-start-watcher-btn");
+  if (startWatchBtn) {
+    startWatchBtn.onclick = async () => {
+      startWatchBtn.disabled = true;
+      startWatchBtn.textContent = "Starting…";
+      await sendRelayCommand("start_watcher");
+      setTimeout(pollStatus, 1000);
+    };
+  }
 
   const primaryBtn = $("wiz-btn-primary");
   if (primaryBtn) {
@@ -1493,6 +1618,7 @@ async function pollStatus() {
   setupStatus = setup;
   calibStatus = calib;
   renderChecks(s);
+  renderLauncher(s);
   const good = ["face", "dtl"].map(a => renderCam(a, setup && setup[a], s && s.phones[a] && s.phones[a].recording));
   $("n2").className = "n" + (good.every(Boolean) ? " ok" : "");
   renderGo(s);
@@ -1523,6 +1649,17 @@ document.addEventListener("visibilitychange", () => {
     loadPlanData();
   }
 });
+const srcSq = $("src-square");
+if (srcSq) srcSq.addEventListener("change", () => sendRelayCommand("switch_source", { source: "square" }));
+const srcGs = $("src-gspro");
+if (srcGs) srcGs.addEventListener("change", () => sendRelayCommand("switch_source", { source: "gspro" }));
+const btnSq = $("btn-launch-square");
+if (btnSq) btnSq.addEventListener("click", () => sendRelayCommand("start_square"));
+const btnWat = $("btn-launch-watcher");
+if (btnWat) btnWat.addEventListener("click", () => sendRelayCommand("start_watcher"));
+const btnGs = $("btn-launch-gspro");
+if (btnGs) btnGs.addEventListener("click", () => sendRelayCommand("start_gspro"));
+
 loadWizardStorage();
 renderWizard();
 pollStatus();

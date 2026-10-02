@@ -24,6 +24,7 @@ param([switch]$Startup, [switch]$NoCameras, [switch]$StartCameras, [string]$Serv
 
 $ErrorActionPreference = "Continue"
 $here = $PSScriptRoot
+. (Join-Path $here "golf-common.ps1")
 $log = Join-Path $here "start-golf-log.txt"
 
 function Say([string]$text, [string]$color = "Gray") {
@@ -43,75 +44,18 @@ if (-not $Source) {
 Say "Start golf ($env:COMPUTERNAME, PowerShell $($PSVersionTable.PSVersion)), shots from: $Source"
 
 if ($Startup) {
-    $link = Join-Path ([Environment]::GetFolderPath("Startup")) "Start golf.lnk"
-    $shell = New-Object -ComObject WScript.Shell
-    $s = $shell.CreateShortcut($link)
-    $s.TargetPath = Join-Path $here $(if ($Source -eq "gspro") { "Start golf (GSPro).cmd" } else { "Start golf.cmd" })
-    $s.WorkingDirectory = $here
-    $s.WindowStyle = 7   # minimized
-    $s.Save()
+    $targetCmd = if ($Source -eq "gspro") { "Start golf (GSPro).cmd" } else { "Start golf.cmd" }
+    $link = Set-StartupShortcut "Start golf.lnk" $targetCmd $here
     Say "Added to Windows sign-in: $link (delete it to undo)." "Green"
-}
-
-# ---- Square Golf's app ----
-function Get-SquareProcess {
-    # (Not Square's GSPro connector, whose name may say Square too.)
-    Get-Process -ErrorAction SilentlyContinue | Where-Object {
-        ($_.ProcessName -like "*Square*" -or ($_.MainWindowTitle -and $_.MainWindowTitle -like "*Square*Golf*")) -and
-        $_.ProcessName -notlike "*GSPro*" -and $_.ProcessName -notlike "*Connect*" -and
-        -not ($_.MainWindowTitle -like "*GSPro*" -or $_.MainWindowTitle -like "*Connect*") }
-}
-
-# Returns @{kind = "path" | "appid"; value = ...} or $null.
-function Find-SquareApp { Find-App "square-app.txt" "*Square*" "*Golf*" "*GSPro*" }
-function Find-ConnectorApp { Find-App "connector-app.txt" "*GSPro*" "*Connect*" "" }
-
-# An app from a saved path or ID, the Start menu (named like $like, preferring $prefer, never $skip),
-# or a shortcut in the Start menu or on the desktop.
-function Find-App([string]$savedName, [string]$like, [string]$prefer, [string]$skip) {
-    $saved = Join-Path $here $savedName
-    if (Test-Path -LiteralPath $saved) {
-        $p = (Get-Content -LiteralPath $saved -TotalCount 1).Trim('" ')
-        if ($p -and (Test-Path -LiteralPath $p)) { return @{ kind = "path"; value = $p } }
-        if ($p) { return @{ kind = "appid"; value = $p } }
-    }
-    # The Start menu's app list: desktop and Microsoft Store apps alike.
-    $apps = @()
-    try { $apps = @(Get-StartApps | Where-Object { $_.Name -like $like -and -not ($skip -and $_.Name -like $skip) }) } catch {}
-    foreach ($a in $apps) { Say "  Start menu app: '$($a.Name)'  id: $($a.AppID)" "DarkGray" }
-    $best = $apps | Where-Object { $_.Name -like $prefer } | Select-Object -First 1
-    if (-not $best) { $best = $apps | Select-Object -First 1 }
-    if ($best) { return @{ kind = "appid"; value = $best.AppID } }
-    $places = @(
-        [Environment]::GetFolderPath("StartMenu"), [Environment]::GetFolderPath("CommonStartMenu"),
-        [Environment]::GetFolderPath("Desktop"), [Environment]::GetFolderPath("CommonDesktopDirectory"))
-    foreach ($place in $places) {
-        if (-not $place -or -not (Test-Path -LiteralPath $place)) { continue }
-        $hit = Get-ChildItem -LiteralPath $place -Recurse -Include "$like.lnk", "$like.url" -ErrorAction SilentlyContinue |
-            Where-Object { -not ($skip -and $_.Name -like $skip) } | Select-Object -First 1
-        if ($hit) { return @{ kind = "path"; value = $hit.FullName } }
-    }
-    return $null
 }
 
 if ($Source -eq "gspro") {
     # ---- Square's GSPro connector and the shot listener ----
-    function Open-App($app, [string]$what) {
-        if ($app.kind -eq "appid") {
-            Say "Opening $what (Start menu app $($app.value))" "Green"
-            Start-Process -FilePath "explorer.exe" -ArgumentList "shell:AppsFolder\$($app.value)"
-        } else {
-            Say "Opening $what ($($app.value))" "Green"
-            Start-Process -FilePath $app.value
-        }
-    }
-
     $square = Get-SquareProcess
     if ($square) {
         Say "Square Golf's app is open: close it, or the connector can't reach the Omni (it takes one Bluetooth connection)." "Yellow"
     }
-    $listener = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like "*shot-listener.ps1*" }
+    $listener = Get-ListenerProcess
     if ($listener) {
         Say "The shot listener is already running."
     } else {
@@ -120,32 +64,30 @@ if ($Source -eq "gspro") {
         Start-Process -FilePath (Join-Path $here "Shot listener.cmd") -ArgumentList "-Server", $Server -WorkingDirectory $here
         Start-Sleep -Seconds 3   # listening before the connector looks for GSPro
     }
-    $connector = Get-Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.ProcessName -like "*GSPro*" -or ($_.MainWindowTitle -and $_.MainWindowTitle -like "*GSPro*") }
+    $connector = Get-ConnectorProcess
     if ($connector) {
         Say "Square's GSPro connector is already open ($(($connector | ForEach-Object ProcessName | Sort-Object -Unique) -join ', '))."
     } else {
-        $app = Find-ConnectorApp
-        if ($app) { Open-App $app "Square's GSPro connector" }
-        else { Say "Couldn't find Square's GSPro connector (SQG GSPro Connect). Open it yourself; to fix it, put the path of its shortcut or .exe in $here\connector-app.txt." "Yellow" }
+        $app = Find-ConnectorApp $here
+        if ($app) {
+            Say "Opening Square's GSPro connector ($($app.value))" "Green"
+            [void](Open-App $app "Square's GSPro connector")
+        } else {
+            Say "Couldn't find Square's GSPro connector (SQG GSPro Connect). Open it yourself; to fix it, put the path of its shortcut or .exe in $here\connector-app.txt." "Yellow"
+        }
     }
 } else {
     $running = Get-SquareProcess
     if ($running) {
         Say "Square Golf's app is already open ($(($running | ForEach-Object ProcessName | Sort-Object -Unique) -join ', '))."
     } else {
-        $app = Find-SquareApp
+        $app = Find-SquareApp $here
         if (-not $app) {
             Say "Couldn't find Square Golf's app. Open it yourself this time; to fix it, put the path of its shortcut or .exe in $here\square-app.txt." "Yellow"
         } else {
             $before = @(Get-Process -ErrorAction SilentlyContinue | ForEach-Object Id)
-            if ($app.kind -eq "appid") {
-                Say "Opening Square Golf's app (Start menu app $($app.value))" "Green"
-                Start-Process -FilePath "explorer.exe" -ArgumentList "shell:AppsFolder\$($app.value)"
-            } else {
-                Say "Opening Square Golf's app ($($app.value))" "Green"
-                Start-Process -FilePath $app.value
-            }
+            Say "Opening Square Golf's app ($($app.value))" "Green"
+            [void](Open-App $app "Square Golf's app")
             # Note what it runs as, so the next start can tell it's already open.
             for ($i = 0; $i -lt 20 -and -not (Get-SquareProcess); $i++) { Start-Sleep -Seconds 1 }
             $new = Get-Process -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.Id -and $_.MainWindowTitle }
@@ -154,8 +96,7 @@ if ($Source -eq "gspro") {
     }
 
     # ---- The Square watcher ----
-    $watcher = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
-        Where-Object { $_.CommandLine -like "*square-watcher.ps1*" }
+    $watcher = Get-WatcherProcess
     if ($watcher) {
         Say "The Square watcher is already running."
     } else {

@@ -17,9 +17,10 @@ end).
 **Before** (once per session, ~2 minutes)
 
 1. **Phones**: open **SwingClips** on both (on their tripods, on the tape marks). Nothing to press.
-2. **Laptop**: double-click **`Start golf.cmd`** (in `Dropbox\SwingClips`). It opens Square's app and
-   the Square watcher, then the **Start page** (`http://192.168.86.250:8000/start`). In Square's app,
-   pick the **driving range**. (The server runs by itself; nothing to do there.)
+2. **Laptop**: with the agent installed (`Golf agent.cmd -Startup`), it starts minimized on sign-in
+   and connects to the server; open the **Start page** (`http://192.168.86.250:8000/start`) and launch
+   Square Golf from the browser. Or double-click **`Start golf.cmd`** (in `Dropbox\SwingClips`).
+   In Square's app, pick the **driving range**. (The server runs by itself; nothing to do there.)
 3. **Start page, sections 1-2**: every check green, both camera pictures framed with the skeleton on
    you. Fix what it says if not.
 4. **Section 3: Start recording.** Each phone says "Recording". (A phone that joins late starts by itself.)
@@ -169,12 +170,16 @@ packages are in [docs/performance.md](docs/performance.md).
 
 ## The sim laptop
 
-Runs `Start golf.cmd` from `Dropbox\SwingClips` (copies of `relay/`: when those change, copy them
-there again; they must stay ASCII with Windows line endings for PowerShell 5.1). The Square watcher
-reads each new shot from Square Golf's own shot database and sends it to the server, which pairs it
-with the swing by time (Square saves a shot ~11 s after the strike, 6-16 s seen). What
-`Start golf.cmd` did each time is in `start-golf-log.txt` next to it. The GSPro-connector option and
-how shots are read: [docs/relay.md](docs/relay.md).
+Runs the launcher agent (`Golf agent.cmd`) from `Dropbox\SwingClips` (copies of `relay/`: when those change,
+copy them there again; they must stay ASCII with Windows line endings for PowerShell 5.1). Install it once
+with `Golf agent.cmd -Startup` to start minimized automatically on Windows sign-in. It reports to the
+server what is running and carries out launch commands from the browser Start page.
+
+`Start golf.cmd` still works as before for manual one-click starting. The Square watcher reads each new
+shot from Square Golf's own shot database and sends it to the server, which pairs it with the swing by
+time (Square saves a shot ~11 s after the strike, 6-16 s seen). What the scripts do is logged in
+`golf-agent-log.txt` and `start-golf-log.txt` next to them. The GSPro-connector option and how shots
+are read: [docs/relay.md](docs/relay.md).
 
 ## Network
 

@@ -3,6 +3,16 @@
 The Square watcher, the GSPro-connector option, and the ball-flight fill-in. (Moved out of HOME-SETUP.md, which has the session checklist, setup and troubleshooting.)
 
 ## `relay/` - launch monitor to server (runs on the sim laptop, nothing to install)
+- **`golf-agent.ps1`** (+ **`Golf agent.cmd`**): the background launcher agent. Copy `relay\` to
+  `Dropbox\SwingClips` and run `Golf agent.cmd -Startup` once on the sim laptop. It adds itself to
+  Windows sign-in (`Golf agent.lnk` in the Startup folder) and runs minimized. It polls the server
+  (`POST /api/relay/agent`), reports what is running (Square app, watcher, connector, listener, shot source),
+  and executes named actions sent from the browser Start page (start/stop Square, start/stop watcher,
+  switch shot source, start/stop GSPro connector stack, open Start page). Supports `-DryRun` for testing.
+- **`golf-common.ps1`**: shared helper functions for `golf-agent.ps1` and `start-golf.ps1` (process checks,
+  Start menu app resolution, shortcut creation, shot source toggling). Compatible with Windows PowerShell 5.1.
+- **`start-golf.ps1`** (+ **`Start golf.cmd`**, **`Start golf (GSPro).cmd`**): the manual one-click launcher
+  script. Still works as before for launching Square Golf or GSPro without running the background agent.
 - **`square-watcher.ps1`** (used): Square Golf's Windows app saves every shot to a plain SQLite
   file, `%USERPROFILE%\AppData\LocalLow\Invant\Square Golf\SQGDB.bytes` (`IVShotLog`: ball data,
   flight result, club data as JSON). The watcher reads new rows read-only via Windows'

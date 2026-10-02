@@ -2288,6 +2288,41 @@ async def relay_heartbeat(request: Request):
     return {"ok": True, "ms": int(time.time() * 1000), "got": session_status.relay_heartbeat(body)}
 
 
+@app.post("/api/relay/agent")
+async def relay_agent_poll(request: Request, wait: int = 15):
+    """The sim laptop's launcher agent (relay/golf-agent.ps1): reports what is running on the laptop,
+    holds open a long poll for launcher commands queued by the server."""
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "Expected JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Expected agent status object")
+    session_status.agent_heartbeat(body)
+    give_up = time.monotonic() + max(0, min(wait, 30))
+    while not session_status.has_agent_mail() and time.monotonic() < give_up:
+        if await request.is_disconnected():
+            return Response(status_code=204)
+        await asyncio.sleep(0.2)
+    return session_status.take_agent_mail()
+
+
+class RelayCommand(BaseModel):
+    action: str
+    source: str | None = None
+
+
+@app.post("/api/relay/command")
+def relay_command(body: RelayCommand):
+    """Queue a launcher action for the sim laptop agent (start/stop Square, watcher, gspro, switch source, open start)."""
+    try:
+        res = session_status.agent_command(body.action, source=body.source)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    print(f"Relay command: {body.action} ({body.source or ''}) -> {res['id']}", flush=True)
+    return {"ok": True, "result": res}
+
+
 @app.get("/api/status")
 def get_status():
     """The Ready panel (static/status.js): phones, Square, framing, the first swing's check, the pose queue."""
@@ -2369,7 +2404,8 @@ class QuietPolling(logging.Filter):
         # The phones' setup stills come every second; so do the Camera setup page's checks.
         return not any(path in message for path in ('"GET /api/clips ', '"GET /api/time ', " /api/setup",
                                                          " /api/practice/latest", " /api/phones/",
-                                                         '"GET /api/status ', '"GET /api/calib ', " /api/relay/heartbeat"))
+                                                         '"GET /api/status ', '"GET /api/calib ', " /api/relay/heartbeat",
+                                                         " /api/relay/agent"))
 
 
 class QuietShutdown(logging.Filter):

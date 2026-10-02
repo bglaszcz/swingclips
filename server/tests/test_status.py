@@ -142,6 +142,41 @@ class HeartbeatTest(unittest.TestCase):
         self.assertEqual(framing(verdict(ok=False, age=1))["level"], "bad")
         self.assertEqual(framing(verdict(ok=False, age=300))["level"], "ok")
 
+    def test_agent_heartbeat_and_snapshot(self):
+        self.assertFalse(self.s.agent_snapshot(self.clock.t)["connected"])
+        self.s.agent_heartbeat({"squareRunning": True, "watcherRunning": True, "source": "square",
+                                "version": "1.0", "computer": "SIM-LAPTOP"})
+        snap = self.s.agent_snapshot(self.clock.t)
+        self.assertTrue(snap["connected"])
+        self.assertEqual(snap["squareRunning"], True)
+        self.assertEqual(snap["computer"], "SIM-LAPTOP")
+        full_snap = self.s.snapshot({}, {}, None)
+        self.assertEqual(full_snap["agent"]["computer"], "SIM-LAPTOP")
+        self.clock.t += status.AGENT_TIMEOUT_S + 1
+        self.assertFalse(self.s.agent_snapshot(self.clock.t)["connected"])
+
+    def test_agent_commands_and_mail(self):
+        self.assertFalse(self.s.has_agent_mail())
+        cmd = self.s.agent_command("start_square")
+        self.assertEqual(cmd["action"], "start_square")
+        self.assertTrue(self.s.has_agent_mail())
+        mail = self.s.take_agent_mail()
+        self.assertEqual(len(mail["commands"]), 1)
+        self.assertEqual(mail["commands"][0]["action"], "start_square")
+        self.assertFalse(self.s.has_agent_mail())
+
+    def test_agent_disallowed_actions(self):
+        with self.assertRaises(ValueError):
+            self.s.agent_command("rm_rf")
+        with self.assertRaises(ValueError):
+            self.s.agent_command("switch_source", source="bad")
+
+    def test_agent_command_expiration(self):
+        self.s.agent_command("start_watcher")
+        self.clock.t += status.AGENT_COMMAND_TIMEOUT_S + 1
+        self.assertFalse(self.s.has_agent_mail())
+        self.assertEqual(self.s.agent_commands[-1]["state"], "failed")
+
 
 class CommandTest(unittest.TestCase):
     def setUp(self):
@@ -538,6 +573,29 @@ class EndpointsTest(unittest.TestCase):
         snap = self.client.get("/api/status").json()
         self.assertEqual(snap["relay"]["version"], "1.0")
         self.assertEqual(next(x for x in snap["rows"] if x["key"] == "square")["level"], "ok")
+
+    def test_agent_endpoints(self):
+        c = self.client
+        self.assertEqual(c.post("/api/relay/agent", json="not a dict").status_code, 400)
+        self.assertEqual(c.post("/api/relay/command", json={"action": "rm_rf"}).status_code, 400)
+        # Queue valid command
+        cmd_res = c.post("/api/relay/command", json={"action": "start_square"})
+        self.assertEqual(cmd_res.status_code, 200)
+        self.assertTrue(cmd_res.json()["ok"])
+        self.assertEqual(cmd_res.json()["result"]["action"], "start_square")
+        # Poll agent
+        poll = c.post("/api/relay/agent?wait=0", json={
+            "squareRunning": False, "watcherRunning": True, "source": "square",
+            "computer": "SIM-LAPTOP", "version": "1.0",
+        })
+        self.assertEqual(poll.status_code, 200)
+        cmds = poll.json()["commands"]
+        self.assertEqual(len(cmds), 1)
+        self.assertEqual(cmds[0]["action"], "start_square")
+        # Verify in status snapshot
+        snap = c.get("/api/status").json()
+        self.assertTrue(snap["agent"]["connected"])
+        self.assertEqual(snap["agent"]["computer"], "SIM-LAPTOP")
 
     def test_status_tick_first_swing(self):
         import json
