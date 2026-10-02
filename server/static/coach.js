@@ -257,7 +257,7 @@
       what: "downswing sequence: arms leading the downswing before the body",
       more: { name: "an arms-led downswing", fault: true,
         how: "The arms start down before the lower body: the club comes from the outside, steep, and the low point moves back.",
-        drill: "Step-through drill (or pause at the top, then start down by turning the belt buckle to the target before the arms move): step the trail foot through after impact. 10 balls.",
+        drill: "Step and fire (the coach's Sequence Tier 1): feet together, swing back, step the lead foot to the target and turn the belt buckle to the target as it lands, hands following. Or pause one second at the top and start down with the lead hip alone, the arms waiting. 10 reps, then 10 balls.",
         thought: "Buckle to the target first." },
       less: { name: "a body-led downswing (pelvis first)",
         how: "The pelvis turns toward the target before the arms start down, leading the downswing.",

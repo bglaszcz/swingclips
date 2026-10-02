@@ -276,7 +276,7 @@ test("arms-led downswing from 3D: swing with 3D and fault, swing with 3D without
   assert.ok(f1, "armsLed detected on 3D swing with bodyLate and square hips");
   assert.equal(f1.name, "arms-led downswing");
   assert.equal(f1.value, 2.5);
-  assert.ok(f1.drill.includes("Step-through drill"));
+  assert.ok(f1.drill.includes("step the lead foot to the target"));
   assert.equal(f1.thought, "Buckle to the target first.");
 
   // 2. Swing with 3D without the fault:

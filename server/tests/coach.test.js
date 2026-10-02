@@ -67,7 +67,7 @@ test("arms-led downswing coaching: fault name, drill, thought and ball effect", 
   assert.ok(m, "armsLed move exists");
   assert.equal(m.more.fault, true);
   assert.equal(m.more.name, "an arms-led downswing");
-  assert.ok(m.more.drill.includes("Step-through drill"));
+  assert.ok(m.more.drill.includes("step the lead foot to the target"));
   assert.ok(m.more.drill.includes("belt buckle to the target"));
   assert.equal(m.more.thought, "Buckle to the target first.");
   assert.ok(m.more.how.includes("outside"));
