@@ -7,7 +7,7 @@ const Coach = require("../static/coach.js");
 const Faults = require("../static/faults.js");
 
 test("names, drills and swing thoughts come from coach.js", () => {
-  assert.equal(Faults.FAULTS.length, 8);
+  assert.equal(Faults.FAULTS.length, 9);
 
   const expected = [
     { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more" },
@@ -18,6 +18,7 @@ test("names, drills and swing thoughts come from coach.js", () => {
     { key: "headRise", name: "head dip", move: "headRise", dir: "less" },
     { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more" },
     { key: "headRise", name: "head lift", move: "headRise", dir: "more" },
+    { key: "armsLed", name: "arms-led downswing", move: "armsLed", dir: "more" },
   ];
 
   for (let i = 0; i < expected.length; i++) {
@@ -35,7 +36,9 @@ test("names, drills and swing thoughts come from coach.js", () => {
 
     // In a swing row with this fault
     const testVal = f.test(f.threshold + 1) ? f.threshold + 1 : f.threshold - 1;
-    const testRow = { [exp.key]: testVal };
+    const testRow = exp.key === "armsLed"
+      ? { body3d: { sequence: { bodyLate: true }, numbers: { pelvisOpenImpact: testVal } } }
+      : { [exp.key]: testVal };
     const faults = Faults.faultsOf(testRow);
     const match = faults.find(item => item.name === exp.name);
     assert.ok(match, `fault ${exp.name} named`);
@@ -258,4 +261,59 @@ test("faultsOf returns multiple faults with thought and drill", () => {
     assert.ok(f.drill.length > 0);
     assert.ok(f.thought.length > 0);
   }
+});
+
+test("arms-led downswing from 3D: swing with 3D and fault, swing with 3D without it, swing without 3D", () => {
+  // 1. Swing with 3D and the fault: bodyLate true and pelvisOpenImpact < 20
+  const swingWithFault = {
+    body3d: {
+      sequence: { bodyLate: true, armsFirst: true },
+      numbers: { pelvisOpenImpact: 2.5 },
+    },
+  };
+  const faults1 = Faults.faultsOf(swingWithFault);
+  const f1 = faults1.find(f => f.key === "armsLed");
+  assert.ok(f1, "armsLed detected on 3D swing with bodyLate and square hips");
+  assert.equal(f1.name, "arms-led downswing");
+  assert.equal(f1.value, 2.5);
+  assert.ok(f1.drill.includes("Step-through drill"));
+  assert.equal(f1.thought, "Buckle to the target first.");
+
+  // 2. Swing with 3D without the fault:
+  // (a) hips open (pelvisOpenImpact >= 20)
+  const swingWithOpenHips = {
+    body3d: {
+      sequence: { bodyLate: true, armsFirst: true },
+      numbers: { pelvisOpenImpact: 35.0 },
+    },
+  };
+  const faults2a = Faults.faultsOf(swingWithOpenHips);
+  assert.equal(faults2a.some(f => f.key === "armsLed"), false, "not named when hips are open at impact");
+
+  // (b) body not late (bodyLate false)
+  const swingBodyOnTime = {
+    body3d: {
+      sequence: { bodyLate: false, armsFirst: false },
+      numbers: { pelvisOpenImpact: 5.0 },
+    },
+  };
+  const faults2b = Faults.faultsOf(swingBodyOnTime);
+  assert.equal(faults2b.some(f => f.key === "armsLed"), false, "not named when body is not late");
+
+  // 3. Swing without 3D: never gets it and does not count against total in sessionFaults
+  const swingWithout3D = {
+    earlyExt: 2.0,
+    bendLoss: -5.0,
+    trust: { earlyExt: { level: "good" } },
+  };
+  const faults3 = Faults.faultsOf(swingWithout3D);
+  assert.equal(faults3.some(f => f.key === "armsLed"), false, "swing without 3D never gets armsLed");
+
+  // In sessionFaults: swing without 3D does not count against total readable
+  const session = Faults.sessionFaults([swingWithFault, swingWithOpenHips, swingWithout3D]);
+  const sf = session.find(f => f.key === "armsLed");
+  assert.ok(sf, "armsLed in sessionFaults");
+  assert.equal(sf.total, 2, "only the 2 swings with 3D count toward total readable");
+  assert.equal(sf.count, 1, "only 1 swing has the fault");
+  assert.equal(sf.share, 0.5, "share is 1/2, not 1/3");
 });
