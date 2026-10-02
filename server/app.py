@@ -44,6 +44,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import ballflight
+import bodycalib
 import calib
 import calibrun
 import drills
@@ -645,6 +646,8 @@ def swing_worker(stop: threading.Event):
                 except Exception:
                     traceback.print_exc()
                 noise_at = time.time()
+            if calib_runs.pending_job("body") and not stop.is_set():
+                place_cameras(clips, summarizer)
             if calib.enabled() and not stop.is_set():
                 try:
                     made = pass_3d(clips, summarizer, stop)
@@ -658,6 +661,55 @@ def swing_worker(stop: threading.Event):
             stop.wait(5)
     finally:
         summarizer.close()
+
+
+# Placing the cameras from the body uses at most this many swings (the newest).
+BODY_SWINGS = 20
+
+
+def place_cameras(clips: dict[str, dict], summarizer: swings.Summarizer) -> None:
+    """The 3D calibration page asked to place both phones from the swings since the tripods were set
+    (bodycalib.py): saves a calibration session dated when the tripods were set, so it holds for
+    those swings and the ones after, until a camera moves."""
+    job = calib_runs.pending_job("body")
+    since, height = job["since"], job["height"]
+    both = [c for c in clips.values() if c["angle"] == "face" and c["partner"] and c["pose"] == "done"
+            and clips.get(c["partner"], {}).get("pose") == "done" and not c.get("calib")
+            and recorded_at(CLIPS_DIR / c["name"]) >= since]
+    both = sorted(both, key=lambda c: recorded_at(CLIPS_DIR / c["name"]))[-BODY_SWINGS:]
+    used = []
+    try:
+        if not both:
+            raise ValueError("no swings filmed from both phones since the tripods were set (and analyzed): "
+                             "hit about 10, wait for them to be analyzed, then try again")
+        lenses = {}
+        for angle, name in (("face", both[-1]["name"]), ("dtl", both[-1]["partner"])):
+            lenses[angle] = calib.lens_for(angle, calib.mode_of(name))
+            if lenses[angle] is None:
+                raise ValueError(f"no lens calibration for the {'face-on' if angle == 'face' else 'down-the-line'} "
+                                 f"phone in {calib.mode_of(name)}: do its lens board first")
+        data = []
+        for c in both:
+            other = clips[c["partner"]]
+            fi, di = swings.pose_input(c, pose_file(c["name"])), swings.pose_input(other, pose_file(other["name"]))
+            offset = summarizer.call("syncOffset", {"impact": fi.get("impact"), "strike": fi.get("strike")},
+                                     {"impact": di.get("impact"), "strike": di.get("strike")})
+            data.append({"face": {"frames": fi["frames"], "impact": fi.get("impact"), "ball": fi.get("ball")},
+                         "dtl": {"frames": di["frames"], "impact": di.get("impact"), "ball": di.get("ball")},
+                         "offset": offset})
+            used.append(c["name"])
+        cams, report = bodycalib.solve(data, lenses["face"], lenses["dtl"], height)
+        out = calib.save_session(cams, None, since, {"method": "body", "report": report, "swings": used})
+        text = bodycalib.describe(report, cams) + f"\nSaved {out.name}."
+        for angle in ("face", "dtl"):
+            for w in cams[angle]["warnings"]:
+                text += f"\nWarning ({angle}): {w}"
+        calib_runs.finish_job(0 if report["good"] else 2, text, used)
+        print(f"3D: cameras placed from {len(used)} swing(s) ({out.name})", flush=True)
+    except ValueError as e:
+        calib_runs.finish_job(1, f"Couldn't place the cameras: {e}", used)
+    except Exception:
+        calib_runs.finish_job(1, "Couldn't place the cameras:\n" + traceback.format_exc(limit=3), used)
 
 
 def work_out_noise(summarizer: swings.Summarizer) -> dict:
@@ -1840,12 +1892,14 @@ def calib_status():
     s = calib.sessions()
     latest = s[-1] if s else None
     return {"enabled": calib.enabled(), "phones": calib.phones(), "lenses": lenses,
-            "recording": run["current"], "job": run["job"],
+            "recording": run["current"], "job": run["job"], "tripods": run["tripods"], "height": run["height"],
+            # Swings filmed from both phones since the tripods were set (for placing the cameras from them).
+            "swingsSinceTripods": swings_since_tripods(run["tripods"]),
             # The latest recording's clips: each phone's of the lens board, and both of the mat board.
             "clips": {"face": calib_clips("lens", "face"), "dtl": calib_clips("lens", "dtl"), "mat": calib_clips("mat", None)},
             # Every calibration clip still in the clips folder (any recording but the one on), for the trash.
             "leftover": calib_leftover(),
-            "session": latest and {"id": latest["id"], "created": latest["created"],
+            "session": latest and {"id": latest["id"], "created": latest["created"], "method": latest.get("method", "board"),
                                    "cameras": {k: {"position": v["position"], "rms": v.get("rms"), "warnings": v.get("warnings", [])}
                                                for k, v in latest["cameras"].items()}}}
 
@@ -1883,6 +1937,51 @@ def calib_leftover() -> list[str]:
         if calib_runs.kind_at(t) and not (cur and t >= cur["from"]):
             out.append(p.name)
     return out
+
+
+def swings_since_tripods(since: float | None) -> int:
+    """Face-on clips with a down-the-line partner since `since`, calibration clips left out."""
+    if since is None:
+        return 0
+    face = dtl = 0
+    for p in clip_paths():
+        m = SWING_NAME.match(p.name)
+        if not m or p.name in pending_trash:
+            continue
+        t = recorded_at(p)
+        if t >= since and not calib_runs.kind_at(t):
+            if (m.group(1) or "face") == "face":
+                face += 1
+            else:
+                dtl += 1
+    return min(face, dtl)
+
+
+@app.post("/api/calib/tripods")
+def calib_tripods():
+    """The tripods are set (or were moved): the swings from now on place the cameras."""
+    t = calib_runs.set_tripods()
+    print(f"3D: tripods set at {datetime.fromtimestamp(t):%H:%M:%S}", flush=True)
+    return calib_status()
+
+
+class BodyPlacement(BaseModel):
+    heightIn: float   # the golfer's height in inches
+
+
+@app.post("/api/calib/body")
+def calib_body(body: BodyPlacement):
+    """Places both phones from the swings since the tripods were set (bodycalib.py), in the swing
+    worker; poll /api/calib for the result (job kind "body")."""
+    height = body.heightIn * 0.0254
+    if not 1.2 <= height <= 2.3:
+        raise HTTPException(400, "Height should be between 48 and 90 inches")
+    try:
+        calib_runs.start_job("body", height)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    print(f"3D: placing the cameras from the swings (height {body.heightIn:g} in)", flush=True)
+    return calib_status()
 
 
 class CalibRecording(BaseModel):

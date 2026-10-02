@@ -312,9 +312,12 @@ def session_file(created: float) -> Path:
     return CALIB_DIR / "sessions" / f"{datetime.fromtimestamp(created):%Y-%m-%d_%H%M%S}.json"
 
 
-def save_session(cameras: dict, spec: board.Spec = board.MAT, created: float | None = None) -> Path:
+def save_session(cameras: dict, spec: board.Spec | None = board.MAT, created: float | None = None,
+                 extra: dict | None = None) -> Path:
+    """Saves a session: from the mat board (spec), or from the golfer's body (bodycalib.py: spec None,
+    extra = {method, report})."""
     created = time.time() if created is None else created
-    doc = {"created": created, "board": spec.to_json(), "cameras": cameras}
+    doc = {"created": created, "board": spec.to_json() if spec else None, "cameras": cameras, **(extra or {})}
     path = session_file(created)
     write_json(path, doc)
     return path

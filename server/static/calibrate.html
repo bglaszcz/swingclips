@@ -88,8 +88,29 @@
   <section id="sec-dtl"></section>
 
   <section>
-    <h2><span class="n" id="n-mat">3</span>Camera positions (mat board)</h2>
-    <div class="hint">Every session, once the tripods are in place. Do the lens of both phones first.</div>
+    <h2><span class="n" id="n-body">3</span>Camera positions (from your swings)</h2>
+    <div class="hint">Once, after the tripods are on their spots, and again only if a tripod moves. Do the lens of
+      both phones first.</div>
+    <ol>
+      <li>Set both tripods, then tap <b>Tripods are set</b>.</li>
+      <li>Hit about 10 swings as usual (any club), and wait for them to be analyzed.</li>
+      <li>Tap <b>Place the cameras</b>. It works out where each phone stands from your joints in both pictures,
+        sized by your height. Check the heights and distances it prints with a tape measure.</li>
+    </ol>
+    <div class="row">
+      <button id="tripods">Tripods are set</button>
+      <button class="primary" id="body-run">Place the cameras</button>
+      <label>Your height <input id="body-height" type="number" inputmode="decimal" placeholder="70" min="48" max="90"> in</label>
+    </div>
+    <div class="row"><span class="state" id="body-state"></span></div>
+    <div id="body-result"></div>
+  </section>
+
+  <section>
+    <details>
+    <summary><b>Or with the mat board</b> <span class="hint">(the big printed board, if placing from swings doesn't work)</span></summary>
+    <h2 style="margin-top: 12px"><span class="n" id="n-mat">3</span>Camera positions (mat board)</h2>
+    <div class="hint">Once the tripods are in place. Do the lens of both phones first.</div>
     <ol>
       <li>Lay the mat board flat with its centre on the ball spot, the <b>x arrow at the target</b> and the
         <b>y arrow away from you</b>.</li>
@@ -103,13 +124,14 @@
     </div>
     <div class="row"><span class="state" id="mat-state"></span></div>
     <div id="mat-result"></div>
+    </details>
   </section>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 const NAMES = { face: "Face-on phone", dtl: "Down-the-line phone" };
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-let state = null, status = null, note = { face: "", dtl: "", mat: "" };
+let state = null, status = null, note = { face: "", dtl: "", mat: "", body: "" };
 
 for (const [i, a] of [[1, "face"], [2, "dtl"]]) {
   $("sec-" + a).innerHTML = `
@@ -148,6 +170,15 @@ for (const a of ["face", "dtl"]) {
 }
 $("mat-start").onclick = () => post("/api/calib/record", { kind: "mat" }, "mat");
 $("mat-run").onclick = () => post("/api/calib/run", { kind: "mat", squareMm: parseFloat($("mat-mm").value) || null }, "mat");
+$("tripods").onclick = () => {
+  if (state && state.tripods && !confirm("Mark the tripods as set again? Only the swings from now on will place the cameras.")) return;
+  post("/api/calib/tripods", {}, "body");
+};
+$("body-run").onclick = () => {
+  const h = parseFloat($("body-height").value);
+  if (!(h >= 48 && h <= 90)) { note.body = "Type your height in inches first (e.g. 70 for 5 ft 10)."; render(); return; }
+  post("/api/calib/body", { heightIn: h }, "body");
+};
 $("rec-start").onclick = async () => {
   $("rec-start").disabled = true;
   try {
@@ -172,10 +203,12 @@ function renderJob(key, job) {
   if (!job) { box.innerHTML = ""; box.className = ""; return; }
   const running = job.code === null;
   const ok = job.code === 0;
-  const head = running ? "Calibrating… (a minute or two)" : ok ? (job.kind === "lens" ? "Lens calibrated: good" : "Camera positions saved")
-    : job.code === 2 ? "Not good enough: record again" : "It didn't work";
+  const head = running ? (job.kind === "body" ? "Placing the cameras… (a minute or so)" : "Calibrating… (a minute or two)")
+    : ok ? (job.kind === "lens" ? "Lens calibrated: good" : "Camera positions saved")
+    : job.code === 2 ? (job.kind === "body" ? "Saved, but the fit isn't good: check the warnings" : "Not good enough: record again")
+    : "It didn't work";
   // Every calibration clip still in the clips folder, both phones' (a clap makes both record), earlier takes too.
-  const left = state.leftover || [];
+  const left = job.kind === "body" ? [] : state.leftover || [];
   box.className = "result" + (running ? "" : ok ? " ok" : " bad");
   box.innerHTML = `<b>${esc(head)}</b><pre>${esc(job.output.trim() || "…")}</pre>` +
     (!running && left.length ? `<div class="row"><button class="small" id="${key}-trash">Move the ${left.length} calibration clip(s) to the trash</button></div>` : "");
@@ -216,7 +249,26 @@ function render() {
     const lens = phone && state.lenses.find(l => l.phone === phone);
     $("n-" + a).className = "n" + (lens && lens.good ? " ok" : "");
   }
-  $("n-mat").className = "n" + (state.session && Date.now() / 1000 - state.session.created < 12 * 3600 ? " ok" : "");
+  $("n-mat").className = "n" + (state.session && state.session.method === "board" && state.session.created >= (state.tripods || 0) ? " ok" : "");
+
+  // Placing the cameras from the swings since the tripods were set.
+  const n = state.swingsSinceTripods || 0;
+  const bodyBusy = job && job.kind === "body" && job.code === null;
+  $("tripods").textContent = state.tripods ? "Tripods moved: set again" : "Tripods are set";
+  $("tripods").disabled = busy;
+  $("body-run").disabled = busy || !state.tripods || n < 3;
+  const hIn = $("body-height");
+  if (!hIn.value && document.activeElement !== hIn && state.height) hIn.value = Math.round(state.height / 0.0254 * 10) / 10;
+  const bits = [];
+  if (state.tripods) {
+    bits.push(`Tripods set ${new Date(state.tripods * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}: ` +
+              `${n} swing(s) from both phones since${n < 10 ? ` (about 10 is best${n < 3 ? ", 3 at least" : ""})` : ""}.`);
+  } else bits.push("Not set yet.");
+  if (bodyBusy) bits.push("Working…");
+  if (note.body) bits.push(note.body);
+  $("body-state").textContent = bits.join(" ");
+  renderJob("body", job && job.kind === "body" ? job : null);
+  $("n-body").className = "n" + (state.session && state.session.method === "body" && state.session.created >= (state.tripods || 0) ? " ok" : "");
 }
 
 let timer = 0;

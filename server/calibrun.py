@@ -9,6 +9,10 @@ trends, like drill swings), and Calibrate runs calib.py on them:
 While a lens recording is on the phones keep LENS_PRE_S before the strike (status.py pre), so a
 clap or knock after waving the board saves the waving.
 
+Without the mat board, the cameras are placed from the golfer's body instead (bodycalib.py): the
+page's "Tripods are set" marks the time, and "Place the cameras from my swings" asks the swing
+worker (app.py) to work it out from the swings after it. Only when asked.
+
 calib.py runs as its own process (the same Python), one at a time; its printout is the result.
 The stretches are kept in recordings.json (in calib.CALIB_DIR), so clips stay tagged after a restart.
 """
@@ -45,12 +49,17 @@ class Runs:
         cur = doc.get("current")
         self.current: dict | None = cur if isinstance(cur, dict) and cur.get("kind") in KINDS else None
         self.periods: list[dict] = [p for p in doc.get("periods") or [] if isinstance(p, dict) and p.get("kind") in KINDS]
+        # When the tripods were last set (the 3D calibration page), and the golfer's height (m), for
+        # placing the cameras from the swings after it (bodycalib.py).
+        self.tripods: float | None = doc.get("tripods")
+        self.height: float | None = doc.get("height")
         self.job: dict | None = None
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"current": self.current, "periods": self.periods[-200:]}, indent=1), encoding="utf-8")
+        tmp.write_text(json.dumps({"current": self.current, "periods": self.periods[-200:],
+                                   "tripods": self.tripods, "height": self.height}, indent=1), encoding="utf-8")
         tmp.replace(self.path)
 
     def _end(self, until: float) -> None:
@@ -131,6 +140,36 @@ class Runs:
         threading.Thread(target=follow, daemon=True).start()
         return dict(job)
 
+    def set_tripods(self) -> float:
+        """The tripods were (re)set now: the swings after it place the cameras."""
+        with self.lock:
+            self.tripods = round(self.clock(), 3)
+            self._save()
+            return self.tripods
+
+    def start_job(self, kind: str, height: float) -> dict:
+        """A job run in the server itself (placing the cameras from the swings: the swing worker)."""
+        with self.lock:
+            if self.job and self.job["code"] is None:
+                raise ValueError("A calibration is already running")
+            if self.tripods is None:
+                raise ValueError("Tap \"Tripods are set\" first, then hit about 10 swings")
+            self.height = height
+            self._save()
+            self.job = {"kind": kind, "angle": None, "clips": [], "started": round(self.clock(), 3), "code": None,
+                        "output": "", "since": self.tripods, "height": height}
+            return dict(self.job)
+
+    def finish_job(self, code: int, output: str, clips: list[str] | None = None) -> None:
+        with self.lock:
+            if self.job:
+                self.job.update(code=code, output=output, finished=round(self.clock(), 3), clips=clips or [])
+
+    def pending_job(self, kind: str) -> dict | None:
+        with self.lock:
+            return dict(self.job) if self.job and self.job["kind"] == kind and self.job["code"] is None else None
+
     def state(self) -> dict:
         with self.lock:
-            return {"current": self.current, "job": self.job and dict(self.job)}
+            return {"current": self.current, "job": self.job and dict(self.job), "tripods": self.tripods,
+                    "height": self.height}
