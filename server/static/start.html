@@ -1101,7 +1101,7 @@ function getProgramProgress(prog, data) {
     ? SwingProgramHistory.runs(data.log, data.programs).filter(r => r.id === prog.id)
     : [];
   if (!runs.length) {
-    return { text: `New · ${prog.blocks.length} blocks`, level: "wait", currentBlockIndex: 0 };
+    return { text: `New · ${prog.blocks.length} block${prog.blocks.length === 1 ? "" : "s"}`, level: "wait", currentBlockIndex: 0 };
   }
   const lastRun = runs[0];
   const passed = (lastRun.blocks || []).filter(b => b.result === "passed");
@@ -1407,7 +1407,8 @@ async function handoverWizard(choice) {
       await programPost("/api/program", { program: progId });
     }
     const sec = $("sec-program");
-    if (sec) sec.scrollIntoView({ behavior: "smooth" });
+    // Again once the started program has drawn (it pushes the page down as it appears).
+    if (sec) { sec.scrollIntoView({ behavior: "smooth" }); setTimeout(() => sec.scrollIntoView({ block: "start" }), 800); }
   } else if (choice.type === "ball_practice") {
     const sec = $("sec-plan");
     if (sec) sec.scrollIntoView({ behavior: "smooth" });

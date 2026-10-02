@@ -53,8 +53,10 @@ function Find-App([string]$savedName, [string]$like, [string]$prefer, [string]$s
         [Environment]::GetFolderPath("Desktop"), [Environment]::GetFolderPath("CommonDesktopDirectory"))
     foreach ($place in $places) {
         if (-not $place -or -not (Test-Path -LiteralPath $place)) { continue }
-        $hit = Get-ChildItem -LiteralPath $place -Recurse -Include "$like.lnk", "$like.url" -ErrorAction SilentlyContinue |
-            Where-Object { -not ($skip -and $_.Name -like $skip) } | Select-Object -First 1
+        # (Not -Include: with -LiteralPath, PowerShell 5.1 ignores it and returns the first folder.)
+        $hit = Get-ChildItem -LiteralPath $place -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object { ($_.Name -like "$like.lnk" -or $_.Name -like "$like.url") -and -not ($skip -and $_.Name -like $skip) } |
+            Select-Object -First 1
         if ($hit) { return @{ kind = "path"; value = $hit.FullName } }
     }
     return $null

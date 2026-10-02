@@ -369,7 +369,7 @@ class ProgramsTest(unittest.TestCase):
         self.hit(shot())
         self.assertEqual(self.p.state()["program"]["waiting3d"], 1)
         # 95 seconds later: timeout
-        self.clock.t += 95
+        self.clock.t += programs.BODY3D_GIVE_UP_S + 5
         self.p.step(self.swings)
         self.assertEqual(self.p.state()["program"]["waiting3d"], 0)
         self.assertIn("Invalid read (no 3D): not counted.", self.said()[-1])

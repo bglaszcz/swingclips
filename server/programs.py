@@ -38,8 +38,10 @@ import swings
 PROGRAMS_FILE = Path(__file__).parent / "programs.json"
 # A swing with no shot this long after the strike never gets one (games.py SHOT_GIVE_UP_S).
 SHOT_GIVE_UP_S = 25.0
-# A swing with no 3D this long after the strike never gets one (down-the-line phone catchup).
-BODY3D_GIVE_UP_S = 90.0
+# A swing with no 3D this long after the strike never gets one. Long: during a session the face-on
+# phone keeps up but the down-the-line one can fall several swings behind and catch up between sets
+# (docs/performance.md), and a rep left out because the server is behind is worse than a late verdict.
+BODY3D_GIVE_UP_S = 300.0
 # Two clips of one swing are at most this far apart (app.py PAIR_SLACK_S).
 PAIR_SLACK_S = 2.0
 # The phone doesn't speak sentences older than this (practice.py SPEAK_WITHIN_S).
