@@ -132,6 +132,31 @@
   .prog-past-blocks div { display: flex; align-items: center; gap: 6px; }
   .prog-trend-box { margin: 8px 0; display: grid; gap: 4px; }
   .prog-trend-box .plan-note { font-weight: 500; color: var(--text); background: var(--panel-2); padding: 8px 10px; border-radius: 6px; margin: 0; }
+  /* ---- Session Wizard ---- */
+  .wiz-section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+  .wiz-banner { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; background: var(--panel-2); border-radius: 10px; border-left: 4px solid var(--accent); }
+  .wiz-banner-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .wiz-choices { display: grid; gap: 10px; margin-top: 12px; }
+  .wiz-choice-btn { display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; color: var(--text); font: inherit; cursor: pointer; transition: border-color 0.15s, background-color 0.15s; width: 100%; box-sizing: border-box; }
+  .wiz-choice-btn:hover, .wiz-choice-btn:focus-visible { border-color: var(--accent); background: #1d2a3d; }
+  .wiz-choice-head { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .wiz-choice-title { font-size: 17px; font-weight: 700; }
+  .wiz-choice-desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
+  .wiz-step-card { padding: 16px; background: var(--panel-2); border-radius: 10px; margin-top: 10px; }
+  .wiz-step-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .wiz-step-title { font-size: 20px; font-weight: 700; margin: 0 0 10px; }
+  .wiz-step-status { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); margin-bottom: 14px; font-size: 15px; }
+  .wiz-step-status.ok { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+  .wiz-step-status.wait { border-color: var(--warn); background: var(--warn-soft); color: var(--text); }
+  .wiz-step-icon { font-size: 20px; font-weight: 700; flex: 0 0 24px; text-align: center; }
+  .wiz-step-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+  .wiz-btn-big { font: inherit; font-size: 17px; font-weight: 700; padding: 14px 22px; border-radius: 10px; cursor: pointer; border: none; background: var(--accent); color: #0b0f14; flex: 1 1 180px; }
+  .wiz-btn-big:disabled { opacity: 0.5; cursor: default; }
+  .wiz-btn-sub { font: inherit; font-size: 14px; font-weight: 600; padding: 14px 18px; border-radius: 10px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+  .wiz-manual-fold { margin-bottom: 20px; }
+  .wiz-manual-fold summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); padding: 10px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; user-select: none; }
+  .wiz-manual-fold summary:hover { color: var(--text); border-color: var(--accent); }
+  .wiz-manual-fold[open] summary { margin-bottom: 12px; }
   @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; } }
 </style>
 <script src="/static/games.js"></script>
@@ -155,34 +180,43 @@
   <a href="/" style="margin-left: 16px">Review page →</a>
 </header>
 <main>
-  <section>
-    <h2><span class="n" id="n1">1</span>Everything connected</h2>
-    <p class="hint">Open SwingClips on both phones. Start golf opens Square's app and the Square watcher on this laptop.</p>
-    <div class="checks" id="checks"></div>
+  <section id="sec-wizard" class="wiz-section">
+    <div id="wiz-banner" hidden></div>
+    <div id="wiz-picker"></div>
+    <div id="wiz-step" hidden></div>
   </section>
 
-  <section>
-    <h2><span class="n" id="n2">2</span>Check the cameras</h2>
-    <p class="hint">Stand at the ball as if to hit. Each phone sends a picture about once a second until it starts recording.</p>
-    <div class="cams">
-      <div class="cam" id="cam-face"><div class="top"><strong>Face-on</strong><span></span></div>
-        <div class="verdict"></div><div class="pic"><div class="empty"></div><img alt="Face-on camera" hidden><canvas></canvas></div></div>
-      <div class="cam" id="cam-dtl"><div class="top"><strong>Down the line</strong><span></span></div>
-        <div class="verdict"></div><div class="pic"><div class="empty"></div><img alt="Down-the-line camera" hidden><canvas></canvas></div></div>
-    </div>
-  </section>
+  <details id="sec-manual-setup" class="wiz-manual-fold">
+    <summary>Camera pictures & hardware setup (manual controls) ▼</summary>
+    <section>
+      <h2><span class="n" id="n1">1</span>Everything connected</h2>
+      <p class="hint">Open SwingClips on both phones. Start golf opens Square's app and the Square watcher on this laptop.</p>
+      <div class="checks" id="checks"></div>
+    </section>
 
-  <section>
-    <h2><span class="n" id="n3">3</span>Record</h2>
-    <div class="go">
-      <button class="primary" id="start">Start recording</button>
-      <button id="stop">Stop</button>
-      <span class="state" id="state"></span>
-      <span class="note" id="go-note"></span>
-    </div>
-  </section>
+    <section>
+      <h2><span class="n" id="n2">2</span>Check the cameras</h2>
+      <p class="hint">Stand at the ball as if to hit. Each phone sends a picture about once a second until it starts recording.</p>
+      <div class="cams">
+        <div class="cam" id="cam-face"><div class="top"><strong>Face-on</strong><span></span></div>
+          <div class="verdict"></div><div class="pic"><div class="empty"></div><img alt="Face-on camera" hidden><canvas></canvas></div></div>
+        <div class="cam" id="cam-dtl"><div class="top"><strong>Down the line</strong><span></span></div>
+          <div class="verdict"></div><div class="pic"><div class="empty"></div><img alt="Down-the-line camera" hidden><canvas></canvas></div></div>
+      </div>
+    </section>
 
-  <section>
+    <section>
+      <h2><span class="n" id="n3">3</span>Record</h2>
+      <div class="go">
+        <button class="primary" id="start">Start recording</button>
+        <button id="stop">Stop</button>
+        <span class="state" id="state"></span>
+        <span class="note" id="go-note"></span>
+      </div>
+    </section>
+  </details>
+
+  <section id="sec-swings">
     <h2><span class="n">4</span>Swings and Square shots</h2>
     <p class="hint">Hit in Square's driving range as usual. Each swing gets its Square numbers 6-16 s after the strike.</p>
     <div class="sum" id="sum"></div>
@@ -904,12 +938,546 @@ $("prog-next").onclick = () => programPost("/api/program/next");
 $("prog-stop").onclick = () => { if (confirm("Stop the program? It's saved as it stands.")) programPost("/api/program/stop"); };
 $("prog-copy").onclick = () => copyProgramReport();
 
+// ---- Session Wizard ----
+const WIZ_STORAGE_KEY = "swingclips_session_choice";
+let wizardChoice = null;
+let wizardStepIndex = 0;
+let wizardHandedOver = false;
+let pendingStorageChoiceId = null;
+let calibStatus = null;
+let setupStatus = null;
+
+function getTodayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function loadWizardStorage() {
+  try {
+    const raw = localStorage.getItem(WIZ_STORAGE_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d && d.date === getTodayKey() && d.choiceId) {
+      pendingStorageChoiceId = d.choiceId;
+      wizardStepIndex = d.stepIndex || 0;
+      wizardHandedOver = !!d.handedOver;
+    }
+  } catch {}
+}
+
+function saveWizardStorage() {
+  try {
+    if (!wizardChoice) {
+      localStorage.removeItem(WIZ_STORAGE_KEY);
+      return;
+    }
+    const d = {
+      date: getTodayKey(),
+      choiceId: wizardChoice.id,
+      stepIndex: wizardStepIndex,
+      handedOver: wizardHandedOver
+    };
+    localStorage.setItem(WIZ_STORAGE_KEY, JSON.stringify(d));
+  } catch {}
+}
+
+function blockNeeds3d(b) {
+  if (!b || !b.gate) return false;
+  const checks = (b.gate.checks || []).concat(b.gate.medians || []);
+  return checks.some(c => ["pelvisPeakMs", "pelvisOpen", "pelvisStartMs", "armAfterPelvis", "armPeakMs"].includes(c.key));
+}
+
+function programNeeds3d(p) {
+  return (p?.blocks || []).some(b => blockNeeds3d(b));
+}
+
+function getProgramProgress(prog, data) {
+  if (!data) return { text: "Loading…", level: "wait", currentBlockIndex: 0 };
+  if (data.program && data.program.id === prog.id) {
+    const curBlock = data.program.blocks[data.program.block];
+    return {
+      text: `In progress: Block ${data.program.block + 1} (${curBlock ? curBlock.name.split(':')[0] : ""})`,
+      level: "warn",
+      inProgress: true,
+      currentBlockIndex: data.program.block
+    };
+  }
+  const runs = (typeof SwingProgramHistory !== "undefined" && data.log && data.programs)
+    ? SwingProgramHistory.runs(data.log, data.programs).filter(r => r.id === prog.id)
+    : [];
+  if (!runs.length) {
+    return { text: `New · ${prog.blocks.length} blocks`, level: "wait", currentBlockIndex: 0 };
+  }
+  const lastRun = runs[0];
+  const passed = (lastRun.blocks || []).filter(b => b.result === "passed");
+  const next = prog.blocks.find(b => {
+    const r = (lastRun.blocks || []).find(x => x.id === b.id);
+    return !r || r.result !== "passed";
+  });
+  const nextIdx = next ? prog.blocks.findIndex(b => b.id === next.id) : 0;
+  if (!next && passed.length === prog.blocks.length) {
+    return { text: "Completed: all passed", level: "ok", currentBlockIndex: prog.blocks.length - 1 };
+  }
+  if (passed.length > 0 && next) {
+    const lastPassed = passed[passed.length - 1];
+    const pName = (lastPassed.name || "").split(":")[0].trim();
+    const nName = (next.name || "").split(":")[0].trim();
+    return { text: `${pName} passed: ${nName} next`, level: "ok", currentBlockIndex: nextIdx };
+  }
+  const firstBlock = prog.blocks[0];
+  const fName = (firstBlock?.name || "").split(":")[0].trim();
+  return { text: `Not passed yet: ${fName} next`, level: "warn", currentBlockIndex: 0 };
+}
+
+function getWizardChoices() {
+  const choices = [];
+
+  // Coach programs
+  if (programState && programState.programs) {
+    for (const prog of programState.programs) {
+      const progress = getProgramProgress(prog, programState);
+      const is3d = programNeeds3d(prog);
+      choices.push({
+        id: "prog_" + prog.id,
+        type: "program",
+        programId: prog.id,
+        prog: prog,
+        title: prog.name,
+        badge: progress.text,
+        badgeLevel: progress.level,
+        desc: `${prog.cap} swings at most; ${prog.clubs}.${is3d ? " Uses 3D tracking." : ""}`,
+        blockIndex: progress.currentBlockIndex
+      });
+    }
+  }
+
+  // No-ball drills only
+  choices.push({
+    id: "noball",
+    type: "noball",
+    title: "No-ball drills only",
+    badge: "No gear needed",
+    badgeLevel: "wait",
+    desc: "No phones, no Square: just your movement and the tap checklist."
+  });
+
+  // Ball practice
+  choices.push({
+    id: "ball_practice",
+    type: "ball_practice",
+    title: "Ball practice",
+    badge: "Today's plan",
+    badgeLevel: "ok",
+    desc: "Phones + Square · warm-up, focus drill & scoring zone from your data."
+  });
+
+  // Play a game
+  choices.push({
+    id: "game",
+    type: "game",
+    title: "Play a game",
+    badge: "Combine & shaping",
+    badgeLevel: "ok",
+    desc: "Target games with strokes gained vs tour."
+  });
+
+  // Just hit balls
+  choices.push({
+    id: "hit",
+    type: "hit",
+    title: "Just hit balls",
+    badge: "Free practice",
+    badgeLevel: "wait",
+    desc: "Free hitting with launch monitor numbers and camera clips."
+  });
+
+  return choices;
+}
+
+function makeCamerasStep() {
+  return {
+    id: "cameras",
+    stepTitle: "Check the cameras",
+    checkTitle: "Both phones connected & framed",
+    check: () => {
+      const p = status?.phones || {};
+      const faceUp = !!p.face?.connected, dtlUp = !!p.dtl?.connected;
+      const faceRec = !!p.face?.recording, dtlRec = !!p.dtl?.recording;
+      const liveRec = faceRec && dtlRec;
+      const faceFramed = setupStatus?.face?.ok || liveRec;
+      const dtlFramed = setupStatus?.dtl?.ok || liveRec;
+
+      const ok = faceUp && dtlUp && faceFramed && dtlFramed;
+      let text = "";
+      if (ok) {
+        text = liveRec ? "Both phones connected and recording." : "Both phones connected and framed at the ball.";
+      } else if (!faceUp || !dtlUp) {
+        const miss = [];
+        if (!faceUp) miss.push("Face-on");
+        if (!dtlUp) miss.push("Down the line");
+        text = `Open SwingClips on: ${miss.join(" and ")}.`;
+      } else {
+        const frameMiss = [];
+        if (!faceFramed) frameMiss.push("Face-on: " + (setupStatus?.face?.text || "check camera"));
+        if (!dtlFramed) frameMiss.push("Down the line: " + (setupStatus?.dtl?.text || "check camera"));
+        text = frameMiss.join(" · ");
+      }
+      return { ok, text };
+    },
+    actionText: "Cameras look good ✓"
+  };
+}
+
+function makeCalib3dStep() {
+  return {
+    id: "calib3d",
+    stepTitle: "3D calibration",
+    checkTitle: "3D tracking calibrated",
+    check: () => {
+      const ok = !!(calibStatus && calibStatus.enabled && calibStatus.session);
+      let text = "";
+      if (ok) {
+        const sess = calibStatus.session;
+        const when = sess.created ? sess.created.slice(0, 10) : "";
+        text = `3D tracking calibrated from both cameras${when ? ' (' + when + ')' : ''}.`;
+      } else if (calibStatus && !calibStatus.enabled) {
+        text = "3D is not enabled on the server (SWINGCLIPS_3D).";
+      } else {
+        text = "No 3D calibration session found. Set tripods and calibrate.";
+      }
+      return { ok, text };
+    },
+    actionText: "3D ready ✓"
+  };
+}
+
+function makeSquareStep() {
+  return {
+    id: "square",
+    stepTitle: "Square launch monitor",
+    checkTitle: "Square paired & running",
+    check: () => {
+      const sqRow = (status?.rows || []).find(r => r.key === "square");
+      const ok = sqRow && sqRow.level === "ok";
+      let text = "";
+      if (ok) {
+        text = sqRow.text || "Square watcher and app running.";
+      } else {
+        text = sqRow ? (sqRow.text || "Square not running") : "Waiting for Square watcher heartbeat on sim laptop.";
+      }
+      return { ok, text };
+    },
+    actionText: "Square ready ✓"
+  };
+}
+
+function makeRecordingStep() {
+  return {
+    id: "record",
+    stepTitle: "Start recording",
+    checkTitle: "Recording on both phones",
+    check: () => {
+      const p = status?.phones || {};
+      const rec = (p.face?.recording ? 1 : 0) + (p.dtl?.recording ? 1 : 0);
+      const ok = rec === 2;
+      let text = "";
+      if (ok) {
+        text = "Recording active on both phones.";
+      } else if (rec === 1) {
+        text = "Recording on one phone only: starting the other…";
+      } else {
+        text = "Phones are ready. Tap Start recording to begin.";
+      }
+      return { ok, text, rec };
+    },
+    actionText: "● Start recording",
+    onAction: async () => {
+      await command("start");
+    }
+  };
+}
+
+function getStepsForChoice(choice) {
+  if (!choice) return [];
+
+  if (choice.type === "noball") {
+    return [
+      {
+        id: "noball_intro",
+        stepTitle: "No-ball drills",
+        checkTitle: "No gear needed",
+        check: () => ({ ok: true, text: "No phones, no Square: practice swings judged by feel." }),
+        actionText: "Open drill checklist →"
+      }
+    ];
+  }
+
+  if (choice.type === "program") {
+    const prog = choice.prog || (programState?.programs || []).find(p => p.id === choice.programId);
+    const blockIdx = choice.blockIndex || 0;
+    const curBlock = prog?.blocks[blockIdx] || prog?.blocks[0];
+    const isBall = curBlock ? !!curBlock.ball : true;
+    const needs3d = curBlock ? blockNeeds3d(curBlock) : (prog ? programNeeds3d(prog) : false);
+
+    if (!isBall) {
+      return [
+        {
+          id: "prog_noball",
+          stepTitle: `Block ${blockIdx + 1}: ${curBlock?.name || "Drill"}`,
+          checkTitle: "No-ball drills (judged by feel)",
+          check: () => ({ ok: true, text: `${curBlock?.how || "Practice swings judged by feel."} No phones or Square needed for this block.` }),
+          actionText: `Start ${curBlock?.name ? curBlock.name.split(':')[0] : "drill"} reps →`
+        }
+      ];
+    }
+
+    const steps = [];
+    steps.push(makeCamerasStep());
+    if (needs3d) steps.push(makeCalib3dStep());
+    steps.push(makeSquareStep());
+    steps.push(makeRecordingStep());
+    return steps;
+  }
+
+  if (choice.type === "ball_practice") {
+    return [
+      makeCamerasStep(),
+      makeSquareStep(),
+      makeRecordingStep()
+    ];
+  }
+
+  if (choice.type === "game") {
+    return [
+      makeSquareStep(),
+      makeCamerasStep(),
+      makeRecordingStep()
+    ];
+  }
+
+  if (choice.type === "hit") {
+    return [
+      makeCamerasStep(),
+      makeSquareStep(),
+      makeRecordingStep()
+    ];
+  }
+
+  return [];
+}
+
+function selectWizardChoice(choiceId) {
+  const choices = getWizardChoices();
+  const c = choices.find(x => x.id === choiceId);
+  if (!c) return;
+  wizardChoice = c;
+  wizardStepIndex = 0;
+  wizardHandedOver = false;
+  saveWizardStorage();
+  renderWizard();
+}
+
+function advanceWizardStep() {
+  const steps = getStepsForChoice(wizardChoice);
+  if (wizardStepIndex < steps.length - 1) {
+    wizardStepIndex++;
+    saveWizardStorage();
+    renderWizard();
+  } else {
+    handoverWizard(wizardChoice);
+  }
+}
+
+async function handoverWizard(choice) {
+  wizardHandedOver = true;
+  saveWizardStorage();
+  renderWizard();
+
+  if (choice.type === "program" || choice.type === "noball") {
+    const progId = choice.programId || (choice.type === "noball" ? "sequence1" : "sequence");
+    const sel = $("prog-select");
+    if (sel && sel.value !== progId) {
+      sel.value = progId;
+      renderProgram(programState);
+    }
+    if (!programState?.program || programState.program.id !== progId) {
+      await programPost("/api/program", { program: progId });
+    }
+    const sec = $("sec-program");
+    if (sec) sec.scrollIntoView({ behavior: "smooth" });
+  } else if (choice.type === "ball_practice") {
+    const sec = $("sec-plan");
+    if (sec) sec.scrollIntoView({ behavior: "smooth" });
+  } else if (choice.type === "game") {
+    const sec = $("sec-game");
+    if (sec) sec.scrollIntoView({ behavior: "smooth" });
+  } else if (choice.type === "hit") {
+    const sec = $("sec-swings") || $("swings");
+    if (sec) sec.scrollIntoView({ behavior: "smooth" });
+  }
+}
+
+function changeWizardSession() {
+  wizardChoice = null;
+  wizardStepIndex = 0;
+  wizardHandedOver = false;
+  pendingStorageChoiceId = null;
+  saveWizardStorage();
+  renderWizard();
+  const w = $("sec-wizard");
+  if (w) w.scrollIntoView({ behavior: "smooth" });
+}
+
+function renderWizard() {
+  const bannerEl = $("wiz-banner");
+  const pickerEl = $("wiz-picker");
+  const stepEl = $("wiz-step");
+  if (!bannerEl || !pickerEl || !stepEl) return;
+
+  if (pendingStorageChoiceId && !wizardChoice) {
+    const choices = getWizardChoices();
+    const c = choices.find(x => x.id === pendingStorageChoiceId);
+    if (c) {
+      wizardChoice = c;
+      pendingStorageChoiceId = null;
+    }
+  }
+
+  // 1. Handed over banner mode
+  if (wizardHandedOver && wizardChoice) {
+    bannerEl.hidden = false;
+    pickerEl.hidden = true;
+    stepEl.hidden = true;
+    bannerEl.innerHTML = `
+      <div class="wiz-banner-title">
+        <span>Today's session: <b>${esc(wizardChoice.title)}</b></span>
+        <span class="tag ${wizardChoice.badgeLevel || 'ok'}">${esc(wizardChoice.badge || 'active')}</span>
+      </div>
+      <button class="plan-btn on" id="wiz-change-btn">Change session</button>
+    `;
+    const btn = $("wiz-change-btn");
+    if (btn) btn.onclick = changeWizardSession;
+    return;
+  }
+
+  // 2. Choice picker mode
+  if (!wizardChoice) {
+    bannerEl.hidden = true;
+    pickerEl.hidden = false;
+    stepEl.hidden = true;
+    const choices = getWizardChoices();
+    pickerEl.innerHTML = `
+      <div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">What are you doing today?</div>
+      <p class="hint" style="margin: 0 0 12px;">Choose your session. We'll check what's needed and get you ready.</p>
+      <div class="wiz-choices">
+        ${choices.map(c => `
+          <button class="wiz-choice-btn" data-choice="${esc(c.id)}">
+            <div class="wiz-choice-head">
+              <span class="wiz-choice-title">${esc(c.title)}</span>
+              <span class="tag ${c.badgeLevel || 'ok'}">${esc(c.badge)}</span>
+            </div>
+            <div class="wiz-choice-desc">${esc(c.desc)}</div>
+          </button>
+        `).join("")}
+      </div>
+    `;
+    pickerEl.querySelectorAll(".wiz-choice-btn").forEach(btn => {
+      btn.onclick = () => selectWizardChoice(btn.dataset.choice);
+    });
+    return;
+  }
+
+  // 3. Step-by-step wizard mode
+  bannerEl.hidden = true;
+  pickerEl.hidden = true;
+  stepEl.hidden = false;
+
+  const steps = getStepsForChoice(wizardChoice);
+  if (!steps.length) {
+    handoverWizard(wizardChoice);
+    return;
+  }
+  if (wizardStepIndex >= steps.length) {
+    wizardStepIndex = steps.length - 1;
+  }
+  const step = steps[wizardStepIndex];
+  const checkRes = step.check ? step.check() : { ok: true, text: "" };
+  const isOk = !!checkRes.ok;
+
+  const isLast = wizardStepIndex === steps.length - 1;
+  const isRecordStep = step.id === "record";
+  const needsRecordAction = isRecordStep && !isOk;
+
+  let primaryLabel = isLast ? "Next: Start session →" : "Next →";
+  if (needsRecordAction) {
+    primaryLabel = "● Start recording";
+  } else if (!isOk && step.actionText) {
+    primaryLabel = step.actionText;
+  }
+
+  stepEl.innerHTML = `
+    <div class="wiz-step-card">
+      <div class="wiz-step-head">
+        <span>${esc(wizardChoice.title)}</span>
+        <span>Step ${wizardStepIndex + 1} of ${steps.length}</span>
+      </div>
+      <div class="wiz-step-title">${esc(step.stepTitle)}</div>
+      <div class="wiz-step-status ${isOk ? 'ok' : 'wait'}">
+        <span class="wiz-step-icon">${isOk ? '✓' : '⏳'}</span>
+        <div>
+          <b>${esc(step.checkTitle)}</b>
+          <div style="font-size: 13px; margin-top: 2px; color: ${isOk ? 'var(--text)' : 'var(--muted)'};">${esc(checkRes.text)}</div>
+        </div>
+      </div>
+      <div class="wiz-step-actions">
+        <button class="wiz-btn-big" id="wiz-btn-primary">${esc(primaryLabel)}</button>
+        ${needsRecordAction ? `<button class="plan-btn on" id="wiz-btn-override">Recording ready ✓</button>` : ''}
+        <button class="wiz-btn-sub" id="wiz-btn-back">← Back</button>
+      </div>
+    </div>
+  `;
+
+  const primaryBtn = $("wiz-btn-primary");
+  if (primaryBtn) {
+    primaryBtn.onclick = async () => {
+      if (needsRecordAction && step.onAction) {
+        primaryBtn.disabled = true;
+        await step.onAction();
+      } else {
+        advanceWizardStep();
+      }
+    };
+  }
+
+  const overrideBtn = $("wiz-btn-override");
+  if (overrideBtn) {
+    overrideBtn.onclick = () => advanceWizardStep();
+  }
+
+  const backBtn = $("wiz-btn-back");
+  if (backBtn) {
+    backBtn.onclick = () => {
+      if (wizardStepIndex > 0) {
+        wizardStepIndex--;
+        saveWizardStorage();
+        renderWizard();
+      } else {
+        wizardChoice = null;
+        wizardStepIndex = 0;
+        saveWizardStorage();
+        renderWizard();
+      }
+    };
+  }
+}
+
 let programTimer = 0;
 async function pollProgram() {
   clearTimeout(programTimer);
   const data = await getJson("/api/program");
   renderProgram(data);
   fillNotes(data);
+  renderWizard();
   programTimer = setTimeout(pollProgram, document.hidden ? 20000 : 2000);
 }
 
@@ -920,12 +1488,15 @@ async function getJson(url) {
 let statusTimer = 0, swingTimer = 0, gameTimer = 0;
 async function pollStatus() {
   clearTimeout(statusTimer);
-  const [s, setup] = await Promise.all([getJson("/api/status"), getJson("/api/setup")]);
+  const [s, setup, calib] = await Promise.all([getJson("/api/status"), getJson("/api/setup"), getJson("/api/calib")]);
   status = s;
+  setupStatus = setup;
+  calibStatus = calib;
   renderChecks(s);
   const good = ["face", "dtl"].map(a => renderCam(a, setup && setup[a], s && s.phones[a] && s.phones[a].recording));
   $("n2").className = "n" + (good.every(Boolean) ? " ok" : "");
   renderGo(s);
+  renderWizard();
   statusTimer = setTimeout(pollStatus, document.hidden ? 10000 : 1000);
 }
 async function pollSwings() {
@@ -952,6 +1523,8 @@ document.addEventListener("visibilitychange", () => {
     loadPlanData();
   }
 });
+loadWizardStorage();
+renderWizard();
 pollStatus();
 pollSwings();
 pollGame();
