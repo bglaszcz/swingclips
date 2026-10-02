@@ -41,6 +41,16 @@ CALIB_DIR = Path(os.environ.get("SWINGCLIPS_CALIB") or
 # picture's 4 x 4 grid of cells (the edges are where the distortion is).
 GOOD_RMS = 0.5
 GOOD_COVERAGE = 0.75
+# The board must be seen tilted, or the lens's focal length can't be told from the board's distance:
+# this share of the views at least GOOD_TILT degrees from facing the phone.
+GOOD_TILT = 25.0
+GOOD_TILTED_SHARE = 0.2
+# Some phones' high-speed video is processed enough that the corners sit ~2 px off the true grid
+# (the S21 at 240 fps: steady from frame to frame, so not motion). Then the RMS can't get under
+# GOOD_RMS, and good means the two halves of the recording, fitted on their own, agree: the same
+# rays land within GOOD_AGREE px of each other (90th percentile across the picture).
+NOISY_RMS = 3.0
+GOOD_AGREE = 1.5
 # Views: a frame counts with at least this many board corners; at most this many are used (spread
 # through the clips), and one is dropped after the first fit if its error is this many times the median.
 MIN_CORNERS = 12
@@ -91,10 +101,32 @@ def is_video(path: str) -> bool:
     return Path(path).suffix.lower() in (".mp4", ".mov", ".webm")
 
 
+# Some phones' high-speed video spreads white a few pixels into black ("blooming": the S21 at 240 fps),
+# filling in the markers' black bits so none of them read. When few corners are found, the markers
+# are read again on a copy with the white shrunk by these many pixels; the corners themselves are
+# still found and refined on the picture as it is.
+BLOOM_ERODE = (3, 5, 7)
+
+
 def detect(gray: np.ndarray, spec: board.Spec):
     """The board's inner corners in a picture: (pixels (n, 2) float32, corner ids (n,)), or None."""
     det = cv2.aruco.CharucoDetector(board.charuco(spec))
-    corners, ids, _, _ = det.detectBoard(gray)
+    best = _corners(det.detectBoard(gray))
+    whole = (spec.squares[0] - 1) * (spec.squares[1] - 1)
+    if best is None or len(best[1]) < 0.75 * whole:
+        markers = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(board.DICTIONARY))
+        for k in BLOOM_ERODE:
+            mc, mids, _ = markers.detectMarkers(cv2.erode(gray, np.ones((k, k), np.uint8)))
+            if mids is None or len(mids) < 2:
+                continue
+            found = _corners(det.detectBoard(gray, markerCorners=mc, markerIds=mids))
+            if found is not None and (best is None or len(found[1]) > len(best[1])):
+                best = found
+    return best
+
+
+def _corners(result):
+    corners, ids = result[0], result[1]
     if corners is None or ids is None or len(ids) < 4:
         return None
     return corners.reshape(-1, 2).astype(np.float32), ids.ravel().astype(np.int32)
@@ -133,6 +165,7 @@ def calibrate(views, size, spec: board.Spec = board.LENS) -> dict:
     if len(views) < 5:
         raise ValueError(f"the board was found in {len(views)} frame(s) with {MIN_CORNERS}+ corners: need 5 or more "
                          "(more light, slower waving, or closer)")
+    every_view = views
     views = spread(views, MAX_VIEWS)
 
     def fit(vs):
@@ -143,16 +176,42 @@ def calibrate(views, size, spec: board.Spec = board.LENS) -> dict:
         for o, i, r, t in zip(obj, img, rvecs, tvecs):
             p, _ = cv2.projectPoints(o, r, t, k, dist)
             errs.append(float(np.sqrt(np.mean(np.sum((p - i) ** 2, axis=2)))))
-        return rms, k, dist, np.array(errs)
+        # How far each view's board is turned from facing the phone (degrees).
+        tilts = [float(np.degrees(np.arccos(min(1.0, abs(cv2.Rodrigues(r)[0][2, 2]))))) for r in rvecs]
+        return rms, k, dist, np.array(errs), np.array(tilts)
 
-    rms, k, dist, errs = fit(views)
+    rms, k, dist, errs, tilts = fit(views)
     keep = errs <= max(OUTLIER * np.median(errs), GOOD_RMS)
     if keep.sum() >= 5 and not keep.all():
         views = [v for v, ok in zip(views, keep) if ok]
-        rms, k, dist, errs = fit(views)
+        rms, k, dist, errs, tilts = fit(views)
     cov = coverage(views, size)
+    tilted = float(np.mean(tilts >= GOOD_TILT))
+    # The two halves of the recording (in time), each fitted alone, against each other.
+    agree = None
+    half = len(every_view) // 2
+    if rms >= GOOD_RMS and half >= 10:
+        try:
+            a = fit(spread(every_view[:half], MAX_VIEWS // 2))
+            b = fit(spread(every_view[half:], MAX_VIEWS // 2))
+            agree = lens_disagreement(a[1], a[2], b[1], b[2], size)
+        except cv2.error:
+            agree = None
+    sharp_enough = rms < GOOD_RMS or (rms < NOISY_RMS and agree is not None and agree < GOOD_AGREE)
     return {"imageSize": list(size), "K": k.tolist(), "dist": dist.ravel().tolist(), "rms": float(rms),
-            "views": len(views), "coverage": cov, "good": bool(rms < GOOD_RMS and cov >= GOOD_COVERAGE)}
+            "views": len(views), "coverage": cov, "tilted": tilted, "maxTilt": float(tilts.max()), "agree": agree,
+            "good": bool(sharp_enough and cov >= GOOD_COVERAGE and tilted >= GOOD_TILTED_SHARE)}
+
+
+def lens_disagreement(k1, d1, k2, d2, size) -> float:
+    """How far apart two lens calibrations put the same rays: 90th percentile over the picture, px."""
+    w, h = size
+    g = np.stack(np.meshgrid(np.linspace(0.05, 0.95, 12) * w, np.linspace(0.05, 0.95, 20) * h), -1)
+    g = g.reshape(-1, 1, 2).astype(np.float64)
+    rays = cv2.undistortPoints(g, np.asarray(k1, float), np.asarray(d1, float))
+    p, _ = cv2.projectPoints(np.concatenate([rays, np.ones((len(g), 1, 1))], -1), np.zeros(3), np.zeros(3),
+                             np.asarray(k2, float), np.asarray(d2, float))
+    return float(np.percentile(np.linalg.norm(p.reshape(-1, 2) - g.reshape(-1, 2), axis=1), 90))
 
 
 def lens_views(paths, spec=board.LENS, every=4):
@@ -211,11 +270,22 @@ def write_json(path: Path, doc: dict) -> None:
 
 
 def verdict(c: dict) -> str:
+    agree = c.get("agree")
+    halves = f", the two halves of the recording agree within {agree:.1f} px" if agree is not None else ""
     if c["good"]:
-        return f"good: RMS {c['rms']:.2f} px over {c['views']} views, corners in {c['coverage']:.0%} of the picture"
+        return (f"good: RMS {c['rms']:.2f} px over {c['views']} views{halves}, corners in {c['coverage']:.0%} of "
+                f"the picture, {c.get('tilted', 1):.0%} of views tilted {GOOD_TILT:g}+ degrees")
     why = []
+    if c.get("tilted") is not None and c["tilted"] < GOOD_TILTED_SHARE:
+        why.append(f"the board was never tilted much (at most {c['maxTilt']:.0f} degrees from facing the phone): tilt it "
+                   f"30-45 degrees, top away, bottom away, left side away, right side away, holding each a moment")
     if c["rms"] >= GOOD_RMS:
-        why.append(f"RMS {c['rms']:.2f} px (want under {GOOD_RMS}): hold the board flatter and steadier, more light")
+        if agree is not None and c["rms"] < NOISY_RMS:
+            if agree >= GOOD_AGREE:
+                why.append(f"the two halves of the recording disagree by {agree:.1f} px (want under {GOOD_AGREE:g}): "
+                           "more tilted views, and record 3 or more clips")
+        else:
+            why.append(f"RMS {c['rms']:.2f} px (want under {GOOD_RMS}): hold the board flatter and steadier, more light")
     if c["coverage"] < GOOD_COVERAGE:
         why.append(f"corners only in {c['coverage']:.0%} of the picture: take the board into the corners and edges")
     return "NOT good enough: " + "; ".join(why)

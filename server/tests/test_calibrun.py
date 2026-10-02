@@ -169,5 +169,46 @@ class TripodSpotApi(unittest.TestCase):
             app.camera_setup.latest.update(saved_latest)
 
 
+class LensBoardTest(unittest.TestCase):
+    """The lens board on a phone whose video blooms (white spreading into black), and a recording
+    with the board never tilted."""
+
+    @classmethod
+    def setUpClass(cls):
+        import calib
+        cls.calib = calib
+        cls.cam = syn.session()["cameras"]["face"]
+        cls.ray = syn.rays(cls.cam)
+
+    def view(self, rng, tilt):
+        spec, (w, h) = board.LENS, board.LENS.size_mm
+        k = np.array(self.cam["K"])
+        u, v, d = rng.uniform(0.2, 0.8) * 1080, rng.uniform(0.15, 0.85) * 1920, rng.uniform(0.45, 0.8)
+        rb = cv2.Rodrigues(rng.uniform(-tilt, tilt, 3))[0]
+        tb = np.array([(u - k[0, 2]) / k[0, 0] * d, (v - k[1, 2]) / k[1, 1] * d, d]) - rb @ [w / 2000, h / 2000, 0]
+        return syn.render_board(spec, rb, tb, self.cam, self.ray, px_per_mm=8)
+
+    def test_blooming_board_still_read(self):
+        rng = np.random.default_rng(5)
+        img = self.view(rng, 0.3)
+        clean = self.calib.detect(img, board.LENS)
+        bloomed = cv2.dilate(img, np.ones((5, 5), np.uint8))       # white 2 px wider each way
+        markers = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(board.DICTIONARY))
+        _, ids, _ = markers.detectMarkers(bloomed)
+        self.assertLess(0 if ids is None else len(ids), 6)          # read as it is, the markers fail
+        got = self.calib.detect(bloomed, board.LENS)
+        self.assertIsNotNone(got)
+        self.assertGreaterEqual(len(got[1]), 0.75 * len(clean[1]))
+        common, a, b = np.intersect1d(clean[1], got[1], return_indices=True)
+        self.assertLess(np.median(np.linalg.norm(clean[0][a] - got[0][b], axis=1)), 0.5)
+
+    def test_flat_on_board_is_not_good(self):
+        rng = np.random.default_rng(6)
+        views = [v for v in (self.calib.detect(self.view(rng, 0.12), board.LENS) for _ in range(16)) if v is not None]
+        c = self.calib.calibrate(views, tuple(self.cam["imageSize"]))
+        self.assertFalse(c["good"])
+        self.assertIn("tilt", self.calib.verdict(c))
+
+
 if __name__ == "__main__":
     unittest.main()
