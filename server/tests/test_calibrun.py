@@ -64,7 +64,7 @@ class RunsTest(unittest.TestCase):
         self.assertIsNone(self.r.state()["current"])
 
 
-def lens_clip(path: Path, views: int = 14, repeat: int = 4) -> None:
+def lens_clip(path: Path, views: int = 14, repeat: int = 4, tilt: float = 0.6) -> None:
     """A clip of the lens board waved in front of a made-up phone (each view `repeat` frames)."""
     rng = np.random.default_rng(3)
     cam = syn.session()["cameras"]["face"]
@@ -75,7 +75,7 @@ def lens_clip(path: Path, views: int = 14, repeat: int = 4) -> None:
     out = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 30, size)
     for _ in range(views):
         u, v, d = rng.uniform(0.15, 0.85) * size[0], rng.uniform(0.12, 0.88) * size[1], rng.uniform(0.45, 0.8)
-        rb = cv2.Rodrigues(rng.uniform(-0.6, 0.6, 3))[0]
+        rb = cv2.Rodrigues(rng.uniform(-tilt, tilt, 3))[0]
         tb = np.array([(u - k[0, 2]) / k[0, 0] * d, (v - k[1, 2]) / k[1, 1] * d, d]) - rb @ [w / 2000, h / 2000, 0]
         img = syn.render_board(spec, rb, tb, cam, ray, px_per_mm=8)
         frame = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR) if img.ndim == 2 else img
@@ -167,6 +167,25 @@ class TripodSpotApi(unittest.TestCase):
         finally:
             app.camera_setup.latest.clear()
             app.camera_setup.latest.update(saved_latest)
+
+
+class KeepGoodLensTest(unittest.TestCase):
+    def test_a_worse_try_never_replaces_a_good_lens(self):
+        import calib
+        good_clip = TMP / "swing_face_1920x1080_240fps_1790000000_6000ms.mp4"
+        flat_clip = TMP / "swing_face_1920x1080_240fps_1790000100_6000ms.mp4"
+        lens_clip(good_clip)
+        lens_clip(flat_clip, tilt=0.1)
+        try:
+            self.assertEqual(calib.main(["lens", "--phone", "keeper", str(good_clip)]), 0)
+            out = calib.lens_file("keeper", "1920x1080_240fps")
+            before = out.read_text(encoding="utf-8")
+            self.assertEqual(calib.main(["lens", "--phone", "keeper", str(flat_clip)]), 2)
+            self.assertEqual(out.read_text(encoding="utf-8"), before)
+            self.assertTrue(list((calib.CALIB_DIR / "tries").glob("keeper-1920x1080_240fps-*.json")))
+        finally:
+            good_clip.unlink(missing_ok=True)
+            flat_clip.unlink(missing_ok=True)
 
 
 class LensBoardTest(unittest.TestCase):

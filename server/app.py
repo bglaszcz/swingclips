@@ -1952,6 +1952,8 @@ def calib_status():
             "swingsSinceTripods": swings_since_tripods(run["tripods"]),
             # The latest recording's clips: each phone's of the lens board, and both of the mat board.
             "clips": {"face": calib_clips("lens", "face"), "dtl": calib_clips("lens", "dtl"), "mat": calib_clips("mat", None)},
+            # Every lens clip of each phone still here (what Calibrate uses).
+            "lensClips": {a: len(lens_clips(a)) for a in ("face", "dtl")},
             # Every calibration clip still in the clips folder (any recording but the one on), for the trash.
             "leftover": calib_leftover(),
             "session": latest and {"id": latest["id"], "created": latest["created"], "method": latest.get("method", "board"),
@@ -1979,6 +1981,25 @@ def calib_clips(kind: str, angle: str | None) -> list[dict]:
         if t >= rec["from"] - calibrun.START_SLACK_S and t <= rec.get("until", float("inf"))                 and calib_runs.kind_at(t) == kind:
             out.append({"name": p.name, "angle": a, "t": t})
     return sorted(out, key=lambda c: c["t"])
+
+
+def lens_clips(angle: str) -> list[dict]:
+    """All clips of the lens board from the phone filming `angle`, from any lens recording of it
+    still in the clips folder (the latest mode's only), oldest first."""
+    out = []
+    for p in clip_paths():
+        m = SWING_NAME.match(p.name)
+        if not m or p.name in pending_trash or (m.group(1) or "face") != angle:
+            continue
+        t = recorded_at(p)
+        rec = calib_runs.recording_at(t)
+        if rec and rec["kind"] == "lens" and rec.get("angle") == angle:
+            out.append({"name": p.name, "angle": angle, "t": t})
+    out.sort(key=lambda c: c["t"])
+    if out:
+        mode = calib.mode_of(out[-1]["name"])
+        out = [c for c in out if calib.mode_of(c["name"]) == mode]
+    return out
 
 
 def calib_leftover() -> list[str]:
@@ -2070,7 +2091,8 @@ def calib_run(body: CalibRun):
         if body.angle not in calibrun.ANGLES:
             raise HTTPException(400, "Which phone? angle face or dtl")
         phone = re.sub(r"[^A-Za-z0-9_-]", "", body.phone or "") or calib.phones().get(body.angle) or f"{body.angle}-phone"
-        clips = [c for c in calib_clips("lens", body.angle) if c["angle"] == body.angle]
+        # Every lens recording's clips of this phone still in the clips folder: each try adds views.
+        clips = lens_clips(body.angle)
         if not clips:
             raise HTTPException(400, "No clips of the lens board from that phone yet")
         args = ["lens", "--phone", phone, "--angle", body.angle] + [str(CLIPS_DIR / c["name"]) for c in clips]

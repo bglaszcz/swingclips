@@ -145,7 +145,8 @@ for (const [i, a] of [[1, "face"], [2, "dtl"]]) {
         <b>tilt it hard</b>: 30 to 45 degrees with the top leaning away, then the bottom, the left side, the right side,
         holding each a moment. A board held flat-on to the phone can't measure the lens. Then clap (or knock hard
         on the board): the phone saves the seconds before the clap.</li>
-      <li>Do that 3 or 4 times, then tap <b>Calibrate</b>.</li>
+      <li>Do that 3 or 4 times, then tap <b>Calibrate</b>. If it isn't good yet, add a clip or two (Start, then
+        Calibrate again): the clips add up, nothing is thrown away, and a good lens is never replaced by a worse try.</li>
     </ol>
     <div class="row">
       <button id="${a}-start">Start</button>
@@ -236,10 +237,12 @@ function render() {
     const clips = (state.clips[key] || []).filter(c => key === "mat" || c.angle === key);
     $(key + "-start").textContent = on ? "Recording…" : clips.length ? "Start again" : "Start";
     $(key + "-start").disabled = on || busy;
-    $(key + "-run").disabled = busy || !clips.length || (key === "mat" && !(clips.some(c => c.angle === "face") && clips.some(c => c.angle === "dtl")));
+    const lensAll = key === "mat" ? clips.length : (state.lensClips || {})[key] || 0;
+    $(key + "-run").disabled = busy || !lensAll || (key === "mat" && !(clips.some(c => c.angle === "face") && clips.some(c => c.angle === "dtl")));
     const bits = [];
-    if (on) bits.push(key === "mat" ? "Recording: clap once." : `Recording: ${clips.length} of 3 clips so far.`);
-    else if (clips.length) bits.push(`${clips.length} clip(s) from the last recording.`);
+    if (on) bits.push(key === "mat" ? "Recording: clap once." : `Recording: ${clips.length} clip(s) this time.`);
+    if (key !== "mat" && lensAll) bits.push(`Calibrate uses all ${lensAll} lens clip(s) of this phone (each try adds to them; the trash button clears them).`);
+    else if (key === "mat" && !on && clips.length) bits.push(`${clips.length} clip(s) from the last recording.`);
     if (key === "mat" && on && clips.length) bits.push(`Face-on ${clips.some(c => c.angle === "face") ? "✓" : "–"}, down the line ${clips.some(c => c.angle === "dtl") ? "✓" : "–"}.`);
     if (note[key]) bits.push(note[key]);
     $(key + "-state").textContent = bits.join(" ");

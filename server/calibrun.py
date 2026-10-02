@@ -105,6 +105,17 @@ class Runs:
                         return p["kind"]
             return None
 
+    def recording_at(self, t: float) -> dict | None:
+        """The calibration recording on at time t ({kind, angle, from, until?}), or None."""
+        with self.lock:
+            for slack in (0, START_SLACK_S):
+                if self.current and t >= self.current["from"] - slack:
+                    return dict(self.current)
+                for p in reversed(self.periods):
+                    if p["from"] - slack <= t <= p["until"]:
+                        return dict(p)
+            return None
+
     def latest(self, kind: str, angle: str | None = None) -> dict | None:
         """The recording now on or the last one of this kind (and angle): {kind, angle, from, until?}."""
         with self.lock:

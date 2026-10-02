@@ -45,12 +45,16 @@ GOOD_COVERAGE = 0.75
 # this share of the views at least GOOD_TILT degrees from facing the phone.
 GOOD_TILT = 25.0
 GOOD_TILTED_SHARE = 0.2
-# Some phones' high-speed video is processed enough that the corners sit ~2 px off the true grid
-# (the S21 at 240 fps: steady from frame to frame, so not motion). Then the RMS can't get under
-# GOOD_RMS, and good means the two halves of the recording, fitted on their own, agree: the same
-# rays land within GOOD_AGREE px of each other (90th percentile across the picture).
+# Some phones' high-speed video is processed enough that the corners sit 1-3 px off the true grid
+# (both phones at 240 fps: steady from frame to frame, so not motion). Then the RMS can't get under
+# GOOD_RMS: the lens is fitted with fewer numbers (one distortion term, the centre in the middle,
+# square pixels: what a phone's video, distortion-corrected already, needs), and good means the
+# two halves of the recording, fitted on their own, agree: the same rays within GOOD_AGREE_PCT % of
+# the focal length (90th percentile across the picture; 1 % is ~0.6 degrees, ~2 cm at 3 m).
 NOISY_RMS = 3.0
-GOOD_AGREE = 1.5
+GOOD_AGREE_PCT = 1.0
+SIMPLE_LENS = (cv2.CALIB_FIX_K2 | cv2.CALIB_FIX_K3 | cv2.CALIB_ZERO_TANGENT_DIST | cv2.CALIB_USE_INTRINSIC_GUESS
+               | cv2.CALIB_FIX_PRINCIPAL_POINT | cv2.CALIB_FIX_ASPECT_RATIO)
 # Views: a frame counts with at least this many board corners; at most this many are used (spread
 # through the clips), and one is dropped after the first fit if its error is this many times the median.
 MIN_CORNERS = 12
@@ -168,10 +172,15 @@ def calibrate(views, size, spec: board.Spec = board.LENS) -> dict:
     every_view = views
     views = spread(views, MAX_VIEWS)
 
-    def fit(vs):
+    def fit(vs, flags=0, guess=None):
         obj = [object_points(spec, ids) for _, ids in vs]
         img = [pts.reshape(-1, 1, 2) for pts, _ in vs]
-        rms, k, dist, rvecs, tvecs = cv2.calibrateCamera(obj, img, size, None, None)
+        k0 = None
+        if flags & cv2.CALIB_USE_INTRINSIC_GUESS:
+            f = float(guess[0, 0]) if guess is not None else max(size)
+            k0 = np.array([[f, 0, size[0] / 2], [0, f, size[1] / 2], [0, 0, 1]], float)
+        rms, k, dist, rvecs, tvecs = cv2.calibrateCamera(obj, img, size, k0, None if k0 is None else np.zeros(5),
+                                                         flags=flags)
         errs = []
         for o, i, r, t in zip(obj, img, rvecs, tvecs):
             p, _ = cv2.projectPoints(o, r, t, k, dist)
@@ -185,6 +194,11 @@ def calibrate(views, size, spec: board.Spec = board.LENS) -> dict:
     if keep.sum() >= 5 and not keep.all():
         views = [v for v, ok in zip(views, keep) if ok]
         rms, k, dist, errs, tilts = fit(views)
+    model, flags = "full", 0
+    if rms >= GOOD_RMS:
+        # Noisy corners: the simple lens, which they can pin down.
+        model, flags = "simple", SIMPLE_LENS
+        rms, k, dist, errs, tilts = fit(views, flags, k)
     cov = coverage(views, size)
     tilted = float(np.mean(tilts >= GOOD_TILT))
     # The two halves of the recording (in time), each fitted alone, against each other.
@@ -192,15 +206,15 @@ def calibrate(views, size, spec: board.Spec = board.LENS) -> dict:
     half = len(every_view) // 2
     if rms >= GOOD_RMS and half >= 10:
         try:
-            a = fit(spread(every_view[:half], MAX_VIEWS // 2))
-            b = fit(spread(every_view[half:], MAX_VIEWS // 2))
-            agree = lens_disagreement(a[1], a[2], b[1], b[2], size)
+            a = fit(spread(every_view[:half], MAX_VIEWS // 2), flags, k)
+            b = fit(spread(every_view[half:], MAX_VIEWS // 2), flags, k)
+            agree = 100 * lens_disagreement(a[1], a[2], b[1], b[2], size) / float(k[0, 0])
         except cv2.error:
             agree = None
-    sharp_enough = rms < GOOD_RMS or (rms < NOISY_RMS and agree is not None and agree < GOOD_AGREE)
+    sharp_enough = rms < GOOD_RMS or (rms < NOISY_RMS and agree is not None and agree < GOOD_AGREE_PCT)
     return {"imageSize": list(size), "K": k.tolist(), "dist": dist.ravel().tolist(), "rms": float(rms),
             "views": len(views), "coverage": cov, "tilted": tilted, "maxTilt": float(tilts.max()), "agree": agree,
-            "good": bool(sharp_enough and cov >= GOOD_COVERAGE and tilted >= GOOD_TILTED_SHARE)}
+            "model": model, "good": bool(sharp_enough and cov >= GOOD_COVERAGE and tilted >= GOOD_TILTED_SHARE)}
 
 
 def lens_disagreement(k1, d1, k2, d2, size) -> float:
@@ -271,7 +285,7 @@ def write_json(path: Path, doc: dict) -> None:
 
 def verdict(c: dict) -> str:
     agree = c.get("agree")
-    halves = f", the two halves of the recording agree within {agree:.1f} px" if agree is not None else ""
+    halves = f", the two halves of the recording agree within {agree:.1f}% of the focal length" if agree is not None else ""
     if c["good"]:
         return (f"good: RMS {c['rms']:.2f} px over {c['views']} views{halves}, corners in {c['coverage']:.0%} of "
                 f"the picture, {c.get('tilted', 1):.0%} of views tilted {GOOD_TILT:g}+ degrees")
@@ -281,9 +295,9 @@ def verdict(c: dict) -> str:
                    f"30-45 degrees, top away, bottom away, left side away, right side away, holding each a moment")
     if c["rms"] >= GOOD_RMS:
         if agree is not None and c["rms"] < NOISY_RMS:
-            if agree >= GOOD_AGREE:
-                why.append(f"the two halves of the recording disagree by {agree:.1f} px (want under {GOOD_AGREE:g}): "
-                           "more tilted views, and record 3 or more clips")
+            if agree >= GOOD_AGREE_PCT:
+                why.append(f"the two halves of the recording disagree by {agree:.1f}% of the focal length (want under "
+                           f"{GOOD_AGREE_PCT:g}%): more tilted views, and another clip or two (they add to these)")
         else:
             why.append(f"RMS {c['rms']:.2f} px (want under {GOOD_RMS}): hold the board flatter and steadier, more light")
     if c["coverage"] < GOOD_COVERAGE:
@@ -450,6 +464,16 @@ def main(argv=None) -> int:
         c.update(name=f"{args.phone}-{mode}", phone=args.phone, mode=mode, board=board.LENS.to_json(),
                  clips=[Path(p).name for p in args.clips], created=time.time())
         out = lens_file(args.phone, mode)
+        try:
+            before = json.loads(out.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            before = None
+        if before and before.get("good") and not c["good"]:
+            # A good lens is never replaced by a worse try: that one is kept aside to look at.
+            kept = out
+            out = CALIB_DIR / "tries" / f"{out.stem}-{datetime.now():%Y%m%d_%H%M%S}.json"
+            print(f"Kept the good calibration from {datetime.fromtimestamp(before.get('created', 0)):%b %d %H:%M} "
+                  f"({kept.name}); this try is saved aside.")
         write_json(out, c)
         if args.angle:
             ph = phones()
