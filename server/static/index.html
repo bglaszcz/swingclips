@@ -854,6 +854,9 @@
     <span class="menu">
       <button class="tab menu-btn" id="tools-btn" title="Tools for testing the setup and the tracking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>Tools</span></button>
       <span class="menu-pop right" hidden>
+        <button class="small" data-page="/start" title="The session start page: checks, both cameras, Start / Stop recording, coach program, plan and games">Start a session</button>
+        <button class="small" data-page="/tripods" title="Find the tripod spots: live pictures, framing meters, level and alignment-stick tools, saved spots">Tripod setup</button>
+        <button class="small" data-page="/calibrate" title="3D from both phones: the lens board per phone, then place the cameras from your swings">3D calibration</button>
         <button id="labels-btn" class="small" title="Hand labels for the scorecard: what's done, what to check, what to label next">Labels</button>
         <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button>
         <button id="help-menu-btn" class="small" title="Keyboard shortcuts and what the page shows">Shortcuts &amp; help <kbd>?</kbd></button>
@@ -3188,6 +3191,8 @@ function toggleHelp() {
 }
 document.getElementById("help-btn").onclick = toggleHelp;
 document.getElementById("help-menu-btn").onclick = toggleHelp;
+// The Tools menu's other pages (the Start, Tripod setup and 3D calibration pages).
+for (const b of document.querySelectorAll("[data-page]")) b.onclick = () => { location.href = b.dataset.page; };
 document.getElementById("help-close").onclick = () => helpDlg.close();
 helpDlg.addEventListener("click", e => { if (e.target === helpDlg) helpDlg.close(); });
 

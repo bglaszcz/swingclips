@@ -60,7 +60,7 @@ plan", "Plan steps", "Drill mode").
   **Down the line**: behind the golfer on the target line (through the hands or the
   ball), at about hand height, also portrait. In the app's **Settings**, set one to **Face-on** and
   the other to **Down the line**; the server address is `http://192.168.86.250:8000`.
-- **Finding the spots**: the **Tripod setup** page (`/tripods`, linked from the Start page) shows
+- **Finding the spots**: the **Tripod setup** page (review page **Tools** menu, or the Start page) shows
   what each phone sees (the setup stills, while not recording) with a grid, your outline, and
   meters for size, room above and below, and centring. Its line tools check the phone is level
   side to side (tap an upright edge) and that the tripod is on an alignment stick's line (a stick
