@@ -6,16 +6,20 @@
 //  - pelvis: the line from the trail hip to the lead hip. Rotation is its heading about the vertical,
 //    side bend its slope (lead hip higher +). Its forward tilt needs points on the front and back of
 //    the pelvis, which the body models don't have, so there is none.
-//  - thorax: spine from mid-hips to mid-shoulders, and the shoulder line square to it. Its
-//    orientation as three angles in turn: rotation about the vertical, then forward bend toward the
-//    ball about the shoulder line, then side bend (lead shoulder higher +).
+//  - thorax: spine from mid-hips to mid-shoulders, and the shoulder line square to it. Rotation is
+//    the shoulder line's heading about the vertical, as for the pelvis (on the first real swings the
+//    rotation of a Ry Rx Rz split of the thorax came out 46-108 degrees at the top on back-to-back
+//    7 irons, swapping with the bend; the shoulder line's heading gave 85-115). Forward bend toward
+//    the ball and side bend (lead shoulder higher +) come from that split: Ry(heading) Rx(bend) Rz(side).
 // Signs as in metrics.js: rotation + = closed (going back), - = open; sway + toward the target,
 // thrust + toward the ball, lift + up, in inches from address.
 //
 // Speeds (degrees per second): pelvis and thorax the rate of their rotation toward the target; the
 // lead arm (shoulder to wrist) and the club (hands to clubhead) how fast their direction turns. The
-// kinematic sequence is when each peaks in the downswing: pelvis, thorax, arm, club is the textbook
-// order, each faster than the last.
+// kinematic sequence is when each peaks from the top to AFTER_IMPACT: pelvis, thorax, arm, club is
+// the textbook order, each faster than the last. A pelvis or thorax that peaks after impact turned
+// late: the arms led the downswing (bodyLate; the first real session: every swing, hips square at
+// impact, which the golfer confirmed on the video).
 //
 // Works in the browser (window.SwingMetrics3D) and in Node / the server's V8 (module.exports).
 (function (root) {
@@ -24,8 +28,16 @@
               L_INDEX: 19, R_INDEX: 20, L_HIP: 23, R_HIP: 24 };
   // Speeds are measured over +-SPEED_SECONDS (240 fps frames are too close for a difference).
   const SPEED_SECONDS = 1 / 120;
-  // The downswing for the sequence: from the top to a little after impact.
-  const AFTER_IMPACT = 0.03;
+  // The downswing for the sequence: from the top to this long after impact (s), per segment. The arm and
+  // club peak by impact (after it, the release and follow-through outrun the downswing); the pelvis
+  // and thorax get longer: at 0.03 those of the first real swings "peaked" right at the edge, still
+  // speeding up.
+  const AFTER_IMPACT = { pelvis: 0.12, thorax: 0.12, arm: 0.03, club: 0.03 };
+  // The thorax track can jump at the top, where the arms cross the shoulders down the line (first real
+  // swings: 30-45 degrees within 50 ms before the club reached the top). A jump of more than
+  // THORAX_JUMP degrees within JUMP_SECONDS from P3 to the top (P4; the chest turns slowly there, unlike
+  // in the downswing) marks its speed unreliable, and its top turn is the most closed one there.
+  const THORAX_JUMP = 25, JUMP_SECONDS = 0.05;
   // Hands to clubhead is the club's length less the grip above the hands (inches), and counts as
   // agreeing within CLUB_TOLERANCE of it.
   const GRIP_ABOVE_HANDS = 4.5, CLUB_TOLERANCE = 0.1;
@@ -60,8 +72,9 @@
       const x = y && unit(sub(l, scale(y, dot(l, y))));
       if (x) {
         const z = cross(x, y);
-        // R = [x y z] as columns = Ry(heading) Rx(bend) Rz(side bend).
-        out.thoraxHeading = Math.atan2(z[0], z[2]) * DEG;
+        // R = [x y z] as columns = Ry(heading) Rx(bend) Rz(side bend); the rotation itself is the
+        // shoulder line's heading, as for the pelvis.
+        out.thoraxHeading = Math.atan2(-l[2], l[0]) * DEG;
         out.thoraxBend = Math.asin(Math.max(-1, Math.min(1, -z[1]))) * DEG;
         out.thoraxSideBend = Math.atan2(x[1], y[1]) * DEG;
       }
@@ -174,6 +187,22 @@
       return r;
     });
 
+    // The thorax's top: the most closed turn from P3 to P4 (the track can jump there), and whether it jumped.
+    let thoraxTop = null, thoraxJump = null;
+    const p3 = find("p3");
+    if (p3 && p4) {
+      for (const v of values) if (v.t >= p3.t && v.t <= p4.t && v.thoraxTurn != null && (!thoraxTop || v.thoraxTurn > thoraxTop.thoraxTurn)) thoraxTop = v;
+      const end = p4.t;
+      thoraxJump = 0;
+      values.forEach((v, i) => {
+        if (v.t < p3.t || v.t > end || v.thoraxTurn == null) return;
+        for (let j = i + 1; j < values.length && values[j].t - v.t <= JUMP_SECONDS; j++) {
+          if (values[j].thoraxTurn != null) thoraxJump = Math.max(thoraxJump, Math.abs(values[j].thoraxTurn - v.thoraxTurn));
+        }
+      });
+    }
+    const thoraxShaky = thoraxJump != null && thoraxJump > THORAX_JUMP;
+
     // Kinematic sequence: each segment's fastest moment between the top and just after impact.
     let sequence = null;
     if (p4 && p7) {
@@ -182,20 +211,27 @@
         let best = -1;
         values.forEach((v, i) => {
           const s = v[key + "Speed"];
-          if (s == null || v.t < p4.t || v.t > p7.t + AFTER_IMPACT) return;
+          if (s == null || v.t < p4.t || v.t > p7.t + AFTER_IMPACT[key]) return;
           if (best < 0 || s > values[best][key + "Speed"]) best = i;
         });
         if (best >= 0) segs.push({ key, label, peak: values[best][key + "Speed"], t: values[best].t,
-                                   beforeImpact: (p7.t - values[best].t) * 1000 });
+                                   beforeImpact: (p7.t - values[best].t) * 1000, afterImpact: values[best].t > p7.t,
+                                   unreliable: key === "thorax" && thoraxShaky });
       }
-      const order = segs.slice().sort((a, b) => a.t - b.t).map(s => s.key);
-      const want = SEGMENTS.map(s => s[0]).filter(k => segs.some(s => s.key === k));
+      const sure = segs.filter(s => !s.unreliable);
+      const order = sure.slice().sort((a, b) => a.t - b.t).map(s => s.key);
+      const want = SEGMENTS.map(s => s[0]).filter(k => sure.some(s => s.key === k));
       const byKey = Object.fromEntries(segs.map(s => [s.key, s]));
       sequence = {
         segments: segs, order,
         inOrder: order.join() === want.join(),
         // Each faster than the one before it (the "speed gain" down the chain).
         gains: want.slice(1).map((k, i) => ({ from: want[i], to: k, ratio: byKey[k].peak / byKey[want[i]].peak })),
+        // The body turned late: the pelvis or thorax at its fastest only after the ball was gone.
+        bodyLate: ["pelvis", "thorax"].some(k => byKey[k] && byKey[k].afterImpact && !byKey[k].unreliable),
+        thoraxJump,
+        // The lead arm at its fastest before the pelvis.
+        armsFirst: !!(byKey.arm && byKey.pelvis && byKey.arm.t < byKey.pelvis.t),
       };
     }
 
@@ -210,7 +246,7 @@
                     diffPct: expected ? 100 * (measured - expected) / expected : null,
                     ok: expected ? Math.abs(measured - expected) <= CLUB_TOLERANCE * expected : null };
     }
-    return { values, address: ai, sequence, clubCheck };
+    return { values, address: ai, sequence, clubCheck, thoraxTop };
   }
 
   /** The numbers at key positions: {p1: values, p4: ..., p6, p7} (nearest 3D frame to each). */
@@ -235,6 +271,8 @@
     ["pelvisSwayTop", "p4", "pelvisSway"], ["pelvisSwayImpact", "p7", "pelvisSway"],
     ["pelvisThrustImpact", "p7", "pelvisThrust"], ["pelvisLiftImpact", "p7", "pelvisLift"],
     ["thoraxSwayImpact", "p7", "thoraxSway"],
+    // Open at impact, + = open (the turn's sign flipped): good players' hips are ~30-45 open.
+    ["pelvisOpenImpact", "p7", "pelvisTurn", -1], ["thoraxOpenImpact", "p7", "thoraxTurn", -1],
   ];
 
   /**
@@ -248,10 +286,15 @@
     const r = compute(doc, a.positions, leadSide, club);
     if (!r) return null;
     const at = atPositions(r, doc, a.positions);
+    // The thorax's top turn and its separation from the pelvis there: the most closed from P3 to P4.
+    if (at.p4 && r.thoraxTop) {
+      at.p4 = Object.assign({}, at.p4, { thoraxTurn: r.thoraxTop.thoraxTurn,
+        separation: at.p4.pelvisTurn != null ? r.thoraxTop.thoraxTurn - at.p4.pelvisTurn : at.p4.separation });
+    }
     const numbers = {};
-    for (const [key, pos, value] of SUMMARY) {
+    for (const [key, pos, value, sign = 1] of SUMMARY) {
       const v = at[pos] && at[pos][value];
-      numbers[key] = typeof v === "number" && Number.isFinite(v) ? v : null;
+      numbers[key] = typeof v === "number" && Number.isFinite(v) ? sign * v : null;
     }
     return { numbers, sequence: r.sequence, clubCheck: r.clubCheck, reprojection: doc.reprojection,
              boneSpreadPct: doc.boneSpreadPct };

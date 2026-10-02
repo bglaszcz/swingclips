@@ -129,7 +129,7 @@
     const p4 = positions.find(p => p.key === "p4"), p7 = positions.find(p => p.key === "p7");
     const wrap = el("div", { class: "seq" });
     if (!p4 || !p7 || !result.sequence) return wrap;
-    const t0 = p4.t - 0.05, t1 = p7.t + 0.06;
+    const t0 = p4.t - 0.05, t1 = p7.t + 0.14;
     const rows = result.values.filter(v => v.t >= t0 && v.t <= t1);
     const W = 560, H = 220, L = 70, R = 10, T = 10, B = 30;
     let top = 0;
@@ -168,7 +168,7 @@
     for (const s of result.sequence.segments) {
       const item = el("span");
       item.append(el("i", { style: `background:${COLORS[s.key]}` }),
-                  `${s.label}: ${Math.round(s.peak)}°/s, ${Math.round(s.beforeImpact)} ms before impact`);
+                  `${s.label}: ${Math.round(s.peak)}°/s, ${Math.round(Math.abs(s.beforeImpact))} ms ${s.afterImpact ? "after" : "before"} impact`);
       legend.append(item);
     }
     wrap.append(legend);
@@ -176,6 +176,16 @@
     wrap.append(el("div", { class: "note" }, result.sequence.inOrder
       ? `In order: ${order.join(", then ")} (the textbook sequence).`
       : `Out of order: ${order.join(", then ")}. The textbook order is pelvis, thorax, arm, club.`));
+    if (result.sequence.segments.some(s => s.unreliable)) {
+      wrap.append(el("div", { class: "note" }, `The thorax track jumped ${Math.round(result.sequence.thoraxJump)}° at the `
+        + "top (the arms cross the shoulders down the line), so its speed is left out of the order."));
+    }
+    if (result.sequence.bodyLate) {
+      const late = result.sequence.segments.filter(s => (s.key === "pelvis" || s.key === "thorax") && s.afterImpact)
+        .map(s => s.label.toLowerCase());
+      wrap.append(el("div", { class: "note" }, `The ${late.join(" and ")} reached top speed only after impact: the body `
+        + "turned late and the arms led the downswing. In a good sequence the pelvis peaks first, well before impact."));
+    }
     return wrap;
   }
 
@@ -197,6 +207,11 @@
       `Calibration ${doc.session}. Reprojection error (median) face-on ${r.face ? r.face.median : "--"} px, `
       + `down the line ${r.dtl ? r.dtl.median : "--"} px; bone lengths varied ${doc.boneSpreadPct ?? "--"}% before the `
       + `filter; synced ${((doc.offset - doc.offsetImpact) * 1000).toFixed(1)} ms from the impact frames. Drag the figure to turn it.`);
+    const impact = SwingMetrics3D.atPositions(result, doc, opts.positions).p7;
+    const open = el("div", { class: "note" }, impact && impact.pelvisTurn != null
+      ? `At impact: hips ${Math.abs(impact.pelvisTurn).toFixed(0)}° ${impact.pelvisTurn <= 0 ? "open" : "closed"}`
+        + (impact.thoraxTurn != null ? `, shoulders ${Math.abs(impact.thoraxTurn).toFixed(0)}° ${impact.thoraxTurn <= 0 ? "open" : "closed"}` : "")
+        + " (good players' hips are about 30-45° open)." : "");
     const canvas = el("canvas", { class: "fig3d", "aria-label": "3D stick figure; drag to turn" });
     const grid = el("div", { class: "grid3d" });
     grid.append(canvas);
@@ -207,7 +222,7 @@
       "Turn + = closed (going back), - = open; side bend + = lead side higher; forward bend toward the ball; "
       + "sway + toward the target, thrust + toward the ball, lift + up, from address. The 2D numbers in brackets are "
       + "the face-on estimates. The pelvis has no forward tilt: that needs points on the front and back of it.");
-    const children = [head, info, grid, notes, el("strong", {}, "Kinematic sequence"), sequenceChart(result, opts.positions)];
+    const children = [head, info, open, grid, notes, el("strong", {}, "Kinematic sequence"), sequenceChart(result, opts.positions)];
     const cc = result.clubCheck;
     if (cc) {
       children.push(el("div", { class: "note" }, cc.expected
