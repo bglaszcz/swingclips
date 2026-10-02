@@ -22,6 +22,7 @@ sys.path[:0] = [str(HERE.parent), str(HERE)]
 
 import board  # noqa: E402
 import calib  # noqa: E402
+import swing3d  # noqa: E402
 import swings  # noqa: E402
 import synthetic3d as syn  # noqa: E402
 import tri  # noqa: E402
@@ -333,19 +334,28 @@ class SwingWorkerTest(unittest.TestCase):
 
     def test_camera_moved(self):
         _, face, dtl = render_swing(seed=8)
-        first, _ = self.add_swing(1789000000, face, dtl)
-        # The same swing again later, with the face-on camera moved: the golfer is further left.
+        face["ball"], dtl["ball"] = {"x": 0.5, "y": 0.86, "r": 0.008}, {"x": 0.5, "y": 0.74, "r": 0.006}
+        firsts = [self.add_swing(1789000000 + 20 * i, face, dtl)[0] for i in range(3)]
+        # The same swing again later, with the face-on camera turned: the golfer and the ball further
+        # left. The 3D fit takes most of a sideways turn up; the ball's place shows it.
         shifted = json.loads(json.dumps(face))
         for f in shifted["frames"]:
             for i in range(0, 99, 3):
                 f["lm"][i] -= 0.08
+        shifted["ball"] = dict(face["ball"], x=0.42)
         later, _ = self.add_swing(1789000100, shifted, dtl)
         self.session(1788999000)
         clips = self.records()
         self.app.pass_3d(clips, self.js, mock.Mock(is_set=lambda: False))
-        self.assertIsNone(self.app.swing_records[first]["why3d"])
-        self.assertIn("face-on camera moved", self.app.swing_records[later]["why3d"])
+        for first in firsts:
+            self.assertIsNone(self.app.swing_records[first]["why3d"])
+        self.assertIn("face-on camera seems to have moved", self.app.swing_records[later]["why3d"])
         self.assertFalse(self.app.file_3d(later).exists())
+
+    def test_moved_from_the_fit(self):
+        doc = {"reprojection": {"address": {"median": 9.0}}}
+        self.assertIn("camera seems to have moved", swing3d.moved(doc, {"id": "s"}))
+        self.assertIsNone(swing3d.moved({"reprojection": {"address": {"median": 1.2}}}, {"id": "s"}))
 
     def test_scorecard(self):
         """Labels on both angles (the true joints): the 3D joints put back into each view land on them."""

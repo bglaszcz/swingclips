@@ -738,8 +738,26 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
     with records_lock:
         records = dict(swing_records)
     times = {n: recorded_at(CLIPS_DIR / n) for n in both}
-    moved = lambda a, b: summarizer.call("cameraMoved", a, b)
     shots = None
+    refs: dict[str, dict | None] = {}
+
+    def ball_of(name: str) -> dict | None:
+        try:
+            return swing3d.read_pose(pose_file(name)).get("ball")
+        except (OSError, ValueError):
+            return None
+
+    def ball_ref(session: dict) -> dict | None:
+        """Where the ball was in each picture on the first swings after this calibration."""
+        if session["id"] not in refs:
+            after = sorted((n for n in both if times[n] >= session["created"]), key=lambda n: times[n])
+            balls = []
+            for n in after:
+                balls.append((ball_of(n), ball_of(both[n]["partner"])))
+                if sum(1 for f, d in balls if f and d) >= swing3d.BALL_SWINGS:
+                    break
+            refs[session["id"]] = swing3d.ball_reference(balls)
+        return refs[session["id"]]
     made = 0
     for name, c in sorted(both.items(), key=lambda kv: times[kv[0]]):
         if stop.is_set():
@@ -747,7 +765,7 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
         rec = records.get(name)
         if not rec or rec.get("code") != swings_code or "error" in rec:
             continue  # its 2D numbers (and framing) first
-        session, why = swing3d.session_for(name, times, records, all_sessions, moved)
+        session, why = swing3d.session_for(name, times, all_sessions)
         if session is not None:
             modes = {session["cameras"][k].get("mode") for k in ("face", "dtl")}
             if calib.mode_of(name) != session["cameras"]["face"].get("mode") or \
@@ -771,8 +789,15 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
                     swings.pose_input(c, pose_file(name)), swings.pose_input(other, pose_file(other["name"])),
                     swing3d.read_pose(pose_file(name)), swing3d.read_pose(pose_file(other["name"])),
                     session, summarizer, shot.get("club"), swings.LEAD_SIDE)
-                swing3d.save(file_3d(name), doc)
-                rec["body3d"] = numbers
+                why_not = swing3d.moved(doc, session) or swing3d.ball_moved(
+                    ball_ref(session), swing3d.read_pose(pose_file(name)).get("ball"),
+                    swing3d.read_pose(pose_file(other["name"])).get("ball"))
+                if why_not:
+                    rec["why3d"] = why_not
+                    file_3d(name).unlink(missing_ok=True)
+                else:
+                    swing3d.save(file_3d(name), doc)
+                    rec["body3d"] = numbers
             except FileNotFoundError:
                 continue
             except Exception:
@@ -1959,6 +1984,15 @@ def calib_status():
             "session": latest and {"id": latest["id"], "created": latest["created"], "method": latest.get("method", "board"),
                                    "cameras": {k: {"position": v["position"], "rms": v.get("rms"), "warnings": v.get("warnings", [])}
                                                for k, v in latest["cameras"].items()}}}
+
+
+@app.get("/api/calib/session")
+def calib_session_file():
+    """The latest calibration session in full (each camera's lens and place), for checking the 3D."""
+    s = calib.sessions()
+    if not s:
+        raise HTTPException(404, "No calibration session yet")
+    return s[-1]
 
 
 # ---- The 3D calibration page (static/calibrate.html, calibrun.py): record the boards, run calib.py ----

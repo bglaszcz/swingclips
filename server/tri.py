@@ -21,21 +21,31 @@ lengths varied before it. Output: <face clip>.3d.json beside the pose files (app
 """
 import numpy as np
 
-VERSION = 1
+VERSION = 2
 # The 33 MediaPipe landmarks, and the clubhead when both pose files have it (the club model's).
 JOINTS = 33
-# Bones kept at one length: (name, a, b), MediaPipe indices. Not shoulder to hip: the trunk bends
-# and twists, so that distance really changes through the swing.
+# The joints both phones see as the same point: shoulders, elbows, wrists, hips, knees, ankles. The
+# head, hand and foot points are placed differently from the front and from the side (on the first
+# real swings the nose and ears missed between the views by 14-35 px, the toes 7-21, against 1-3 for
+# the hips and knees), so they are triangulated for the stick figure but weigh less in the filter
+# (OTHER_WEIGHT) and are left out of the fit numbers.
+CORE = (11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28)
+OTHER_WEIGHT = 0.3
+# Bones kept at one length: (name, a, b), MediaPipe indices, between core joints. Not shoulder to
+# hip: the trunk bends and twists, so that distance really changes through the swing.
 BONES = [
     ("shoulders", 11, 12), ("hips", 23, 24),
     ("lead upper arm", 11, 13), ("trail upper arm", 12, 14), ("lead forearm", 13, 15), ("trail forearm", 14, 16),
-    ("lead hand", 15, 19), ("trail hand", 16, 20),
     ("lead thigh", 23, 25), ("trail thigh", 24, 26), ("lead shin", 25, 27), ("trail shin", 26, 28),
-    ("lead heel", 27, 29), ("trail heel", 28, 30), ("lead foot", 27, 31), ("trail foot", 28, 32),
-    ("ears", 7, 8),
 ]
-# Joints whose triangulation sets the sub-frame sync: they move fastest in the downswing.
-SYNC_JOINTS = (13, 14, 15, 16)
+# A point that misses its ray by more than this (px, in either view) in a frame is dropped there: the
+# filter fills it from the frames around it (the trail elbow hidden behind the body down the line).
+OUTLIER_PX = 15.0
+# Address for the fit at address (s before the face-on impact): the camera-moved check (swing3d.py).
+ADDRESS_BEFORE_IMPACT = 1.1
+# Joints whose triangulation sets the sub-frame sync: they move fastest in the downswing. Not the
+# trail elbow: down the line it's behind the body then (it missed by 30+ px on the first real swings).
+SYNC_JOINTS = (13, 15, 16)
 SYNC_WINDOW = (-0.25, 0.05)        # seconds around impact (face-on clip)
 SYNC_SEARCH = 1.5                  # frames either way
 SYNC_STEP = 0.00025                # seconds
@@ -373,6 +383,12 @@ def swing(face_pose: dict, dtl_pose: dict, session: dict, offset: float, face_im
     err = reprojection(cams, Y, pxs, wts)                          # (2, n, J)
     worst = np.nanmax(np.nan_to_num(err, nan=0.0), axis=0)
     c = np.where(np.isfinite(Y[..., 0]), np.minimum(wts[0], wts[1]) / (1 + (worst / REPROJ_SCALE) ** 2), 0.0)
+    c[worst > OUTLIER_PX] = 0.0
+    other = np.ones(c.shape[1], bool)
+    other[list(CORE)] = False
+    other[JOINTS:] = False
+    c[:, other] *= OTHER_WEIGHT
+    core = list(CORE)
 
     body = slice(0, JOINTS)
     Xb, L = filter_swing(t, Y[:, body], c[:, body])
@@ -381,6 +397,7 @@ def swing(face_pose: dict, dtl_pose: dict, session: dict, offset: float, face_im
         Xc, _ = filter_swing(t, Y[:, JOINTS:], c[:, JOINTS:], hz=CLUB_SMOOTH_HZ, bones=False)
     mask = coverage_mask(t, c)
     after = reprojection(cams, np.where(mask[:, body, None], Xb, np.nan), pxs[:, :, body], wts[:, :, body])
+    at_address = (t <= face_impact - ADDRESS_BEFORE_IMPACT) if face_impact is not None else (t <= t[0] + 0.4)
 
     bones = {}
     for (name, a, b), length in zip(BONES, L):
@@ -411,8 +428,11 @@ def swing(face_pose: dict, dtl_pose: dict, session: dict, offset: float, face_im
         "syncError": {"atImpactOffset": None if at is None else round(at, 2),
                       "atBest": round(min(tried.values()), 2) if tried else None},
         "axes": "metres; x toward the target, y up, z toward the golfer's front; origin at the ball",
-        "reprojection": {"face": stats(err[0][:, body]), "dtl": stats(err[1][:, body]),
-                         "filteredFace": stats(after[0]), "filteredDtl": stats(after[1])},
+        # The core joints only (CORE); "address": both views, before the swing starts.
+        "reprojection": {"face": stats(err[0][:, core]), "dtl": stats(err[1][:, core]),
+                         "filteredFace": stats(after[0][:, core]), "filteredDtl": stats(after[1][:, core]),
+                         "address": stats(err[:, at_address][:, :, core]),
+                         "dropped": round(float(np.mean(worst[:, core] > OUTLIER_PX)), 3)},
         "bones": bones,
         "boneSpreadPct": round(float(np.median(spreads)), 1) if spreads else None,
         "cameras": {k: {"position": session["cameras"][k]["position"]} for k in ("face", "dtl")},
