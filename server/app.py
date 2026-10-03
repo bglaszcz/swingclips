@@ -26,6 +26,7 @@ import gzip
 import json
 import collections
 import logging
+import multiprocessing
 import os
 import re
 import threading
@@ -61,6 +62,7 @@ import status
 import swing3d
 import swings
 import tri
+import update
 
 CLIPS_DIR = Path(os.environ.get("SWINGCLIPS_CLIPS", r"D:\SwingClips\clips"))
 POSE_DIR = Path(os.environ.get("SWINGCLIPS_POSE", CLIPS_DIR.parent / "pose"))
@@ -2323,6 +2325,66 @@ def relay_command(body: RelayCommand):
     return {"ok": True, "result": res}
 
 
+@app.get("/api/relay/files")
+def relay_files():
+    """The sim laptop's scripts and their SHA-256: relay/golf-launcher.ps1 fetches the ones that differ."""
+    return {"files": update.relay_files()}
+
+
+@app.get("/api/relay/files/{name}")
+def relay_file(name: str):
+    path = update.relay_file(name)
+    if path is None:
+        raise HTTPException(404, "No such relay script")
+    return FileResponse(path, media_type="application/octet-stream")
+
+
+# Tools > Update the server (static/update.js): what's new, then a fast-forward pull, then a restart
+# when the change needs one (update.py says which). The restart is the server exiting with
+# update.RESTART_EXIT; "Start server.cmd" runs it again.
+restart_requested = threading.Event()
+uvicorn_server = None
+
+
+@app.get("/api/update")
+def update_check():
+    try:
+        got = update.check()
+    except update.GitError as e:
+        raise HTTPException(502, str(e))
+    got["session"] = session_on()
+    return got
+
+
+@app.post("/api/update")
+def update_now(restart: bool = True):
+    try:
+        got = update.pull()
+    except update.GitError as e:
+        raise HTTPException(409, str(e))
+    got["restarting"] = restart and got["restart"] == "auto"
+    print(f"Update: {got['from']} -> {got['to']}, {len(got['files'])} files, restart {got['restart']}"
+          + (" (restarting)" if got["restarting"] else ""), flush=True)
+    if got["restarting"]:
+        threading.Timer(1.0, restart_server).start()  # after this answer has gone
+    return got
+
+
+@app.post("/api/restart")
+def restart_now():
+    """Restart without updating (e.g. after an update that was pulled with restart=false)."""
+    if uvicorn_server is None:
+        raise HTTPException(409, "This server wasn't started by app.py, so it can't restart itself")
+    threading.Timer(1.0, restart_server).start()
+    return {"restarting": True}
+
+
+def restart_server():
+    restart_requested.set()
+    if uvicorn_server is not None:
+        uvicorn_server.should_exit = True
+
+
 @app.get("/api/status")
 def get_status():
     """The Ready panel (static/status.js): phones, Square, framing, the first swing's check, the pose queue."""
@@ -2445,4 +2507,11 @@ if __name__ == "__main__":
     logging.getLogger("uvicorn.access").addFilter(QuietPolling())
     logging.getLogger("uvicorn.error").addFilter(QuietShutdown())
     # Ctrl+C: don't wait on open browser connections (a review page or a video keeps one open).
-    uvicorn.run(app, host="0.0.0.0", port=PORT, timeout_graceful_shutdown=2)
+    uvicorn_server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=PORT, timeout_graceful_shutdown=2))
+    uvicorn_server.run()
+    if restart_requested.is_set():
+        # A clip being analyzed is analyzed again after the restart: don't wait for it.
+        for child in multiprocessing.active_children():
+            child.kill()
+        print("Restarting...", flush=True)
+        os._exit(update.RESTART_EXIT)

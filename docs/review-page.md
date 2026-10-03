@@ -117,8 +117,15 @@ What the server works out for each swing and what each part of the review page s
   `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
   ~11 s, 6-16 s seen; GSPro connector ~1 s); each match records its gap.
-- Deploy on the server: `git -C D:\SwingClips\app pull`, then `Stop server.cmd` and
-  `Start server.cmd` (Stop also finds the background copy the auto-start task runs).
+- Deploy: **Tools > Update the server** (`static/update.js`, `update.py`): `GET /api/update` fetches
+  and lists the new commits and whether a restart is needed; `POST /api/update` does
+  `git pull --ff-only` and, when the change needs it, the server exits with code 3, which
+  `Start server.cmd` takes as "run again" (pip first, for new requirements). Needs a restart: anything
+  in `server/` except the review page's own files and the tests; the page files the server also runs
+  (`swings.JS_FILES`, `metrics3d.js`, `games.js`) count as server code. A change to
+  `Start server.cmd` needs a restart by hand (cmd reads a running batch file from disk).
+  `POST /api/restart` restarts without updating. By hand: `git -C D:\SwingClips\app pull`, then
+  `Stop server.cmd` and `Start server.cmd` (Stop also finds the background copy the auto-start task runs).
 
 ## Trust per number: ok, shaky, no reading
 Every body number on the page (the swing numbers table and tempo line, the numbers over the video,

@@ -9,7 +9,11 @@ The Square watcher, the GSPro-connector option, and the ball-flight fill-in. (Mo
   the connector + the shot listener), **Drills, no ball** (nothing), **Close everything**. Each then
   opens the Start page. While the window is open it runs `golf-agent.ps1` hidden, so the Start page's
   launcher buttons work; closing the window stops it. Nothing starts at Windows sign-in. `-DryRun`
-  logs instead of acting; `-SelfTest` presses every button in dry run and closes.
+  logs instead of acting; `-SelfTest` presses every button in dry run and closes. On opening it
+  brings the folder's scripts up to date from the server (`Update-RelayFiles` in `golf-common.ps1`:
+  `GET /api/relay/files` lists the server's `relay/*.ps1` and `*.cmd` with SHA-256; each one that
+  differs or is missing is fetched from `/api/relay/files/<name>`, checked and swapped in; other
+  files, such as `square-app.txt`, are left alone), then opens the new launcher with `-NoUpdate`.
 - **`golf-agent.ps1`** (+ **`Golf agent.cmd`**): the launcher agent the window runs (it can also run on
   its own, and `-Startup` would add it to Windows sign-in, which the owner doesn't want). It polls the server
   (`POST /api/relay/agent`), reports what is running (Square app, watcher, connector, listener, shot source),

@@ -9,9 +9,12 @@ if not exist .venv\Scripts\python.exe (
   echo First run - setting up Python environment...
   py -3.13 -m venv .venv || goto :fail
 )
+:run
 rem Only one ONNX Runtime package at a time: the CPU one, DirectML or CUDA (ort_package.py).
 .venv\Scripts\python.exe ort_package.py "%SWINGCLIPS_REQUIREMENTS%" || goto :fail
 .venv\Scripts\python.exe -m pip install -q --disable-pip-version-check -r "%SWINGCLIPS_REQUIREMENTS%" || goto :fail
 .venv\Scripts\python.exe app.py
+rem Exit code 3: the review page's Tools > Update the server asked for a restart (update.py).
+if %errorlevel%==3 goto :run
 :fail
 pause

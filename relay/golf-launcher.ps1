@@ -5,10 +5,13 @@
 # launcher buttons work; closing the window stops it. Nothing starts at Windows sign-in.
 #
 # "Put an icon on the desktop" (shown until there is one) adds a "Golf" shortcut to this window.
+# On opening it fetches any scripts in this folder that differ from the server's copy (Update-RelayFiles
+# in golf-common.ps1) and, if there were any, opens the new launcher instead (-NoUpdate skips it).
 # -DryRun only logs what each button would do; -SelfTest opens the window, presses every button in
 # dry-run, prints the log and closes (for testing on another PC). Log: golf-launcher-log.txt here.
 
-param([string]$Server = "http://192.168.86.250:8000", [switch]$DryRun, [switch]$SelfTest)
+param([string]$Server = "http://192.168.86.250:8000", [switch]$DryRun, [switch]$SelfTest, [switch]$NoUpdate,
+      [string]$Updated = "")
 
 $ErrorActionPreference = "Continue"
 $here = $PSScriptRoot
@@ -98,6 +101,25 @@ function Add-DesktopIcon {
     Say "Added the Golf icon to the desktop."
 }
 
+# ---- Up to date with the server ----
+if (-not $NoUpdate) {
+    try {
+        $got = Update-RelayFiles $here $Server -DryRun:$DryRun
+        if ($got.Count -and $DryRun) {
+            Say "Would update from the server: $($got -join ', ')"
+        } elseif ($got.Count) {
+            $names = $got -join ', '
+            Say "Updated from the server: $names"
+            $again = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File",
+                       "`"$PSCommandPath`"", "-Server", $Server, "-NoUpdate", "-Updated", "`"$names`"")
+            Start-Process -FilePath "powershell.exe" -ArgumentList $again -WindowStyle Hidden
+            exit
+        }
+    } catch {
+        Say "Couldn't get newer scripts from the server: $($_.Exception.Message)"
+    }
+}
+
 # ---- The window ----
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -176,6 +198,11 @@ $timer.Add_Tick({ Update-State })
 $form.Add_Shown({
     Update-State
     $timer.Start()
+    if ($Updated) {
+        $note = "Scripts updated from the server: $Updated."
+        if ((Get-WatcherProcess) -and $Updated -like "*square-watcher*") { $note += " To restart the watcher: Close everything, then Driving range." }
+        Say $note
+    }
     if ($SelfTest) {
         foreach ($b in $buttons) { $b.PerformClick() }
         Add-DesktopIcon

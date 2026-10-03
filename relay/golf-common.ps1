@@ -166,6 +166,35 @@ function Set-ShotSource([string]$baseDir = "", [string]$newSource = "", [switch]
     return "Shot source set to $newSource"
 }
 
+# Brings this folder's scripts up to date from the server (GET /api/relay/files: name -> SHA-256), so
+# nothing is copied by hand after an update. Only .ps1 / .cmd files the server lists; files only here
+# are left alone. Returns the names it replaced (or would, with -DryRun); an empty list when the
+# server can't be reached.
+function Update-RelayFiles([string]$baseDir = "", [string]$server = "", [switch]$DryRun) {
+    if (-not $baseDir) { $baseDir = $PSScriptRoot }
+    if (-not $server) { $server = "http://192.168.86.250:8000" }
+    $base = $server.TrimEnd('/') + "/api/relay/files"
+    $listing = Invoke-RestMethod -Uri $base -TimeoutSec 5 -ErrorAction Stop
+    $changed = @()
+    foreach ($prop in $listing.files.PSObject.Properties) {
+        $name = $prop.Name
+        $want = "$($prop.Value)"
+        if ($name -notmatch '^[A-Za-z0-9 ()._-]+\.(ps1|cmd)$') { continue }
+        $local = Join-Path $baseDir $name
+        if ((Test-Path -LiteralPath $local) -and (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash -eq $want) { continue }
+        $changed += $name
+        if ($DryRun) { continue }
+        $tmp = "$local.download"
+        Invoke-WebRequest -Uri ($base + "/" + [uri]::EscapeDataString($name)) -OutFile $tmp -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
+        if ((Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash -ne $want) {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+            throw "$name came through damaged"
+        }
+        Move-Item -LiteralPath $tmp -Destination $local -Force
+    }
+    return ,$changed
+}
+
 function Open-StartPage([string]$server = "", [switch]$DryRun) {
     if (-not $server) { $server = "http://192.168.86.250:8000" }
     $url = $server.TrimEnd('/') + "/start"

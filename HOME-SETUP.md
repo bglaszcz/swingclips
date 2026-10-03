@@ -125,9 +125,13 @@ Only one phone talks (the one with Practice voice on). What it can say:
   `excluded.json` (swings left out), `goodshots.json`, `practice.json` and `practice-log.jsonl`,
   `game.json` and `games-log.jsonl`, `noise.json`, and `events.jsonl` (what the phones were told to
   say, uploads, clips with no swing and why).
-- **Deploy**: `git -C D:\SwingClips\app pull`, then `Stop server.cmd` and `Start server.cmd` (Stop
-  also finds the background copy the auto-start task runs). A change to the review page only
-  (`server\static`) needs just the pull.
+- **Deploy**: on the review page, **Tools > Update the server**. It lists what's new on GitHub, pulls
+  it (fast-forward only: it never overwrites an edit made on the server) and restarts the server
+  when the change needs it (Python, settings, or the scripts the server runs too, like
+  `summary.js`); a change to the review page only just reloads the page. A change to
+  `Start server.cmd` itself still needs a restart by hand. By hand: `git -C D:\SwingClips\app pull`,
+  then `Stop server.cmd` and `Start server.cmd` (Stop also finds the background copy the auto-start
+  task runs).
 - **After a reboot** the auto-start task runs the server in the background, with no window (only
   `python.exe` in Task Manager's Details tab). Check it from a phone: http://192.168.86.250:8000.
 - **During a session** new clips get a quick analysis, face-on first, so the spoken checks and
@@ -171,8 +175,9 @@ packages are in [docs/performance.md](docs/performance.md).
 ## The sim laptop
 
 Runs the **Golf** launcher window (`Golf launcher.cmd`, the desktop icon) from `Dropbox\SwingClips`
-(copies of `relay/`: when those change, copy all of them there again, replacing the old ones; they must
-stay ASCII with Windows line endings for PowerShell 5.1). Its buttons start Square Golf and the watcher,
+(copies of `relay/`). Each time it opens, the launcher fetches any script there that differs from the
+server's copy (so after **Update the server** there's nothing to copy by hand) and opens the new
+version; if the server can't be reached it carries on with what it has. Its buttons start Square Golf and the watcher,
 or the GSPro connector, or nothing; while it's open the launcher agent runs hidden so the Start page's
 launcher buttons work. Nothing starts at Windows sign-in.
 
