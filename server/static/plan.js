@@ -126,6 +126,19 @@
     return finite(nums[move]) ? nums[move] : null;
   }
 
+  // The latest session: face-on clips within this long of the newest one that has 3D.
+  const SESSION_HOURS = 12;
+
+  /** Rows for faults.js from the latest session's swings with 3D: {name, body3d}. */
+  function latestRows3d(clips, swings) {
+    if (!swings || typeof swings !== "object") return [];
+    const rows = (clips || []).filter(c => c && c.angle === "face" && !c.excluded && swings[c.name] && swings[c.name].body3d)
+      .map(c => ({ name: c.name, partner: c.partner, t: Date.parse(c.recorded), body3d: swings[c.name].body3d }));
+    if (!rows.length) return [];
+    const newest = Math.max(...rows.map(r => r.t));
+    return rows.filter(r => newest - r.t <= SESSION_HOURS * 3600e3);
+  }
+
   /** Summarizes 3D downswing sequence across swing rows. */
   function extractSequenceSummary(rows, swings) {
     const list = rows || [];
@@ -421,7 +434,9 @@
     if (!effectiveFocus || !effectiveFocus.move) {
       let sFaults = Array.isArray(inputs.sessionFaults) ? inputs.sessionFaults : null;
       if (!sFaults && Faults && typeof Faults.sessionFaults === "function" && clips.length > 0) {
-        sFaults = Faults.sessionFaults(clips);
+        // Only the 3D fault picks the focus by itself: the 2D ones need the page's trust levels (trends.js)
+        // to be shown, and the plan doesn't have them.
+        sFaults = Faults.sessionFaults(latestRows3d(clips, inputs.swings)).filter(f => f.key === "armsLed");
       }
       if (inputs.topFault) {
         autoFault = inputs.topFault;
@@ -440,7 +455,7 @@
         if (autoFault.key === "armsLed") {
           const swings = inputs.swings && typeof inputs.swings === "object" && !Array.isArray(inputs.swings)
             ? inputs.swings : null;
-          seqSummary = extractSequenceSummary(clips, swings);
+          seqSummary = extractSequenceSummary(latestRows3d(clips, swings), swings);
         }
       }
     }

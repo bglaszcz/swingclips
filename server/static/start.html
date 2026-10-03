@@ -534,6 +534,7 @@ function renderPlan() {
     ? SwingDrillSets.sets(allClips || [], swingRecords || {})
     : [];
   const plan = SwingPlan.buildPlan({
+    programState,
     focus: journalData ? journalData.focus : null,
     gameLog: gameState ? gameState.log : [],
     clips: allClips || [],
@@ -546,7 +547,7 @@ function renderPlan() {
   if (sumEl) {
     const now = planStep && plan.blocks.find(b => b.id === planStep.block);
     sumEl.textContent = now ? `Now: ${now.title}. Tap Next when you've hit its balls.`
-      : `${plan.totalMinutes} minutes · ${plan.totalBalls} balls in 4 blocks, from your data. Tap Start on the first block `
+      : `${plan.totalMinutes} minutes · ${plan.totalBalls} balls in ${plan.blocks.length} blocks, from your data. Tap Start on the first block `
         + "when recording is on: each block switches on what it needs (a drill recording, a game) and the one before off.";
   }
 
@@ -638,6 +639,17 @@ function stepControls(blocks, idx) {
     x.onclick = () => { x.disabled = true; goToBlock(action); };
     return x;
   };
+  if (b.id === "program") {
+    // The coach program runs in its own section (5), with its own drill mode: going there, not a plan step
+    // (a plan step would switch the program's drill mode off).
+    const go = document.createElement("button");
+    go.className = "plan-btn";
+    go.textContent = "Go to the program";
+    // (Not smooth: the page redraws every second and cuts a smooth scroll short.)
+    go.onclick = () => { const sec = $("sec-program"); if (sec) sec.scrollIntoView({ block: "start" }); };
+    act.append(go);
+    return act;
+  }
   if (planStep && planStep.block === b.id) {
     const on = document.createElement("div");
     on.className = "plan-on";
@@ -773,9 +785,12 @@ async function programPost(url, body) {
   pollGame();
 }
 
+let planProgramKey = null;   // the program and block Today's plan was last drawn with
 function renderProgram(data) {
   programState = data;
   if (!data) return;
+  const key = data.program ? `${data.program.id}:${data.program.block}` : "";
+  if (key !== planProgramKey) { planProgramKey = key; renderPlan(); }
   const run = data.program;
   $("n5").className = "n" + (run ? " ok" : "");
   $("prog-active").hidden = !run;
@@ -1408,16 +1423,16 @@ async function handoverWizard(choice) {
     }
     const sec = $("sec-program");
     // Again once the started program has drawn (it pushes the page down as it appears).
-    if (sec) { sec.scrollIntoView({ behavior: "smooth" }); setTimeout(() => sec.scrollIntoView({ block: "start" }), 800); }
+    if (sec) { sec.scrollIntoView({ block: "start" }); setTimeout(() => sec.scrollIntoView({ block: "start" }), 800); }
   } else if (choice.type === "ball_practice") {
     const sec = $("sec-plan");
-    if (sec) sec.scrollIntoView({ behavior: "smooth" });
+    if (sec) sec.scrollIntoView({ block: "start" });
   } else if (choice.type === "game") {
     const sec = $("sec-game");
-    if (sec) sec.scrollIntoView({ behavior: "smooth" });
+    if (sec) sec.scrollIntoView({ block: "start" });
   } else if (choice.type === "hit") {
     const sec = $("sec-swings") || $("swings");
-    if (sec) sec.scrollIntoView({ behavior: "smooth" });
+    if (sec) sec.scrollIntoView({ block: "start" });
   }
 }
 
@@ -1429,7 +1444,7 @@ function changeWizardSession() {
   saveWizardStorage();
   renderWizard();
   const w = $("sec-wizard");
-  if (w) w.scrollIntoView({ behavior: "smooth" });
+  if (w) w.scrollIntoView({ block: "start" });
 }
 
 function renderWizard() {

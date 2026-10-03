@@ -456,7 +456,9 @@ test("armsLed fault feeds focus block when no focus is set and it is the top fau
     makeArmsLedClip("s5",  7)
   ];
 
-  const plan = Plan.buildPlan({ clips });
+  // As on the page: /api/clips (face-on) and the swing records (/api/swings) that carry body3d.
+  const swings = Object.fromEntries(clips.map(c => [c.name, { body3d: c.body3d }]));
+  const plan = Plan.buildPlan({ clips: clips.map(c => ({ ...c, angle: "face", body3d: undefined })), swings });
   const fBlock = plan.blocks.find(b => b.id === "focus");
 
   assert.ok(fBlock, "focus block not found");
@@ -491,7 +493,9 @@ test("armsLed focus block needs body3d=true", () => {
     }
   });
   const clips = Array.from({ length: 4 }, (_, i) => makeArmsLedClip(`s${i}`));
-  const plan = Plan.buildPlan({ clips });
+  // As on the page: /api/clips (face-on) and the swing records (/api/swings) that carry body3d.
+  const swings = Object.fromEntries(clips.map(c => [c.name, { body3d: c.body3d }]));
+  const plan = Plan.buildPlan({ clips: clips.map(c => ({ ...c, angle: "face", body3d: undefined })), swings });
   const fBlock = plan.blocks.find(b => b.id === "focus");
   assert.ok(fBlock && fBlock.needs && fBlock.needs.body3d,
     "armsLed focus block should declare body3d needed");
