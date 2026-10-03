@@ -3,9 +3,15 @@
 The Square watcher, the GSPro-connector option, and the ball-flight fill-in. (Moved out of HOME-SETUP.md, which has the session checklist, setup and troubleshooting.)
 
 ## `relay/` - launch monitor to server (runs on the sim laptop, nothing to install)
-- **`golf-agent.ps1`** (+ **`Golf agent.cmd`**): the background launcher agent. Copy `relay\` to
-  `Dropbox\SwingClips` and run `Golf agent.cmd -Startup` once on the sim laptop. It adds itself to
-  Windows sign-in (`Golf agent.lnk` in the Startup folder) and runs minimized. It polls the server
+- **`golf-launcher.ps1`** (+ **`Golf launcher.cmd`**): the golf launcher window, the owner's way in: a
+  **Golf** icon on the desktop (the window's "Put an icon on the desktop" makes it) opens four buttons:
+  **Driving range** (Square Golf's app + the watcher), **GSPro connector** (closes Square's app, starts
+  the connector + the shot listener), **Drills, no ball** (nothing), **Close everything**. Each then
+  opens the Start page. While the window is open it runs `golf-agent.ps1` hidden, so the Start page's
+  launcher buttons work; closing the window stops it. Nothing starts at Windows sign-in. `-DryRun`
+  logs instead of acting; `-SelfTest` presses every button in dry run and closes.
+- **`golf-agent.ps1`** (+ **`Golf agent.cmd`**): the launcher agent the window runs (it can also run on
+  its own, and `-Startup` would add it to Windows sign-in, which the owner doesn't want). It polls the server
   (`POST /api/relay/agent`), reports what is running (Square app, watcher, connector, listener, shot source),
   and executes named actions sent from the browser Start page (start/stop Square, start/stop watcher,
   switch shot source, start/stop GSPro connector stack, open Start page). Supports `-DryRun` for testing.
