@@ -116,7 +116,10 @@ What the server works out for each swing and what each part of the review page s
 - Pose files are named by version (`<clip>.v6.json.gz`); when `pose.py` changes enough to bump
   `VERSION`, every clip is analyzed again on its own.
 - Shots pair with clips by time: each source has a typical strike-to-report delay (Square's app
-  ~11 s, 6-16 s seen; GSPro connector ~1 s); each match records its gap.
+  ~13 s from the clip's name time, 6-17 s seen, wedges quickest, driver slowest; GSPro connector ~1 s);
+  each match records its gap. A clip only one phone recorded counts 3 s further off (`LONE_PENALTY_S`),
+  so a sound one phone heard just after a swing doesn't take the swing's shot. `GET /api/events`
+  (`since`, `kind`, `limit`) reads the events log from another PC.
 - Deploy: **Tools > Update the server** (`static/update.js`, `update.py`): `GET /api/update` fetches
   and lists the new commits and whether a restart is needed; `POST /api/update` does
   `git pull --ff-only` and, when the change needs it, the server exits with code 3, which
@@ -351,7 +354,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   games `games-log.jsonl` next to the clips folder (`server/games.py`). Starting a game turns the practice number
   off, and turning that on stops the game. The Combine is always the same 27 shots (9 targets, 50-170 yd,
   shuffled), so its score is comparable across weeks. Under the Combine scores table, "Where you lose strokes" breaks down strokes gained by target distance over the last 3 Combines to pinpoint the weakest yardages. The Past games table lets you pick any game to view past sessions with that game's own hit wording (on the green, in the fairway, shaped as called, or within 5 yards). No phone update needed.
-- **Coach program** (`programs.py`, `programs.json`, `/api/program*`, Start page section 5): a coach's drill
+- **Coach program** (`programs.py`, `programs.json`, `/api/program*`, Start page "Coach program"): a coach's drill
   ladder as data: blocks in order, each with its drill (drill mode, so rehearsals stay out of the trends;
   a block without one, like the transfer block, counts as normal swings), ball or no ball, reps, and a gate
   (`count`: need of reps, or `streak`: need in a row) of checks on Square's numbers (`strikeV`, `attack`,
@@ -383,7 +386,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   A block ends when its reps are in or its streak is made, then the next starts (`requires`: skipped unless
   that block passed); the program ends after the last block, at its cap (every swing counts, taps too), or
   45 minutes idle, and is logged to `programs-log.jsonl`. **Program history and trends**
-  (`static/programhistory.js`, `SwingProgramHistory`, Start page section 5, Progress step 3): under the
+  (`static/programhistory.js`, `SwingProgramHistory`, Start page "Coach program", Progress step 3): under the
   program picker on the Start page, **Past runs** lists up to 5 finished runs (newest first: date, swings used
   out of cap, and for each block its passed / not passed / skipped tag and gate count) with a **Copy for coach**
   button per run (`/api/program/report?started=<run.started>`). Folded under `<details>` "Past runs" when more
@@ -395,7 +398,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   arm peak ms, pelvis open at impact, pelvis turn start vs top), and the impact frame
   (`/api/still/{clip}`) of the first ball swing hit in a no-ball block (the toe-tap swing). Tested in
   `tests/test_programs.py` and `tests/programhistory.test.js`.
-- **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page (section 6)
+- **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page ("Today's plan")
   for quick setup in the barn. Lays out an ordered 45-minute practice session (60-80 balls) across 4 blocks:
   (1) Warm-up wedge shots, (2) Focus block with the active focus move, its coach.js drill and swing thought,
   the latest drill set line if recorded in the last 14 days, and a "Practice this" button that configures

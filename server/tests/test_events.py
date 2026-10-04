@@ -173,5 +173,18 @@ class HealthNotes(unittest.TestCase):
         self.assertEqual(h.streaks, {})
 
 
+@unittest.skipIf(TestClient is None, "needs httpx")
+class EventsApi(unittest.TestCase):
+    def test_since_and_kind(self):
+        app.log_event("say", to="face", text="Recording.")
+        app.log_event("upload", clip="x.mp4")
+        client = TestClient(app.app)
+        mine = [e for e in client.get("/api/events", params={"since": "2000-01-01"}).json()
+                if e.get("text") == "Recording." or e.get("clip") == "x.mp4"]
+        self.assertEqual([e["kind"] for e in mine[-2:]], ["say", "upload"])
+        self.assertTrue(all(e["kind"] == "upload" for e in client.get("/api/events?kind=upload").json()))
+        self.assertEqual(client.get("/api/events", params={"since": "2999-01-01"}).json(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

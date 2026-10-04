@@ -21,27 +21,29 @@ end).
    range**, **GSPro connector**, **Drills, no ball**). It starts only what that needs and opens the
    Start page. (First time: double-click `Golf launcher.cmd` in `Dropbox\SwingClips` and press "Put an
    icon on the desktop".) In Square's app, pick the **driving range**. (The server runs by itself; nothing to do there.)
-3. **Start page, sections 1-2**: every check green, both camera pictures framed with the skeleton on
-   you. Fix what it says if not.
-4. **Section 3: Start recording.** Each phone says "Recording". (A phone that joins late starts by itself.)
-5. **Hit one ball.** Section 4 lists it with "both" and its Square shot; about a minute later the
-   phone says "First swing: both cameras saw you, Square paired" (or what's wrong).
+3. **Start page, 1 Get ready**: every check green, both camera pictures framed with the skeleton on
+   you. Fix what it says if not. (It folds to one line once both phones record.)
+4. **2 What are you doing?**: pick one. Only what it needs shows below it (the launcher's **Drills, no
+   ball** button picks "Drills, no ball" for you).
+5. **3 Record: Start recording.** Each phone says "Recording". (A phone that joins late starts by itself.)
+6. **Hit one ball.** "Swings and Square shots" at the bottom lists it with "both" and its Square
+   shot; about a minute later the phone says "First swing: both cameras saw you, Square paired" (or what's wrong).
 
-**During**: pick ONE of these on the Start page (starting one turns the others off, so only one thing
-talks after each swing):
+**During** (starting one of these turns the others off, so only one thing talks after each swing):
 
-| You want to... | Section | What you do |
+| You picked... | What shows | What you do |
 |---|---|---|
-| Do the coach's drills | **5 Coach program** | Pick it, **Start program**. Follow the block on screen: no-ball reps, tap **Pass / Miss**; ball shots, listen for the verdict (flush line: tap where the mark started). Blocks move on by themselves. |
-| A session built from your data | **6 Today's plan** | **Start** on the first block, hit its balls, **Next**. |
-| A game | **7 Play a game** | Pick it, **Start game**; the phone says each target. |
-| Just hit | nothing | Hit. Everything is recorded and analyzed. |
+| Just hit balls | Record, swings | Hit. Everything is recorded and analyzed. |
+| Today's plan | Record, the plan | **Start** on the first block, hit its balls, **Next**. |
+| Coach program | Record, the program | Pick it, **Start program**. Follow the block on screen: no-ball reps, tap **Pass / Miss**; ball shots, listen for the verdict (flush line: tap where the mark started). Blocks move on by themselves. |
+| Play a game | Record, the game | Pick it, **Start game**; the phone says each target. |
+| Drills, no ball | The program only (no phones, no Square) | A no-ball program is picked; **Start program**, tap **Pass / Miss** each rep. |
 
 **After**
 
-1. **Coach program**: section 5, **Copy for coach**, paste into the coach chat (save the
+1. **Coach program**: **Copy for coach**, paste into the coach chat (save the
    down-the-line picture if one shows). Older runs: **Past runs**, each has its own button.
-2. **Stop** in section 3 (each phone says "Stopped"), or just close the apps.
+2. **Stop** under Record (each phone says "Stopped"), or just close the apps.
 3. Leave the server alone: about 10 minutes after the last swing it re-analyzes the session the
    careful way (the review page's Ready bar shows "deep pass: n clips to go").
 4. Look back on the **review page** (`http://192.168.86.250:8000`): **Progress** (how did it go /
@@ -52,7 +54,7 @@ phones; `Start golf.cmd -StartCameras` starts both phones without the page; **Pr
 page (one number spoken after each swing, or games); `Start golf (GSPro).cmd` instead of Square's app
 (README, "Sim laptop"; details in [docs/relay.md](docs/relay.md)). `Start golf.cmd -Startup` adds it to
 Windows sign-in; if Square's app isn't found, put its shortcut or .exe path in `square-app.txt` next to it.
-What each Start page section does in detail: docs/review-page.md ("Coach program", "Today's practice
+What each Start page part does in detail: docs/review-page.md ("Coach program", "Today's practice
 plan", "Plan steps", "Drill mode").
 
 ## Setting up the phones
@@ -183,7 +185,8 @@ launcher buttons work. Nothing starts at Windows sign-in.
 
 `Start golf.cmd` still works as before for manual one-click starting. The Square watcher reads each new
 shot from Square Golf's own shot database and sends it to the server, which pairs it with the swing by
-time (Square saves a shot ~11 s after the strike, 6-16 s seen). What the scripts do is logged in
+time (Square saves a shot ~13 s after the clip's start, 6-17 s seen; a clip only one phone recorded
+is the last choice, so a stray sound just after a swing doesn't take its shot). What the scripts do is logged in
 `golf-launcher-log.txt`, `golf-agent-log.txt` and `start-golf-log.txt` next to them. The GSPro-connector option and how shots
 are read: [docs/relay.md](docs/relay.md).
 
@@ -206,7 +209,8 @@ are read: [docs/relay.md](docs/relay.md).
   phones"). Impact then falls back to the heard strike, and the
   numbers from the top on are marked shaky (~).
 - **"No swing found"**: the swing page says why ("No swing found in this clip: ..."), and so does
-  `D:\SwingClips\events.jsonl` (the server window prints `No swing: <clip>: <why>`): `tracking`
+  `D:\SwingClips\events.jsonl` (the server window prints `No swing: <clip>: <why>`; from another PC:
+  `http://192.168.86.250:8000/api/events?since=2026-10-04&kind=noswing`): `tracking`
   (the body seen in under 20 frames: out of the picture, dark, or nobody there), `window` (nothing
   tracked around the strike), `no-backswing`, `impact-before-top`, `timing` (not a swing's
   timing).

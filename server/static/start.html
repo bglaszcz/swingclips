@@ -132,31 +132,21 @@
   .prog-past-blocks div { display: flex; align-items: center; gap: 6px; }
   .prog-trend-box { margin: 8px 0; display: grid; gap: 4px; }
   .prog-trend-box .plan-note { font-weight: 500; color: var(--text); background: var(--panel-2); padding: 8px 10px; border-radius: 6px; margin: 0; }
-  /* ---- Session Wizard ---- */
-  .wiz-section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 20px; }
-  .wiz-banner { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; background: var(--panel-2); border-radius: 10px; border-left: 4px solid var(--accent); }
-  .wiz-banner-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .wiz-choices { display: grid; gap: 10px; margin-top: 12px; }
-  .wiz-choice-btn { display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; color: var(--text); font: inherit; cursor: pointer; transition: border-color 0.15s, background-color 0.15s; width: 100%; box-sizing: border-box; }
-  .wiz-choice-btn:hover, .wiz-choice-btn:focus-visible { border-color: var(--accent); background: #1d2a3d; }
-  .wiz-choice-head { display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-  .wiz-choice-title { font-size: 17px; font-weight: 700; }
-  .wiz-choice-desc { font-size: 13px; color: var(--muted); line-height: 1.4; }
-  .wiz-step-card { padding: 16px; background: var(--panel-2); border-radius: 10px; margin-top: 10px; }
-  .wiz-step-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .wiz-step-title { font-size: 20px; font-weight: 700; margin: 0 0 10px; }
-  .wiz-step-status { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); margin-bottom: 14px; font-size: 15px; }
-  .wiz-step-status.ok { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
-  .wiz-step-status.wait { border-color: var(--warn); background: var(--warn-soft); color: var(--text); }
-  .wiz-step-icon { font-size: 20px; font-weight: 700; flex: 0 0 24px; text-align: center; }
-  .wiz-step-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-  .wiz-btn-big { font: inherit; font-size: 17px; font-weight: 700; padding: 14px 22px; border-radius: 10px; cursor: pointer; border: none; background: var(--accent); color: #0b0f14; flex: 1 1 180px; }
-  .wiz-btn-big:disabled { opacity: 0.5; cursor: default; }
-  .wiz-btn-sub { font: inherit; font-size: 14px; font-weight: 600; padding: 14px 18px; border-radius: 10px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--muted); }
-  .wiz-manual-fold { margin-bottom: 20px; }
-  .wiz-manual-fold summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); padding: 10px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; user-select: none; }
-  .wiz-manual-fold summary:hover { color: var(--text); border-color: var(--accent); }
-  .wiz-manual-fold[open] summary { margin-bottom: 12px; }
+  /* ---- Steps: get ready, what you're doing, record ---- */
+  .ready-sum { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; }
+  .linkbtn { font: inherit; font-size: 13px; font-weight: 600; background: none; border: 0; padding: 4px 0; margin-left: auto;
+             color: var(--accent); cursor: pointer; }
+  .laptop { margin-top: 12px; font-size: 13px; }
+  .laptop summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+  .laptop .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 8px; }
+  .choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .choice { font: inherit; text-align: left; padding: 12px 14px; border-radius: 10px; cursor: pointer;
+            border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  .choice:hover { border-color: var(--accent); }
+  .choice.on { border: 2px solid var(--accent); background: var(--accent-soft); padding: 11px 13px; }
+  .choice b { display: block; font-size: 16px; }
+  .choice span { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .choice.on span { color: var(--text); }
   @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; } }
 </style>
 <script src="/static/games.js"></script>
@@ -180,75 +170,52 @@
   <a href="/" style="margin-left: 16px">Review page →</a>
 </header>
 <main>
-  <section id="sec-wizard" class="wiz-section">
-    <div id="wiz-banner" hidden></div>
-    <div id="wiz-picker"></div>
-    <div id="wiz-step" hidden></div>
-  </section>
-
-  <details id="sec-manual-setup" class="wiz-manual-fold">
-    <summary>Camera pictures & hardware setup (manual controls) ▼</summary>
-    <section id="sec-hardware">
-      <h2><span class="n" id="n1">1</span>Everything connected</h2>
-      <p class="hint">Open SwingClips on both phones. The laptop launcher controls Square's app and watcher from the browser.</p>
+  <section id="sec-ready">
+    <h2><span class="n" id="n1">1</span>Get ready</h2>
+    <div class="ready-sum" id="ready-sum" hidden><span id="ready-text"></span>
+      <button class="linkbtn" id="ready-show">Show the cameras</button></div>
+    <div id="ready-full">
+      <p class="hint">Open SwingClips on both phones and stand at the ball as if to hit: each phone sends a picture about once a second until it records.</p>
       <div class="checks" id="checks"></div>
-      <div class="launcher-panel" id="launcher-panel" style="margin-top: 14px; padding: 12px; background: #161b22; border: 1px solid #30363d; border-radius: 8px;">
-        <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px;">
-          <div>
-            <strong style="color: #c9d1d9; font-size: 14px;">Sim laptop launcher</strong>
-            <span id="launcher-agent-status" style="margin-left: 8px; font-size: 13px; color: #8b949e;">Waiting for agent…</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 12px; font-size: 13px;">
-            <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
-              <input type="radio" name="shot-source" value="square" id="src-square" checked> Square app (default)
-            </label>
-            <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;">
-              <input type="radio" name="shot-source" value="gspro" id="src-gspro"> GSPro connector
-            </label>
-          </div>
-        </div>
-        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-          <button class="plan-btn on" id="btn-launch-square">Launch Square Golf</button>
-          <button class="plan-btn on" id="btn-launch-watcher">Start Square Watcher</button>
-          <button class="plan-btn on" id="btn-launch-gspro">Start GSPro Connector & Listener</button>
-          <button class="plan-btn disabled" id="btn-launch-gspro-game" disabled title="GSPro game is not installed yet (placeholder)" style="opacity: 0.5; cursor: not-allowed;">GSPro Game (placeholder)</button>
-          <span id="launcher-cmd-status" style="font-size: 12px; color: #58a6ff;"></span>
-        </div>
-      </div>
-    </section>
-
-    <section>
-      <h2><span class="n" id="n2">2</span>Check the cameras</h2>
-      <p class="hint">Stand at the ball as if to hit. Each phone sends a picture about once a second until it starts recording.</p>
-      <div class="cams">
+      <div class="cams" style="margin-top: 12px;">
         <div class="cam" id="cam-face"><div class="top"><strong>Face-on</strong><span></span></div>
           <div class="verdict"></div><div class="pic"><div class="empty"></div><img alt="Face-on camera" hidden><canvas></canvas></div></div>
         <div class="cam" id="cam-dtl"><div class="top"><strong>Down the line</strong><span></span></div>
           <div class="verdict"></div><div class="pic"><div class="empty"></div><img alt="Down-the-line camera" hidden><canvas></canvas></div></div>
       </div>
-    </section>
-
-    <section>
-      <h2><span class="n" id="n3">3</span>Record</h2>
-      <div class="go">
-        <button class="primary" id="start">Start recording</button>
-        <button id="stop">Stop</button>
-        <span class="state" id="state"></span>
-        <span class="note" id="go-note"></span>
-      </div>
-    </section>
-  </details>
-
-  <section id="sec-swings">
-    <h2><span class="n">4</span>Swings and Square shots</h2>
-    <p class="hint">Hit in Square's driving range as usual. Each swing gets its Square numbers 6-16 s after the strike.</p>
-    <div class="sum" id="sum"></div>
-    <table><thead><tr><th>Time</th><th class="hide-sm">Cameras</th><th>Square</th><th>Club</th><th class="num">Ball mph</th><th class="num">Carry yd</th></tr></thead>
-      <tbody id="swings"></tbody></table>
+      <details class="laptop" id="launcher-panel">
+        <summary>Laptop: <span id="launcher-agent-status">waiting for the Golf launcher</span></summary>
+        <div class="row">
+          <label><input type="radio" name="shot-source" value="square" id="src-square" checked> Square app (default)</label>
+          <label><input type="radio" name="shot-source" value="gspro" id="src-gspro"> GSPro connector</label>
+        </div>
+        <div class="row">
+          <button class="plan-btn on" id="btn-launch-square">Launch Square Golf</button>
+          <button class="plan-btn on" id="btn-launch-watcher">Start Square Watcher</button>
+          <button class="plan-btn on" id="btn-launch-gspro">Start GSPro Connector & Listener</button>
+          <span id="launcher-cmd-status" class="plan-note"></span>
+        </div>
+      </details>
+    </div>
   </section>
 
-  <section id="sec-program">
-    <h2><span class="n" id="n5">5</span>Coach program</h2>
+  <section id="sec-choose">
+    <h2><span class="n" id="n2">2</span>What are you doing?</h2>
+    <div class="choices" id="choices"></div>
+  </section>
+
+  <section id="sec-record" hidden>
+    <h2><span class="n" id="n3">3</span>Record</h2>
+    <div class="go">
+      <button class="primary" id="start">Start recording</button>
+      <button id="stop">Stop</button>
+      <span class="state" id="state"></span>
+      <span class="note" id="go-note"></span>
+    </div>
+  </section>
+
+  <section id="sec-program" hidden>
+    <h2><span class="n" id="n5">4</span>Coach program</h2>
     <p class="hint" id="prog-hint">Drill blocks from your coach, each with a gate to pass. The phone says each shot's verdict.</p>
     <div id="prog-idle">
       <div class="go">
@@ -282,14 +249,14 @@
     </div>
   </section>
 
-  <section id="sec-plan">
-    <h2><span class="n ok" id="n6">6</span>Today's plan</h2>
+  <section id="sec-plan" hidden>
+    <h2><span class="n" id="n6">4</span>Today's plan</h2>
     <p class="hint" id="plan-summary">Ordered practice session built from your data.</p>
     <div class="plan-blocks" id="plan-blocks"></div>
   </section>
 
-  <section id="sec-game">
-    <h2><span class="n" id="n7">7</span>Play a game</h2>
+  <section id="sec-game" hidden>
+    <h2><span class="n" id="n7">4</span>Play a game</h2>
     <div id="game-active" hidden>
       <div class="target-huge" id="game-target"></div>
       <div class="game-score" id="game-score"></div>
@@ -306,6 +273,13 @@
       <p class="hint" id="game-describe" style="margin-top: 8px;"></p>
       <div class="sum" id="game-last-combine" style="margin-top: 8px;"></div>
     </div>
+  </section>
+  <section id="sec-swings" hidden>
+    <h2>Swings and Square shots</h2>
+    <p class="hint">Hit in Square's driving range as usual. Each swing gets its Square numbers 6-16 s after the strike.</p>
+    <div class="sum" id="sum"></div>
+    <table><thead><tr><th>Time</th><th class="hide-sm">Cameras</th><th>Square</th><th>Club</th><th class="num">Ball mph</th><th class="num">Carry yd</th></tr></thead>
+      <tbody id="swings"></tbody></table>
   </section>
 </main>
 <script>
@@ -335,22 +309,21 @@ function phoneCheck(a, s) {
 function renderChecks(s) {
   if (!s) {
     $("checks").innerHTML = `<div class="check bad"><span class="dot bad"></span><div><b>Server</b><span>Not answering. Is the home server on?</span></div></div>`;
-    $("n1").className = "n";
-    return;
+    return false;
   }
   const square = s.rows.find(r => r.key === "square") || { level: "warn", label: "Square", text: "" };
   const server = s.rows.find(r => r.key === "server") || { level: "ok", text: "" };
   const agent = s.agent || {};
   const agentText = agent.connected
     ? `${agent.computer || 'laptop'}: running · shots from ${agent.source || 'square'}`
-    : "agent not running (start Golf agent.cmd on laptop)";
+    : "not connected: open the Golf launcher on the laptop";
   const items = [phoneCheck("face", s), phoneCheck("dtl", s),
                  { level: square.level, title: square.label, text: square.text },
                  { level: server.level, title: "Server", text: server.text },
                  { level: agent.connected ? "ok" : "off", title: "Laptop launcher", text: agentText }];
   $("checks").innerHTML = items.map(i => `<div class="check ${i.level}"><span class="dot ${i.level}"></span>
     <div><b>${esc(i.title)}</b><span>${esc(i.text)}</span></div></div>`).join("");
-  $("n1").className = "n" + (items.every(i => i.level === "ok" || i.level === "off") ? " ok" : "");
+  return items.every(i => i.level === "ok" || i.level === "off");
 }
 
 async function sendRelayCommand(action, params = {}) {
@@ -385,7 +358,7 @@ function renderLauncher(s) {
   const srcGspro = $("src-gspro");
 
   if (!agent || !agent.connected) {
-    if (statusEl) statusEl.textContent = "Agent not connected (run Golf agent.cmd on laptop)";
+    if (statusEl) statusEl.textContent = "the Golf launcher isn't open";
     if (sqBtn) sqBtn.textContent = "Launch Square Golf";
     if (watchBtn) watchBtn.textContent = "Start Square Watcher";
     return;
@@ -614,7 +587,7 @@ function blockAction(b) {
 function blockOnText(b) {
   const a = blockAction(b);
   if (a.drill) return "Recording pump drills: the phones keep 6 s before the strike, and these swings stay out of your trends.";
-  if (a.game) return "Game on: the target is in section 7 below, and the phone says it.";
+  if (a.game) return "Game on: the target shows below, and the phone says it.";
   return "Nothing to switch on: just hit.";
 }
 
@@ -645,8 +618,7 @@ function stepControls(blocks, idx) {
     const go = document.createElement("button");
     go.className = "plan-btn";
     go.textContent = "Go to the program";
-    // (Not smooth: the page redraws every second and cuts a smooth scroll short.)
-    go.onclick = () => { const sec = $("sec-program"); if (sec) sec.scrollIntoView({ block: "start" }); };
+    go.onclick = () => choose("program");
     act.append(go);
     return act;
   }
@@ -1048,48 +1020,108 @@ $("prog-next").onclick = () => programPost("/api/program/next");
 $("prog-stop").onclick = () => { if (confirm("Stop the program? It's saved as it stands.")) programPost("/api/program/stop"); };
 $("prog-copy").onclick = () => copyProgramReport();
 
-// ---- Session Wizard ----
-const WIZ_STORAGE_KEY = "swingclips_session_choice";
-let wizardChoice = null;
-let wizardStepIndex = 0;
-let wizardHandedOver = false;
-let pendingStorageChoiceId = null;
-let calibStatus = null;
-let setupStatus = null;
+// ---- 2. What are you doing: picks which sections show ----
+// Kept for the day in this browser; ?do=hit|plan|program|game|noball picks it (the laptop's Golf
+// launcher opens ?do=noball for "Drills, no ball").
+const CHOICE_KEY = "swingclips_activity";
+const CHOICES = [
+  { id: "hit", title: "Just hit balls", desc: "Square and both cameras, nothing else" },
+  { id: "plan", title: "Today's plan", desc: "Warm-up, your focus, scoring zone: from your data" },
+  { id: "program", title: "Coach program", desc: "Drill blocks with a gate to pass" },
+  { id: "game", title: "Play a game", desc: "Combine, wedge ladder and more, scored against tour" },
+  { id: "noball", title: "Drills, no ball", desc: "No phones or Square: you judge each rep" },
+];
+let choice = null, readyOpen = null, calibStatus = null, setupStatus = null, camsGood = false, checksGood = false;
 
-function getTodayKey() {
+function todayKey() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function loadWizardStorage() {
+function loadChoice() {
+  const asked = new URLSearchParams(location.search).get("do");
+  if (CHOICES.some(c => c.id === asked)) { choose(asked, false); return; }
   try {
-    const raw = localStorage.getItem(WIZ_STORAGE_KEY);
-    if (!raw) return;
-    const d = JSON.parse(raw);
-    if (d && d.date === getTodayKey() && d.choiceId) {
-      pendingStorageChoiceId = d.choiceId;
-      wizardStepIndex = d.stepIndex || 0;
-      wizardHandedOver = !!d.handedOver;
-    }
-  } catch {}
+    const d = JSON.parse(localStorage.getItem(CHOICE_KEY) || "null");
+    if (d && d.date === todayKey() && CHOICES.some(c => c.id === d.id)) choice = d.id;
+  } catch { /* none kept */ }
 }
 
-function saveWizardStorage() {
-  try {
-    if (!wizardChoice) {
-      localStorage.removeItem(WIZ_STORAGE_KEY);
-      return;
-    }
-    const d = {
-      date: getTodayKey(),
-      choiceId: wizardChoice.id,
-      stepIndex: wizardStepIndex,
-      handedOver: wizardHandedOver
-    };
-    localStorage.setItem(WIZ_STORAGE_KEY, JSON.stringify(d));
-  } catch {}
+function choose(id, scroll = true) {
+  choice = id;
+  readyOpen = null;
+  try { localStorage.setItem(CHOICE_KEY, JSON.stringify({ date: todayKey(), id })); } catch { /* not kept */ }
+  if (id === "noball") pickNoBallProgram();
+  renderChoices();
+  const next = id === "noball" ? $("sec-program") : $("sec-record");
+  if (scroll && next) next.scrollIntoView({ block: "start" });
 }
+
+/** For drills without a ball: a program with no ball at all, else one that starts without one,
+ *  unless one is running. */
+function pickNoBallProgram() {
+  const sel = $("prog-select"), progs = (programState && programState.programs) || [];
+  const first = progs.find(p => p.blocks.length && p.blocks.every(b => !b.ball))
+    || progs.find(p => p.blocks.length && !p.blocks[0].ball);
+  if (!sel || !first || (programState && programState.program) || sel.dataset.picked) return;
+  if (!sel.options.length) renderProgram(programState);
+  sel.value = first.id;
+  sel.dataset.picked = "1";
+  renderProgram(programState);
+}
+
+/** The line on "Coach program": the running one, or where the picked one stands. */
+function programBadge() {
+  if (!programState || !programState.programs) return "";
+  if (programState.program) return `${programState.program.name}: on`;
+  const sel = $("prog-select"), prog = programState.programs.find(p => p.id === (sel && sel.value)) || programState.programs[0];
+  return prog ? `${prog.name}: ${getProgramProgress(prog, programState).text}` : "";
+}
+
+function renderChoices() {
+  // What's running on the server says what's being done, when nothing was picked here today.
+  if (!choice) {
+    if (programState && programState.program) choice = "program";
+    else if (planStep) choice = "plan";
+    else if (gameState && gameState.game) choice = "game";
+  }
+  if (choice === "noball") pickNoBallProgram();
+  const box = $("choices");
+  const html = CHOICES.map(c => `<button class="choice${choice === c.id ? " on" : ""}" data-id="${c.id}"><b>${esc(c.title)}</b>` +
+    `<span>${esc(c.id === "program" && programBadge() || c.desc)}</span></button>`).join("");
+  if (box.dataset.html !== html) {
+    box.innerHTML = html;
+    box.dataset.html = html;
+    for (const b of box.querySelectorAll(".choice")) b.onclick = () => choose(b.dataset.id);
+  }
+  $("n2").className = "n" + (choice ? " ok" : "");
+  const balls = !!choice && choice !== "noball";
+  $("sec-record").hidden = !balls;
+  $("sec-swings").hidden = !balls;
+  $("sec-program").hidden = !(choice === "program" || choice === "noball");
+  $("sec-plan").hidden = choice !== "plan";
+  $("sec-game").hidden = !(choice === "game" || (gameState && gameState.game));
+  $("n7").textContent = choice === "game" ? "4" : "5";  // after Today's plan when a plan block plays one
+  $("n5").textContent = balls ? "4" : "3";
+  renderReady();
+}
+
+// ---- 1. Get ready: open until both phones record (or for drills without a ball), then one line ----
+function renderReady() {
+  const p = (status && status.phones) || {};
+  const recording = !!(p.face && p.face.recording && p.dtl && p.dtl.recording);
+  const needed = choice !== "noball";
+  $("n1").className = "n" + (recording || (needed && checksGood && camsGood) ? " ok" : "");
+  const open = readyOpen != null ? readyOpen : needed && !recording;
+  $("ready-full").hidden = !open;
+  $("ready-sum").hidden = open;
+  const sq = status && status.rows.find(r => r.key === "square");
+  $("ready-text").textContent = !needed ? "No phones or Square needed for drills without a ball."
+    : recording ? "● Both phones recording" + (sq ? ` · ${sq.label}: ${sq.text}` : "")
+    : checksGood && camsGood ? "✓ Both cameras see you; Square and the laptop are ready." : "Something needs a look.";
+  $("ready-show").textContent = open ? "Hide the cameras" : "Show the cameras";
+}
+$("ready-show").onclick = () => { readyOpen = $("ready-full").hidden; renderReady(); };
 
 function blockNeeds3d(b) {
   if (!b || !b.gate) return false;
@@ -1139,486 +1171,13 @@ function getProgramProgress(prog, data) {
   return { text: `Not passed yet: ${fName} next`, level: "warn", currentBlockIndex: 0 };
 }
 
-function getWizardChoices() {
-  const choices = [];
-
-  // Coach programs
-  if (programState && programState.programs) {
-    for (const prog of programState.programs) {
-      const progress = getProgramProgress(prog, programState);
-      const is3d = programNeeds3d(prog);
-      choices.push({
-        id: "prog_" + prog.id,
-        type: "program",
-        programId: prog.id,
-        prog: prog,
-        title: prog.name,
-        badge: progress.text,
-        badgeLevel: progress.level,
-        desc: `${prog.cap} swings at most; ${prog.clubs}.${is3d ? " Uses 3D tracking." : ""}`,
-        blockIndex: progress.currentBlockIndex
-      });
-    }
-  }
-
-  // No-ball drills only
-  choices.push({
-    id: "noball",
-    type: "noball",
-    title: "No-ball drills only",
-    badge: "No gear needed",
-    badgeLevel: "wait",
-    desc: "No phones, no Square: just your movement and the tap checklist."
-  });
-
-  // Ball practice
-  choices.push({
-    id: "ball_practice",
-    type: "ball_practice",
-    title: "Ball practice",
-    badge: "Today's plan",
-    badgeLevel: "ok",
-    desc: "Phones + Square · warm-up, focus drill & scoring zone from your data."
-  });
-
-  // Play a game
-  choices.push({
-    id: "game",
-    type: "game",
-    title: "Play a game",
-    badge: "Combine & shaping",
-    badgeLevel: "ok",
-    desc: "Target games with strokes gained vs tour."
-  });
-
-  // Just hit balls
-  choices.push({
-    id: "hit",
-    type: "hit",
-    title: "Just hit balls",
-    badge: "Free practice",
-    badgeLevel: "wait",
-    desc: "Free hitting with launch monitor numbers and camera clips."
-  });
-
-  return choices;
-}
-
-function makeCamerasStep() {
-  return {
-    id: "cameras",
-    stepTitle: "Check the cameras",
-    checkTitle: "Both phones connected & framed",
-    check: () => {
-      const p = status?.phones || {};
-      const faceUp = !!p.face?.connected, dtlUp = !!p.dtl?.connected;
-      const faceRec = !!p.face?.recording, dtlRec = !!p.dtl?.recording;
-      const liveRec = faceRec && dtlRec;
-      const faceFramed = setupStatus?.face?.ok || liveRec;
-      const dtlFramed = setupStatus?.dtl?.ok || liveRec;
-
-      const ok = faceUp && dtlUp && faceFramed && dtlFramed;
-      let text = "";
-      if (ok) {
-        text = liveRec ? "Both phones connected and recording." : "Both phones connected and framed at the ball.";
-      } else if (!faceUp || !dtlUp) {
-        const miss = [];
-        if (!faceUp) miss.push("Face-on");
-        if (!dtlUp) miss.push("Down the line");
-        text = `Open SwingClips on: ${miss.join(" and ")}.`;
-      } else {
-        const frameMiss = [];
-        if (!faceFramed) frameMiss.push("Face-on: " + (setupStatus?.face?.text || "check camera"));
-        if (!dtlFramed) frameMiss.push("Down the line: " + (setupStatus?.dtl?.text || "check camera"));
-        text = frameMiss.join(" · ");
-      }
-      return { ok, text };
-    },
-    actionText: "Cameras look good ✓"
-  };
-}
-
-function makeCalib3dStep() {
-  return {
-    id: "calib3d",
-    stepTitle: "3D calibration",
-    checkTitle: "3D tracking calibrated",
-    check: () => {
-      const ok = !!(calibStatus && calibStatus.enabled && calibStatus.session);
-      let text = "";
-      if (ok) {
-        const sess = calibStatus.session;
-        const when = sess.created ? sess.created.slice(0, 10) : "";
-        text = `3D tracking calibrated from both cameras${when ? ' (' + when + ')' : ''}.`;
-      } else if (calibStatus && !calibStatus.enabled) {
-        text = "3D is not enabled on the server (SWINGCLIPS_3D).";
-      } else {
-        text = "No 3D calibration session found. Set tripods and calibrate.";
-      }
-      return { ok, text };
-    },
-    actionText: "3D ready ✓"
-  };
-}
-
-function makeSquareStep() {
-  return {
-    id: "square",
-    stepTitle: "Square launch monitor",
-    checkTitle: "Square paired & running",
-    check: () => {
-      const sqRow = (status?.rows || []).find(r => r.key === "square");
-      const ok = sqRow && sqRow.level === "ok";
-      const agent = status?.agent || {};
-      let text = "";
-      let extraHtml = "";
-      if (ok) {
-        text = sqRow.text || "Square watcher and app running.";
-      } else if (agent.connected && !agent.squareRunning) {
-        text = "Square's app isn't open: ";
-        extraHtml = `<button class="plan-btn on" id="wiz-open-square-btn" style="padding: 2px 10px; font-size: 13px; margin-top: 6px;">Open it</button>`;
-      } else {
-        text = sqRow ? (sqRow.text || "Square not running") : "Waiting for Square watcher heartbeat on sim laptop.";
-        if (agent.connected && !agent.watcherRunning) {
-          extraHtml = `<button class="plan-btn on" id="wiz-start-watcher-btn" style="padding: 2px 10px; font-size: 13px; margin-top: 6px;">Start watcher</button>`;
-        }
-      }
-      return { ok, text, extraHtml };
-    },
-    actionText: "Square ready ✓"
-  };
-}
-
-function makeRecordingStep() {
-  return {
-    id: "record",
-    stepTitle: "Start recording",
-    checkTitle: "Recording on both phones",
-    check: () => {
-      const p = status?.phones || {};
-      const rec = (p.face?.recording ? 1 : 0) + (p.dtl?.recording ? 1 : 0);
-      const ok = rec === 2;
-      let text = "";
-      if (ok) {
-        text = "Recording active on both phones.";
-      } else if (rec === 1) {
-        text = "Recording on one phone only: starting the other…";
-      } else {
-        text = "Phones are ready. Tap Start recording to begin.";
-      }
-      return { ok, text, rec };
-    },
-    actionText: "● Start recording",
-    onAction: async () => {
-      await command("start");
-    }
-  };
-}
-
-function getStepsForChoice(choice) {
-  if (!choice) return [];
-
-  if (choice.type === "noball") {
-    return [
-      {
-        id: "noball_intro",
-        stepTitle: "No-ball drills",
-        checkTitle: "No gear needed",
-        check: () => ({ ok: true, text: "No phones, no Square: practice swings judged by feel." }),
-        actionText: "Open drill checklist →"
-      }
-    ];
-  }
-
-  if (choice.type === "program") {
-    const prog = choice.prog || (programState?.programs || []).find(p => p.id === choice.programId);
-    const blockIdx = choice.blockIndex || 0;
-    const curBlock = prog?.blocks[blockIdx] || prog?.blocks[0];
-    const isBall = curBlock ? !!curBlock.ball : true;
-    const needs3d = curBlock ? blockNeeds3d(curBlock) : (prog ? programNeeds3d(prog) : false);
-
-    if (!isBall) {
-      return [
-        {
-          id: "prog_noball",
-          stepTitle: `Block ${blockIdx + 1}: ${curBlock?.name || "Drill"}`,
-          checkTitle: "No-ball drills (judged by feel)",
-          check: () => ({ ok: true, text: `${curBlock?.how || "Practice swings judged by feel."} No phones or Square needed for this block.` }),
-          actionText: `Start ${curBlock?.name ? curBlock.name.split(':')[0] : "drill"} reps →`
-        }
-      ];
-    }
-
-    const steps = [];
-    steps.push(makeCamerasStep());
-    if (needs3d) steps.push(makeCalib3dStep());
-    steps.push(makeSquareStep());
-    steps.push(makeRecordingStep());
-    return steps;
-  }
-
-  if (choice.type === "ball_practice") {
-    return [
-      makeCamerasStep(),
-      makeSquareStep(),
-      makeRecordingStep()
-    ];
-  }
-
-  if (choice.type === "game") {
-    return [
-      makeSquareStep(),
-      makeCamerasStep(),
-      makeRecordingStep()
-    ];
-  }
-
-  if (choice.type === "hit") {
-    return [
-      makeCamerasStep(),
-      makeSquareStep(),
-      makeRecordingStep()
-    ];
-  }
-
-  return [];
-}
-
-function selectWizardChoice(choiceId) {
-  const choices = getWizardChoices();
-  const c = choices.find(x => x.id === choiceId);
-  if (!c) return;
-  wizardChoice = c;
-  wizardStepIndex = 0;
-  wizardHandedOver = false;
-  saveWizardStorage();
-  renderWizard();
-}
-
-function advanceWizardStep() {
-  const steps = getStepsForChoice(wizardChoice);
-  if (wizardStepIndex < steps.length - 1) {
-    wizardStepIndex++;
-    saveWizardStorage();
-    renderWizard();
-  } else {
-    handoverWizard(wizardChoice);
-  }
-}
-
-async function handoverWizard(choice) {
-  wizardHandedOver = true;
-  saveWizardStorage();
-  renderWizard();
-
-  if (choice.type === "program" || choice.type === "noball") {
-    const progId = choice.programId || (choice.type === "noball" ? "sequence1" : "sequence");
-    const sel = $("prog-select");
-    if (sel && sel.value !== progId) {
-      sel.value = progId;
-      renderProgram(programState);
-    }
-    if (!programState?.program || programState.program.id !== progId) {
-      await programPost("/api/program", { program: progId });
-    }
-    const sec = $("sec-program");
-    // Again once the started program has drawn (it pushes the page down as it appears).
-    if (sec) { sec.scrollIntoView({ block: "start" }); setTimeout(() => sec.scrollIntoView({ block: "start" }), 800); }
-  } else if (choice.type === "ball_practice") {
-    const sec = $("sec-plan");
-    if (sec) sec.scrollIntoView({ block: "start" });
-  } else if (choice.type === "game") {
-    const sec = $("sec-game");
-    if (sec) sec.scrollIntoView({ block: "start" });
-  } else if (choice.type === "hit") {
-    const sec = $("sec-swings") || $("swings");
-    if (sec) sec.scrollIntoView({ block: "start" });
-  }
-}
-
-function changeWizardSession() {
-  wizardChoice = null;
-  wizardStepIndex = 0;
-  wizardHandedOver = false;
-  pendingStorageChoiceId = null;
-  saveWizardStorage();
-  renderWizard();
-  const w = $("sec-wizard");
-  if (w) w.scrollIntoView({ block: "start" });
-}
-
-function renderWizard() {
-  const bannerEl = $("wiz-banner");
-  const pickerEl = $("wiz-picker");
-  const stepEl = $("wiz-step");
-  if (!bannerEl || !pickerEl || !stepEl) return;
-
-  if (pendingStorageChoiceId && !wizardChoice) {
-    const choices = getWizardChoices();
-    const c = choices.find(x => x.id === pendingStorageChoiceId);
-    if (c) {
-      wizardChoice = c;
-      pendingStorageChoiceId = null;
-    }
-  }
-
-  // 1. Handed over banner mode
-  if (wizardHandedOver && wizardChoice) {
-    bannerEl.hidden = false;
-    pickerEl.hidden = true;
-    stepEl.hidden = true;
-    bannerEl.innerHTML = `
-      <div class="wiz-banner-title">
-        <span>Today's session: <b>${esc(wizardChoice.title)}</b></span>
-        <span class="tag ${wizardChoice.badgeLevel || 'ok'}">${esc(wizardChoice.badge || 'active')}</span>
-      </div>
-      <button class="plan-btn on" id="wiz-change-btn">Change session</button>
-    `;
-    const btn = $("wiz-change-btn");
-    if (btn) btn.onclick = changeWizardSession;
-    return;
-  }
-
-  // 2. Choice picker mode
-  if (!wizardChoice) {
-    bannerEl.hidden = true;
-    pickerEl.hidden = false;
-    stepEl.hidden = true;
-    const choices = getWizardChoices();
-    pickerEl.innerHTML = `
-      <div style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">What are you doing today?</div>
-      <p class="hint" style="margin: 0 0 12px;">Choose your session. We'll check what's needed and get you ready.</p>
-      <div class="wiz-choices">
-        ${choices.map(c => `
-          <button class="wiz-choice-btn" data-choice="${esc(c.id)}">
-            <div class="wiz-choice-head">
-              <span class="wiz-choice-title">${esc(c.title)}</span>
-              <span class="tag ${c.badgeLevel || 'ok'}">${esc(c.badge)}</span>
-            </div>
-            <div class="wiz-choice-desc">${esc(c.desc)}</div>
-          </button>
-        `).join("")}
-      </div>
-    `;
-    pickerEl.querySelectorAll(".wiz-choice-btn").forEach(btn => {
-      btn.onclick = () => selectWizardChoice(btn.dataset.choice);
-    });
-    return;
-  }
-
-  // 3. Step-by-step wizard mode
-  bannerEl.hidden = true;
-  pickerEl.hidden = true;
-  stepEl.hidden = false;
-
-  const steps = getStepsForChoice(wizardChoice);
-  if (!steps.length) {
-    handoverWizard(wizardChoice);
-    return;
-  }
-  if (wizardStepIndex >= steps.length) {
-    wizardStepIndex = steps.length - 1;
-  }
-  const step = steps[wizardStepIndex];
-  const checkRes = step.check ? step.check() : { ok: true, text: "" };
-  const isOk = !!checkRes.ok;
-
-  const isLast = wizardStepIndex === steps.length - 1;
-  const isRecordStep = step.id === "record";
-  const needsRecordAction = isRecordStep && !isOk;
-
-  let primaryLabel = isLast ? "Next: Start session →" : "Next →";
-  if (needsRecordAction) {
-    primaryLabel = "● Start recording";
-  } else if (!isOk && step.actionText) {
-    primaryLabel = step.actionText;
-  }
-
-  stepEl.innerHTML = `
-    <div class="wiz-step-card">
-      <div class="wiz-step-head">
-        <span>${esc(wizardChoice.title)}</span>
-        <span>Step ${wizardStepIndex + 1} of ${steps.length}</span>
-      </div>
-      <div class="wiz-step-title">${esc(step.stepTitle)}</div>
-      <div class="wiz-step-status ${isOk ? 'ok' : 'wait'}">
-        <span class="wiz-step-icon">${isOk ? '✓' : '⏳'}</span>
-        <div>
-          <b>${esc(step.checkTitle)}</b>
-          <div style="font-size: 13px; margin-top: 2px; color: ${isOk ? 'var(--text)' : 'var(--muted)'};">
-            ${esc(checkRes.text)}
-            ${checkRes.extraHtml ? `<div style="margin-top: 4px;">${checkRes.extraHtml}</div>` : ''}
-          </div>
-        </div>
-      </div>
-      <div class="wiz-step-actions">
-        <button class="wiz-btn-big" id="wiz-btn-primary">${esc(primaryLabel)}</button>
-        ${needsRecordAction ? `<button class="plan-btn on" id="wiz-btn-override">Recording ready ✓</button>` : ''}
-        <button class="wiz-btn-sub" id="wiz-btn-back">← Back</button>
-      </div>
-    </div>
-  `;
-
-  const openSqBtn = $("wiz-open-square-btn");
-  if (openSqBtn) {
-    openSqBtn.onclick = async () => {
-      openSqBtn.disabled = true;
-      openSqBtn.textContent = "Opening…";
-      await sendRelayCommand("start_square");
-      setTimeout(pollStatus, 1000);
-    };
-  }
-  const startWatchBtn = $("wiz-start-watcher-btn");
-  if (startWatchBtn) {
-    startWatchBtn.onclick = async () => {
-      startWatchBtn.disabled = true;
-      startWatchBtn.textContent = "Starting…";
-      await sendRelayCommand("start_watcher");
-      setTimeout(pollStatus, 1000);
-    };
-  }
-
-  const primaryBtn = $("wiz-btn-primary");
-  if (primaryBtn) {
-    primaryBtn.onclick = async () => {
-      if (needsRecordAction && step.onAction) {
-        primaryBtn.disabled = true;
-        await step.onAction();
-      } else {
-        advanceWizardStep();
-      }
-    };
-  }
-
-  const overrideBtn = $("wiz-btn-override");
-  if (overrideBtn) {
-    overrideBtn.onclick = () => advanceWizardStep();
-  }
-
-  const backBtn = $("wiz-btn-back");
-  if (backBtn) {
-    backBtn.onclick = () => {
-      if (wizardStepIndex > 0) {
-        wizardStepIndex--;
-        saveWizardStorage();
-        renderWizard();
-      } else {
-        wizardChoice = null;
-        wizardStepIndex = 0;
-        saveWizardStorage();
-        renderWizard();
-      }
-    };
-  }
-}
-
 let programTimer = 0;
 async function pollProgram() {
   clearTimeout(programTimer);
   const data = await getJson("/api/program");
   renderProgram(data);
   fillNotes(data);
-  renderWizard();
+  renderChoices();
   programTimer = setTimeout(pollProgram, document.hidden ? 20000 : 2000);
 }
 
@@ -1633,12 +1192,12 @@ async function pollStatus() {
   status = s;
   setupStatus = setup;
   calibStatus = calib;
-  renderChecks(s);
+  checksGood = renderChecks(s);
   renderLauncher(s);
   const good = ["face", "dtl"].map(a => renderCam(a, setup && setup[a], s && s.phones[a] && s.phones[a].recording));
-  $("n2").className = "n" + (good.every(Boolean) ? " ok" : "");
+  camsGood = good.every(Boolean);
   renderGo(s);
-  renderWizard();
+  renderReady();
   statusTimer = setTimeout(pollStatus, document.hidden ? 10000 : 1000);
 }
 async function pollSwings() {
@@ -1653,6 +1212,7 @@ async function pollGame() {
   if (data) {
     renderGame(data);
     renderPlan();
+    renderChoices();
   }
   gameTimer = setTimeout(pollGame, document.hidden ? 20000 : 2000);
 }
@@ -1676,8 +1236,8 @@ if (btnWat) btnWat.addEventListener("click", () => sendRelayCommand("start_watch
 const btnGs = $("btn-launch-gspro");
 if (btnGs) btnGs.addEventListener("click", () => sendRelayCommand("start_gspro"));
 
-loadWizardStorage();
-renderWizard();
+loadChoice();
+renderChoices();
 pollStatus();
 pollSwings();
 pollGame();

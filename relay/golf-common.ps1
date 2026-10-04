@@ -195,9 +195,11 @@ function Update-RelayFiles([string]$baseDir = "", [string]$server = "", [switch]
     return ,$changed
 }
 
-function Open-StartPage([string]$server = "", [switch]$DryRun) {
+# $do picks what the Start page shows (start.html ?do=: hit, plan, program, game, noball).
+function Open-StartPage([string]$server = "", [switch]$DryRun, [string]$do = "") {
     if (-not $server) { $server = "http://192.168.86.250:8000" }
     $url = $server.TrimEnd('/') + "/start"
+    if ($do) { $url += "?do=" + $do }
     if ($DryRun) { return "Would open $url" }
     Start-Process $url
     return "Opened $url"

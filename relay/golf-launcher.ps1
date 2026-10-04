@@ -72,7 +72,7 @@ function Start-GSPro {
 function Start-Drills {
     Say "Drills, no ball: nothing to start on the laptop."
     Start-Agent
-    Say (Open-StartPage $Server -DryRun:$DryRun)
+    Say (Open-StartPage $Server -DryRun:$DryRun -do "noball")
     Say "Pick your drills on the Start page."
 }
 

@@ -121,6 +121,21 @@ class Pairing(unittest.TestCase):
             app.load_shots = orig
         self.assertEqual({k: v["gap"] for k, v in got.items()}, {f"c{i}": g for i, g in enumerate(gaps)})
 
+    def test_lone_clip_after_a_swing_doesnt_take_its_shot(self):
+        """2026-10-04 17:13: a driver swing (both phones), then a sound only the face-on phone heard
+        8 s later; Square's report came 15.3 s after the swing and must stay with it."""
+        import app
+        t0 = 1_791_152_016.0
+        clips = {"swing": t0, "noise": t0 + 8}
+        shots = [{"_t": t0 + 15.3, "source": "square-app", "received": ""}]
+        orig = app.load_shots
+        app.load_shots = lambda: shots
+        try:
+            got = app.match_shots(clips, {"noise"})
+        finally:
+            app.load_shots = orig
+        self.assertEqual(list(got), ["swing"])
+
 
 if __name__ == "__main__":
     unittest.main()

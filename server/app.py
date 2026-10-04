@@ -1005,7 +1005,8 @@ def listed_clips(with_shots: bool = True, since: float | None = None) -> list[di
             c.pop("_t")
         return clips
     # One shot per swing: paired by the face-on clip (or the only one), then shown on both angles.
-    shots = match_shots({c["name"]: c["_t"] for c in swing_clips if not (c["partner"] and c["angle"] != "face")})
+    shots = match_shots({c["name"]: c["_t"] for c in swing_clips if not (c["partner"] and c["angle"] != "face")},
+                        {c["name"] for c in swing_clips if not c["partner"]})
     clubs = load_clubs()
     for name, shot in shots.items():
         # The club as corrected on the review page, if it was (Square's own is kept alongside).
@@ -1141,14 +1142,18 @@ async def upload(name: str, request: Request, shutter: str | None = Query(None, 
 # What a source doesn't measure (the connector: carry, club speed) is filled in or left out as the
 # shot comes in (ballflight.fill).
 SHOTS_FILE = Path(os.environ.get("SWINGCLIPS_SHOTS", CLIPS_DIR.parent / "shots.jsonl"))
-# Typical seconds from strike to report, per source. Square's own app saves a shot 6-16 s after the
-# strike (10.4-15.5 s over the first sessions, 9-13 s on 2026-09-28 with some wedges at 6.0-6.9 s;
-# its ball-flight animation plays first, or the laptop clock drifts); the GSPro connector reports
-# within about a second. A shot pairs with the clip whose gap is closest to its source's delay,
-# within SHOT_SLACK_S of it. Swings are ~20 s apart, so the window can't reach the wrong one.
-SHOT_DELAY_S = {"square-app": 11.0, "gspro-connect": 1.0}
+# Typical seconds from the clip's name time to the report, per source. Square's own app saves a shot
+# 6-17 s after it (409 shots to 2026-10-04: median 13.4, 5-95% 9.4-15.0; wedges quickest, GW 9.3,
+# driver and hybrid ~14.5-15, up to 16.6; its ball-flight animation plays first); the GSPro connector
+# reports within about a second. A shot pairs with the clip whose gap is closest to its source's
+# delay, within SHOT_SLACK_S of it; a clip only one phone recorded counts LONE_PENALTY_S further
+# off, so a sound one phone heard a few seconds after a swing (kids, a dropped club) doesn't take
+# that swing's shot (2026-10-04 17:13: a driver shot 15.3 s after the swing went to a face-only
+# clip 7.3 s before it when the delay was 11).
+SHOT_DELAY_S = {"square-app": 13.0, "gspro-connect": 1.0}
 DEFAULT_SHOT_DELAY_S = 1.0
-SHOT_SLACK_S = 6.0
+SHOT_SLACK_S = 7.0
+LONE_PENALTY_S = 3.0
 
 
 @app.post("/api/shots")
@@ -1187,15 +1192,16 @@ def load_shots() -> list[dict]:
     return shots
 
 
-def match_shots(clip_times: dict[str, float]) -> dict[str, dict]:
-    """Clip name -> the shot reported just after its strike. Each shot goes to one clip at most."""
+def match_shots(clip_times: dict[str, float], lone: set[str] = frozenset()) -> dict[str, dict]:
+    """Clip name -> the shot reported just after its strike. Each shot goes to one clip at most.
+    `lone`: clips only one phone recorded, picked only when no two-phone swing fits better."""
     pairs = []
     for s in load_shots():
         delay = SHOT_DELAY_S.get(s.get("source"), DEFAULT_SHOT_DELAY_S)
         for name, t in clip_times.items():
             gap = s["_t"] - t
             if gap >= -1.0 and abs(gap - delay) <= SHOT_SLACK_S:
-                pairs.append((abs(gap - delay), name, s))
+                pairs.append((abs(gap - delay) + (LONE_PENALTY_S if name in lone else 0.0), name, s))
     matched, used = {}, set()
     for _, name, s in sorted(pairs, key=lambda p: p[0]):
         if name in matched or id(s) in used:
@@ -2323,6 +2329,25 @@ def relay_command(body: RelayCommand):
         raise HTTPException(400, str(e))
     print(f"Relay command: {body.action} ({body.source or ''}) -> {res['id']}", flush=True)
     return {"ok": True, "result": res}
+
+
+@app.get("/api/events")
+def get_events(since: str = "", kind: str = "", limit: int = Query(2000, ge=1, le=20000)):
+    """The events log (what the phones were sent to say, uploads, quiet, clips with no swing), newest
+    `limit` lines from `since` (an ISO time, e.g. 2026-10-04 or 2026-10-04T17:00), optionally one kind."""
+    try:
+        lines = EVENTS_FILE.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+    out = []
+    for line in lines:
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if (not since or e.get("t", "") >= since) and (not kind or e.get("kind") == kind):
+            out.append(e)
+    return out[-limit:]
 
 
 @app.get("/api/relay/files")
