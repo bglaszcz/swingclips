@@ -1987,6 +1987,8 @@ def calib_status():
             "recording": run["current"], "job": run["job"], "tripods": run["tripods"], "height": run["height"],
             # Swings filmed from both phones since the tripods were set (for placing the cameras from them).
             "swingsSinceTripods": swings_since_tripods(run["tripods"]),
+            # 3D off for the latest swings because a camera moved since the latest calibration.
+            "moved": camera_moved() if calib.enabled() else None,
             # The latest recording's clips: each phone's of the lens board, and both of the mat board.
             "clips": {"face": calib_clips("lens", "face"), "dtl": calib_clips("lens", "dtl"), "mat": calib_clips("mat", None)},
             # Every lens clip of each phone still here (what Calibrate uses).
@@ -2079,12 +2081,46 @@ def swings_since_tripods(since: float | None) -> int:
     return min(face, dtl)
 
 
+class TripodsSet(BaseModel):
+    since: float | None = None   # unix time: the swings from then on place the cameras (default: now)
+
+
 @app.post("/api/calib/tripods")
-def calib_tripods():
-    """The tripods are set (or were moved): the swings from now on place the cameras."""
-    t = calib_runs.set_tripods()
-    print(f"3D: tripods set at {datetime.fromtimestamp(t):%H:%M:%S}", flush=True)
+def calib_tripods(body: TripodsSet | None = None):
+    """The tripods are set (or were moved): the swings from now on place the cameras, or from `since`
+    (the calibration page offers the start of the swings a moved camera turned 3D off for)."""
+    since = body.since if body else None
+    if since is not None:
+        s = calib.sessions()
+        if since > time.time() or (s and since <= s[-1]["created"]):
+            raise HTTPException(400, "since must be after the latest calibration and not in the future")
+    t = calib_runs.set_tripods(since)
+    print(f"3D: tripods set at {datetime.fromtimestamp(t):%a %H:%M:%S}", flush=True)
     return calib_status()
+
+
+# A camera moved: this many swings in a row since the latest calibration said so (swing3d.moved,
+# ball_moved), with none in 3D after them. Shown on the Start and 3D calibration pages.
+MOVED_SWINGS = 3
+
+
+def camera_moved() -> dict | None:
+    """{since: the first of those swings' time, swings: how many, text: the latest one's why}, or None."""
+    s = calib.sessions()
+    latest = s[-1]["created"] if s else None
+    with records_lock:
+        recs = [(n, r.get("why3d"), bool(r.get("body3d"))) for n, r in swing_records.items() if r.get("partner")]
+    run = []
+    for t, why, ok in sorted((recorded_at(CLIPS_DIR / n), why, ok) for n, why, ok in recs):
+        if latest is not None and t < latest:
+            continue
+        if ok:
+            run = []
+        elif why and "moved" in why:
+            run.append((t, why))
+    if len(run) < MOVED_SWINGS:
+        return None
+    return {"since": run[0][0], "swings": len(run), "text": run[-1][1]}
 
 
 class BodyPlacement(BaseModel):

@@ -62,6 +62,7 @@
   pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.4 ui-monospace, Consolas, monospace; }
   .note { padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); border: 1px solid var(--warn); font-size: 14px; }
   @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } }
+  .moved { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
 </style>
 </head>
 <body>
@@ -99,6 +100,8 @@
       <li>Tap <b>Place the cameras</b>. It works out where each phone stands from your joints in both pictures,
         sized by your height. Check the heights and distances it prints with a tape measure.</li>
     </ol>
+    <div class="moved" id="moved" hidden><b id="moved-text"></b>
+      <div class="row"><button class="primary" id="moved-run">Place the cameras from those swings</button></div></div>
     <div class="row">
       <button id="tripods">Tripods are set</button>
       <button class="primary" id="body-run">Place the cameras</button>
@@ -159,14 +162,17 @@ for (const [i, a] of [[1, "face"], [2, "dtl"]]) {
 
 async function post(url, body, key) {
   note[key] = "";
+  let ok = false;
   try {
     const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) note[key] = d.detail || `The server said ${r.status}`;
     else if (d.recording !== undefined) state = d;
+    ok = r.ok;
   } catch { note[key] = "Can't reach the server"; }
   render();
   poll();
+  return ok;
 }
 
 for (const a of ["face", "dtl"]) {
@@ -178,6 +184,15 @@ $("mat-run").onclick = () => post("/api/calib/run", { kind: "mat", squareMm: par
 $("tripods").onclick = () => {
   if (state && state.tripods && !confirm("Mark the tripods as set again? Only the swings from now on will place the cameras.")) return;
   post("/api/calib/tripods", {}, "body");
+};
+// A camera moved: the swings since then place the cameras (the tripods "set" just before the first),
+// and the calibration made from them holds for them too, so they get their 3D back.
+$("moved-run").onclick = async () => {
+  const h = parseFloat($("body-height").value);
+  if (!(h >= 48 && h <= 90)) { note.body = "Type your height in inches first (e.g. 70 for 5 ft 10)."; render(); return; }
+  $("moved-run").disabled = true;
+  if (await post("/api/calib/tripods", { since: state.moved.since - 1 }, "body")) await post("/api/calib/body", { heightIn: h }, "body");
+  $("moved-run").disabled = false;
 };
 $("body-run").onclick = () => {
   const h = parseFloat($("body-height").value);
@@ -264,6 +279,15 @@ function render() {
   $("tripods").textContent = state.tripods ? "Tripods moved: set again" : "Tripods are set";
   $("tripods").disabled = busy;
   $("body-run").disabled = busy || !state.tripods || n < 3;
+  const mv = state.moved;
+  $("moved").hidden = !mv || bodyBusy;
+  if (mv) {
+    $("moved-text").textContent = `3D has been off since ${new Date(mv.since * 1000).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}: ` +
+      `a camera moved (${mv.swings} swings since). If the tripods haven't moved again, this places the cameras from those swings ` +
+      "and gives them their 3D back. If you've moved a tripod since, use the steps below instead.";
+    $("moved-text").title = mv.text;
+    $("moved-run").disabled = busy || mv.swings < 3;
+  }
   const hIn = $("body-height");
   if (!hIn.value && document.activeElement !== hIn && state.height) hIn.value = Math.round(state.height / 0.0254 * 10) / 10;
   const bits = [];

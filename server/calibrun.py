@@ -151,10 +151,11 @@ class Runs:
         threading.Thread(target=follow, daemon=True).start()
         return dict(job)
 
-    def set_tripods(self) -> float:
-        """The tripods were (re)set now: the swings after it place the cameras."""
+    def set_tripods(self, at: float | None = None) -> float:
+        """The tripods were (re)set now, or at `at` (unix time, e.g. just before a session filmed after a
+        camera moved): the swings after it place the cameras."""
         with self.lock:
-            self.tripods = round(self.clock(), 3)
+            self.tripods = round(self.clock() if at is None else at, 3)
             self._save()
             return self.tripods
 
