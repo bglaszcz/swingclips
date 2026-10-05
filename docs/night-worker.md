@@ -45,6 +45,13 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    dashed sky blue without angle labels so the server's solid skeleton remains primary. This works in
    both regular playback and labeling mode (`L`), allowing the owner to judge disagreements by eye
    directly on the video.
+4. **Nightly improve step and the Night report.** When there are new hand labels, the night worker
+   trains a new club model on the GPU, scores it against the current baseline on validation swings it
+   never saw (`eval.py`), and sends the server a candidate with before/after scores (`/api/improve`).
+   The review page's **Tools > Night report** view (`static/nightreport-view.js`) shows the candidate
+   comparison table, worker progress from `/api/night`, and past nights. Tapping **Use it** (or
+   **Go back to this one**) adopts the model via `POST /api/improve/<id>/use`, queuing all clips to be
+   analyzed again over idle hours.
 
 ## Setting it up (gaming PC)
 

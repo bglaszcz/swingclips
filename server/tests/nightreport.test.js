@@ -197,3 +197,27 @@ test("nightLine: formats date, time, clips and improve sentence", () => {
   assert.match(line, /Trained a club model on 52 labeled swings: better/);
   assert.ok(line.includes(" · "));
 });
+
+test("index.html contains Night report markup, Tools menu item, and scripts", () => {
+  const htmlPath = path.resolve(__dirname, "../static/index.html");
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.ok(html.includes('id="nightreport-btn"'), "defines Tools menu Night report button");
+  assert.ok(html.includes('<section id="nightreport" hidden>'), "defines #nightreport section");
+  assert.ok(html.includes('id="nr-close"'), "defines Close button");
+  assert.ok(html.includes('id="nr-status"'), "defines status span");
+  assert.ok(html.includes('id="nr-content"'), "defines content container");
+  assert.ok(html.includes('<script src="/static/nightreport.js"></script>'), "loads nightreport.js");
+  assert.ok(html.includes('<script src="/static/nightreport-view.js"></script>'), "loads nightreport-view.js");
+  assert.ok(html.includes("#nightreport {"), "defines #nightreport CSS");
+  assert.ok(html.includes(".nr-table"), "defines .nr-table CSS");
+});
+
+test("trends.js includes nightreport in showView and leaveTrendViews", () => {
+  const trendsPath = path.resolve(__dirname, "../static/trends.js");
+  const trends = fs.readFileSync(trendsPath, "utf8");
+
+  assert.ok(trends.includes('document.getElementById("nightreport")'), "showView references nightreport box");
+  assert.ok(trends.includes('document.getElementById("nightreport-btn")'), "showView references nightreport button");
+  assert.ok(trends.includes('which === "nightreport"'), "showView checks for nightreport");
+});

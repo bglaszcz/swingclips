@@ -131,6 +131,12 @@ What the server works out for each swing and what each part of the review page s
   each match records its gap. A clip only one phone recorded counts 3 s further off (`LONE_PENALTY_S`),
   so a sound one phone heard just after a swing doesn't take the swing's shot. `GET /api/events`
   (`since`, `kind`, `limit`) reads the events log from another PC.
+- Night worker report: **Tools > Night report** (`static/nightreport-view.js`, `static/nightreport.js`):
+  the gaming PC's nightly improve run. Shows the newest candidate model's score comparisons on validation
+  swings (Before, After, Change table; green = better, amber = worse, muted = within noise, never red),
+  worker progress from `/api/night`, folded earlier candidates, and past night lines. Tapping **Use it**
+  (or **Go back to this one**) promotes the model via `POST /api/improve/<id>/use` to re-analyze clips over
+  idle hours.
 - Deploy: **Tools > Update the server** (`static/update.js`, `update.py`): `GET /api/update` fetches
   and lists the new commits and whether a restart is needed; `POST /api/update` does
   `git pull --ff-only` and, when the change needs it, the server exits with code 3, which
