@@ -95,7 +95,7 @@ test("a link planted only in early sessions -> found, then faded", () => {
   assert.deepEqual(t, { found: 1, held: 0, faded: 1, reversed: 0, early: 0 });
 
   const s = HoldUp.sentence(r0);
-  assert.equal(s, "Found Sep 22; faded in the 3 sessions since.");
+  assert.match(s, /^Found Sep 22; not clear in the 3 sessions since \(r -?\d\.\d\d, \d+ swings\)\.$/);
 });
 
 test("a link planted opposite in later sessions -> found, then reversed", () => {
@@ -196,4 +196,10 @@ test("formatDate: converts ISO dates and leaves plain strings intact", () => {
   assert.equal(HoldUp.formatDate("2026-10-03"), "Oct 3");
   assert.equal(HoldUp.formatDate("s0"), "s0");
   assert.equal(HoldUp.formatDate(""), "");
+});
+
+test("the date comes from the session's start when its key is a clip name", () => {
+  const x = { foundAt: "swing_face_1920x1080_240fps_1790278981_2308ms.mp4", foundStart: new Date(2026, 8, 25, 14).getTime(),
+              verdict: "too early", later: { sessions: 1, n: 3 } };
+  assert.equal(HoldUp.sentence(x), "Found Sep 25; too early to tell (1 session since).");
 });

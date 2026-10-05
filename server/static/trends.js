@@ -190,7 +190,6 @@ function holdUpData(club, sessions, input) {
   const replayed = SwingHoldUp.replay(input);
   const tally = SwingHoldUp.tally(replayed);
   const elapsed = performance.now() - t0;
-  console.log(`[HoldUp] replay for ${club || "all"}: ${sessions.length} sessions, ${replayed.length} findings in ${elapsed.toFixed(1)}ms`);
 
   holdUpCache[key] = { replayed, tally, elapsed };
   return holdUpCache[key];
@@ -1562,7 +1561,7 @@ const pEl = (tag, cls, text) => Object.assign(document.createElement(tag), cls ?
  * both ways by different results is a trade-off, not a drill.
  */
 function helpsModel(club, sessions) {
-  const input = sessions.map(s => ({ key: s.key, rows: s.rows.map(r => ({ ...r,
+  const input = sessions.map(s => ({ key: s.key, start: s.start, rows: s.rows.map(r => ({ ...r,
     shaky: Object.fromEntries(SwingSummary.BODY.map(f => [f.key, isShaky(r, f)])) })) }));
   const a = SwingHelps.analyze(input);
   const listed = a.links.filter(l => l.label !== "chance");
@@ -1590,7 +1589,7 @@ function renderHelpsEvidence(club, sessions, h) {
   const replayMap = new Map((holdUp?.replayed || []).map(r => [`${r.move}:${r.result}`, r]));
   const verdictTags = {
     held: "held up later",
-    faded: "faded later",
+    faded: "not clear later",
     reversed: "reversed later",
     "too early": "too early to tell"
   };
@@ -1637,11 +1636,13 @@ function renderHelpsEvidence(club, sessions, h) {
     if (t.found > 0 || (a.tested && a.sessions >= 3)) {
       fold = pEl("details", "explain");
       fold.style.marginTop = "8px";
-      const sumText = `Checked forward: of ${t.found} finding${t.found === 1 ? "" : "s"}, ${t.held} held up in later sessions, ${t.faded} faded, ${t.reversed} reversed, ${t.early} too early to tell.`;
+      const sumText = `Checked forward: of ${t.found} finding${t.found === 1 ? "" : "s"}, ${t.held} held up in later sessions, ${t.faded} not clear since, ${t.reversed} reversed, ${t.early} too early to tell.`;
       fold.append(pEl("summary", null, sumText));
       const body = pEl("div");
+      const mv = k => SwingSummary.BODY.find(f => f.key === k)?.label || k;
+      const rs = k => (SwingHelps.RESULTS.find(r => r.key === k)?.label || k).toLowerCase();
       for (const item of (holdUp.replayed || [])) {
-        body.append(pEl("div", "note", SwingHoldUp.sentence(item)));
+        body.append(pEl("div", "note", `${mv(item.move)} → ${rs(item.result)}: ${SwingHoldUp.sentence(item)}`));
       }
       fold.append(body);
     }

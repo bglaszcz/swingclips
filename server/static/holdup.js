@@ -8,10 +8,11 @@
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
   /**
-   * Formats a session key or ISO date string into a short date ("Sep 28").
-   * Non-ISO keys (like "s0") are returned unchanged.
+   * Formats a session's start (ms since 1970) or an ISO date string into a short date ("Sep 28").
+   * Other keys (like "s0") are returned unchanged.
    */
   function formatDate(dStr) {
+    if (finite(dStr)) return new Date(dStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
     if (typeof dStr !== "string") return String(dStr || "");
     if (/^\d{4}-\d{2}-\d{2}/.test(dStr)) {
       const parts = dStr.slice(0, 10).split("-").map(Number);
@@ -52,7 +53,7 @@
 
   /**
    * Replays findings forward in time across sessions.
-   * @param sessions [{key, rows}] oldest first
+   * @param sessions [{key, start?, rows}] oldest first (start: ms since 1970, for the date in sentence)
    * @param opts {minSessions, moves, results}
    * @returns [{move, result, foundAt, foundLabel, foundSign, later: {sessions, n, r, p, agree, counted}, verdict}]
    */
@@ -75,6 +76,7 @@
               move: l.move,
               result: l.result,
               foundAt: sessions[k - 1].key,
+              foundStart: sessions[k - 1].start,
               foundLabel: l.label,
               foundSign: l.r > 0 ? 1 : l.r < 0 ? -1 : 0,
               foundK: k
@@ -110,6 +112,7 @@
         move: item.move,
         result: item.result,
         foundAt: item.foundAt,
+        foundStart: item.foundStart,
         foundLabel: item.foundLabel,
         foundSign: item.foundSign,
         later: {
@@ -160,7 +163,7 @@
    */
   function sentence(x) {
     if (!x) return "";
-    const date = formatDate(x.foundAt);
+    const date = formatDate(finite(x.foundStart) ? x.foundStart : x.foundAt);
     const count = (x.later && x.later.sessions != null) ? x.later.sessions : 0;
     const sessionWord = `${count} session${count === 1 ? "" : "s"}`;
 
@@ -175,7 +178,10 @@
       return `Found ${date}; reversed in the ${sessionWord} since (r ${r}, ${n} swing${n === 1 ? "" : "s"}).`;
     }
     if (x.verdict === "faded") {
-      return `Found ${date}; faded in the ${sessionWord} since.`;
+      // Not seen clearly again: with a few sessions since, that's often too little to say, not gone.
+      const n = (x.later && x.later.n != null) ? x.later.n : 0;
+      const r = fmtR(x.later && x.later.r);
+      return `Found ${date}; not clear in the ${sessionWord} since (r ${r}, ${n} swing${n === 1 ? "" : "s"}).`;
     }
     // "too early"
     return `Found ${date}; too early to tell (${sessionWord} since).`;
