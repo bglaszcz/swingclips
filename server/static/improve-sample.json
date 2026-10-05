@@ -1,0 +1,82 @@
+{
+  "inUse": {"club": "club-deep@0173e707", "since": "2026-09-27T18:40:00"},
+  "deepLeft": 0,
+  "candidates": [
+    {
+      "id": "club-2026-10-07-0215",
+      "kind": "club",
+      "made": "2026-10-07T02:51:10",
+      "status": "better",
+      "model": "club-deep@9f3c21aa",
+      "summary": "Trained on 52 labeled swings (1,104 frames). On 9 swings it never saw, key positions within one frame went from 61% to 66%, and the clubhead was found in the downswing on 74% of frames (was 68%).",
+      "verdict": {"better": true, "why": "Key positions 90th percentile 2.1 ms better on average, no position more than 1 frame worse."},
+      "train": {"swings": 52, "frames": 1104, "valSwings": 9, "epochs": 150, "minutes": 21.4, "labelsSig": "a1b2c3"},
+      "scores": {
+        "current": {
+          "positions": [
+            {"angle": "face", "event": "takeaway", "n": 9, "median": 12.5, "p90": 38.0, "within1": 33.3},
+            {"angle": "face", "event": "p2", "n": 9, "median": 8.3, "p90": 20.8, "within1": 55.6},
+            {"angle": "face", "event": "p4", "n": 9, "median": 8.3, "p90": 37.5, "within1": 33.3},
+            {"angle": "face", "event": "p8", "n": 9, "median": 4.2, "p90": 8.3, "within1": 77.8},
+            {"angle": "dtl", "event": "p2", "n": 8, "median": 8.3, "p90": 25.0, "within1": 37.5},
+            {"angle": "dtl", "event": "p8", "n": 8, "median": 4.2, "p90": 12.5, "within1": 62.5}
+          ],
+          "club": [
+            {"angle": "face", "phase": "downswing", "n": 31, "found": 90.3, "median": 2.0, "p90": 4.6},
+            {"angle": "dtl", "phase": "downswing", "n": 25, "found": 56.0, "median": 2.3, "p90": 6.7}
+          ],
+          "clubhead": [
+            {"angle": "face", "phase": "downswing", "n": 31, "found": 68.0, "median": 1.1, "p90": 2.9}
+          ]
+        },
+        "candidate": {
+          "positions": [
+            {"angle": "face", "event": "takeaway", "n": 9, "median": 12.5, "p90": 36.0, "within1": 33.3},
+            {"angle": "face", "event": "p2", "n": 9, "median": 4.2, "p90": 16.6, "within1": 66.7},
+            {"angle": "face", "event": "p4", "n": 9, "median": 8.3, "p90": 37.5, "within1": 33.3},
+            {"angle": "face", "event": "p8", "n": 9, "median": 4.2, "p90": 8.3, "within1": 88.9},
+            {"angle": "dtl", "event": "p2", "n": 8, "median": 8.3, "p90": 20.8, "within1": 50.0},
+            {"angle": "dtl", "event": "p8", "n": 8, "median": 4.2, "p90": 12.5, "within1": 62.5}
+          ],
+          "club": [
+            {"angle": "face", "phase": "downswing", "n": 31, "found": 93.5, "median": 1.9, "p90": 4.4},
+            {"angle": "dtl", "phase": "downswing", "n": 25, "found": 60.0, "median": 2.2, "p90": 6.1}
+          ],
+          "clubhead": [
+            {"angle": "face", "phase": "downswing", "n": 31, "found": 74.2, "median": 1.0, "p90": 2.7}
+          ]
+        }
+      }
+    },
+    {
+      "id": "club-2026-10-06-0220",
+      "kind": "club",
+      "made": "2026-10-06T02:58:40",
+      "status": "not better",
+      "model": "club-deep@51d0e7b2",
+      "summary": "Trained on 48 labeled swings (1,020 frames). On 9 swings it never saw, P8 face-on within one frame went from 78% to 44%.",
+      "verdict": {"better": false, "why": "P8 face-on within one frame 33 points worse."},
+      "train": {"swings": 48, "frames": 1020, "valSwings": 9, "epochs": 150, "minutes": 20.1, "labelsSig": "9f8e7d"},
+      "scores": {"current": {"positions": [], "club": [], "clubhead": []}, "candidate": {"positions": [], "club": [], "clubhead": []}}
+    },
+    {
+      "id": "previous-2026-09-27",
+      "kind": "club",
+      "made": "2026-09-27T18:40:00",
+      "status": "used before",
+      "model": "club-deep@0aa11bb2",
+      "summary": "The club model in use before club-2026-10-07-0215.",
+      "verdict": {"better": null, "why": ""},
+      "train": null,
+      "scores": null
+    }
+  ],
+  "nights": [
+    {"date": "2026-10-07", "started": "2026-10-07T02:00:04", "ended": "2026-10-07T06:58:51", "worker": "MichaelScarn",
+     "clips": 64, "improve": "Trained a club model on 52 labeled swings: better on the swings it never saw (club-2026-10-07-0215)."},
+    {"date": "2026-10-06", "started": "2026-10-06T02:00:02", "ended": "2026-10-06T07:00:00", "worker": "MichaelScarn",
+     "clips": 71, "improve": "Trained a club model on 48 labeled swings: not better, kept the one in use."},
+    {"date": "2026-10-05", "started": "2026-10-05T11:05:00", "ended": "2026-10-05T16:40:00", "worker": "MichaelScarn",
+     "clips": 824, "improve": "Nothing new to learn: no new labels since the last try."}
+  ]
+}
