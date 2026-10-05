@@ -111,6 +111,8 @@
     ["pelvisTop", "Pelvis turn at top", "°", "face", "p4", "pelvisTurn"],
     ["xFactor", "X-factor at top", "°", "face", "p4", "separation"],
     ["hipSway", "Hip sway at impact", "in", "face", "p7", "hipSway"],
+    ["leadHipP6", "Lead hip at P6", "in", "face", "p6", "leadHip"],
+    ["trailHipTop", "Trail hip at top", "in", "face", "p4", "trailHip"],
     ["handsAhead", "Hands ahead of ball at impact", "in", "face", "p7", "handsBall"],
     ["headSway", "Head sway at impact", "in", "face", "p7", "headSway"],
     ["headRise", "Head rise at impact", "in", "face", "p7", "headRise"],

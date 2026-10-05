@@ -302,9 +302,10 @@ _again_failed: set[str] = set()
 _ball_failed: set[str] = set()
 _deep_failed: set[str] = set()
 _onset_failed: set[str] = set()
+_hip_failed: set[str] = set()
 
 
-def _pose_stamp(name: str) -> tuple[str, int, bool, bool] | None:
+def _pose_stamp(name: str) -> tuple[str, int, bool, bool, int] | None:
     f = pose_file(name)
     try:
         mtime = f.stat().st_mtime_ns
@@ -320,10 +321,11 @@ def _pose_stamp(name: str) -> tuple[str, int, bool, bool] | None:
             return None
         m = re.search(r'"model":"([^"]+)"', head)
         b = re.search(r'"ballVersion":(\d+)', head)
+        e = re.search(r'"hipEdge":(\d+)', head)
         got = (mtime, m.group(1) if m else models.DEFAULT, int(b.group(1)) if b else 1, '"pass":"deep"' in head,
-               '"clubOnset":' in head)
+               '"clubOnset":' in head, int(e.group(1)) if e else 0)
         _pose_models[name] = got
-    return got[1], got[2], got[3], got[4]
+    return got[1], got[2], got[3], got[4], got[5]
 
 
 def pose_model(name: str) -> str | None:
@@ -337,7 +339,7 @@ def pose_made(name: str) -> str | None:
     "rtmpose-m-256x192+ball3+deep". Quality records, swing numbers and 3D keep it, and are worked out
     again when it changes."""
     stamp = _pose_stamp(name)
-    return stamp and f"{stamp[0]}+ball{stamp[1]}" + ("+deep" if stamp[2] else "") + ("+onset" if stamp[3] else "")
+    return stamp and f"{stamp[0]}+ball{stamp[1]}" + ("+deep" if stamp[2] else "") + ("+onset" if stamp[3] else "") + (f"+hip{stamp[4]}" if stamp[4] else "")
 
 
 def is_deep(name: str) -> bool:
@@ -406,6 +408,45 @@ def add_club_onset(clip: dict, pool: ProcessPoolExecutor, summarizer: swings.Sum
     except Exception as e:
         _onset_failed.add(name)
         print(f"Onset: {name} FAILED", flush=True)
+        traceback.print_exc()
+        if isinstance(e, BrokenProcessPool):
+            pool = new_pool()
+    finally:
+        with files_lock:
+            pose_busy = None
+    return pool
+
+
+def add_hip_edges(clip: dict, pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> ProcessPoolExecutor:
+    """The outer edges of the hips (pose.hip_edges) from P1 to P8, saved in a face-on clip's pose
+    file: each frame's "hip", for the lead hip line. Stamped even when nothing is found, so it isn't
+    looked for again. Returns the pool (a fresh one if a worker died)."""
+    global pose_busy
+    name = clip["name"]
+    with files_lock:
+        if not (CLIPS_DIR / name).exists() or name in pending_trash:
+            return pool
+        pose_busy = name
+    try:
+        path = pose_file(name)
+        mtime = path.stat().st_mtime_ns
+        doc = json.loads(gzip.decompress(path.read_bytes()))
+        times = summarizer.call("positionTimes", swings.pose_input(clip, path), None, swings.LEAD_SIDE)["main"]["times"]
+        edges = {}
+        if times.get("p1") is not None:
+            end = times.get("p8") or times.get("impact") or times["p1"] + 2.0
+            edges = pool.submit(pose.hip_edges, str(CLIPS_DIR / name), doc, times["p1"] - pose.HIP_EDGE_PAD,
+                                end + pose.HIP_EDGE_PAD).result()
+        with files_lock:
+            if path.stat().st_mtime_ns != mtime:
+                return pool   # analyzed again meanwhile: looked for next time round
+            tmp = path.with_suffix(".tmp")
+            tmp.write_bytes(gzip.compress(json.dumps(pose.with_hip_edges(doc, edges), separators=(",", ":")).encode()))
+            tmp.replace(path)
+        print(f"Hips: {name}: outer edges on {len(edges)} frames", flush=True)
+    except Exception as e:
+        _hip_failed.add(name)
+        print(f"Hips: {name} FAILED", flush=True)
         traceback.print_exc()
         if isinstance(e, BrokenProcessPool):
             pool = new_pool()
@@ -512,6 +553,15 @@ def pose_worker(stop: threading.Event):
                     if summarizer is None:
                         summarizer = swings.Summarizer(STATIC_DIR)
                     pool = add_club_onset(max(onsets, key=lambda c: c["recorded"]), pool, summarizer)
+                    continue
+                # Then the outer hip edges (the lead hip line) of face-on clips, newest first.
+                hips = [c for c in listed_clips(with_shots=False) if c["angle"] == "face" and c["pose"] == "done"
+                        and c["name"] not in _hip_failed
+                        and (_pose_stamp(c["name"]) or (0, 0, 0, 0, pose.HIP_EDGE_VERSION))[4] != pose.HIP_EDGE_VERSION]
+                if hips:
+                    if summarizer is None:
+                        summarizer = swings.Summarizer(STATIC_DIR)
+                    pool = add_hip_edges(max(hips, key=lambda c: c["recorded"]), pool, summarizer)
                     continue
             if waiting:
                 stop.wait(5)

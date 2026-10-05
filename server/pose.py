@@ -335,6 +335,127 @@ def with_club_onset(doc, onset):
     return out
 
 
+# ---- The outer edges of the hips (face-on): where the body's outline ends beside each hip ----
+# Each hip joint is scanned outward along MediaPipe's person outline (its segmentation mask), over
+# rows from HIP_EDGE_ROWS[0] above the joint to HIP_EDGE_ROWS[1] below (picture heights: the belt and
+# pocket, under the hands at P8), and the median of the rows where the outline ends is the edge: the
+# line a coach draws down the outside of the lead hip at address. Every HIP_EDGE_STRIDE-th frame,
+# the ones between in a straight line. Frames whose middle half of rows spread wider than
+# HIP_EDGE_SPREAD (hands or club across most of the band) are dropped.
+HIP_EDGE_VERSION = 1
+HIP_EDGE_ROWS = (0.01, 0.03)
+HIP_EDGE_STRIDE = 2
+HIP_EDGE_SPREAD = 0.03
+HIP_EDGE_PAD = 0.1   # seconds looked at before P1 and after P8
+L_HIP, R_HIP = 23, 24
+
+
+def edges_in_mask(mask, left_hip, right_hip):
+    """(left edge, right edge) of the hips in a person mask (rows x cols, 0..1): picture x shares,
+    each None when not found. `left_hip`/`right_hip`: the picture-left and picture-right hip
+    joints, (x, y) shares of the picture."""
+    h, w = mask.shape[:2]
+    inside = mask > 0.5
+    y = (left_hip[1] + right_hip[1]) / 2
+    rows = range(max(0, int((y - HIP_EDGE_ROWS[0]) * h)), min(h, int((y + HIP_EDGE_ROWS[1]) * h) + 1))
+    out = []
+    for joint, step in ((left_hip, -1), (right_hip, 1)):
+        x0 = int(round(joint[0] * w))
+        xs = []
+        for r in rows:
+            row = inside[r]
+            if not 0 <= x0 < w or not row[x0]:
+                continue
+            # The first column outward that is outside the outline.
+            run = row[x0::step] if step > 0 else row[x0::-1]
+            gap = np.flatnonzero(~run)
+            if len(gap):
+                xs.append(x0 + step * int(gap[0]))
+        if len(xs) < max(3, len(rows) // 2) or np.subtract(*np.percentile(xs, [75, 25])) / w > HIP_EDGE_SPREAD:
+            out.append(None)
+        else:
+            out.append(round(float(np.median(xs)) / w, 4))
+    return tuple(out)
+
+
+def hip_edges(path, doc, t0, t1):
+    """{frame index: [left edge, right edge]} for the pose file's frames with t0 <= t <= t1 (clip
+    seconds): see edges_in_mask; entries None where not found. Starts from the pose file's hip
+    joints (MediaPipe's own where it has none). ~3-5 s a clip (a second decode and MediaPipe run)."""
+    import mediapipe as mp
+    from mediapipe.tasks.python import BaseOptions
+    from mediapipe.tasks.python.vision import PoseLandmarker, PoseLandmarkerOptions, RunningMode
+    cv2.setNumThreads(1)
+    frames = doc["frames"]
+    want = [i for i, f in enumerate(frames) if t0 <= f["t"] <= t1]
+    if not want:
+        return {}
+    rotation = doc.get("rotation", 0)
+    by_t = {round(frames[i]["t"], 4): i for i in want[::HIP_EDGE_STRIDE]}
+    got = {}
+    lm = PoseLandmarker.create_from_options(PoseLandmarkerOptions(
+        base_options=BaseOptions(model_asset_path=MODEL), running_mode=RunningMode.IMAGE, num_poses=1,
+        output_segmentation_masks=True))
+    try:
+        with av.open(path) as c:
+            s = c.streams.video[0]
+            tb = float(s.time_base)
+            for f in decode_range(c, int(max(0.0, frames[want[0]]["t"] - 0.01) / tb), int((frames[want[-1]]["t"] + 0.01) / tb)):
+                i = by_t.get(round(f.pts * tb, 4))
+                if i is None:
+                    continue
+                rgb = cv2.resize(cv2.cvtColor(f.to_ndarray(format="yuv420p"), cv2.COLOR_YUV2RGB_I420), None,
+                                 fx=SCALE, fy=SCALE, interpolation=cv2.INTER_AREA)
+                if rotation in ROTATE_CW:
+                    rgb = cv2.rotate(rgb, ROTATE_CW[rotation])
+                res = lm.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb)))
+                if not res.segmentation_masks:
+                    continue
+                a = frames[i].get("lm")
+                if a:
+                    hips = [(a[j * 3], a[j * 3 + 1]) for j in (L_HIP, R_HIP)]
+                elif res.pose_landmarks:
+                    hips = [(res.pose_landmarks[0][j].x, res.pose_landmarks[0][j].y) for j in (L_HIP, R_HIP)]
+                else:
+                    continue
+                left, right = sorted(hips)
+                got[i] = edges_in_mask(np.squeeze(res.segmentation_masks[0].numpy_view()), left, right)
+    finally:
+        lm.close()
+    # The frames between, in a straight line (each edge on its own), at most 3 frames apart.
+    out = {}
+    for side in (0, 1):
+        have = sorted(i for i, e in got.items() if e[side] is not None)
+        for k, i in enumerate(have):
+            out.setdefault(i, [None, None])[side] = got[i][side]
+            if k + 1 < len(have) and 1 < have[k + 1] - i <= 3:
+                j = have[k + 1]
+                for m in range(i + 1, j):
+                    w = (m - i) / (j - i)
+                    out.setdefault(m, [None, None])[side] = round(got[i][side] + w * (got[j][side] - got[i][side]), 4)
+    return out
+
+
+def with_hip_edges(doc, edges):
+    """The pose file `doc` with each frame's "hip" ([left, right] outer hip edges, picture x shares,
+    from hip_edges) and "hipEdge" (HIP_EDGE_VERSION: looked for) just after "ballVersion", where
+    the server reads what a pose file holds (app.py, _pose_stamp)."""
+    frames = [{k: v for k, v in f.items() if k != "hip"} for f in doc["frames"]]
+    for i, e in edges.items():
+        if 0 <= int(i) < len(frames):
+            frames[int(i)]["hip"] = e
+    out = {}
+    for k, v in doc.items():
+        if k == "hipEdge":
+            continue
+        out[k] = frames if k == "frames" else v
+        if k == "ballVersion":
+            out["hipEdge"] = HIP_EDGE_VERSION
+    if "hipEdge" not in out:
+        out = {"hipEdge": HIP_EDGE_VERSION, **out}
+    return out
+
+
 def decode_range(container, start_pts, end_pts):
     s = container.streams.video[0]
     container.seek(start_pts, stream=s, backward=True, any_frame=False)

@@ -47,6 +47,15 @@
     const px = i => { const p = at(f.lm, i); return { x: p.x * aspect, y: p.y }; };
     const out = {};
 
+    // The outer edges of the hips (pose.py hip_edges, face-on: where the body's outline ends beside
+    // each hip), picture-left and picture-right; the lead one is on the target side.
+    if (f.hip) {
+      const [l, r] = f.hip;
+      const lead = s.m > 0 ? r : l, trail = s.m > 0 ? l : r;
+      if (lead != null) out.leadEdge = lead * aspect;
+      if (trail != null) out.trailEdge = trail * aspect;
+    }
+
     // How wide the hips and shoulders look, in body heights (nose to feet), for the turns.
     const body = Math.max(at(f.lm, I.L_ANKLE).y, at(f.lm, I.R_ANKLE).y) - at(f.lm, I.NOSE).y;
     if (body > 0) {
@@ -188,6 +197,9 @@
         r.headSway = s.m * (v.head.x - base.head.x) * inch;
         r.headRise = -(v.head.y - base.head.y) * inch;
         r.hipSway = s.m * (v.hips.x - base.hips.x) * inch;
+        // The outside of each hip against its line at address, + = toward the target.
+        if (v.leadEdge != null && base.leadEdge != null) r.leadHip = s.m * (v.leadEdge - base.leadEdge) * inch;
+        if (v.trailEdge != null && base.trailEdge != null) r.trailHip = s.m * (v.trailEdge - base.trailEdge) * inch;
         if (ball && Number.isFinite(ball.x)) r.handsBall = s.m * (v.wrists.x - ball.x * aspect) * inch;
       }
       return r;

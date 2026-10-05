@@ -63,6 +63,8 @@ METRICS = [
     _m("downswing", "Downswing time", "Downswing", "s", "body", "face", 2, "too quick", "too slow"),
     _m("headSway", "Head sway at impact", "Head sway", "in", "body", "face", 1, "too far back", "too far forward"),
     _m("hipSway", "Hip sway at impact", "Hip sway", "in", "body", "face", 1, "too far back", "too far forward"),
+    _m("leadHipP6", "Lead hip at P6 (outside of the lead hip vs its address line)", "Lead hip", "in", "body", "face", 1,
+       "stuck back", "too far forward", pos="p6"),
     _m("headRise", "Head rise at impact", "Head rise", "in", "body", "face", 1, "too far down", "too far up",
        noisy="small up-and-down moves are near the tracking noise"),
     _m("spineTiltImpact", "Spine tilt at impact", "Spine tilt", "°", "body", "face", 0, "too little tilt", "too much tilt"),

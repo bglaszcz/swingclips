@@ -200,7 +200,13 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   r -0.42, the same way on 8 of 10 clubs; ball position held constant), but not with dynamic loft.
   Oct 1 (the low point drill day) read +2.0 in on 7 irons against about +0.6 before. Copy for coach
   reports its median per block. Shaft lean at impact was tried and isn't measured: at 240 fps the shaft
-  turns ~8 degrees a frame near impact and is often a blur, and it showed no link to dynamic loft. The ranges come
+  turns ~8 degrees a frame near impact and is often a blur, and it showed no link to dynamic loft.
+  **Lead hip at P6** and **Trail hip at top** (face-on, `leadHip` / `trailHip` in `metrics.js`, inches,
+  + toward the target): the outside of each hip against its line at address. The edge is where
+  MediaPipe's person outline ends beside the hip joint, over the belt-to-pocket rows (`pose.hip_edges`,
+  saved per frame as `hip` when the server is idle). The lead hip should have moved toward the target by
+  P6. On 41 labeled swings (Sep 2026): lead hip +2.0 to +4.7 in at P6 (median ~3.6), trail hip -0.3 to
+  -2.1 at the top. No fault is named from them yet (no threshold from the owner's data). The ranges come
   from the trends' data (`/api/swings`), loaded when the first swing is opened and again when it's over a
   minute old.
 - **Compare**: a **My good shots** table with each number's middle 50% and 80% for the open swing's
