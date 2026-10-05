@@ -277,7 +277,8 @@
   .nr-table { border-collapse: collapse; font-size: 13px; width: 100%; font-variant-numeric: tabular-nums; margin-top: 6px; }
   .nr-table th, .nr-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; }
   .nr-table th { color: var(--muted); font-weight: 600; font-size: 12px; }
-  .nr-table th:not(:first-child):not(:nth-child(2)), .nr-table td:not(:first-child):not(:nth-child(2)) { text-align: right; }
+  .nr-table th:not(:first-child), .nr-table td:not(:first-child) { text-align: right; white-space: nowrap; }
+  .nr-table tr.nr-group td { border-bottom: none; padding-top: 10px; font-weight: 600; }
   .nr-item-label { font-weight: 600; color: var(--text); vertical-align: top; white-space: nowrap; }
   .nr-metric-name { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .nr-better { color: var(--accent); font-weight: 600; }

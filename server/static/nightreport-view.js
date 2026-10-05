@@ -23,9 +23,10 @@
       .replace(/'/g, "&#039;");
   }
 
+  /** "6:58 am" from an ISO time or the server's seconds since 1970 (/api/night seen.at). */
   function formatAskTime(iso) {
     if (!iso) return "";
-    const d = new Date(iso);
+    const d = new Date(typeof iso === "number" ? iso * 1000 : iso);
     if (isNaN(d.getTime())) return "";
     let h = d.getHours();
     const m = String(d.getMinutes()).padStart(2, "0");
@@ -46,8 +47,7 @@
         <table class="nr-table">
           <thead>
             <tr>
-              <th>What</th>
-              <th>Metric</th>
+              <th></th>
               <th>Before</th>
               <th>After</th>
               <th>Change</th>
@@ -71,8 +71,8 @@
         const pAftStr = r.p90.after != null ? `${r.p90.after.toFixed(1)} ms` : "-";
 
         html += `
+          <tr class="nr-group"><td colspan="4" class="nr-item-label">${escapeHtml(r.label)}</td></tr>
           <tr>
-            <td rowspan="2" class="nr-item-label">${escapeHtml(r.label)}</td>
             <td class="nr-metric-name">within 1 frame</td>
             <td>${wBefStr}</td>
             <td>${wAftStr}</td>
@@ -100,8 +100,8 @@
         const pAftStr = r.p90.after != null ? `${r.p90.after.toFixed(1)} ${unit}` : "-";
 
         html += `
+          <tr class="nr-group"><td colspan="4" class="nr-item-label">${escapeHtml(r.label)}</td></tr>
           <tr>
-            <td rowspan="2" class="nr-item-label">${escapeHtml(r.label)}</td>
             <td class="nr-metric-name">% found</td>
             <td>${fBefStr}</td>
             <td>${fAftStr}</td>
@@ -320,6 +320,8 @@
   }
 
   async function useCandidate(id) {
+    // The sample's candidates don't exist on the server: never send it a tap from sample mode.
+    if (isSampleMode) { simulateUseInSample(id); return; }
     if (nrStatus) nrStatus.textContent = "Switching model…";
     try {
       const res = await fetch(`/api/improve/${encodeURIComponent(id)}/use`, {
@@ -334,18 +336,12 @@
         }
         if (nrStatus) nrStatus.textContent = "";
         await loadNightReport();
-      } else if (isSampleMode) {
-        // Fallback simulation for sample testing mode
-        simulateUseInSample(id);
       } else {
-        if (nrStatus) nrStatus.textContent = "Failed to switch model";
+        const why = (await res.json().catch(() => ({}))).detail || res.statusText;
+        if (nrStatus) nrStatus.textContent = `Not switched: ${why}`;
       }
     } catch (err) {
-      if (isSampleMode) {
-        simulateUseInSample(id);
-      } else {
-        if (nrStatus) nrStatus.textContent = "Error switching model";
-      }
+      if (nrStatus) nrStatus.textContent = `Not switched: the server didn't answer (${err.message})`;
     }
   }
 
