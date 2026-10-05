@@ -2675,6 +2675,16 @@ def night_status():
             "swings": {k: {a: v[a] for a in ("face", "dtl") if a in v} for k, v in table.items() if "error" not in v}}
 
 
+@app.get("/api/night/pose/{name}")
+def get_night_pose(name: str):
+    """The night worker's pose file for a clip (gzip JSON), 404 when not analyzed yet."""
+    checked_clip(name)
+    path = night.night_file(NIGHT_DIR, name)
+    if not path.is_file():
+        raise HTTPException(404, "No night pose for this clip")
+    return FileResponse(path, media_type="application/json", headers={"Content-Encoding": "gzip"})
+
+
 @app.get("/api/pose/{name}")
 def get_pose(name: str):
     checked_clip(name)

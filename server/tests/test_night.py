@@ -132,6 +132,34 @@ class NightApiTest(unittest.TestCase):
             self.client.post(f"/api/night/{self.name}?failed=boom", content=b"")
             self.assertIn("wait", self.client.get("/api/night/next").json())
 
+    def test_pose_returns_404_when_missing(self):
+        r = self.client.get(f"/api/night/pose/{self.name}")
+        self.assertEqual(r.status_code, 404)
+
+    def test_pose_returns_document_after_save(self):
+        night.save(self.dir, self.name, pose_doc(), {"worker": "pc", "at": 100})
+        r = self.client.get(f"/api/night/pose/{self.name}")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.headers.get("content-encoding"), "gzip")
+        self.assertTrue(r.content.startswith(b'{"night":'))
+        doc = r.json()
+        self.assertEqual(list(doc.keys())[0], "night")
+        self.assertEqual(doc["night"]["worker"], "pc")
+        # routes still answer
+        with mock.patch.object(app, "session_on", lambda now=None: False):
+            self.assertIn("wait", self.client.get("/api/night/next").json())
+            other = clip("swing_face_1920x1080_240fps_1790000002_2000ms.mp4")
+            with mock.patch.object(app, "listed_clips", lambda **k: [other]):
+                self.assertEqual(self.client.get("/api/night/next").json()["name"], other["name"])
+        self.assertEqual(self.client.get("/api/night/club").status_code, 404)
+        model_file = self.dir / "club.onnx"
+        model_file.write_bytes(b"model")
+        with mock.patch.object(app, "deep_profile", lambda: {"clubModel": str(model_file)}):
+            club_resp = self.client.get("/api/night/club")
+            self.assertEqual(club_resp.status_code, 200)
+            self.assertEqual(club_resp.content, b"model")
+
 
 if __name__ == "__main__":
     unittest.main()
+
