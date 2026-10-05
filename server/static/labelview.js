@@ -11,6 +11,13 @@ const GOAL_MOMENTS = 20, GOAL_POINTS = 10;
 // Frames with points for an angle to count as done (labeling mode suggests about a dozen).
 const POINT_FRAMES = 8;
 let labelData = null, labelSig = "", labelBusy = false;
+// The night worker's comparison (/api/night): how far it has got and where it disagrees.
+let nightData = null;
+// Disagreements smaller than this (ms, 3 frames at 240 fps) aren't listed; at most NIGHT_ROWS are. The
+// two models differ by a steady amount at some positions (the key-position rules are tuned to the
+// server's), so each is measured from the usual difference at that position and angle (the median).
+const NIGHT_MIN_MS = 12.5, NIGHT_ROWS = 8;
+const POSITION_NAMES = { p1: "Address", takeaway: "Takeaway", p7: "Impact" };
 
 function lvEl(tag, props, ...kids) {
   const e = Object.assign(document.createElement(tag), props || {});
@@ -107,6 +114,52 @@ function openForLabeling(name, opts) {
   setTimeout(() => window.Labels && Labels.start && Labels.start(opts), 50);
 }
 
+/** Unlabeled swings where the night worker and the server put a key position furthest apart, worst
+ * first: {c, angle, key, ms, t}. */
+function nightDisagreements(swings) {
+  const done = new Set(swings.flatMap(s => [s.main, s.face && s.face.clip, s.dtl && s.dtl.clip]).filter(Boolean));
+  const all = Object.entries((nightData && nightData.swings) || {});
+  // The usual difference at each angle and position, over every swing compared.
+  const usual = {};
+  for (const [, angles] of all) for (const [angle, a] of Object.entries(angles))
+    for (const [key, ms] of Object.entries(a.ms || {})) (usual[angle + key] = usual[angle + key] || []).push(ms);
+  for (const k in usual) { const v = usual[k].sort((x, y) => x - y); usual[k] = (v[(v.length - 1) >> 1] + v[v.length >> 1]) / 2; }
+  const out = [];
+  for (const [main, angles] of all) {
+    const c = clips.find(x => x.name === main);
+    if (!c || c.excluded || done.has(main)) continue;
+    let best = null;
+    for (const [angle, a] of Object.entries(angles)) {
+      for (const [key, raw] of Object.entries(a.ms || {})) {
+        const ms = raw - usual[angle + key];
+        if (Math.abs(ms) >= NIGHT_MIN_MS && (!best || Math.abs(ms) > Math.abs(best.ms)) && a.t[key] != null)
+          best = { c, angle, key, ms, t: a.t[key] };
+      }
+    }
+    if (best) out.push(best);
+  }
+  return out.sort((a, b) => Math.abs(b.ms) - Math.abs(a.ms));
+}
+
+function renderNight(swings) {
+  const status = document.getElementById("lv-night-status"), box = document.getElementById("lv-night");
+  if (!nightData) { status.textContent = ""; box.replaceChildren(lvEl("span", { className: "lv-muted", textContent: "Not reached." })); return; }
+  const seen = nightData.seen && nightData.seen.at
+    ? ` · worker last asked ${fmtWhen(new Date(nightData.seen.at * 1000).toISOString())}` : " · no worker yet";
+  status.textContent = `${nightData.done} of ${nightData.clips} clips done${seen}`;
+  const rows = nightDisagreements(swings);
+  box.replaceChildren(...(rows.length ? rows.slice(0, NIGHT_ROWS).map(r => {
+    const go = lvEl("button", { className: "small", textContent: "Go" });
+    go.onclick = () => openForLabeling(r.c.name, { angle: r.angle, t: r.t });
+    const what = `${POSITION_NAMES[r.key] || r.key.toUpperCase()} ${Math.round(Math.abs(r.ms))} ms further apart than usual`
+      + ` (${r.angle === "dtl" ? "down the line" : "face-on"})`;
+    return lvEl("div", { className: "lv-work-line" },
+      lvEl("span", { className: "lv-work-angle", textContent: fmtWhen(r.c.recorded) + (r.c.shot ? " · " + clubName(r.c.shot.club) : "") }),
+      lvEl("span", { className: "lv-work-text", textContent: what }), go);
+  }) : [lvEl("span", { className: "lv-muted", textContent: nightData.done
+    ? "No unlabeled swing where they disagree by 3 frames more than usual." : "Nothing compared yet." })]));
+}
+
 /** The worklist: every fix from the label checks, by swing and angle, with repeats of the same fix
  * (hips on 10 frames) on one line. Go opens the swing at the first of them in labeling mode, where
  * the points are ringed in red and Next fix (N) steps through the rest. */
@@ -194,6 +247,7 @@ function renderLabelView() {
   table.replaceChildren(lvEl("thead", {}, head), body);
 
   renderWorklist(rows, swings);
+  renderNight(swings);
 
   const next = suggestions(swings);
   const nextBox = document.getElementById("lv-next");
@@ -215,6 +269,8 @@ async function loadLabelView() {
   try {
     const res = await fetch("/api/labels/summary", { cache: "no-store" });
     if (res.ok) labelData = await res.json();
+    const night = await fetch("/api/night", { cache: "no-store" });
+    if (night.ok) nightData = await night.json();
   } catch {}
   labelBusy = false;
   renderLabelView();

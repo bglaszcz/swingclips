@@ -125,7 +125,7 @@ Only one phone talks (the one with Practice voice on). What it can say:
   by hand, never automatically), `shots.jsonl` (Square's shots), `swings.json` (each swing's
   numbers), `clubs.json` (clubs corrected on the page), `journal.json` (handicap, notes, focus),
   `excluded.json` (swings left out), `goodshots.json`, `practice.json` and `practice-log.jsonl`,
-  `game.json` and `games-log.jsonl`, `noise.json`, and `events.jsonl` (what the phones were told to
+  `game.json` and `games-log.jsonl`, `noise.json`, `night` (the night worker's pose files), and `events.jsonl` (what the phones were told to
   say, uploads, clips with no swing and why).
 - **Deploy**: on the review page, **Tools > Update the server**. It lists what's new on GitHub, pulls
   it (fast-forward only: it never overwrites an edit made on the server) and restarts the server
@@ -140,7 +140,11 @@ Only one phone talks (the one with Practice voice on). What it can say:
   practice numbers keep up (~9.5 s a clip with 8 workers). The careful deep pass runs after the
   session. Why and how it was measured: [docs/performance.md](docs/performance.md).
 - **After an update** that changes the analysis, older clips are analyzed again in the background,
-  newest first; new swings still go first.
+  newest first; new swings still go first. So does a retrained club model (`club-deep.onnx`).
+- **The night worker** (optional): the gaming PC analyzes every clip again with bigger models on its
+  graphics card while no session is on, and the Labels view lists the swings where it and the server
+  disagree. Double-click `server\Night worker.cmd` on that PC (add `--hours 23-7` to keep it to the
+  night). Details: [docs/night-worker.md](docs/night-worker.md).
 
 ### Settings (`server\settings.cmd`)
 Not in git; `Start server.cmd` calls it. The server's own file has:
@@ -239,6 +243,7 @@ are read: [docs/relay.md](docs/relay.md).
 | [docs/key-positions.md](docs/key-positions.md) | How P1-P8 and the takeaway are defined against the labels. |
 | [docs/scorecard.md](docs/scorecard.md) | Labeling, `eval.py`, the body model, the ball search, trying other body models. |
 | [docs/performance.md](docs/performance.md) | Keeping up during a session, the deep pass, benchmarks, GPUs. |
+| [docs/night-worker.md](docs/night-worker.md) | The gaming PC's second opinion on every clip: setup, what it runs, what the comparison is for. |
 | [docs/club-model.md](docs/club-model.md) | Training the YOLO club model on the gaming PC, and its results so far. |
 | [docs/3d.md](docs/3d.md) | 3D from both phones (off by default): boards, calibration, the checklist for the real setup. |
 | [docs/relay.md](docs/relay.md) | The Square watcher, the GSPro-connector option, ball flight for connector shots. |

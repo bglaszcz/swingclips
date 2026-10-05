@@ -53,6 +53,7 @@ import games
 import goodshots
 import labelcheck
 import models
+import night
 import pose
 import quality
 import practice
@@ -293,7 +294,7 @@ def body_model() -> str:
 
 
 # What made each pose file, by clip name: (file's mtime, body model, ball search version, deep pass,
-# clubhead onset looked for).
+# clubhead onset looked for, hip edges version, club model).
 # The worker checks every clip.
 _pose_models: dict[str, tuple[int, str, int, bool]] = {}
 # Clips that failed to be analyzed again with the current model, or to have the ball found again
@@ -322,10 +323,11 @@ def _pose_stamp(name: str) -> tuple[str, int, bool, bool, int] | None:
         m = re.search(r'"model":"([^"]+)"', head)
         b = re.search(r'"ballVersion":(\d+)', head)
         e = re.search(r'"hipEdge":(\d+)', head)
+        c = re.search(r'"clubModel":"([^"]+)"', head)
         got = (mtime, m.group(1) if m else models.DEFAULT, int(b.group(1)) if b else 1, '"pass":"deep"' in head,
-               '"clubOnset":' in head, int(e.group(1)) if e else 0)
+               '"clubOnset":' in head, int(e.group(1)) if e else 0, c and c.group(1))
         _pose_models[name] = got
-    return got[1], got[2], got[3], got[4], got[5]
+    return got[1], got[2], got[3], got[4], got[5], got[6]
 
 
 def pose_model(name: str) -> str | None:
@@ -345,6 +347,34 @@ def pose_made(name: str) -> str | None:
 def is_deep(name: str) -> bool:
     stamp = _pose_stamp(name)
     return bool(stamp and stamp[2])
+
+
+# The deep pass's club model stamp (models.club_stamp), kept while the file is unchanged.
+_deep_club: tuple = (None, None, None)
+
+
+def deep_club_stamp(deep: dict) -> str | None:
+    """The stamp the deep pass's club model puts in pose files, or None without one."""
+    global _deep_club
+    path = deep.get("clubModel")
+    if not path:
+        return None
+    try:
+        mtime = Path(path).stat().st_mtime_ns
+    except OSError:
+        return None
+    if _deep_club[:2] != (str(path), mtime):
+        _deep_club = (str(path), mtime, models.club_stamp(path))
+    return _deep_club[2]
+
+
+def needs_deep(name: str, club_stamp: str | None) -> bool:
+    """Whether an analyzed clip still needs the deep pass: never had it, or had it with another club
+    model (after club-deep.onnx is retrained, every clip is analyzed again with the new one). Models
+    are told apart by the file's hash, so the same model under another name counts as the same."""
+    stamp = _pose_stamp(name)
+    return bool(stamp) and (not stamp[2] or (club_stamp is not None
+                                             and (stamp[5] or "").split("@")[-1] != club_stamp.split("@")[-1]))
 
 
 def find_ball_again(clip: Path, pool: ProcessPoolExecutor) -> ProcessPoolExecutor:
@@ -515,8 +545,10 @@ def pose_worker(stop: threading.Event):
             deep = None if busy else deep_profile()
             # During a session, new clips the quick way (when a deep pass will redo them after it).
             quick = pose.quick_profile() if busy else None
+            deep_club = deep and deep_club_stamp(deep)
             pose_deep_left = 0 if deep is None else sum(
-                1 for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done" and not is_deep(p.name))
+                1 for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done"
+                and needs_deep(p.name, deep_club))
             if todo and not waiting:
                 # Face-on clips first: the phones' spoken checks and practice numbers mostly need them, and
                 # during a session the down-the-line ones catch up between sets. After a session a new
@@ -539,10 +571,11 @@ def pose_worker(stop: threading.Event):
                 if reball:
                     pool = find_ball_again(max(reball, key=recorded_at), pool)
                     continue
-                # Then the deep pass, newest first: the last session's swings are ready first.
+                # Then the deep pass, newest first: the last session's swings are ready first. Clips
+                # deep-analyzed with an older club model too.
                 if deep is not None:
                     deepen = [p for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done"
-                              and not is_deep(p.name)]
+                              and needs_deep(p.name, deep_club)]
                     if deepen:
                         pool = analyze_clip(max(deepen, key=recorded_at), pool, again=True, deep=deep)
                         continue
@@ -698,6 +731,11 @@ def swing_worker(stop: threading.Event):
                 except Exception:
                     traceback.print_exc()
                 noise_at = time.time()
+            if not stop.is_set():
+                try:
+                    night_compare(clips, summarizer, stop)
+                except Exception:
+                    traceback.print_exc()
             if calib_runs.pending_job("body") and not stop.is_set():
                 place_cameras(clips, summarizer)
             if calib.enabled() and not stop.is_set():
@@ -713,6 +751,69 @@ def swing_worker(stop: threading.Event):
             stop.wait(5)
     finally:
         summarizer.close()
+
+
+# The night worker's files (night.py), and each swing's key positions by the server against by them.
+NIGHT_DIR = Path(os.environ.get("SWINGCLIPS_NIGHT", CLIPS_DIR.parent / "night"))
+NIGHT_COMPARE = NIGHT_DIR / "compare.json"
+night_table: dict = {}
+# Compared at most this many swings per round of the swing worker, so new swings aren't held up.
+NIGHT_PER_ROUND = 40
+
+
+def night_compare(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threading.Event) -> int:
+    """Works out the key positions from the night files of each swing that has them (both angles,
+    when it has two) and keeps how far they are from the server's own (night.differences)."""
+    global night_table
+    if not NIGHT_DIR.is_dir():
+        return 0
+    if not night_table:
+        night_table = night.load_compare(NIGHT_COMPARE)
+    done = 0
+    for c in clips.values():
+        if stop.is_set() or done >= NIGHT_PER_ROUND:
+            break
+        if c["pose"] != "done" or (c["partner"] and c["angle"] != "face"):
+            continue
+        other = clips.get(c["partner"] or "")
+        other = other if other and other["pose"] == "done" else None
+        names = [c["name"]] + ([other["name"]] if other else [])
+        files = [night.night_file(NIGHT_DIR, n) for n in names]
+        try:
+            sig = [summarizer.code] + [pose_made(n) for n in names] + [f.stat().st_mtime_ns for f in files]
+        except OSError:
+            continue  # no night file yet
+        old = night_table.get(c["name"])
+        if old and old.get("sig") == sig:
+            continue
+        try:
+            ours = [swings.pose_input(c, pose_file(c["name"])), swings.pose_input(other, pose_file(other["name"])) if other else None]
+            theirs = [swings.pose_input(c, files[0]), swings.pose_input(other, files[1]) if other else None]
+            # The clubhead onset is an idle step on the server (add_club_onset), not in the night
+            # files: the server's, so the takeaway differs only by what the models see.
+            for a, b in zip(ours, theirs):
+                if a and b and b.get("clubOnset") is None:
+                    b["clubOnset"] = a.get("clubOnset")
+            mine = summarizer.call("positionTimes", *ours, swings.LEAD_SIDE)
+            theirs = summarizer.call("positionTimes", *theirs, swings.LEAD_SIDE)
+        except FileNotFoundError:
+            continue
+        except Exception:
+            night_table[c["name"]] = {"sig": sig, "error": traceback.format_exc(limit=1)}
+            done += 1
+            continue
+        # Per angle: night minus server (ms), and the server's times (s) to go to them.
+        entry = {"sig": sig, c["angle"]: {"ms": night.differences(mine["main"], theirs["main"]),
+                                          "t": (mine["main"] or {}).get("times", {})}}
+        if other:
+            entry["dtl"] = {"ms": night.differences(mine["dtl"], theirs["dtl"]), "t": (mine["dtl"] or {}).get("times", {})}
+        night_table[c["name"]] = entry
+        done += 1
+    if done:
+        NIGHT_DIR.mkdir(parents=True, exist_ok=True)
+        night.save_compare(NIGHT_COMPARE, night_table)
+        print(f"Night: compared {done} swing(s) with the night worker's", flush=True)
+    return done
 
 
 # Placing the cameras from the body uses at most this many swings (the newest).
@@ -2504,6 +2605,74 @@ def get_status():
     return session_status.snapshot(setup_now, {"queued": pose_queued, "busy": pose_busy, "deepLeft": pose_deep_left,
                                               "held": DURING_SESSION == "wait" and session_on()},
                                    newest_shot())
+
+
+# Clips handed to the night worker a moment ago (name -> time), so a second worker or a retry doesn't
+# get the same one; handed out again after NIGHT_CLAIM_S. Clips it couldn't analyze, until a restart.
+_night_claims: dict[str, float] = {}
+_night_failed: set[str] = set()
+NIGHT_CLAIM_S = 900
+# The worker's last ask: {"at": time, "worker": its name, "clip": what it was given}.
+night_seen: dict = {}
+
+
+@app.get("/api/night/next")
+def night_next(worker: str = Query("", max_length=60)):
+    """The night worker's next clip (night.next_clip) and how to analyze it, or {"wait": s, "why"}:
+    nothing while a session is on, so the phones' uploads and the server's own analysis come first."""
+    now = time.time()
+    night_seen.update(at=now, worker=worker, clip=None)
+    if session_on(now):
+        return {"wait": 300, "why": "A session is on"}
+    labeled = set(list_labels()["1"])
+    skip = {n for n, t in _night_claims.items() if now - t < NIGHT_CLAIM_S} | _night_failed
+    c = night.next_clip(listed_clips(with_shots=False), NIGHT_DIR, labeled, skip)
+    if c is None:
+        return {"wait": 1800, "why": "Every clip is done"}
+    _night_claims[c["name"]] = now
+    night_seen["clip"] = c["name"]
+    deep = deep_profile()
+    return {"name": c["name"], "angle": c["angle"], "version": night.VERSION, **night.PROFILE,
+            "clubStamp": deep and deep_club_stamp(deep)}
+
+
+@app.get("/api/night/club")
+def night_club():
+    """The deep pass's club model, for the night worker to use the same one."""
+    deep = deep_profile()
+    if not deep or not deep.get("clubModel"):
+        raise HTTPException(404, "No club model for the deep pass")
+    return FileResponse(deep["clubModel"], media_type="application/octet-stream")
+
+
+@app.post("/api/night/{name}")
+async def night_put(name: str, request: Request, worker: str = Query("", max_length=60),
+                    failed: str | None = Query(None, max_length=300)):
+    """The worker's pose file for a clip (gzip JSON), or ?failed=why when it couldn't analyze it."""
+    checked_clip(name)
+    _night_claims.pop(name, None)
+    if failed is not None:
+        _night_failed.add(name)
+        log_event("night", clip=name, worker=worker, failed=failed)
+        print(f"Night: {name} FAILED on {worker or 'the worker'}: {failed}", flush=True)
+        return {"ok": True}
+    try:
+        stamp = night.save(NIGHT_DIR, name, await request.body(), {"worker": worker, "at": round(time.time())})
+    except (OSError, ValueError, EOFError) as e:
+        raise HTTPException(400, f"Not a pose file: {e}")
+    print(f"Night: {name} from {worker or 'the worker'}", flush=True)
+    return {"ok": True, "night": stamp}
+
+
+@app.get("/api/night")
+def night_status():
+    """How far the night worker has got, when it last asked, and each swing's key positions by it
+    against the server's: {swings: {clip: {face, dtl: {ms: night minus server, t: the server's times}}}}."""
+    names = [p.name for p in clip_paths()]
+    done = sum(1 for n in names if night.version_of(night.night_file(NIGHT_DIR, n)) == night.VERSION)
+    table = night_table or night.load_compare(NIGHT_COMPARE)
+    return {"done": done, "clips": len(names), "seen": night_seen or None, "version": night.VERSION,
+            "swings": {k: {a: v[a] for a in ("face", "dtl") if a in v} for k, v in table.items() if "error" not in v}}
 
 
 @app.get("/api/pose/{name}")
