@@ -444,3 +444,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   bottom (the P6 the drill rehearses: hands to plane, wrist hinge) against the good-shot P6 range, the
   real swing's P6 after the pumps, and whether the rehearsal carried into the swing (within 1 in), with
   the focus's swing thought. Each "Pump n" button jumps the video there. Tempo isn't given for these swings.
+- **Drill pelvis check** (Start page): while a drill or coach program is running, a card shows the latest swing's
+  pelvis vs ball at impact (one large number in inches, + = ahead), colored green/amber/gray from the target zone
+  calibration (`static/pelviszone.js`, never red), with the one-line position and target sentence below. Shows
+  "Analyzing…" while the clip is processed (~10-15 s) so the previous rep's number is never shown for a new swing.
