@@ -31,7 +31,12 @@ What the server works out for each swing and what each part of the review page s
   P6 / impact: pelvis and shoulder turn, X-factor, lead arm, shaft, spine tilt, forward bend, hip and
   shoulder tilt, head sway / rise, hip sway, and tempo. Turns come from how much narrower the hips
   and shoulders look than at address; MediaPipe's 3D estimate (saved per frame as `w`) is only used
-  for forward bend and for scale. Overlays: hand path, head position vs address. The hand path is
+  for forward bend and for scale. Overlays: hand path, head position vs address, and the hip line
+  (Show > Hips, face-on). The hip line draws a dashed vertical line down the outside of the lead hip at
+  address (and a thinner, fainter one at the trail hip), and through the swing marks where the lead hip
+  is now at hip height, with a bar between them coloured by the good-shot range for Lead hip at P6
+  (green in the middle 50%, amber outside). From P6 to impact, a callout shows the swing's P6 number
+  and the coach's thought ("Step, then swing") when hanging back. The hand path is
   the wrists and index fingers weighted by MediaPipe's confidence, smoothed over ±45 ms (a local
   curve fit that leans on confident frames and drops one-frame glitches), and ends once a wrist is
   lost behind the head in the finish. A kinematic
