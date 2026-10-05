@@ -123,6 +123,12 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0]["pose"])
         self.assertTrue(any("other camera angle" in i for i in rows[0]["issues"]))
+        # Made only from a pick between the two analyses' frames: no nag for the other angle.
+        doc.update(frames={}, picked={"takeaway": "night"})
+        (tmp / (NAME + ".json")).write_text(json.dumps(doc))
+        rows = labelcheck.summary(tmp, lambda name: pose_file if name == NAME else None)
+        self.assertFalse(any("other camera angle" in i for i in rows[0]["issues"]))
+        self.assertFalse(any(f["kind"] == "other" for f in rows[0]["fixes"]))
 
 
 if __name__ == "__main__":

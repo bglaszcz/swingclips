@@ -227,7 +227,10 @@ def summary(labels_dir: Path, pose_path) -> list[dict]:
                "partner": partner, "updated": doc.get("updated"), "pose": bool(pp and pp.is_file()), **got[1]}
         row["issues"] = list(row["issues"])
         row["fixes"] = list(row.get("fixes", []))
-        if partner and (label_pass, partner) not in labeled:
+        # A file made only from picks between the two analyses' frames (the Labels view's Compare: a
+        # "picked" map, no points) is a key moment or two, not a labeling session: no nag for the other angle.
+        picks_only = bool(doc.get("picked")) and not doc.get("frames")
+        if partner and (label_pass, partner) not in labeled and not picks_only:
             row["issues"].append("The other camera angle of this swing isn't labeled yet.")
             row["fixes"].append({"kind": "other", "t": None, "points": [], "clip": partner,
                                  "text": "The other camera angle isn't labeled yet"})
