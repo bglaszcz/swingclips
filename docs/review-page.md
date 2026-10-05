@@ -31,12 +31,15 @@ What the server works out for each swing and what each part of the review page s
   P6 / impact: pelvis and shoulder turn, X-factor, lead arm, shaft, spine tilt, forward bend, hip and
   shoulder tilt, head sway / rise, hip sway, and tempo. Turns come from how much narrower the hips
   and shoulders look than at address; MediaPipe's 3D estimate (saved per frame as `w`) is only used
-  for forward bend and for scale. Overlays: hand path, head position vs address, and the hip line
-  (Show > Hips, face-on). The hip line draws a dashed vertical line down the outside of the lead hip at
-  address (and a thinner, fainter one at the trail hip), and through the swing marks where the lead hip
-  is now at hip height, with a bar between them coloured by the good-shot range for Lead hip at P6
-  (green in the middle 50%, amber outside). From P6 to impact, a callout shows the swing's P6 number
-  and the coach's thought ("Step, then swing") when hanging back. The hand path is
+  for forward bend and for scale. Overlays: hand path, head position vs address, and pelvis vs ball
+  at impact (Show > Impact, face-on). On the P7 impact frame and frames within ±2 of it, the Impact
+  overlay draws a dotted vertical line through the ball, a marker (filled circle) at the pelvis's middle,
+  and a translucent shaded target zone band calibrated from the owner's best low-point swings
+  (green = in target zone, amber = within 1 in, gray = not met, never red; no band until calibrated),
+  plus a one-line position and goal sentence near the bottom ("Pelvis ... in ... of the ball at impact. Target: ...").
+  Under the scrubber (when Impact is on, face-on), a small trace shows pelvis vs ball from P1 to P8 with
+  a faint zero line for the ball and the target zone band, showing at a glance whether the pelvis moved forward
+  and stayed or drifted back. The hand path is
   the wrists and index fingers weighted by MediaPipe's confidence, smoothed over ±45 ms (a local
   curve fit that leans on confident frames and drops one-frame glitches), and ends once a wrist is
   lost behind the head in the finish. A kinematic
@@ -441,3 +444,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   bottom (the P6 the drill rehearses: hands to plane, wrist hinge) against the good-shot P6 range, the
   real swing's P6 after the pumps, and whether the rehearsal carried into the swing (within 1 in), with
   the focus's swing thought. Each "Pump n" button jumps the video there. Tempo isn't given for these swings.
+- **Drill pelvis check** (Start page): while a drill or coach program is running, a card shows the latest swing's
+  pelvis vs ball at impact (one large number in inches, + = ahead), colored green/amber/gray from the target zone
+  calibration (`static/pelviszone.js`, never red), with the one-line position and target sentence below. Shows
+  "Analyzing…" while the clip is processed (~10-15 s) so the previous rep's number is never shown for a new swing.

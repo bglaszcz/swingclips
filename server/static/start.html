@@ -13,13 +13,13 @@
   :root { color-scheme: light dark; }
   :root {
     --bg: #f3f5f3; --panel: #ffffff; --panel-2: #f7f9f7; --text: #111a14; --muted: #5a685f;
-    --line: #e0e6e2; --accent: #16803f; --accent-text: #ffffff; --accent-soft: #e4f4ea;
+    --line: #e0e6e2; --accent: #16803f; --accent-text: #ffffff; --accent-soft: #e4f4ea; --good: #16803f;
     --warn: #b45309; --warn-soft: #fdf1e3; --bad: #dc2626; --bad-soft: #fde8e8; --radius: 12px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0b100d; --panel: #131a16; --panel-2: #17201a; --text: #e7ede8; --muted: #8e9f95;
-      --line: #223029; --accent: #34c26f; --accent-text: #04130a; --accent-soft: #143322;
+      --line: #223029; --accent: #34c26f; --accent-text: #04130a; --accent-soft: #143322; --good: #34c26f;
       --warn: #f59e0b; --warn-soft: #2d2110; --bad: #f87171; --bad-soft: #2d1414;
     }
   }
@@ -147,6 +147,10 @@
   .choice b { display: block; font-size: 16px; }
   .choice span { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
   .choice.on span { color: var(--text); }
+  .pelvis-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 10px 0; text-align: center; }
+  .pelvis-card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
+  .pelvis-card-num { font-size: 40px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; margin: 4px 0 6px; }
+  .pelvis-card-sentence { font-size: 13px; color: var(--muted); line-height: 1.4; }
   @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; } }
 </style>
 <script src="/static/games.js"></script>
@@ -157,6 +161,7 @@
 <script src="/static/metrics.js"></script>
 <script src="/static/summary.js"></script>
 <script src="/static/trust.js"></script>
+<script src="/static/pelviszone.js"></script>
 <script src="/static/drillsets.js"></script>
 <script src="/static/plan.js"></script>
 <script src="/static/programhistory.js"></script>
@@ -212,6 +217,7 @@
       <span class="state" id="state"></span>
       <span class="note" id="go-note"></span>
     </div>
+    <div id="record-pelvis-card" class="pelvis-card" hidden></div>
   </section>
 
   <section id="sec-program" hidden>
@@ -227,6 +233,7 @@
     </div>
     <div id="prog-active" hidden>
       <div class="prog-head"><b id="prog-name"></b><span id="prog-used"></span></div>
+      <div id="prog-pelvis-card" class="pelvis-card" hidden></div>
       <div class="prog-now" id="prog-now"></div>
       <div class="prog-blocks" id="prog-blocks"></div>
       <div class="plan-act">
@@ -252,6 +259,7 @@
   <section id="sec-plan" hidden>
     <h2><span class="n" id="n6">4</span>Today's plan</h2>
     <p class="hint" id="plan-summary">Ordered practice session built from your data.</p>
+    <div id="plan-pelvis-card" class="pelvis-card" hidden></div>
     <div class="plan-blocks" id="plan-blocks"></div>
   </section>
 
@@ -507,6 +515,131 @@ function renderSwings(clips) {
 
 // ---- 5. Today's plan ----
 let journalData = null, allClips = null, practiceConfig = null, swingRecords = null, planStep = null;
+let drillState = null, recentClips = [];
+
+function isDrillOrProgramRunning() {
+  return Boolean(
+    (programState && programState.program) ||
+    (drillState && drillState.current && drillState.current.drill) ||
+    (planStep && planStep.drill)
+  );
+}
+
+function getSwingsForZone() {
+  if (!allClips || !swingRecords) return [];
+  return allClips.map(c => ({
+    name: c.name,
+    club: c.shot ? c.shot.club : null,
+    shot: c.shot,
+    record: swingRecords[c.name] || null,
+    body: (swingRecords[c.name] && swingRecords[c.name].body) || null,
+    pelvisBall: swingRecords[c.name]?.body?.pelvisBall
+  }));
+}
+
+function hidePelvisCard() {
+  const c1 = $("record-pelvis-card"), c2 = $("prog-pelvis-card"), c3 = $("plan-pelvis-card");
+  if (c1) c1.hidden = true;
+  if (c2) c2.hidden = true;
+  if (c3) c3.hidden = true;
+}
+
+function renderPelvisCard(clips) {
+  if (!isDrillOrProgramRunning()) {
+    hidePelvisCard();
+    return;
+  }
+
+  const cRecord = $("record-pelvis-card"), cProg = $("prog-pelvis-card"), cPlan = $("plan-pelvis-card");
+  if (cRecord) cRecord.hidden = true;
+  if (cProg) cProg.hidden = true;
+  if (cPlan) cPlan.hidden = true;
+
+  let targetCard = null;
+  if (programState && programState.program && $("sec-program") && !$("sec-program").hidden) {
+    targetCard = cProg;
+  } else if (planStep && planStep.drill && $("sec-plan") && !$("sec-plan").hidden) {
+    targetCard = cPlan;
+  } else {
+    targetCard = cRecord;
+  }
+  if (!targetCard) return;
+
+  const swings = (clips || []).filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+  const latest = swings[0];
+
+  const startedAt = (programState && programState.program && programState.program.started) ||
+    (drillState && drillState.current && drillState.current.from) ||
+    (planStep && planStep.since) || 0;
+
+  if (!latest) {
+    targetCard.innerHTML = `<div class="pelvis-card-title">Pelvis vs ball at impact</div>` +
+      `<div class="pelvis-card-num" style="color: var(--muted); font-size: 28px;">–</div>` +
+      `<div class="pelvis-card-sentence">Waiting for first drill rep…</div>`;
+    targetCard.hidden = false;
+    return;
+  }
+
+  const clipTime = new Date(latest.recorded).getTime() / 1000 + (latest.strike || 0);
+  if (startedAt && clipTime < startedAt - 5) {
+    targetCard.innerHTML = `<div class="pelvis-card-title">Pelvis vs ball at impact</div>` +
+      `<div class="pelvis-card-num" style="color: var(--muted); font-size: 28px;">–</div>` +
+      `<div class="pelvis-card-sentence">Waiting for first drill rep…</div>`;
+    targetCard.hidden = false;
+    return;
+  }
+
+  const rec = swingRecords && swingRecords[latest.name];
+  const hasPelvis = rec && rec.body && Number.isFinite(rec.body.pelvisBall);
+
+  if (latest.pose === "failed") {
+    targetCard.innerHTML = `<div class="pelvis-card-title">Pelvis vs ball at impact</div>` +
+      `<div class="pelvis-card-num" style="color: var(--muted); font-size: 28px;">–</div>` +
+      `<div class="pelvis-card-sentence">Analysis failed on latest swing.</div>`;
+    targetCard.hidden = false;
+    return;
+  }
+
+  if (latest.pose !== "done" || !rec) {
+    targetCard.innerHTML = `<div class="pelvis-card-title">Pelvis vs ball at impact</div>` +
+      `<div class="pelvis-card-num" style="color: var(--muted); font-size: 28px;">Analyzing…</div>` +
+      `<div class="pelvis-card-sentence">Analyzing latest swing (~10-15 s)…</div>`;
+    targetCard.hidden = false;
+    return;
+  }
+
+  if (!hasPelvis) {
+    targetCard.innerHTML = `<div class="pelvis-card-title">Pelvis vs ball at impact</div>` +
+      `<div class="pelvis-card-num" style="color: var(--muted); font-size: 28px;">–</div>` +
+      `<div class="pelvis-card-sentence">No pelvis reading on latest swing (face-on camera and ball needed).</div>`;
+    targetCard.hidden = false;
+    return;
+  }
+
+  const val = rec.body.pelvisBall;
+  const club = latest.shot ? latest.shot.club : (programState?.program?.clubs || null);
+  const zoneResult = typeof SwingPelvisZone !== "undefined"
+    ? SwingPelvisZone.zone(getSwingsForZone(), club)
+    : null;
+  const placeResult = typeof SwingPelvisZone !== "undefined"
+    ? SwingPelvisZone.place(val, zoneResult?.zone)
+    : "out";
+  const numColor = typeof SwingPelvisZone !== "undefined"
+    ? SwingPelvisZone.color(placeResult)
+    : "var(--text)";
+  const sentenceText = typeof SwingPelvisZone !== "undefined"
+    ? SwingPelvisZone.sentence(val, zoneResult)
+    : `Pelvis ${val > 0 ? val.toFixed(1) + " in ahead" : Math.abs(val).toFixed(1) + " in behind"} of the ball at impact.`;
+
+  const numText = Math.abs(val) < 0.05
+    ? "0.0 in"
+    : (val > 0 ? `+${val.toFixed(1)} in` : `${val.toFixed(1)} in`);
+
+  targetCard.innerHTML = `<div class="pelvis-card-title">Pelvis vs ball at impact</div>` +
+    `<div class="pelvis-card-num" style="color: ${esc(numColor)};">${esc(numText)}</div>` +
+    `<div class="pelvis-card-sentence">${esc(sentenceText)}</div>`;
+  targetCard.hidden = false;
+}
 
 function renderPlan() {
   if (typeof SwingPlan === "undefined") return;
@@ -606,6 +739,7 @@ async function goToBlock(action) {
   } catch { /* stays as it was */ }
   renderPlan();
   pollGame();
+  renderPelvisCard(recentClips);
 }
 
 /** A block's buttons: Start (or, on the block being practiced, what's on, Next and End). */
@@ -656,6 +790,7 @@ async function loadPlanData() {
   if (pr) practiceConfig = pr.config;
   if (s) swingRecords = s.swings;
   renderPlan();
+  renderPelvisCard(recentClips);
 }
 
 // ---- 6. Games ----
@@ -1111,6 +1246,7 @@ function renderChoices() {
   $("n7").textContent = choice === "game" ? "4" : "5";  // after Today's plan when a plan block plays one
   $("n5").textContent = balls ? "4" : "3";
   renderReady();
+  renderPelvisCard(recentClips);
 }
 
 // ---- 1. Get ready: open until both phones record (or for drills without a ball), then one line ----
@@ -1181,10 +1317,12 @@ function getProgramProgress(prog, data) {
 let programTimer = 0;
 async function pollProgram() {
   clearTimeout(programTimer);
-  const data = await getJson("/api/program");
+  const [data, drill] = await Promise.all([getJson("/api/program"), getJson("/api/drill")]);
+  drillState = drill;
   renderProgram(data);
   fillNotes(data);
   renderChoices();
+  renderPelvisCard(recentClips);
   programTimer = setTimeout(pollProgram, document.hidden ? 20000 : 2000);
 }
 
@@ -1209,7 +1347,19 @@ async function pollStatus() {
 }
 async function pollSwings() {
   clearTimeout(swingTimer);
-  renderSwings(await getJson(`/api/clips?since=${Math.floor(Date.now() / 1000 - SWINGS_SINCE_S)}`));
+  const clips = await getJson(`/api/clips?since=${Math.floor(Date.now() / 1000 - SWINGS_SINCE_S)}`);
+  recentClips = clips || [];
+  renderSwings(recentClips);
+  if (isDrillOrProgramRunning()) {
+    const latest = recentClips.find(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+    const needsFetch = !swingRecords || (latest && latest.pose === "done" && (!swingRecords[latest.name] || swingRecords[latest.name].body?.pelvisBall == null));
+    if (needsFetch) {
+      const sData = await getJson("/api/swings");
+      if (sData && sData.swings) swingRecords = sData.swings;
+      if (!allClips) allClips = await getJson("/api/clips");
+    }
+  }
+  renderPelvisCard(recentClips);
   swingTimer = setTimeout(pollSwings, document.hidden ? 20000 : 4000);
 }
 async function pollGame() {
@@ -1220,6 +1370,7 @@ async function pollGame() {
     renderGame(data);
     renderPlan();
     renderChoices();
+    renderPelvisCard(recentClips);
   }
   gameTimer = setTimeout(pollGame, document.hidden ? 20000 : 2000);
 }
