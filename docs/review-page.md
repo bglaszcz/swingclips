@@ -37,7 +37,9 @@ What the server works out for each swing and what each part of the review page s
   and a translucent shaded target zone band calibrated from the owner's best low-point swings
   (green = in target zone, amber = within 1 in, gray = not met, never red; no band until calibrated),
   plus a one-line position and goal sentence near the bottom ("Pelvis ... in ... of the ball at impact. Target: ...").
-  The hand path is
+  Under the scrubber (when Impact is on, face-on), a small trace shows pelvis vs ball from P1 to P8 with
+  a faint zero line for the ball and the target zone band, showing at a glance whether the pelvis moved forward
+  and stayed or drifted back. The hand path is
   the wrists and index fingers weighted by MediaPipe's confidence, smoothed over ±45 ms (a local
   curve fit that leans on confident frames and drops one-frame glitches), and ends once a wrist is
   lost behind the head in the finish. A kinematic

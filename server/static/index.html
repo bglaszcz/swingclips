@@ -671,6 +671,8 @@
                  padding: 0 2px; min-width: 0; font-size: 10px; font-weight: 700; color: var(--muted); line-height: 16px;
                  display: flex; flex-direction: column; align-items: center; }
   #marks .mark::after { content: ""; width: 2px; height: 12px; margin-top: 2px; background: var(--line-strong); border-radius: 1px; }
+  #scrub-trace { display: block; width: calc(100% - 16px); height: 20px; margin: 1px 8px 0; pointer-events: none; }
+  #scrub-trace[hidden] { display: none; }
   #marks .mark.nolabel span { visibility: hidden; }
   #marks .mark:hover, #marks .mark.here { color: var(--accent); }
   #marks .mark:hover::after, #marks .mark.here::after { background: var(--accent); }
@@ -897,7 +899,7 @@
       </div>
     </div>
     <div class="transport">
-      <div id="scrub"><div id="marks"></div><input type="range" id="seek" min="0" max="1000" step="1" value="0" aria-label="Position in the clip"></div>
+      <div id="scrub"><div id="marks"></div><input type="range" id="seek" min="0" max="1000" step="1" value="0" aria-label="Position in the clip"><canvas id="scrub-trace" height="20" hidden></canvas></div>
     <div class="controls">
       <button id="play" class="primary icon" title="Play / pause (Space)" aria-label="Play"></button>
       <button id="prev" class="icon" title="Previous frame (←)" aria-label="Previous frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg></button>
@@ -1954,6 +1956,7 @@ function draw2(t) {
 function redraw() {
   draw(video.currentTime);
   if (partner) draw2(video2.currentTime);
+  renderScrubTrace();
 }
 
 // ---- Keeping the second angle in step ----
@@ -2842,7 +2845,7 @@ seek.addEventListener("input", () => {
 /** The key positions as ticks over the scrubber; labels are left off where they'd crowd each other. */
 function renderMarks() {
   const d = video.duration;
-  if (!positions.length || !d) { marksBox.replaceChildren(); return; }
+  if (!positions.length || !d) { marksBox.replaceChildren(); renderScrubTrace(); return; }
   const width = marksBox.clientWidth || 600;
   let lastX = -Infinity;
   marksBox.replaceChildren(...positions.map(p => {
@@ -2858,9 +2861,154 @@ function renderMarks() {
     return b;
   }));
   markPosition(video.currentTime);
+  renderScrubTrace();
 }
 video.addEventListener("loadedmetadata", renderMarks);
-new ResizeObserver(() => renderMarks()).observe(marksBox);
+new ResizeObserver(() => { renderMarks(); renderScrubTrace(); }).observe(marksBox);
+
+/**
+ * Pelvis trace on the scrub bar from P1 to P7 (+ a little after impact, to P8),
+ * face-on only, with a faint zero line (= the ball) and the zone band if calibrated.
+ * Hidden when Impact overlay is off.
+ */
+function renderScrubTrace() {
+  const canvas = document.getElementById("scrub-trace");
+  if (!canvas) return;
+  const show = pose && pose.angle !== "dtl" && overlays.impact && metrics && positions.length > 0;
+  canvas.hidden = !show;
+  if (!show) return;
+
+  const d = video.duration;
+  if (!d) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.round((canvas.clientWidth || marksBox.clientWidth || 600) * dpr);
+  const H = Math.round((canvas.clientHeight || 20) * dpr);
+  if (!W || !H) return;
+  if (canvas.width !== W || canvas.height !== H) {
+    canvas.width = W;
+    canvas.height = H;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, W, H);
+
+  const p1 = positions.find(p => p.key === "p1");
+  const p7 = positions.find(p => p.key === "p7" || p.key === "impact");
+  const p8 = positions.find(p => p.key === "p8");
+  if (!p1 || !p7) return;
+
+  const startIdx = p1.index;
+  const p7Idx = p7.index;
+  const endIdx = p8 ? p8.index : Math.min(pose.frames.length - 1, p7Idx + 5);
+
+  const pts = [];
+  for (let idx = startIdx; idx <= endIdx; idx++) {
+    const f = pose.frames[idx];
+    const m = metrics.values[idx];
+    if (f && m && Number.isFinite(m.pelvisBall)) {
+      pts.push({ t: f.t, val: m.pelvisBall, isImpact: idx === p7Idx });
+    }
+  }
+  if (pts.length < 2) return;
+
+  const c = current && clipOf(current);
+  const club = c && c.shot ? c.shot.club : null;
+  const zoneResult = (typeof pelvisZoneData === "function" && club)
+    ? pelvisZoneData(club)
+    : (club && typeof SwingPelvisZone !== "undefined"
+        ? SwingPelvisZone.zone([], club)
+        : null);
+
+  const impactVal = (metrics.values[p7Idx] && Number.isFinite(metrics.values[p7Idx].pelvisBall))
+    ? metrics.values[p7Idx].pelvisBall
+    : pts.find(p => p.isImpact)?.val;
+
+  const placeResult = (impactVal != null && zoneResult && zoneResult.zone)
+    ? SwingPelvisZone.place(impactVal, zoneResult.zone)
+    : "out";
+  const placeColor = typeof SwingPelvisZone !== "undefined"
+    ? SwingPelvisZone.color(placeResult, zoneResult ? zoneResult.zone : null)
+    : "#94a3b8";
+
+  let minV = Math.min(...pts.map(p => p.val), 0);
+  let maxV = Math.max(...pts.map(p => p.val), 0);
+  if (zoneResult && zoneResult.zone) {
+    minV = Math.min(minV, zoneResult.zone.lo);
+    maxV = Math.max(maxV, zoneResult.zone.hi);
+  }
+  minV -= 0.6;
+  maxV += 0.6;
+  const span = Math.max(3, maxV - minV);
+
+  const xOf = t => (t / d) * W;
+  const yOf = v => H - ((v - minV) / span) * H;
+
+  const xStart = xOf(pts[0].t);
+  const xEnd = xOf(pts[pts.length - 1].t);
+
+  // 1. Zone band if calibrated
+  if (zoneResult && zoneResult.enough && zoneResult.zone) {
+    const yLo = yOf(zoneResult.zone.lo);
+    const yHi = yOf(zoneResult.zone.hi);
+    const topY = Math.min(yLo, yHi);
+    const bandH = Math.max(2, Math.abs(yLo - yHi));
+
+    let bandFill = "rgba(148, 163, 184, 0.2)";
+    if (placeResult === "in") bandFill = "rgba(34, 197, 94, 0.2)";
+    else if (placeResult === "close") bandFill = "rgba(245, 158, 11, 0.2)";
+
+    ctx.fillStyle = bandFill;
+    ctx.fillRect(xStart, topY, xEnd - xStart, bandH);
+
+    ctx.strokeStyle = placeColor;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2 * dpr, 2 * dpr]);
+    ctx.beginPath();
+    ctx.moveTo(xStart, topY); ctx.lineTo(xEnd, topY);
+    ctx.moveTo(xStart, topY + bandH); ctx.lineTo(xEnd, topY + bandH);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // 2. Faint zero line (= the ball)
+  const y0 = yOf(0);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2 * dpr, 2 * dpr]);
+  ctx.beginPath();
+  ctx.moveTo(xStart, y0);
+  ctx.lineTo(xEnd, y0);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 3. Pelvis trace
+  ctx.strokeStyle = placeColor;
+  ctx.lineWidth = Math.max(1.5, 1.8 * dpr);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  pts.forEach((p, idx) => {
+    const x = xOf(p.t);
+    const y = yOf(p.val);
+    if (idx === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // 4. Dot at impact
+  const impPt = pts.find(p => p.isImpact);
+  if (impPt) {
+    const x = xOf(impPt.t);
+    const y = yOf(impPt.val);
+    ctx.fillStyle = placeColor;
+    ctx.beginPath();
+    ctx.arc(x, y, 2.5 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1 * dpr;
+    ctx.stroke();
+  }
+}
 
 function toggleFullscreen() {
   const st = document.getElementById("stages");
