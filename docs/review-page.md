@@ -279,6 +279,7 @@ drawn by `renderHelps` in `trends.js`):
   helps one result one way and another the other way is a trade-off, not a drill. General
   instruction for a right-hander: a coach watching the swing trumps it. Tests:
   `node --test tests/coach.test.js`.
+- **Checked forward in time** (`static/holdup.js`, `SwingHoldUp.replay`): re-runs the finding search session by session from `minSessions` (3) up to the second-to-last session. For any link first labeled emerging or confirmed at session $k$, the sessions after $k$ alone are tested with `SwingHelps.link` (one-sided $p = p/2$ in the found direction). A verdict is assigned: **held up later** ($p < 0.05$ same sign), **reversed later** ($p < 0.05$ opposite sign), **faded later** ($\ge 15$ later swings, but neither), or **too early to tell** ($< 15$ later swings). Each listed link shows a small muted tag with its forward verdict (none if only found in the latest session). A folded summary at the bottom of the card reports: "Checked forward: of $N$ findings, $H$ held up in later sessions, $F$ faded, $R$ reversed, $E$ too early to tell", with the sentence line for each finding inside. Tests: `node --test tests/holdup.test.js`.
 
 ## My focus
 On **Progress**, first card (`static/focus.js`, drawn by `renderFocus` in `trends.js`):

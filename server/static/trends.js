@@ -171,6 +171,31 @@ function faultLinksData() {
   return faultLinksCache.value;
 }
 
+let holdUpCache = {};
+let holdUpSig = "";
+/** Replay of What helps, what hurts findings forward in time (SwingHoldUp.replay), per club and session list. */
+function holdUpData(club, sessions, input) {
+  if (typeof SwingHoldUp === "undefined") {
+    return { replayed: [], tally: { found: 0, held: 0, faded: 0, reversed: 0, early: 0 }, elapsed: 0 };
+  }
+  const sig = dataSig + "|" + clips.length;
+  if (holdUpSig !== sig) {
+    holdUpCache = {};
+    holdUpSig = sig;
+  }
+  const key = `${club || ""}|${sessions.map(s => `${s.key}:${s.rows.length}`).join(",")}`;
+  if (holdUpCache[key] !== undefined) return holdUpCache[key];
+
+  const t0 = performance.now();
+  const replayed = SwingHoldUp.replay(input);
+  const tally = SwingHoldUp.tally(replayed);
+  const elapsed = performance.now() - t0;
+  console.log(`[HoldUp] replay for ${club || "all"}: ${sessions.length} sessions, ${replayed.length} findings in ${elapsed.toFixed(1)}ms`);
+
+  holdUpCache[key] = { replayed, tally, elapsed };
+  return holdUpCache[key];
+}
+
 /** The page shows one view at a time: a swing, one session's trends, progress, camera setup, or the shutter test. */
 function showView(which) {
   if (window.Compare) Compare.close(true);
@@ -1553,14 +1578,22 @@ function helpsModel(club, sessions) {
   const moves = [...byMove.values()].slice(0, 3).map(m => ({ ...m, tradeOff: m.aims.size > 1, aim: m.items[0].c.aim,
     fix: m.items[0].c.fix, goals: [...new Set(m.items.map(x => x.c.goal))],
     label: m.items.some(x => x.l.label === "confirmed") ? "confirmed" : "emerging" }));
-  return { a, listed, coached, moves };
+  const holdUp = holdUpData(club, sessions, input);
+  return { a, listed, coached, moves, holdUp };
 }
 
 /** The evidence under "Why this?": every link, in golf terms, strongest first. */
 function renderHelpsEvidence(club, sessions, h) {
   const status = document.getElementById("p-helps-status"), box = document.getElementById("p-helps-list");
   const name = club ? clubName(club).toLowerCase() : "club";
-  const { a, listed, coached } = h;
+  const { a, listed, coached, holdUp } = h;
+  const replayMap = new Map((holdUp?.replayed || []).map(r => [`${r.move}:${r.result}`, r]));
+  const verdictTags = {
+    held: "held up later",
+    faded: "faded later",
+    reversed: "reversed later",
+    "too early": "too early to tell"
+  };
   const counts = ["confirmed", "emerging"].map(k => [EVIDENCE[k].toLowerCase(), listed.filter(l => l.label === k).length]).filter(x => x[1]);
   status.textContent = !a.tested
     ? `not enough swings with body numbers yet: ${a.swings} with the ${name}; a link needs ${SwingHelps.MIN_PAIRS} in sessions of ${SwingHelps.MIN_IN_SESSION} or more.`
@@ -1573,6 +1606,10 @@ function renderHelpsEvidence(club, sessions, h) {
     const head = pEl("div", "p-link-head");
     head.append(pEl("span", `tag ${l.label}`, EVIDENCE[l.label] || l.label));
     if (l.helps != null) head.append(pEl("span", l.helps ? "helps" : "hurts", l.helps ? "Helps" : "Hurts"));
+    const rItem = replayMap.get(`${l.move}:${l.result}`);
+    if (rItem && verdictTags[rItem.verdict]) {
+      head.append(pEl("span", "tag muted", verdictTags[rItem.verdict]));
+    }
     head.append(pEl("span", null, `${c.when[0].toUpperCase() + c.when.slice(1)} → ${c.then}`));
     if (l.shaky) { head.classList.add("shaky"); head.title = "Shaky: most of the move's numbers are (trust.js)"; }
     card.append(head);
@@ -1594,7 +1631,22 @@ function renderHelpsEvidence(club, sessions, h) {
     card.append(see);
     list.append(card);
   }
-  box.replaceChildren(...(coached.length ? [list] : []));
+  let fold = null;
+  if (holdUp && holdUp.tally) {
+    const t = holdUp.tally;
+    if (t.found > 0 || (a.tested && a.sessions >= 3)) {
+      fold = pEl("details", "explain");
+      fold.style.marginTop = "8px";
+      const sumText = `Checked forward: of ${t.found} finding${t.found === 1 ? "" : "s"}, ${t.held} held up in later sessions, ${t.faded} faded, ${t.reversed} reversed, ${t.early} too early to tell.`;
+      fold.append(pEl("summary", null, sumText));
+      const body = pEl("div");
+      for (const item of (holdUp.replayed || [])) {
+        body.append(pEl("div", "note", SwingHoldUp.sentence(item)));
+      }
+      fold.append(body);
+    }
+  }
+  box.replaceChildren(...(coached.length ? [list] : []), ...(fold ? [fold] : []));
 }
 
 // ---- Progress: my focus (focus.js) ----
