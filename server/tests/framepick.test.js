@@ -12,6 +12,7 @@ const {
   mergePick,
   pickSource,
   frameDiff,
+  filterDisagreements,
 } = require("../static/framepick.js");
 
 test("labelEvent: maps key position names to label event names, skips p1", () => {
@@ -115,4 +116,59 @@ test("frameDiff: formats difference in frames correctly", () => {
   assert.equal(frameDiff(1.0, 1.004166, 240), "1 frame apart");
   assert.equal(frameDiff(1.0, 1.0, 240), "0 frames apart");
   assert.equal(frameDiff(1.025, 1.0, 240), "6 frames apart");
+});
+
+test("filterDisagreements: drops only labeled (clip, position) pairs and skips p1", () => {
+  const clips = [
+    { name: "swing_face.mp4", angle: "face", partner: "swing_dtl.mp4" },
+    { name: "swing_dtl.mp4", angle: "dtl", partner: "swing_face.mp4" },
+    { name: "swing_exc.mp4", angle: "face", partner: null, excluded: true },
+  ];
+
+  const nightSwings = {
+    "swing_face.mp4": {
+      face: {
+        ms: { p1: 20.0, takeaway: 30.0, p4: 40.0 },
+        t: { p1: 0.5, takeaway: 1.0, p4: 1.5 },
+      },
+      dtl: {
+        ms: { p7: 25.0 },
+        t: { p7: 2.0 },
+      },
+    },
+    "swing_exc.mp4": {
+      face: {
+        ms: { p4: 50.0 },
+        t: { p4: 1.6 },
+      },
+    },
+  };
+
+  // Case 1: No labels yet -> p1 is skipped, p4 (40ms) is worse than takeaway (30ms)
+  let rows = filterDisagreements(nightSwings, clips, []);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].c.name, "swing_face.mp4");
+  assert.equal(rows[0].key, "p4");
+  assert.equal(rows[0].ms, 40.0);
+
+  // Case 2: p4 is labeled on face -> p4 dropped, next worst (takeaway 30ms) is listed
+  const labelRows = [
+    { clip: "swing_face.mp4", pass: 1, missing: ["takeaway", "p2", "p3", "p5", "p6", "impact", "p8"], events: 1 },
+  ];
+  rows = filterDisagreements(nightSwings, clips, labelRows);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].key, "takeaway");
+  assert.equal(rows[0].ms, 30.0);
+
+  // Case 3: takeaway also labeled on face -> only impact (p7) on dtl remains
+  labelRows[0].missing = ["p2", "p3", "p5", "p6", "impact", "p8"]; // takeaway now labeled
+  rows = filterDisagreements(nightSwings, clips, labelRows);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].angle, "dtl");
+  assert.equal(rows[0].key, "p7");
+
+  // Case 4: dtl clip also has impact labeled -> nothing left
+  labelRows.push({ clip: "swing_dtl.mp4", pass: 1, missing: ["takeaway", "p2", "p3", "p4", "p5", "p6", "p8"], events: 1 });
+  rows = filterDisagreements(nightSwings, clips, labelRows);
+  assert.equal(rows.length, 0);
 });

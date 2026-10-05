@@ -114,23 +114,66 @@ function openForLabeling(name, opts) {
   setTimeout(() => window.Labels && Labels.start && Labels.start(opts), 50);
 }
 
+const pickedFilesCache = new Map(); // clipName -> { updated, hasPicked }
+
+async function syncPickedCounts() {
+  const p1Clips = (labelData?.clips || []).filter(r => r.pass === 1 && r.clip);
+  const needed = p1Clips.filter(r => {
+    const cached = pickedFilesCache.get(r.clip);
+    return !cached || cached.updated !== r.updated;
+  });
+  if (!needed.length) return;
+  await Promise.all(needed.map(async r => {
+    try {
+      const res = await fetch(`/api/labels/${encodeURIComponent(r.clip)}?pass=1`, { cache: "no-store" });
+      if (res.ok) {
+        const doc = await res.json();
+        const hasPicked = Boolean(doc.picked && Object.keys(doc.picked).length > 0);
+        pickedFilesCache.set(r.clip, { updated: r.updated, hasPicked });
+      } else {
+        pickedFilesCache.set(r.clip, { updated: r.updated, hasPicked: false });
+      }
+    } catch {
+      pickedFilesCache.set(r.clip, { updated: r.updated, hasPicked: false });
+    }
+  }));
+}
+
 /** Unlabeled swings where the night worker and the server put a key position furthest apart, worst
- * first: {c, angle, key, ms, t}. */
+ * first: {c, angle, key, ms, t}. Drops only (clip, position) pairs that have that event labeled. */
 function nightDisagreements(swings) {
-  const done = new Set(swings.flatMap(s => [s.main, s.face && s.face.clip, s.dtl && s.dtl.clip]).filter(Boolean));
   const all = Object.entries((nightData && nightData.swings) || {});
   // The usual difference at each angle and position, over every swing compared.
   const usual = {};
   for (const [, angles] of all) for (const [angle, a] of Object.entries(angles))
     for (const [key, ms] of Object.entries(a.ms || {})) (usual[angle + key] = usual[angle + key] || []).push(ms);
   for (const k in usual) { const v = usual[k].sort((x, y) => x - y); usual[k] = (v[(v.length - 1) >> 1] + v[v.length >> 1]) / 2; }
+
+  if (window.FramePicker && FramePicker.filterDisagreements) {
+    return FramePicker.filterDisagreements(all, clips, labelData?.clips || [], usual, NIGHT_MIN_MS);
+  }
+
+  const byClip = new Map((labelData?.clips || []).filter(r => r.pass === 1).map(r => [r.clip, r]));
+  const isLabeled = (clipName, ev) => {
+    const r = byClip.get(clipName);
+    if (!r) return false;
+    return r.missing ? !r.missing.includes(ev) : (r.events === 8);
+  };
+  const getEvent = k => k === "p7" ? "impact" : (k === "p1" ? null : k);
   const out = [];
   for (const [main, angles] of all) {
     const c = clips.find(x => x.name === main);
-    if (!c || c.excluded || done.has(main)) continue;
+    if (!c || c.excluded) continue;
     let best = null;
     for (const [angle, a] of Object.entries(angles)) {
       for (const [key, raw] of Object.entries(a.ms || {})) {
+        if (key === "p1") continue;
+        const ev = getEvent(key);
+        if (!ev) continue;
+        const targetName = angle === "dtl"
+          ? (c.angle === "dtl" ? c.name : c.partner)
+          : (c.angle === "face" ? c.name : c.partner);
+        if (targetName && isLabeled(targetName, ev)) continue;
         const ms = raw - usual[angle + key];
         if (Math.abs(ms) >= NIGHT_MIN_MS && (!best || Math.abs(ms) > Math.abs(best.ms)) && a.t[key] != null)
           best = { c, angle, key, ms, t: a.t[key] };
@@ -143,15 +186,40 @@ function nightDisagreements(swings) {
 
 function renderNight(swings) {
   const status = document.getElementById("lv-night-status"), box = document.getElementById("lv-night");
-  if (!nightData) { status.textContent = ""; box.replaceChildren(lvEl("span", { className: "lv-muted", textContent: "Not reached." })); return; }
+  const countEl = document.getElementById("lv-night-count");
+  if (!nightData) {
+    status.textContent = "";
+    if (countEl) countEl.textContent = "";
+    box.replaceChildren(lvEl("span", { className: "lv-muted", textContent: "Not reached." }));
+    return;
+  }
   const seen = nightData.seen && nightData.seen.at
     ? ` · worker last asked ${fmtWhen(new Date(nightData.seen.at * 1000).toISOString())}` : " · no worker yet";
   status.textContent = `${nightData.done} of ${nightData.clips} clips done${seen}`;
   const rows = nightDisagreements(swings);
+
+  const pickedCount = [...pickedFilesCache.values()].filter(x => x.hasPicked).length;
+  if (countEl) {
+    countEl.textContent = `${pickedCount} picked so far · ${rows.length} left`;
+  }
+
   box.replaceChildren(...(rows.length ? rows.slice(0, NIGHT_ROWS).map(r => {
     const compare = lvEl("button", { className: "small", textContent: "Compare" });
     compare.onclick = () => {
-      if (window.FramePicker) FramePicker.open(r, rows, () => loadLabelView());
+      if (window.FramePicker) {
+        FramePicker.open(r, rows, (clipName, ev, doc) => {
+          pickedFilesCache.set(clipName, { updated: doc.updated, hasPicked: true });
+          const rowInSummary = (labelData?.clips || []).find(c => c.pass === 1 && c.clip === clipName);
+          if (rowInSummary) {
+            rowInSummary.updated = doc.updated;
+            if (rowInSummary.missing) {
+              rowInSummary.missing = rowInSummary.missing.filter(m => m !== ev);
+              rowInSummary.events = 8 - rowInSummary.missing.length;
+            }
+          }
+          renderLabelView();
+        });
+      }
     };
     const go = lvEl("button", { className: "small", textContent: "Go" });
     go.onclick = () => openForLabeling(r.c.name, { angle: r.angle, t: r.t });
@@ -272,7 +340,10 @@ async function loadLabelView() {
   labelBusy = true;
   try {
     const res = await fetch("/api/labels/summary", { cache: "no-store" });
-    if (res.ok) labelData = await res.json();
+    if (res.ok) {
+      labelData = await res.json();
+      await syncPickedCounts();
+    }
     const night = await fetch("/api/night", { cache: "no-store" });
     if (night.ok) nightData = await night.json();
   } catch {}

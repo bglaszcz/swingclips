@@ -61,6 +61,41 @@
     return `${diff} frame${diff === 1 ? "" : "s"} apart`;
   }
 
+  /** Filters disagreement candidates against label summary: drops p1 and labeled (clip, position) pairs. */
+  function filterDisagreements(allNightSwings, clipsList, labelRows, usual = {}, minMs = 12.5) {
+    const byClip = new Map((labelRows || []).filter(r => r.pass === 1 && r.clip).map(r => [r.clip, r]));
+    const isLabeled = (clipName, ev) => {
+      const r = byClip.get(clipName);
+      if (!r) return false;
+      return r.missing ? !r.missing.includes(ev) : (r.events === 8);
+    };
+
+    const out = [];
+    const entries = Array.isArray(allNightSwings) ? allNightSwings : Object.entries(allNightSwings || {});
+    for (const [main, angles] of entries) {
+      const c = (clipsList || []).find(x => x.name === main);
+      if (!c || c.excluded) continue;
+      let best = null;
+      for (const [angle, a] of Object.entries(angles || {})) {
+        for (const [key, raw] of Object.entries(a.ms || {})) {
+          if (key === "p1") continue;
+          const ev = labelEvent(key);
+          if (!ev) continue;
+          const targetName = angle === "dtl"
+            ? (c.angle === "dtl" ? c.name : c.partner)
+            : (c.angle === "face" ? c.name : c.partner);
+          if (targetName && isLabeled(targetName, ev)) continue;
+          const u = usual[angle + key] || 0;
+          const ms = raw - u;
+          if (Math.abs(ms) >= minMs && (!best || Math.abs(ms) > Math.abs(best.ms)) && a.t && a.t[key] != null)
+            best = { c, angle, key, ms, t: a.t[key] };
+        }
+      }
+      if (best) out.push(best);
+    }
+    return out.sort((a, b) => Math.abs(b.ms) - Math.abs(a.ms));
+  }
+
   // ---- UI Controller ----
 
   let isOpen = false;
@@ -505,6 +540,7 @@
     mergePick,
     pickSource,
     frameDiff,
+    filterDisagreements,
     open,
     close,
     step,

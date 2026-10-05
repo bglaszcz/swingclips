@@ -137,6 +137,16 @@ What the server works out for each swing and what each part of the review page s
   worker progress from `/api/night`, folded earlier candidates, and past night lines. Tapping **Use it**
   (or **Go back to this one**) promotes the model via `POST /api/improve/<id>/use` to re-analyze clips over
   idle hours.
+- Labels view and frame picker: **Tools > Labels** (`static/labelview.js`, `static/framepick.js`):
+  tracks hand labels across clips and key positions. The **Where the two analyses disagree** card lists
+  unlabeled positions where the server and night pass disagree by 2+ frames, sorted worst first, alongside
+  a progress line (`N picked so far · M left`). Tapping **Compare** opens a side-by-side picker panel
+  showing Server, Night pass, and takeaway onset stills with pose skeleton overlays (solid for server,
+  dashed sky-blue for night pass). Single-frame stepping (`‹`/`›` or `[`/`]`), one-tap picking ("This one"
+  or keys `1`-`4`), custom adjustment ("Neither, label it myself" / `N`), and skipping (`S`) let you resolve
+  disagreements rapidly. One-tap saving writes to `POST /api/labels/<clip>?pass=1` with source attribution
+  (`picked[event] = "server" | "night" | "onset" | "adjusted"`), prompts before overwriting any existing
+  hand labels, automatically advances to the next disagreement, and drops only the resolved position.
 - Deploy: **Tools > Update the server** (`static/update.js`, `update.py`): `GET /api/update` fetches
   and lists the new commits and whether a restart is needed; `POST /api/update` does
   `git pull --ff-only` and, when the change needs it, the server exits with code 3, which

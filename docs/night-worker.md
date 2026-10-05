@@ -34,8 +34,14 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    each is from the server's, per angle (`night/compare.json`). The clubhead onset (the takeaway's
    anchor) is an idle step on the server, not in the night files, so the server's is used for both:
    the takeaway differs only by what the models see. The Labels view's **Where the two analyses
-   disagree** card lists the unlabeled swings with the biggest gap (2 frames or more), worst first;
-   **Go** opens the swing at the server's frame for that position.
+   disagree** card lists the unlabeled swings with the biggest gap (2 frames or more), worst first,
+   with a progress line (`N picked so far · M left`). **Go** opens the swing at the server's frame for that
+   position. **Compare** opens a side-by-side frame picker panel (`framepick.js`) showing the Server,
+   Night pass, and takeaway onset frames with pose skeletons drawn on canvas (solid for server, dashed
+   sky-blue for night pass). Single-frame stepping (`‹`/`›`, `[`/`]`), one-tap picking ("This one" or keys
+   `1`-`4`), and custom adjustment ("Neither" / `N`) save directly to `/api/labels/<clip>?pass=1` with source
+   attribution (`picked[event] = "server" | "night" | "onset" | "adjusted"`), protecting existing hand labels
+   from overwrite with a confirmation dialog and dropping only the resolved `(clip, position)` pair from the list.
 2. **Training data.** The night files are a second set of body points on every frame of every clip,
    from a stronger model: the start of training data for the next models without labeling by hand.
    Not used yet.
