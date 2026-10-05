@@ -42,7 +42,10 @@ What the server works out for each swing and what each part of the review page s
   and stayed or drifted back. The hand path is
   the wrists and index fingers weighted by MediaPipe's confidence, smoothed over ±45 ms (a local
   curve fit that leans on confident frames and drops one-frame glitches), and ends once a wrist is
-  lost behind the head in the finish. A kinematic
+  lost behind the head in the finish. Night pass (`Show > Night pass`): draws the skeleton from the
+  night pass (`/api/night/pose/<clip>`, RTMW-l on the gaming PC) alongside the server's, matched by
+  timestamp and drawn in dashed sky blue without angle labels; works during playback and in labeling mode.
+  A kinematic
   sequence isn't attempted: from face-on alone the turn speeds come out in the wrong order (with
   both phones calibrated, the 3D panel has one: see [3d.md](3d.md)).
 - **Find** (the box above the swing list; `static/find.js`): paste times ("4:25 PM", "Fri Sep 25

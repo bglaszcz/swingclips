@@ -17,7 +17,7 @@
     --accent-soft: #e4f4ea; --sel: #e6f3ea; --warn: #b45309; --warn-soft: #fdf1e3; --bad: #dc2626;
     --dot: #16803f; --shadow: 0 1px 2px rgba(16, 24, 18, 0.06), 0 1px 3px rgba(16, 24, 18, 0.08);
     --shadow-lg: 0 12px 32px rgba(16, 24, 18, 0.18); --radius: 12px; --radius-sm: 8px;
-    --appbar-h: 56px; --tabbar-h: 0px; --ref: #a21caf;
+    --appbar-h: 56px; --tabbar-h: 0px; --ref: #a21caf; --night: #0284c7;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -25,7 +25,7 @@
       --line: #223029; --line-strong: #2f3f35; --accent: #34c26f; --accent-2: #4ad283; --accent-text: #04130a;
       --accent-soft: #143322; --sel: #16291d; --warn: #f59e0b; --warn-soft: #2d2110; --bad: #f87171;
       --dot: #34b86a; --shadow: 0 1px 2px rgba(0, 0, 0, 0.4); --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
-      --ref: #e879f9;
+      --ref: #e879f9; --night: #38bdf8;
     }
   }
   * { box-sizing: border-box; }
@@ -142,6 +142,7 @@
                background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 12px; pointer-events: none; }
   #stages:not(.two) .angle-tag { display: none; }
   #video2 { cursor: pointer; }
+  .night-legend { font-size: 12px; color: var(--muted); margin: -4px 0 0 2px; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   button { font: inherit; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--line);
            background: var(--panel); color: var(--text); cursor: pointer; min-width: 44px; }
@@ -900,6 +901,7 @@
         <canvas id="overlay2"></canvas>
       </div>
     </div>
+    <div id="night-legend" class="night-legend hint" hidden>Dashed: night pass (bigger model on the gaming PC). Solid: the server's.</div>
     <div class="transport">
       <div id="scrub"><div id="marks"></div><input type="range" id="seek" min="0" max="1000" step="1" value="0" aria-label="Position in the clip"><canvas id="scrub-trace" height="20" hidden></canvas></div>
     <div class="controls">
@@ -917,6 +919,7 @@
           <button id="headbox" title="Show where the head was at address">Head</button>
           <button id="impact" title="Show pelvis vs ball at impact (face-on)">Impact</button>
           <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane <kbd>P</kbd></button>
+          <button id="night" title="Show the night pass skeleton (RTMW-l on the gaming PC)">Night pass</button>
         </span>
       </span>
       <button id="compare-btn" title="Compare this swing with another one, side by side (C)">Compare…</button>
@@ -1390,9 +1393,19 @@ let speed = 1;
 let showSkeleton = true;
 try { showSkeleton = localStorage.getItem("skeleton") !== "off"; } catch {}
 // Extra overlays, each remembered like the skeleton.
-const overlays = { angles: true, handpath: false, headbox: false, impact: false, plane: true };
+const overlays = { angles: true, handpath: false, headbox: false, impact: false, plane: true, night: false };
 for (const k in overlays) {
   try { const v = localStorage.getItem("overlay-" + k); if (v) overlays[k] = v === "on"; } catch {}
+}
+let cachedNightColor = "";
+function getNightColor() {
+  if (!cachedNightColor) {
+    cachedNightColor = getComputedStyle(document.documentElement).getPropertyValue("--night").trim() || "#38bdf8";
+  }
+  return cachedNightColor;
+}
+if (window.matchMedia) {
+  try { window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { cachedNightColor = ""; }); } catch {}
 }
 let metrics = null;       // SwingMetrics.compute for the open clip
 let dtlMetrics = null;    // SwingMetrics.computeDTL for the swing's down-the-line clip
@@ -1454,14 +1467,19 @@ function fitRect(W, H, v = video) {
   return { x: (W - vw * k) / 2, y: (H - vh * k) / 2, w: vw * k, h: vh * k };
 }
 
-function drawSpine(ctx, spine, toPx, lineWidth, isReference) {
+function drawSpine(ctx, spine, toPx, lineWidth, isReference, isNight = false) {
   const hip = toPx(spine.hip), sh = toPx(spine.shoulder);
   // Extend past the shoulders toward the head so the angle is easy to judge.
   const top = { x: sh.x + (sh.x - hip.x) * 0.35, y: sh.y + (sh.y - hip.y) * 0.35 };
   ctx.save();
   ctx.lineWidth = isReference ? lineWidth * 0.7 : lineWidth * 1.3;
-  ctx.strokeStyle = isReference ? REF_SPINE_COLOR : SPINE_COLOR;
-  if (isReference) ctx.setLineDash([lineWidth * 3, lineWidth * 2]);
+  if (isNight) {
+    ctx.strokeStyle = getNightColor();
+    ctx.setLineDash([lineWidth * 2.5, lineWidth * 1.8]);
+  } else {
+    ctx.strokeStyle = isReference ? REF_SPINE_COLOR : SPINE_COLOR;
+    if (isReference) ctx.setLineDash([lineWidth * 3, lineWidth * 2]);
+  }
   ctx.beginPath();
   ctx.moveTo(hip.x, hip.y);
   ctx.lineTo(top.x, top.y);
@@ -1490,11 +1508,17 @@ function drawLabel(ctx, text, at, fontSize) {
 function drawShaft(ctx, lm, club, toPx, r, lineWidth, p = pose, head = null) {
   const grip = toPx({ x: (lm[L_INDEX * 3] + lm[R_INDEX * 3]) / 2, y: (lm[L_INDEX * 3 + 1] + lm[R_INDEX * 3 + 1]) / 2 });
   const len = (p.clubLength || 0.25) * r.h, a = club[0] * Math.PI / 180;
+  const isNight = Boolean(p && p.isNight);
   if (head && club[1] >= SHAFT_CONFIDENT) {
     const h = toPx({ x: head[0], y: head[1] });
     ctx.save();
     ctx.lineWidth = lineWidth * 1.2;
-    ctx.strokeStyle = ctx.fillStyle = SHAFT_COLOR;
+    if (isNight) {
+      ctx.strokeStyle = ctx.fillStyle = getNightColor();
+      ctx.setLineDash([lineWidth * 2.5, lineWidth * 1.8]);
+    } else {
+      ctx.strokeStyle = ctx.fillStyle = SHAFT_COLOR;
+    }
     ctx.beginPath();
     ctx.moveTo(grip.x, grip.y);
     ctx.lineTo(h.x, h.y);
@@ -1507,7 +1531,10 @@ function drawShaft(ctx, lm, club, toPx, r, lineWidth, p = pose, head = null) {
   }
   ctx.save();
   ctx.lineWidth = lineWidth * 1.2;
-  if (club[1] >= SHAFT_CONFIDENT) {
+  if (isNight) {
+    ctx.strokeStyle = getNightColor();
+    ctx.setLineDash([lineWidth * 2.5, lineWidth * 1.8]);
+  } else if (club[1] >= SHAFT_CONFIDENT) {
     ctx.strokeStyle = SHAFT_COLOR;
   } else {
     ctx.strokeStyle = SHAFT_GUESS_COLOR;
@@ -1525,36 +1552,47 @@ function drawPose(ctx, frame, r, withLabel, p = pose) {
   const lm = frame.lm;
   const toPx = p => ({ x: r.x + p.x * r.w, y: r.y + p.y * r.h });
   const k = r.w / 400; // sizes were tuned on a ~400px-wide picture in the phone app
-  const lineWidth = Math.max(1.5, 3 * k), radius = Math.max(1.5, 4 * k), fontSize = Math.max(12, 14 * k);
+  const isNight = Boolean(p && p.isNight);
+  const lineWidth = isNight ? Math.max(1.2, 2.2 * k) : Math.max(1.5, 3 * k);
+  const radius = isNight ? Math.max(1.2, 2.5 * k) : Math.max(1.5, 4 * k);
+  const fontSize = Math.max(12, 14 * k);
 
+  ctx.save();
   ctx.lineWidth = lineWidth;
   ctx.lineCap = "round";
-  ctx.strokeStyle = BONE_COLOR;
+  if (isNight) {
+    const col = getNightColor();
+    ctx.strokeStyle = col;
+    ctx.fillStyle = col;
+    ctx.setLineDash([lineWidth * 2.5, lineWidth * 1.8]);
+  } else {
+    ctx.strokeStyle = BONE_COLOR;
+  }
   for (const [a, b] of SKELETON) {
-    const p = point(lm, a), q = point(lm, b);
-    if (!p || !q) continue;
-    const P = toPx(p), Q = toPx(q);
+    const ptA = point(lm, a), ptB = point(lm, b);
+    if (!ptA || !ptB) continue;
+    const P = toPx(ptA), Q = toPx(ptB);
     ctx.beginPath();
     ctx.moveTo(P.x, P.y);
     ctx.lineTo(Q.x, Q.y);
     ctx.stroke();
   }
-  ctx.fillStyle = JOINT_COLOR;
+  if (!isNight) ctx.fillStyle = JOINT_COLOR;
   for (const i of JOINTS) {
-    const p = point(lm, i);
-    if (!p) continue;
-    const P = toPx(p);
+    const pt = point(lm, i);
+    if (!pt) continue;
+    const P = toPx(pt);
     ctx.beginPath();
     ctx.arc(P.x, P.y, radius, 0, Math.PI * 2);
     ctx.fill();
   }
 
   if (frame.club) drawShaft(ctx, lm, frame.club, toPx, r, lineWidth, p, frame.clubhead);
-  if (p.reference) drawSpine(ctx, p.reference, toPx, lineWidth, true);
+  if (p.reference && !isNight) drawSpine(ctx, p.reference, toPx, lineWidth, true);
   const spine = spineLine(lm, p.video);
   if (spine) {
-    drawSpine(ctx, spine, toPx, lineWidth, false);
-    if (withLabel) {
+    drawSpine(ctx, spine, toPx, lineWidth, false, isNight);
+    if (withLabel && !isNight) {
       // Down the line, the spine's lean in the picture is the forward bend.
       const word = p.angle === "dtl" ? "Bend" : "Spine";
       const text = p.reference
@@ -1563,6 +1601,7 @@ function drawPose(ctx, frame, r, withLabel, p = pose) {
       drawLabel(ctx, text, toPx(spine.hip), fontSize);
     }
   }
+  ctx.restore();
 }
 
 // The numbers, in the order they're listed on the video and in the table: [label, key, unit].
@@ -1936,6 +1975,33 @@ function freshCanvas(c) {
   return ctx;
 }
 
+/** Finds the frame in pose p whose timestamp .t is closest to target timestamp t, within half a frame duration. */
+function frameAtTime(t, p) {
+  if (!p || !p.frames || !p.frames.length) return null;
+  const frames = p.frames;
+  const n = frames.length;
+  const dt = n > 1 ? (frames[n - 1].t - frames[0].t) / (n - 1) : 1 / 30;
+  const halfFrame = Math.max(0.001, dt * 0.55);
+
+  let low = 0, high = n - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    if (frames[mid].t < t) low = mid + 1;
+    else high = mid - 1;
+  }
+  let best = null, bestDiff = Infinity;
+  for (const idx of [low - 1, low, low + 1]) {
+    if (idx >= 0 && idx < n) {
+      const diff = Math.abs(frames[idx].t - t);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = frames[idx];
+      }
+    }
+  }
+  return bestDiff <= halfFrame ? best : null;
+}
+
 function draw(t) {
   const ctx = freshCanvas(canvas), W = canvas.width, H = canvas.height;
   showFrameLabel(t);
@@ -1949,6 +2015,10 @@ function draw(t) {
   // A down-the-line clip on its own has its own numbers.
   const dtlHere = pose.angle === "dtl" && dtlMetrics;
   if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !((metrics || dtlHere) && overlays.angles));
+  if (overlays.night && nightPose && frame) {
+    const nf = frameAtTime(frame.t, nightPose);
+    if (nf && nf.lm) drawPose(ctx, nf, r, false, nightPose);
+  }
   if (metrics && overlays.angles) drawAngles(ctx, metrics.values[i], r);
   if (dtlHere && overlays.angles) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
   if (metrics && overlays.headbox && frame.lm) drawHead(ctx, frame.lm, r, lineWidth);
@@ -1968,6 +2038,10 @@ function draw2(t) {
   if (positions.length && overlays.handpath) drawHandPath(ctx, r, lineWidth, p);
   if (positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, p);
   if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !numbers, p);
+  if (overlays.night && partnerNightPose && frame) {
+    const nf = frameAtTime(frame.t, partnerNightPose);
+    if (nf && nf.lm) drawPose(ctx, nf, r, false, partnerNightPose);
+  }
   if (numbers) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
   if (window.Labels) Labels.drawOn(ctx, r, "dtl", i);
 }
@@ -2095,6 +2169,7 @@ function setOverlay(key, on) {
   overlays[key] = on;
   document.getElementById(key).classList.toggle("on", on);
   try { localStorage.setItem("overlay-" + key, on ? "on" : "off"); } catch {}
+  if (key === "night") loadNightPoses();
   redraw();
 }
 
@@ -2124,6 +2199,95 @@ async function fetchPose(name, v) {
            ball: data.ball ?? null, clubOnset: data.clubOnset ?? null, video: v, angle: c.angle || "face" };
 }
 
+const nightPoseCache = window.nightPoseCache = new Map();
+let nightPose = null;
+let partnerNightPose = null;
+
+/** The night worker's pose for a clip, or null when 404 (not analyzed yet). */
+async function fetchNightPose(name, v) {
+  if (!name) return null;
+  if (nightPoseCache.has(name)) return nightPoseCache.get(name);
+
+  const p = (async () => {
+    try {
+      const res = await fetch("/api/night/pose/" + encodeURIComponent(name));
+      if (res.status === 404) return null;
+      if (!res.ok) return null;
+      const data = await res.json();
+      await whenReady(v, "loadedmetadata", () => v.videoWidth > 0);
+      let reference = null;
+      if (Array.isArray(data.frames)) {
+        for (const f of data.frames) {
+          if (f.lm && (reference = spineLine(f.lm, v))) break;
+        }
+      }
+      const c = clips.find(c => c.name === name);
+      return {
+        name,
+        frames: data.frames || [],
+        reference,
+        clubLength: data.clubLength ?? null,
+        video: v,
+        angle: c?.angle || "face",
+        isNight: true
+      };
+    } catch {
+      return null;
+    }
+  })();
+
+  nightPoseCache.set(name, p);
+  return p;
+}
+
+function updateNightLegend() {
+  const el = document.getElementById("night-legend");
+  if (!el) return;
+  const hasNight = Boolean(nightPose || partnerNightPose);
+  el.hidden = !overlays.night;
+  el.textContent = hasNight
+    ? "Dashed: night pass (bigger model on the gaming PC). Solid: the server's."
+    : "Night pass: not analyzed by the night worker yet.";
+}
+
+function updateNightButton() {
+  const btn = document.getElementById("night");
+  if (!btn) return;
+  if (!overlays.night) {
+    btn.title = "Show the night pass skeleton (RTMW-l on the gaming PC)";
+    return;
+  }
+  const hasNight = Boolean(nightPose || partnerNightPose);
+  btn.title = hasNight
+    ? "Show the night pass skeleton (RTMW-l on the gaming PC)"
+    : "Not analyzed by the night worker yet";
+}
+
+async function loadNightPoses() {
+  if (!overlays.night) {
+    nightPose = null;
+    partnerNightPose = null;
+    updateNightButton();
+    updateNightLegend();
+    redraw();
+    return;
+  }
+  const myClip = current;
+  const partnerClip = partner?.name;
+  const [res1, res2] = await Promise.all([
+    myClip ? fetchNightPose(myClip, video) : Promise.resolve(null),
+    partnerClip ? fetchNightPose(partnerClip, video2) : Promise.resolve(null)
+  ]);
+  if (current !== myClip) return;
+  nightPose = res1;
+  partnerNightPose = (partner?.name === partnerClip) ? res2 : null;
+  updateNightButton();
+  updateNightLegend();
+  redraw();
+}
+window.loadNightPoses = loadNightPoses;
+window.fetchNightPose = fetchNightPose;
+
 async function loadPose(name) {
   pose = null;
   metrics = null;
@@ -2134,6 +2298,7 @@ async function loadPose(name) {
   pose = p;
   updateSkeletonButton();
   syncPartner();
+  if (overlays.night) loadNightPoses();
   redraw();
   buildPositions(name);
 }
@@ -2146,6 +2311,7 @@ async function loadPartnerPose() {
   partner.pose = p;
   // Now in step by the ball, if both saw it; and the cards get this angle too.
   syncPartner();
+  if (overlays.night) loadNightPoses();
   draw2(video2.currentTime);
   if (pose) buildPositions(current);
 }
@@ -3068,6 +3234,9 @@ function setPartner(name) {
     video2.playbackRate = speed;
     loadPartnerPose();
   } else {
+    partnerNightPose = null;
+    updateNightLegend();
+    updateNightButton();
     video2.removeAttribute("src");
     video2.load();
     thumbVideo2.removeAttribute("src");
@@ -3090,6 +3259,10 @@ function open(name) {
   row?.closest(".session")?.classList.remove("closed");
   fps = fpsFromName(name);
   pose = null;
+  nightPose = null;
+  partnerNightPose = null;
+  updateNightLegend();
+  updateNightButton();
   positions = [];
   metrics = null;
   dtlMetrics = null;

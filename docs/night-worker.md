@@ -39,6 +39,12 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
 2. **Training data.** The night files are a second set of body points on every frame of every clip,
    from a stronger model: the start of training data for the next models without labeling by hand.
    Not used yet.
+3. **Judging by eye on the frame (Night pass overlay).** The swing page's **Show** menu includes a
+   **Night pass** toggle (`overlays.night`). When enabled, it fetches `/api/night/pose/<clip>` and draws
+   the night pass skeleton matched by timestamp alongside the server's. The night skeleton is drawn in
+   dashed sky blue without angle labels so the server's solid skeleton remains primary. This works in
+   both regular playback and labeling mode (`L`), allowing the owner to judge disagreements by eye
+   directly on the video.
 
 ## Setting it up (gaming PC)
 
