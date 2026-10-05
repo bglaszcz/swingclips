@@ -51,6 +51,7 @@ import calibrun
 import drills
 import games
 import goodshots
+import improve
 import labelcheck
 import models
 import night
@@ -2628,7 +2629,9 @@ def night_next(worker: str = Query("", max_length=60)):
     skip = {n for n, t in _night_claims.items() if now - t < NIGHT_CLAIM_S} | _night_failed
     c = night.next_clip(listed_clips(with_shots=False), NIGHT_DIR, labeled, skip)
     if c is None:
-        return {"wait": 1800, "why": "Every clip is done"}
+        # allDone: the worker's improve step may run now (night_worker.py).
+        busy = any(now - t < NIGHT_CLAIM_S for t in _night_claims.values())
+        return {"wait": 1800, "why": "Every clip is done", "allDone": not busy}
     _night_claims[c["name"]] = now
     night_seen["clip"] = c["name"]
     deep = deep_profile()
@@ -2673,6 +2676,98 @@ def night_status():
     table = night_table or night.load_compare(NIGHT_COMPARE)
     return {"done": done, "clips": len(names), "seen": night_seen or None, "version": night.VERSION,
             "swings": {k: {a: v[a] for a in ("face", "dtl") if a in v} for k, v in table.items() if "error" not in v}}
+
+
+# The improve step's candidates and nights (improve.py): the Night report (Tools menu).
+IMPROVE_DIR = Path(os.environ.get("SWINGCLIPS_IMPROVE", CLIPS_DIR.parent / "improve"))
+improve_store = improve.Store(IMPROVE_DIR)
+
+
+def club_in_use() -> tuple[Path, str | None]:
+    """Where the deep pass's club model is (or would be), and its stamp (None without one)."""
+    deep = deep_profile()
+    path = Path(deep["clubModel"]) if deep and deep.get("clubModel") else models.models_dir() / "club-deep.onnx"
+    return path, (deep_club_stamp({"clubModel": path}) if path.is_file() else None)
+
+
+def deep_left(stamp: str | None) -> int:
+    return sum(1 for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done"
+               and needs_deep(p.name, stamp))
+
+
+@app.get("/api/improve")
+def improve_report():
+    """The Night report: the club model in use, clips still waiting for the deep pass, the candidates
+    (newest first) and what each night did."""
+    path, stamp = club_in_use()
+    since = datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds") if stamp else None
+    return {"inUse": {"club": stamp, "since": since}, "deepLeft": deep_left(stamp),
+            "candidates": improve_store.listing(stamp), "nights": improve_store.nights()}
+
+
+@app.get("/api/improve/next")
+def improve_next():
+    """For the night worker: whether a new club model is worth training (the labels changed since
+    the last try), the labeled clips to fetch, and the models to score against."""
+    sig = improve.labels_sig(LABELS_DIR)
+    labeled = list_labels()["1"]
+    _, stamp = club_in_use()
+    due, why = True, "The labels changed since the last try."
+    if not labeled:
+        due, why = False, "No labels yet."
+    elif stamp is None:
+        due, why = False, "No club model in use to compare with."
+    elif improve_store.tried(sig):
+        due, why = False, "Nothing new to learn: no new labels since the last try."
+    return {"due": due, "why": why, "labelsSig": sig, "labels": labeled, "bodyModel": models.backend(),
+            "clubStamp": stamp}
+
+
+@app.post("/api/improve/night")
+async def improve_night(request: Request):
+    """What a night did (the worker sends it as it goes): {started, ended, worker, clips, improve}."""
+    try:
+        return {"nights": improve_store.note_night(await request.json())}
+    except (ValueError, TypeError, AttributeError) as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/improve/{cid}/model")
+async def improve_model(cid: str, request: Request):
+    """A candidate's model (.onnx), before its report."""
+    try:
+        path = improve_store.save_model(cid, await request.body())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "stamp": models.club_stamp(path)}
+
+
+@app.post("/api/improve/{cid}/report")
+async def improve_put_report(cid: str, request: Request):
+    """A candidate's report (improve.py: status, scores, verdict, summary, train)."""
+    try:
+        report = improve_store.save_report(cid, await request.json())
+    except (ValueError, TypeError, AttributeError) as e:
+        raise HTTPException(400, str(e))
+    log_event("improve", candidate=cid, status=report.get("status"))
+    print(f"Improve: candidate {cid} is {report.get('status')}", flush=True)
+    return {"ok": True}
+
+
+@app.post("/api/improve/{cid}/use")
+def improve_use(cid: str):
+    """The owner's tap: candidate `cid`'s club model becomes the deep pass's; every clip gets the
+    deep pass again with it (needs_deep). The model it replaces stays as a candidate to go back to."""
+    target, stamp = club_in_use()
+    try:
+        improve_store.use(cid, target, stamp, TRASH_DIR / "models", models.club_stamp)
+    except (OSError, ValueError) as e:
+        raise HTTPException(400, str(e))
+    _deep_failed.clear()
+    _, now = club_in_use()
+    log_event("improve", candidate=cid, used=now)
+    print(f"Improve: now using {cid} ({now}); every clip gets the deep pass again when idle", flush=True)
+    return {"ok": True, "inUse": {"club": now}, "deepLeft": deep_left(now)}
 
 
 @app.get("/api/night/pose/{name}")

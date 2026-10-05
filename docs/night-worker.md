@@ -46,6 +46,39 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    both regular playback and labeling mode (`L`), allowing the owner to judge disagreements by eye
    directly on the video.
 
+## Getting better every night: the improve step
+
+Once every clip is done, the worker runs the improve step once (`server/night_improve.py`; server
+side `server/improve.py`, `/api/improve`):
+
+1. **Only when there's something new to learn**: the server fingerprints the pass-1 label files
+   (`improve.labels_sig`); a try that was trained and scored on these labels isn't repeated (a failed
+   one is, the next night). Not with less than 50 minutes left before `--stop-at`.
+2. **Train**: the labels and labeled clips are copied to the gaming PC (`%USERPROFILE%\SwingClips-night`,
+   only new clips download), `club_dataset.py` makes the dataset (validation = ~20% of swings by swing
+   name, the same swings each time), and `train/club_train.py` trains a YOLO11s club model in
+   `train\.venv` (~20 min on the 5070 Ti). The worker's own processes are stopped first: they hold
+   ~15 GB of the card.
+3. **Score**: `eval.py --rerun --deep --only-val` twice, with the model in use (the server's,
+   downloaded) and with the new one, the server's body model: the key positions, shaft and clubhead
+   on the validation swings neither model trained on.
+4. **Judge** (`improve.judge`): better when no key position is clearly worse (within one frame 10
+   points lower, or 90th percentile 2 frames higher), the shaft and clubhead aren't found clearly less
+   often in the downswing, and the key positions are better on average (90th percentile 1 ms lower or
+   within one frame 3 points higher) or the club is found clearly more often. Club model v3 is the
+   reason for the "no position clearly worse" rule: better on its training metric, worse at P2 and P8.
+5. **Report**: the model and both scorecards go to the server as a candidate (`improve/candidates/<id>`).
+   **Nothing changes until the owner taps Use it** on the Night report. Use it copies the model over
+   the deep pass's `club-deep.onnx` (the old one goes to `trash\models` and stays as a "used before"
+   candidate: going back is the same tap), and every clip gets the deep pass again when the server is
+   idle.
+
+What each night did (clips, the improve step's sentence) goes to `improve/nights.json` as it goes.
+The fuel is labels: each swing labeled from the **Where the two analyses disagree** list gives the next
+night something to learn. Trying the step out without the GPU: `SWINGCLIPS_IMPROVE_EPOCHS=1`,
+`SWINGCLIPS_IMPROVE_DEVICE=cpu`, `SWINGCLIPS_IMPROVE_PROVIDER=cpu`, then
+`.venv-gpu\Scripts\python.exe night_improve.py --server <url> [--force]`.
+
 ## Setting it up (gaming PC)
 
 1. The repo checked out (this is the dev PC: `D:\SwingClips-dev\swingclips`).

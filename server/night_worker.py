@@ -7,7 +7,9 @@ sets it up and starts it; it runs until closed.
   .venv-gpu\\Scripts\\python.exe night_worker.py --stop-at 7           until 7:00, then exit (the 2 am task)
   .venv-gpu\\Scripts\\python.exe night_worker.py --server http://192.168.86.250:8000 --once
 
-The server says which clip and how (/api/night/next), and nothing while a session is on. The work runs
+The server says which clip and how (/api/night/next), and nothing while a session is on. Once every
+clip is done, the improve step (night_improve.py) runs once: a new club model when the labels changed,
+for the Night report. What the night did goes to the server as it goes (/api/improve/night). The work runs
 below normal priority, so the PC stays usable; --hours keeps it to the night when the PC is used for
 games. The body model comes from public/models like the server's (fetch_models.py rtmw); the club
 model is the server's deep-pass one, downloaded as public/models/club-night.onnx whenever it changes.
@@ -156,12 +158,41 @@ def main(argv=None) -> int:
             seconds = min(seconds, (stop - datetime.now()).total_seconds())
         time.sleep(max(1.0, seconds))
 
+    import night_improve
+    night = {"started": datetime.now().isoformat(timespec="seconds"), "ended": None, "worker": me, "clips": 0,
+             "improve": None}
+
+    def note(**changes) -> None:
+        """This run's line in the Night report."""
+        night.update(changes)
+        try:
+            ask(server, "/api/improve/night", json.dumps(night).encode())
+        except OSError:
+            pass
+
+    def improve_step() -> str:
+        """The improve step, with the graphics card to itself: the pool's processes each hold the
+        models on it, so they're stopped first (and started again after, by the caller)."""
+        left = (stop - datetime.now()).total_seconds() / 60 if stop else None
+        if left is not None and left < night_improve.MINUTES:
+            return "Not enough time left tonight to train a model."
+        stay_awake(True)
+        try:
+            return night_improve.try_once(server, lambda stamp: club_model(server, stamp, models),
+                                          say=lambda m: print(f"{datetime.now():%H:%M} {m}", flush=True))
+        except Exception as e:
+            traceback.print_exc()
+            return f"The improve step failed: {type(e).__name__}"
+        finally:
+            stay_awake(False)
+
     pool = ProcessPoolExecutor(args.workers, initializer=pose.low_priority)
     folder = Path(tempfile.mkdtemp(prefix="swingclips-night-"))
     try:
         while True:
             if stop and datetime.now() >= stop:
                 print(f"{datetime.now():%H:%M} stopping ({args.stop_at}:00)", flush=True)
+                note(ended=datetime.now().isoformat(timespec="seconds"))
                 return 0
             if not in_hours(args.hours, datetime.now()):
                 nap(MAX_WAIT_S)
@@ -172,6 +203,11 @@ def main(argv=None) -> int:
                 print(f"{datetime.now():%H:%M} server not reached ({e}); trying again in {OFFLINE_WAIT_S // 60} min",
                       flush=True)
                 nap(OFFLINE_WAIT_S)
+                continue
+            if "name" not in job and job.get("allDone") and night["improve"] is None and not args.once:
+                pool.shutdown()
+                note(improve=improve_step())
+                pool = ProcessPoolExecutor(args.workers, initializer=pose.low_priority)
                 continue
             if "name" not in job:
                 print(f"{datetime.now():%H:%M} {job.get('why', 'nothing to do')}; asking again in "
@@ -192,6 +228,7 @@ def main(argv=None) -> int:
                 result = pose.analyze(str(clip), pool, args.workers, deep=deep)
                 ask(server, where, gzip.compress(json.dumps(result, separators=(",", ":")).encode()), timeout=120)
                 print(f"{datetime.now():%H:%M} {name}: {result['seconds']} s", flush=True)
+                note(clips=night["clips"] + 1)
             except OSError as e:
                 # The server went away mid-clip (or the download failed): the clip is handed out again.
                 print(f"{datetime.now():%H:%M} {name}: {e}", flush=True)
