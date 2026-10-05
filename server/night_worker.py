@@ -4,6 +4,7 @@ sets it up and starts it; it runs until closed.
 
   .venv-gpu\\Scripts\\python.exe night_worker.py                       the home server, any time
   .venv-gpu\\Scripts\\python.exe night_worker.py --hours 23-7          only from 11 pm to 7 am
+  .venv-gpu\\Scripts\\python.exe night_worker.py --stop-at 7           until 7:00, then exit (the 2 am task)
   .venv-gpu\\Scripts\\python.exe night_worker.py --server http://192.168.86.250:8000 --once
 
 The server says which clip and how (/api/night/next), and nothing while a session is on. The work runs
@@ -24,7 +25,7 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 SERVER = "http://192.168.86.250:8000"
@@ -76,6 +77,42 @@ def in_hours(hours: tuple[int, int] | None, now: datetime) -> bool:
     return start <= now.hour < end if start < end else now.hour >= start or now.hour < end
 
 
+def only_one(path: Path | None = None):
+    """An open, locked file while this is the only night worker on the PC (the 2 am task and one started
+    by hand would both fill the graphics card's memory), else None. Kept open until the process ends."""
+    path = path or Path(tempfile.gettempdir()) / "swingclips-night-worker.lock"
+    f = open(path, "a+b")
+    try:
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    return f
+
+
+def stay_awake(on: bool) -> None:
+    """Asks Windows not to sleep while a clip is being worked on (the PC sleeps after a while with
+    nobody at it), and lets it again when idle. Nothing elsewhere."""
+    if os.name != "nt":
+        return
+    import ctypes
+    ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+    ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if on else 0))
+
+
+def deadline(hour: int | None, now: datetime) -> datetime | None:
+    """The next time it's `hour`:00 after `now` (--stop-at), or None without one."""
+    if hour is None:
+        return None
+    at = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+    return at if at > now else at + timedelta(days=1)
+
+
 def parse_hours(text: str | None) -> tuple[int, int] | None:
     if not text:
         return None
@@ -93,7 +130,13 @@ def main(argv=None) -> int:
     ap.add_argument("--provider", default=os.environ.get("SWINGCLIPS_ORT_PROVIDER") or "cuda",
                     help="where the models run: cuda (default), dml or cpu")
     ap.add_argument("--once", action="store_true", help="one clip, then stop")
+    ap.add_argument("--stop-at", type=int, choices=range(24), metavar="HOUR",
+                    help="exit at this hour (after the clip it's on), e.g. 7")
     args = ap.parse_args(argv)
+    lock = only_one()
+    if lock is None:
+        print("Night worker: another one is already running on this PC; nothing to do", flush=True)
+        return 0
     server = args.server.rstrip("/")
     # Before pose and models are loaded, and before the worker processes start (they read it too).
     os.environ["SWINGCLIPS_ORT_PROVIDER"] = args.provider
@@ -103,29 +146,42 @@ def main(argv=None) -> int:
     me = socket.gethostname()
     print(f"Night worker on {me}: clips from {server}, {args.workers} workers, models on "
           f"{models.PROVIDER_NAMES.get(models.provider(), models.provider())}"
-          + (f", {args.hours[0]}:00 to {args.hours[1]}:00" if args.hours else ""), flush=True)
+          + (f", {args.hours[0]}:00 to {args.hours[1]}:00" if args.hours else "")
+          + (f", until {args.stop_at}:00" if args.stop_at is not None else ""), flush=True)
+    stop = deadline(args.stop_at, datetime.now())
+
+    def nap(seconds: float) -> None:
+        """Waits, but not past the stop time."""
+        if stop:
+            seconds = min(seconds, (stop - datetime.now()).total_seconds())
+        time.sleep(max(1.0, seconds))
+
     pool = ProcessPoolExecutor(args.workers, initializer=pose.low_priority)
     folder = Path(tempfile.mkdtemp(prefix="swingclips-night-"))
     try:
         while True:
+            if stop and datetime.now() >= stop:
+                print(f"{datetime.now():%H:%M} stopping ({args.stop_at}:00)", flush=True)
+                return 0
             if not in_hours(args.hours, datetime.now()):
-                time.sleep(MAX_WAIT_S)
+                nap(MAX_WAIT_S)
                 continue
             try:
                 job = ask(server, "/api/night/next?" + urllib.parse.urlencode({"worker": me}))
             except OSError as e:
                 print(f"{datetime.now():%H:%M} server not reached ({e}); trying again in {OFFLINE_WAIT_S // 60} min",
                       flush=True)
-                time.sleep(OFFLINE_WAIT_S)
+                nap(OFFLINE_WAIT_S)
                 continue
             if "name" not in job:
                 print(f"{datetime.now():%H:%M} {job.get('why', 'nothing to do')}; asking again in "
                       f"{min(job.get('wait', 60), MAX_WAIT_S) // 60} min", flush=True)
                 if args.once:
                     return 0
-                time.sleep(min(job.get("wait", 60), MAX_WAIT_S))
+                nap(min(job.get("wait", 60), MAX_WAIT_S))
                 continue
             name = job["name"]
+            stay_awake(True)
             where = f"/api/night/{urllib.parse.quote(name)}?" + urllib.parse.urlencode({"worker": me})
             clip = None
             try:
@@ -139,7 +195,7 @@ def main(argv=None) -> int:
             except OSError as e:
                 # The server went away mid-clip (or the download failed): the clip is handed out again.
                 print(f"{datetime.now():%H:%M} {name}: {e}", flush=True)
-                time.sleep(OFFLINE_WAIT_S)
+                nap(OFFLINE_WAIT_S)
             except Exception as e:
                 traceback.print_exc()
                 try:
@@ -149,6 +205,7 @@ def main(argv=None) -> int:
                 if isinstance(e, BrokenProcessPool):
                     pool = ProcessPoolExecutor(args.workers, initializer=pose.low_priority)
             finally:
+                stay_awake(False)
                 if clip is not None:
                     clip.unlink(missing_ok=True)
             if args.once:

@@ -96,6 +96,33 @@ class DeepAgainTest(unittest.TestCase):
             app.pose_file(name).unlink()
 
 
+class WorkerHoursTest(unittest.TestCase):
+    def test_stop_at_and_hours(self):
+        from datetime import datetime
+        import night_worker
+        at2 = datetime(2026, 10, 5, 2, 0)
+        self.assertEqual(night_worker.deadline(7, at2), datetime(2026, 10, 5, 7, 0))
+        # Started after 7 (by hand in the day): the next morning's 7.
+        self.assertEqual(night_worker.deadline(7, datetime(2026, 10, 5, 11, 0)), datetime(2026, 10, 6, 7, 0))
+        self.assertIsNone(night_worker.deadline(None, at2))
+        hours = night_worker.parse_hours("23-7")
+        self.assertTrue(night_worker.in_hours(hours, datetime(2026, 10, 5, 2, 0)))
+        self.assertFalse(night_worker.in_hours(hours, datetime(2026, 10, 5, 12, 0)))
+
+    def test_only_one_worker(self):
+        import night_worker
+        lock = TMP / "night-worker.lock"  # not the real one: a worker may be running on this PC
+        first = night_worker.only_one(lock)
+        try:
+            self.assertIsNotNone(first)
+            self.assertIsNone(night_worker.only_one(lock))
+        finally:
+            first.close()
+        again = night_worker.only_one(lock)
+        self.assertIsNotNone(again)
+        again.close()
+
+
 @unittest.skipIf(TestClient is None, "needs httpx")
 class NightApiTest(unittest.TestCase):
     def setUp(self):

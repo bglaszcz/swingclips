@@ -53,7 +53,11 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    CUDA through pip, ~1 GB; needs NVIDIA driver 580 or newer) and downloads RTMW (~220 MB).
 3. It runs until the window is closed, below normal priority. To keep it to the night (the PC is
    used for games): `"Night worker.cmd" --hours 23-7`. Other options: `--workers N` (default half
-   the cores), `--server URL`, `--once`.
+   the cores), `--server URL`, `--once`, `--stop-at 7` (exit at 7:00, after the clip it's on).
+4. Every night: a Task Scheduler task **SwingClips night worker** (on the gaming PC) starts
+   `Night worker.cmd --stop-at 7` at 2:00 and wakes the PC for it (Power Options must allow wake
+   timers). It doesn't start late if the PC was off at 2:00. Only one worker runs on a PC at a time:
+   a second one (the task while one started by hand is still going) says so and exits.
 
 The Labels view shows how far it has got ("N of M clips done · worker last asked ...").
 
