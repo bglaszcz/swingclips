@@ -208,22 +208,27 @@ function showView(which) {
   document.getElementById("labelview").hidden = which !== "labelview";
   document.getElementById("labels-btn").classList.toggle("on", which === "labelview");
   document.getElementById("practice-btn").classList.toggle("on", which === "practice");
+  const nrBox = document.getElementById("nightreport");
+  if (nrBox) nrBox.hidden = which !== "nightreport";
+  const nrBtn = document.getElementById("nightreport-btn");
+  if (nrBtn) nrBtn.classList.toggle("on", which === "nightreport");
   viewer.hidden = which !== "swing" || !current;
   tipEl.hidden = pTipEl.hidden = true;
   if (which !== "swing") video.pause();
   if (which !== "trends") trendsKey = null;
   progressOpen = which === "progress";
   document.getElementById("progress-btn").classList.toggle("on", progressOpen);
-  // The tabs: a session's trends belong to Swings; Labels and the shutter test are under Tools.
+  // The tabs: a session's trends belong to Swings; Labels, Night report and the shutter test are under Tools.
   document.getElementById("swings-btn").classList.toggle("on", which === "swing" || which === "trends");
-  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview");
+  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview" || which === "nightreport");
   document.body.dataset.view = which;
 }
 
 /** Called when a swing is opened: back to the swing view. */
 function leaveTrendViews() {
   if (!trendsKey && !progressOpen && document.getElementById("setup").hidden && document.getElementById("shutter").hidden
-      && document.getElementById("practice").hidden && document.getElementById("labelview").hidden) return;
+      && document.getElementById("practice").hidden && document.getElementById("labelview").hidden
+      && (!document.getElementById("nightreport") || document.getElementById("nightreport").hidden)) return;
   showView("swing");
   renderList();
 }

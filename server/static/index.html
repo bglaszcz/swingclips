@@ -53,7 +53,7 @@
     body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
     main { grid-template-columns: 340px 1fr; flex: 1; min-height: 0; }
     #side { overflow-y: auto; border-right: 1px solid var(--line); }
-    #viewer, #trends, #progress, #setup, #shutter, #practice, #labelview, #compare { overflow-y: auto; }
+    #viewer, #trends, #progress, #setup, #shutter, #practice, #labelview, #nightreport, #compare { overflow-y: auto; }
   }
   #listbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--line);
              position: sticky; top: 0; background: var(--bg); z-index: 1; }
@@ -239,7 +239,7 @@
   #t-good-bad-body { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
   .t-gb-line { font-size: 14px; font-weight: 550; }
   .t-gb-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-  @media (max-width: 899px) { #trends, #progress, #setup, #shutter, #practice, #labelview { order: -1; border-bottom: 1px solid var(--line); } }
+  @media (max-width: 899px) { #trends, #progress, #setup, #shutter, #practice, #labelview, #nightreport { order: -1; border-bottom: 1px solid var(--line); } }
   #setup { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   #setup .note, .s-note { color: var(--muted); font-size: 12px; }
   .s-note { flex: 1; }
@@ -260,6 +260,45 @@
   /* Labels (labelview.js): how far the hand labeling has got, and what to check. */
   #labelview { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   #labelview .note { color: var(--muted); font-size: 12px; }
+  /* Night report (nightreport-view.js): model candidates, worker progress, nights. */
+  #nightreport { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  #nightreport .note { color: var(--muted); font-size: 12px; }
+  .nr-headline { font-size: 15px; font-weight: 600; line-height: 1.4; color: var(--text); }
+  .nr-worker-progress { margin-top: 4px; }
+  .nr-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .nr-tag { display: inline-block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 4px; }
+  .nr-tag-better { background: var(--accent-soft); color: var(--accent); }
+  .nr-tag-not-better { background: var(--warn-soft); color: var(--warn); }
+  .nr-tag-in-use { background: var(--sel); color: var(--text); border: 1px solid var(--accent); }
+  .nr-tag-used-before { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+  .nr-tag-failed { background: var(--warn-soft); color: var(--warn); }
+  .nr-summary { margin: 0 0 8px; font-size: 14px; line-height: 1.45; }
+  .nr-verdict { margin-bottom: 10px; font-style: italic; }
+  .nr-table { border-collapse: collapse; font-size: 13px; width: 100%; font-variant-numeric: tabular-nums; margin-top: 6px; }
+  .nr-table th, .nr-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+  .nr-table th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  .nr-table th:not(:first-child):not(:nth-child(2)), .nr-table td:not(:first-child):not(:nth-child(2)) { text-align: right; }
+  .nr-item-label { font-weight: 600; color: var(--text); vertical-align: top; white-space: nowrap; }
+  .nr-metric-name { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .nr-better { color: var(--accent); font-weight: 600; }
+  .nr-worse { color: var(--warn); font-weight: 600; }
+  .nr-muted { color: var(--muted); }
+  .nr-train { margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .nr-train summary { cursor: pointer; font-weight: 500; }
+  .nr-action-row { margin-top: 12px; display: flex; align-items: center; gap: 12px; }
+  .nr-fold-card summary { cursor: pointer; user-select: none; }
+  .nr-earlier-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .nr-earlier-item { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .nr-earlier-item:last-child { border-bottom: 0; }
+  .nr-earlier-summary { cursor: pointer; font-size: 13px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .nr-earlier-date { font-weight: 600; }
+  .nr-earlier-text { color: var(--muted); font-size: 12px; }
+  .nr-earlier-body { margin-top: 8px; padding-left: 8px; }
+  .nr-nights-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 13px; }
+  .nr-night-row { padding: 4px 0; border-bottom: 1px solid var(--line); }
+  .nr-night-row:last-child { border-bottom: 0; }
+  .nr-bottom-note { font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .link-btn { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
   .lv-muted { color: var(--muted); }
   .lv-bar { display: flex; flex-direction: column; gap: 4px; }
   .lv-bar-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
@@ -595,7 +634,7 @@
   .t-head { align-items: center; }
   .t-head strong { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
   .t-head > button.small { background: none; }
-  #trends, #progress, #setup, #shutter, #practice, #labelview, #compare { padding: 20px; gap: 16px; scroll-margin-top: var(--appbar-h); }
+  #trends, #progress, #setup, #shutter, #practice, #labelview, #nightreport, #compare { padding: 20px; gap: 16px; scroll-margin-top: var(--appbar-h); }
 
   /* ---- Session list ---- */
   #side { background: var(--panel); }
@@ -870,6 +909,7 @@
         <button class="small" data-page="/tripods" title="Find the tripod spots: live pictures, framing meters, level and alignment-stick tools, saved spots">Tripod setup</button>
         <button class="small" data-page="/calibrate" title="3D from both phones: the lens board per phone, then place the cameras from your swings">3D calibration</button>
         <button id="labels-btn" class="small" title="Hand labels for the scorecard: what's done, what to check, what to label next">Labels</button>
+        <button id="nightreport-btn" class="small" title="The gaming PC's nightly improve run: model candidate scores, worker progress, and nights">Night report</button>
         <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button>
         <button id="update-btn" class="small" title="Get the latest version from GitHub; the server restarts itself when the change needs it">Update the server</button>
         <button id="help-menu-btn" class="small" title="Keyboard shortcuts and what the page shows">Shortcuts &amp; help <kbd>?</kbd></button>
@@ -1088,6 +1128,14 @@
       <div style="overflow-x: auto"><table id="lv-table"></table></div>
       <div class="note" id="lv-pass2"></div>
     </div>
+  </section>
+  <section id="nightreport" hidden>
+    <div class="t-head">
+      <strong>Night report</strong>
+      <span class="s-note" id="nr-status"></span>
+      <button id="nr-close" class="small">Close</button>
+    </div>
+    <div id="nr-content"></div>
   </section>
   <section id="practice" hidden>
     <div class="t-head">
@@ -3901,6 +3949,8 @@ setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 <script src="/static/status.js"></script>
 <script src="/static/labelview.js"></script>
 <script src="/static/labels.js"></script>
+<script src="/static/nightreport.js"></script>
+<script src="/static/nightreport-view.js"></script>
 <script src="/static/compare.js"></script>
 <script src="/static/update.js"></script>
 </body>
