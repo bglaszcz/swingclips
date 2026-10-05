@@ -149,13 +149,17 @@ function renderNight(swings) {
   status.textContent = `${nightData.done} of ${nightData.clips} clips done${seen}`;
   const rows = nightDisagreements(swings);
   box.replaceChildren(...(rows.length ? rows.slice(0, NIGHT_ROWS).map(r => {
+    const compare = lvEl("button", { className: "small", textContent: "Compare" });
+    compare.onclick = () => {
+      if (window.FramePicker) FramePicker.open(r, rows, () => loadLabelView());
+    };
     const go = lvEl("button", { className: "small", textContent: "Go" });
     go.onclick = () => openForLabeling(r.c.name, { angle: r.angle, t: r.t });
     const what = `${POSITION_NAMES[r.key] || r.key.toUpperCase()} ${Math.round(Math.abs(r.ms))} ms further apart than usual`
       + ` (${r.angle === "dtl" ? "down the line" : "face-on"})`;
     return lvEl("div", { className: "lv-work-line" },
       lvEl("span", { className: "lv-work-angle", textContent: fmtWhen(r.c.recorded) + (r.c.shot ? " · " + clubName(r.c.shot.club) : "") }),
-      lvEl("span", { className: "lv-work-text", textContent: what }), go);
+      lvEl("span", { className: "lv-work-text", textContent: what }), compare, go);
   }) : [lvEl("span", { className: "lv-muted", textContent: nightData.done
     ? "No unlabeled swing where they disagree by 3 frames more than usual." : "Nothing compared yet." })]));
 }

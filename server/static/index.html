@@ -328,6 +328,29 @@
   .lv-work-angle { color: var(--muted); min-width: 92px; }
   .lv-work-text { flex: 1; min-width: 0; }
   @media (max-width: 600px) { .lv-work-angle { min-width: 0; } }
+  /* Frame picker (framepick.js): side-by-side frames from night disagreements */
+  #framepick-panel { margin: 12px 0 16px; padding: 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); }
+  .fp-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .fp-head-left { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .fp-title { font-size: 15px; font-weight: 700; }
+  .fp-subtitle { font-size: 13px; color: var(--muted); }
+  .fp-head-right { display: flex; align-items: center; gap: 10px; }
+  .fp-status { color: var(--accent); font-weight: 600; font-size: 13px; }
+  .fp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  @media (max-width: 600px) { .fp-grid { grid-template-columns: 1fr; } }
+  .fp-card { background: var(--panel); border: 2px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; }
+  .fp-card.focused { border-color: var(--accent); }
+  .fp-card-head { display: flex; align-items: center; justify-content: space-between; width: 100%; font-size: 13px; font-weight: 600; }
+  .fp-card-title { font-weight: 600; }
+  .fp-card-sub { font-size: 11px; color: var(--muted); background: var(--panel-2); padding: 1px 6px; border-radius: 999px; }
+  .fp-canvas-box { width: 100%; max-height: 440px; background: #000; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .fp-canvas-box canvas { width: 100%; height: auto; max-height: 440px; object-fit: contain; display: block; }
+  .fp-controls { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
+  .fp-controls .icon { width: 28px; height: 28px; padding: 0; font-size: 16px; line-height: 1; }
+  .fp-time { font-family: monospace; font-size: 13px; font-variant-numeric: tabular-nums; min-width: 76px; text-align: center; }
+  .fp-pick-btn { width: 100%; padding: 6px 12px; font-size: 13px; }
+  .fp-bottom-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .fp-loading { padding: 24px; text-align: center; color: var(--muted); font-size: 14px; }
   /* Shutter test (shutter.js): clip quality by session, camera and shutter setting. */
   #shutter { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   #shutter .note { color: var(--muted); font-size: 12px; }
@@ -1119,7 +1142,8 @@
       <strong>Where the two analyses disagree</strong> <span class="lv-muted" id="lv-night-status"></span>
       <div class="note">The night worker (a PC with a graphics card) analyzes every clip again with bigger models.
         Where it puts a key position much further from the server's than it usually does, one of them is wrong:
-        those swings teach the scorecard most. <b>Go</b> opens the swing at the server's frame.</div>
+        those swings teach the scorecard most. <b>Compare</b> picks the better frame side by side; <b>Go</b> opens the swing at the server's frame.</div>
+      <div id="framepick-panel" hidden></div>
       <div id="lv-night"></div>
     </div>
     <div class="t-card">
@@ -3948,6 +3972,7 @@ setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 <script src="/static/games.js"></script>
 <script src="/static/gamesview.js"></script>
 <script src="/static/status.js"></script>
+<script src="/static/framepick.js"></script>
 <script src="/static/labelview.js"></script>
 <script src="/static/labels.js"></script>
 <script src="/static/nightreport.js"></script>
