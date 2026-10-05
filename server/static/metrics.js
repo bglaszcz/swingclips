@@ -238,6 +238,49 @@
     return v && { leadArm: v.leadArm, spineTilt: v.spineTilt, pelvisTilt: v.pelvisTilt, shoulderTilt: v.shoulderTilt };
   }
 
+  /**
+   * The lead hip line at address (and trail hip line) and where the lead hip sits on frame i.
+   * Coordinates lineX, trailX, nowX, y in picture shares (0..1 of picture width/height).
+   * @param frames face-on pose frames [{t, lm, hip: [leftEdge, rightEdge], ...}]
+   * @param address frame index of address (P1)
+   * @param i current frame index
+   * @param leadSide "left" (default, right-handed golfer) or "right"
+   * @param scale optional metres per picture height (from compute().scale)
+   * @param aspect optional picture aspect ratio (width / height)
+   * @returns { lineX, trailX, nowX, y, inches } or null if no hip edge at address
+   */
+  function hipLine(frames, address, i, leadSide, scale, aspect) {
+    if (!frames || address == null || address < 0 || address >= frames.length) return null;
+    const f0 = frames[address];
+    if (!f0 || !f0.hip) return null;
+    const s = sides(leadSide === "right" ? "right" : "left");
+    const [l0, r0] = f0.hip;
+    const lineX = s.m > 0 ? r0 : l0;
+    if (lineX == null) return null;
+    const trailX = s.m > 0 ? l0 : r0;
+
+    const fi = (i != null && i >= 0 && i < frames.length) ? frames[i] : null;
+    let nowX = null;
+    if (fi && fi.hip) {
+      const [li, ri] = fi.hip;
+      const cur = s.m > 0 ? ri : li;
+      nowX = cur != null ? cur : null;
+    }
+
+    const hipYOf = f => (f && f.lm) ? (at(f.lm, I.L_HIP).y + at(f.lm, I.R_HIP).y) / 2 : null;
+    const y = hipYOf(fi) ?? hipYOf(f0);
+
+    let inches = null;
+    if (nowX != null) {
+      const sc = typeof scale === "number" ? scale : (f0.w ? scaleAt(f0, aspect || 1) : null);
+      if (sc != null) {
+        inches = s.m * (nowX - lineX) * (aspect || 1) * sc * INCHES_PER_METRE;
+      }
+    }
+    return { lineX, trailX, nowX, y, inches };
+  }
+
+
   // ---- Down the line ----
   //
   // From behind the hands, looking at the target: the picture shows the golfer side-on, so bend,
@@ -325,7 +368,7 @@
     return { values, address, scale, side: m };
   }
 
-  const api = { compute, computeDTL, frameAngles, bendOf };
+  const api = { compute, computeDTL, frameAngles, bendOf, hipLine };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingMetrics = api;
 })(typeof window !== "undefined" ? window : globalThis);
