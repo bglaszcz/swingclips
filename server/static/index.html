@@ -911,7 +911,7 @@
           <button id="angles" title="Show the angles for the frame on screen (A)">Angles <kbd>A</kbd></button>
           <button id="handpath" title="Show the path of the hands through the swing (H)">Hand path <kbd>H</kbd></button>
           <button id="headbox" title="Show where the head was at address">Head</button>
-          <button id="hips" title="Show the hip line at address and where the lead hip moves (face-on)">Hips</button>
+          <button id="impact" title="Show pelvis vs ball at impact (face-on)">Impact</button>
           <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane <kbd>P</kbd></button>
         </span>
       </span>
@@ -1315,6 +1315,7 @@
 <script src="/static/summary.js"></script>
 <script src="/static/trust.js"></script>
 <script src="/static/goodshots.js"></script>
+<script src="/static/pelviszone.js"></script>
 <script src="/static/helps.js"></script>
 <script src="/static/coach.js"></script>
 <script src="/static/focus.js"></script>
@@ -1377,7 +1378,7 @@ let speed = 1;
 let showSkeleton = true;
 try { showSkeleton = localStorage.getItem("skeleton") !== "off"; } catch {}
 // Extra overlays, each remembered like the skeleton.
-const overlays = { angles: true, handpath: false, headbox: false, hips: false, plane: true };
+const overlays = { angles: true, handpath: false, headbox: false, impact: false, plane: true };
 for (const k in overlays) {
   try { const v = localStorage.getItem("overlay-" + k); if (v) overlays[k] = v === "on"; } catch {}
 }
@@ -1758,135 +1759,122 @@ function drawHead(ctx, lm, r, lineWidth) {
 }
 
 /**
- * Face-on: the vertical line down the outside of the lead hip at address (and trail hip),
- * the current lead hip tick at hip height with a horizontal bar from address, coloured
- * by the good-shot range for leadHipP6 (green inside middle 50%, amber outside), and from P6
- * to impact a callout with the swing's lead hip at P6 and the thought if hanging back.
+ * Face-on: pelvis vs ball at impact (the coach's shift check).
+ * On P7 (impact) and frames within +/- 2 of it:
+ *  1. Dotted vertical line through the ball, full picture height;
+ *  2. Marker (filled circle) at the pelvis's middle;
+ *  3. Target zone translucent shaded band, full height, from ball.x + zone.lo to + zone.hi,
+ *     coloured by place: green / amber / gray (without calibrated zone: no band);
+ * Plus a short line of text near the bottom of the picture: sentence(...).
  */
-function drawHips(ctx, frame, i, r, lineWidth) {
-  if (!metrics || !pose || !pose.frames.length) return;
-  const aspect = r.w / r.h;
-  const geo = SwingMetrics.hipLine(pose.frames, metrics.address, i, leadSide, metrics.scale, aspect);
-  if (!geo) return;
+function drawImpact(ctx, frame, i, r, lineWidth) {
+  if (!metrics || !pose || !pose.frames.length || pose.angle === "dtl") return;
 
-  const leadX = r.x + geo.lineX * r.w;
-  const trailX = geo.trailX != null ? r.x + geo.trailX * r.w : null;
-  const topY = r.y, botY = r.y + r.h;
+  const p7Pos = positions.find(p => p.key === "p7" || p.key === "impact");
+  const p7Index = p7Pos ? p7Pos.index : (positionIndex("p7") ?? positionIndex("impact"));
+  if (p7Index == null || Math.abs(i - p7Index) > 2) return;
+
+  const c = current && clipOf(current);
+  const club = c && c.shot ? c.shot.club : null;
+  const zoneResult = (typeof pelvisZoneData === "function" && club)
+    ? pelvisZoneData(club)
+    : (club && typeof SwingPelvisZone !== "undefined"
+        ? SwingPelvisZone.zone([], club)
+        : null);
+
+  const impactVal = (p7Index != null && metrics.values[p7Index] && metrics.values[p7Index].pelvisBall != null)
+    ? metrics.values[p7Index].pelvisBall
+    : (metrics.values[i] ? metrics.values[i].pelvisBall : null);
+
+  const placeResult = (impactVal != null && zoneResult && zoneResult.zone)
+    ? SwingPelvisZone.place(impactVal, zoneResult.zone)
+    : "out";
+  const placeColor = typeof SwingPelvisZone !== "undefined"
+    ? SwingPelvisZone.color(placeResult, zoneResult ? zoneResult.zone : null)
+    : "#94a3b8";
 
   ctx.save();
   try {
-    // Dashed vertical line, full picture height, at the lead hip edge of the address frame.
-    ctx.lineWidth = lineWidth;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
-    ctx.setLineDash([lineWidth * 3, lineWidth * 2]);
-    ctx.beginPath();
-    ctx.moveTo(leadX, topY);
-    ctx.lineTo(leadX, botY);
-    ctx.stroke();
+    const ball = pose.ball;
+    const hasBall = ball && Number.isFinite(ball.x);
+    const ballPx = hasBall ? r.x + ball.x * r.w : null;
 
-    // Thinner, fainter one at the trail hip edge.
-    if (trailX != null) {
-      ctx.lineWidth = lineWidth * 0.7;
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+    // 3. Target zone translucent shaded band, full height (behind lines and marker)
+    if (hasBall && zoneResult && zoneResult.enough && zoneResult.zone && metrics.scale) {
+      const INCHES_PER_METRE = 39.37;
+      const sM = leadSide === "left" ? 1 : -1;
+      const dx = valIn => sM * (valIn / (metrics.scale * INCHES_PER_METRE)) * r.h;
+      const x1 = ballPx + dx(zoneResult.zone.lo);
+      const x2 = ballPx + dx(zoneResult.zone.hi);
+      const bandX = Math.min(x1, x2);
+      const bandW = Math.abs(x2 - x1);
+
+      let bandFill = "rgba(148, 163, 184, 0.25)";
+      if (placeResult === "in") bandFill = "rgba(34, 197, 94, 0.25)";
+      else if (placeResult === "close") bandFill = "rgba(245, 158, 11, 0.25)";
+
+      ctx.setLineDash([]);
+      ctx.fillStyle = bandFill;
+      ctx.fillRect(bandX, r.y, bandW, r.h);
+
+      ctx.strokeStyle = placeColor;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bandX, r.y, bandW, r.h);
+    }
+
+    // 1. Dotted vertical line through the ball, full picture height
+    if (hasBall) {
+      ctx.lineWidth = Math.max(1.5, lineWidth);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.setLineDash([lineWidth * 1.5, lineWidth * 1.5]);
       ctx.beginPath();
-      ctx.moveTo(trailX, topY);
-      ctx.lineTo(trailX, botY);
+      ctx.moveTo(ballPx, r.y);
+      ctx.lineTo(ballPx, r.y + r.h);
       ctx.stroke();
     }
 
-    // On the frame on screen (if it has hip), a short solid vertical tick at the current lead edge
-    // at hip height (the hip joints' mean y), and a horizontal bar between the address line and the tick.
-    if (geo.nowX != null && geo.y != null) {
-      const nowX = r.x + geo.nowX * r.w;
-      const hipY = r.y + geo.y * r.h;
-
-      const c = current && clipOf(current);
-      const club = c && c.shot ? c.shot.club : null;
-      const range = (club && typeof goodRange === "function") ? goodRange(club, "leadHipP6") : null;
-      const p6Pos = positions.find(p => p.key === "p6");
-      const p6Val = (p6Pos && metrics && metrics.values[p6Pos.index]) ? metrics.values[p6Pos.index].leadHip : null;
-
-      let barColor = "rgba(255, 255, 255, 0.85)"; // neutral colour
-      let place = null;
-      if (range && range.enough && p6Val != null) {
-        place = SwingGoodShots.place(p6Val, range, "in");
-        if (place.status === "in") barColor = "#22c55e"; // green inside middle 50%
-        else if (place.status === "above" || place.status === "below") barColor = "#f59e0b"; // amber outside
-      }
+    // 2. Marker (filled circle) at the pelvis's middle (mean of the two hip joints)
+    if (frame.lm) {
+      const L_HIP = 23, R_HIP = 24;
+      const pelX = (frame.lm[L_HIP * 3] + frame.lm[R_HIP * 3]) / 2;
+      const pelY = (frame.lm[L_HIP * 3 + 1] + frame.lm[R_HIP * 3 + 1]) / 2;
+      const px = r.x + pelX * r.w;
+      const py = r.y + pelY * r.h;
+      const radius = Math.max(5, Math.round(r.w / 55));
 
       ctx.setLineDash([]);
-      ctx.lineWidth = lineWidth * 1.2;
-      ctx.strokeStyle = barColor;
+      ctx.fillStyle = placeColor;
       ctx.beginPath();
-      ctx.moveTo(leadX, hipY);
-      ctx.lineTo(nowX, hipY);
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = Math.max(1.5, lineWidth * 0.8);
+      ctx.strokeStyle = "#ffffff";
       ctx.stroke();
+    }
 
-      const tickHalfH = Math.max(10, r.h * 0.035);
-      ctx.lineWidth = lineWidth * 1.5;
+    // Short line of text near the bottom of the picture: sentence(...)
+    if (typeof SwingPelvisZone !== "undefined") {
+      const text = SwingPelvisZone.sentence(impactVal, zoneResult);
+      const fontSize = Math.max(11, Math.min(13, Math.round(r.h / 50)));
+      ctx.save();
+      ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
+      const padX = fontSize * 0.8, h = fontSize * 1.8;
+      const w = ctx.measureText(text).width + padX * 2;
+      const x = Math.round(r.x + (r.w - w) / 2);
+      const y = Math.round(r.y + r.h - h - Math.max(12, r.h * 0.03));
+
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
       ctx.beginPath();
-      ctx.moveTo(nowX, hipY - tickHalfH);
-      ctx.lineTo(nowX, hipY + tickHalfH);
-      ctx.stroke();
+      if (ctx.roundRect) ctx.roundRect(x, y, w, h, 6);
+      else ctx.rect(x, y, w, h);
+      ctx.fill();
 
-      // From P6 to impact, a small callout next to the tick: "Lead hip at P6: +3.4 in"
-      // and its coach.js thought when outside on the hanging-back side (less).
-      const p6 = positionIndex("p6");
-      const p7 = positionIndex("p7") ?? (positions.find(q => q.key === "impact")?.index);
-      if (p6 != null && i >= p6 && (p7 == null || i <= p7) && p6Val != null) {
-        const sign = p6Val > 0 ? "+" : "";
-        const line1 = `Lead hip at P6: ${sign}${p6Val.toFixed(1)} in`;
-
-        let thought = null;
-        if (place && place.status === "below") {
-          const move = (typeof SwingCoach !== "undefined" && SwingCoach.MOVES && SwingCoach.MOVES.leadHipP6) || null;
-          thought = (move && move.less && move.less.thought) || null;
-        }
-
-        const fontSize = Math.max(10, Math.min(12, Math.round(r.h / 55)));
-        ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
-        const padX = fontSize * 0.7, lh = fontSize * 1.35, padY = fontSize * 0.45;
-        const textW = Math.max(ctx.measureText(line1).width, thought ? ctx.measureText(thought).width : 0);
-        const boxW = Math.ceil(textW + padX * 2);
-        const boxH = Math.ceil((thought ? lh * 2 : lh) + padY * 2);
-
-        const isLeftHanded = leadSide === "right";
-        const gap = 8;
-        let boxX;
-        if (!isLeftHanded) {
-          if (ctx.canvas.width - nowX >= boxW + gap) {
-            boxX = Math.min(nowX + gap, ctx.canvas.width - boxW - 4);
-          } else {
-            boxX = Math.max(4, nowX - gap - boxW);
-          }
-        } else {
-          if (nowX >= boxW + gap) {
-            boxX = Math.max(4, nowX - gap - boxW);
-          } else {
-            boxX = Math.min(ctx.canvas.width - boxW - 4, nowX + gap);
-          }
-        }
-
-        let boxY = Math.round(hipY - boxH / 2);
-        boxY = Math.max(4, Math.min(ctx.canvas.height - boxH - 4, boxY));
-
-        ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
-        ctx.beginPath();
-        ctx.roundRect(boxX, boxY, boxW, boxH, 5);
-        ctx.fill();
-
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        if (thought) {
-          ctx.fillStyle = "#ffffff";
-          ctx.fillText(line1, boxX + padX, boxY + padY + lh * 0.45);
-          ctx.fillStyle = "#f59e0b";
-          ctx.fillText(thought, boxX + padX, boxY + padY + lh * 1.45);
-        } else {
-          ctx.fillStyle = "#ffffff";
-          ctx.fillText(line1, boxX + padX, boxY + boxH / 2);
-        }
-      }
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, x + w / 2, y + h / 2);
+      ctx.restore();
     }
   } finally {
     ctx.restore();
@@ -1943,7 +1931,7 @@ function draw(t) {
   if (metrics && overlays.angles) drawAngles(ctx, metrics.values[i], r);
   if (dtlHere && overlays.angles) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
   if (metrics && overlays.headbox && frame.lm) drawHead(ctx, frame.lm, r, lineWidth);
-  if (pose.angle !== "dtl" && metrics && overlays.hips) drawHips(ctx, frame, i, r, lineWidth);
+  if (pose.angle !== "dtl" && metrics && overlays.impact) drawImpact(ctx, frame, i, r, lineWidth);
   if (window.Labels) Labels.drawOn(ctx, r, "main", i);
   if (pose.angle !== "dtl") View3D.draw(t);
 }
@@ -2488,7 +2476,7 @@ function openGoodRanges(tp, facts) {
   if (!goodLoading && (!trendDataLoaded || Date.now() - trendDataAt > 60000)) {
     goodLoading = true;
     const name = current, first = !trendDataLoaded;
-    loadTrendData().then(changed => { if (current === name && trendDataLoaded && (first || changed)) showNumbers(); })
+    loadTrendData().then(changed => { if (current === name && trendDataLoaded && (first || changed)) { showNumbers(); redraw(); } })
       .finally(() => { goodLoading = false; });
   }
   if (!trendDataLoaded) return out;

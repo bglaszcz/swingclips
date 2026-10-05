@@ -137,6 +137,29 @@ function goodRange(club, key) {
   return c ? c.ranges[key] : null;
 }
 
+let pelvisZoneCache = {};
+let pelvisZoneSig = "";
+/** Target zone for pelvis vs ball at impact (SwingPelvisZone.zone), per club. */
+function pelvisZoneData(club) {
+  if (!club || typeof SwingPelvisZone === "undefined") return null;
+  const sig = dataSig + "|" + clips.length;
+  if (pelvisZoneSig !== sig) {
+    pelvisZoneCache = {};
+    pelvisZoneSig = sig;
+  }
+  if (pelvisZoneCache[club] !== undefined) return pelvisZoneCache[club];
+  const swings = shownClips().map(c => ({
+    name: c.name,
+    club: c.shot ? c.shot.club : null,
+    shot: c.shot,
+    record: swingRecords[c.name] || null,
+    body: (swingRecords[c.name] && swingRecords[c.name].body) || null,
+    pelvisBall: swingRecords[c.name]?.body?.pelvisBall,
+  }));
+  pelvisZoneCache[club] = SwingPelvisZone.zone(swings, club);
+  return pelvisZoneCache[club];
+}
+
 let faultLinksCache = { sig: null, value: null };
 /** Fault links across all readable swings stratified by club (SwingFaultLinks.links). */
 function faultLinksData() {
