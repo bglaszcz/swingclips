@@ -145,6 +145,12 @@ test("sentence wording: both sides of the ball and at the ball", () => {
     "Pelvis 2.1 in behind the ball at impact. Target: not set yet (12 of 30 swings, 3 of 8 best)."
   );
 
+  // Enough swings, too few best ones: only the best count is still short
+  assert.equal(
+    PelvisZone.sentence(3.6, { n: 35, minTotal: 30, best: 1, minBest: 8, enough: false, zone: null }),
+    "Pelvis 3.6 in ahead of the ball at impact. Target: not set yet (1 of 8 best swings)."
+  );
+
   // At the ball (|v| < 0.05), calibrated
   assert.equal(
     PelvisZone.sentence(0.02, calibrated),

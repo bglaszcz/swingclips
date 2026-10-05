@@ -205,7 +205,8 @@
       const minTotal = zoneResult?.minTotal ?? DEFAULTS.minTotal;
       const best = zoneResult?.best ?? 0;
       const minBest = zoneResult?.minBest ?? DEFAULTS.minBest;
-      targetText = `Target: not set yet (${n} of ${minTotal} swings, ${best} of ${minBest} best).`;
+      targetText = n >= minTotal ? `Target: not set yet (${best} of ${minBest} best swings).`
+        : `Target: not set yet (${n} of ${minTotal} swings, ${best} of ${minBest} best).`;
     }
 
     return `${posText} ${targetText}`;
