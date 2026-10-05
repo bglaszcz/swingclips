@@ -74,6 +74,8 @@ NUMBERS = {
     "pelvisOpen": ("Pelvis open at impact", "°", 0),
     "pelvisStartMs": ("Pelvis turn start vs top", " ms", 0),
     "armAfterPelvis": ("Arm peak after pelvis", "", 0),
+    "pelvisBall": ("Pelvis vs ball at impact", " in", 1),
+    "chestBall": ("Chest vs ball at impact", " in", 1),
 }
 
 
@@ -700,7 +702,8 @@ def fmt(key: str, v) -> str:
     if isinstance(v, bool):
         return "yes" if v else "no"
     dec = NUMBERS[key][2]
-    return f"{v:+.{dec}f}" if key in ("attack", "faceToPath", "strikeV", "strikeH", "pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs") else f"{v:.{dec}f}"
+    return f"{v:+.{dec}f}" if key in ("attack", "faceToPath", "strikeV", "strikeH", "pelvisPeakMs", "armPeakMs", "pelvisOpen",
+                                       "pelvisStartMs", "pelvisBall", "chestBall") else f"{v:.{dec}f}"
 
 
 def spread(key: str, values: list) -> str:
@@ -790,10 +793,12 @@ def report(p: dict, run: dict, body=None) -> dict:
     lines.append("")
     has_any_3d = (any(r.get("numbers", {}).get("pelvisPeakMs") is not None for r in reps if r.get("numbers"))
                   or any(block_needs_3d(b) for b in p["blocks"]))
+    has_shift = bool(body) and any((body(r["clip"]) or {}).get("pelvisBall") is not None for r in reps if r.get("clip"))
+    shift_head = " | vs ball at impact, + = ahead" if has_shift else ""
     if has_any_3d:
-        lines.append("Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height | 3D: pelvis peak / arm peak / pelvis open / pelvis start, verdict):")
+        lines.append(f"Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height | 3D: pelvis peak / arm peak / pelvis open / pelvis start{shift_head}, verdict):")
     else:
-        lines.append("Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height, verdict):")
+        lines.append(f"Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height{shift_head}, verdict):")
     by_block = {b["id"]: {r["t"]: r for r in judged(b, run["reps"], run["marks"])} for b in p["blocks"]}
     names = {b["id"]: b["name"] for b in p["blocks"]}
     for i, r0 in enumerate(reps, 1):
@@ -811,6 +816,14 @@ def report(p: dict, run: dict, body=None) -> dict:
                   f"pelvis open {fmt('pelvisOpen', n.get('pelvisOpen'))}°, "
                   f"pelvis start {fmt('pelvisStartMs', n.get('pelvisStartMs'))} ms")
             nums = f"{nums} | 3D: {d3}"
+        # Pelvis and chest against the ball at impact (the coach's shift check), from the face-on
+        # camera: the 3D's distances aren't used for it (on the Oct 2 swings its stance came out ~1.35x
+        # too wide and the ball at the lead ankle; the camera's put it mid-stance).
+        cam = (body(r0["clip"]) or {}) if body and r0.get("clip") else {}
+        shift = [f"{word} {fmt(k, cam[k])} in" for k, word in (("pelvisBall", "pelvis"), ("chestBall", "chest"))
+                 if cam.get(k) is not None]
+        if shift:
+            nums = f"{nums} | vs ball: " + ", ".join(shift)
         verdict = ("invalid read, not counted (" + r0["noRead"] + ")" if r0.get("noRead") else
                    "waiting for 3D" if r.get("waiting3d") else
                    "pass" if r.get("gate") else "miss" if r.get("gate") is False else "")

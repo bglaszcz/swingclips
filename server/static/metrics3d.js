@@ -12,7 +12,8 @@
 //    7 irons, swapping with the bend; the shoulder line's heading gave 85-115). Forward bend toward
 //    the ball and side bend (lead shoulder higher +) come from that split: Ry(heading) Rx(bend) Rz(side).
 // Signs as in metrics.js: rotation + = closed (going back), - = open; sway + toward the target,
-// thrust + toward the ball, lift + up, in inches from address.
+// thrust + toward the ball, lift + up, in inches from address. pelvisBall / thoraxBall: the pelvis's
+// and the shoulders' middle along the target line from the ball (the origin), + = ahead of it.
 //
 // Speeds (degrees per second): pelvis and thorax the rate of their rotation toward the target; the
 // lead arm (shoulder to wrist) and the club (hands to clubhead) how fast their direction turns. The
@@ -179,7 +180,9 @@
       if (v.thoraxSideBend != null) r.thoraxSideBend = v.thoraxSideBend;
       if (v.thoraxBend != null) r.thoraxBend = v.thoraxBend;
       for (const [seg, key] of [["pelvis", "pelvisCentre"], ["thorax", "thoraxCentre"]]) {
-        if (!v[key] || !base[key]) continue;
+        if (!v[key]) continue;
+        r[seg + "Ball"] = inch(v[key][0]);
+        if (!base[key]) continue;
         const d = sub(v[key], base[key]);
         r[seg + "Sway"] = inch(d[0]);
         r[seg + "Lift"] = inch(d[1]);
@@ -297,6 +300,8 @@
     ["pelvisSwayTop", "p4", "pelvisSway"], ["pelvisSwayImpact", "p7", "pelvisSway"],
     ["pelvisThrustImpact", "p7", "pelvisThrust"], ["pelvisLiftImpact", "p7", "pelvisLift"],
     ["thoraxSwayImpact", "p7", "thoraxSway"],
+    // Along the target line from the ball at impact, + = ahead of it (the coach's pelvis / chest shift).
+    ["pelvisBallImpact", "p7", "pelvisBall"], ["thoraxBallImpact", "p7", "thoraxBall"],
     // Open at impact, + = open (the turn's sign flipped): good players' hips are ~30-45 open.
     ["pelvisOpenImpact", "p7", "pelvisTurn", -1], ["thoraxOpenImpact", "p7", "thoraxTurn", -1],
   ];

@@ -288,6 +288,16 @@ class ProgramsTest(unittest.TestCase):
         self.assertIn("hands ahead of ball at impact +1.6 in (camera, 2 swings)", self.p.report(body=bodies.get)["text"])
         self.assertNotIn("hands ahead", self.p.report()["text"])
 
+    def test_report_has_pelvis_and_chest_vs_ball_per_swing(self):
+        self.flush()
+        self.hit(shot())
+        self.hit(shot())
+        bodies = {self.swings[0]["name"]: {"pelvisBall": -2.04, "chestBall": 0.5}, self.swings[1]["name"]: {"pelvisBall": 3.0}}
+        text = self.p.report(body=bodies.get)["text"]
+        self.assertIn("| vs ball: pelvis -2.0 in, chest +0.5 in", text)
+        self.assertIn("| vs ball: pelvis +3.0 in", text)
+        self.assertNotIn("vs ball: pelvis", self.p.report()["text"])
+
     def test_setup_notes_go_into_the_report(self):
         self.flush()
         self.p.note("Omni moved 2 in back")

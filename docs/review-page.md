@@ -211,7 +211,14 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   MediaPipe's person outline ends beside the hip joint, over the belt-to-pocket rows (`pose.hip_edges`,
   saved per frame as `hip` when the server is idle). The lead hip should have moved toward the target by
   P6. On 41 labeled swings (Sep 2026): lead hip +2.0 to +4.7 in at P6 (median ~3.6), trail hip -0.3 to
-  -2.1 at the top. No fault is named from them yet (no threshold from the owner's data). The ranges come
+  -2.1 at the top. No fault is named from them yet (no threshold from the owner's data).
+  **Pelvis vs ball at impact** and **Chest vs ball at impact** (face-on, `pelvisBall` / `chestBall` in
+  `metrics.js`, inches, + = ahead of the ball, toward the target): the hip joints' and the shoulders'
+  middle against where the ball sat, at P7 (the coach's "pelvis shift" check; its change from address is
+  Hip sway). From the camera, not the 3D: on the Oct 2 2026 3D swings the 3D stance came out ~1.35x too
+  wide and the ball at the lead ankle (camera: mid-stance), so its `pelvisBallImpact` /
+  `thoraxBallImpact` (metrics3d.js) are kept for comparison only. The target zone is to come from the
+  owner's best low-point swings, not a book number. The ranges come
   from the trends' data (`/api/swings`), loaded when the first swing is opened and again when it's over a
   minute old.
 - **Compare**: a **My good shots** table with each number's middle 50% and 80% for the open swing's
@@ -406,7 +413,8 @@ toward the ball". The phones face away from you, so voice is the channel.
   each program with 2+ runs gets a folded trend line. **Copy for coach** (`/api/program/report`): per
   block the gate result and medians (range) of attack angle, dynamic loft and face to path for shots 1-10
   and 11 on, the club order, every shot in order with its verdict and bring-back metrics (pelvis peak ms,
-  arm peak ms, pelvis open at impact, pelvis turn start vs top), and the impact frame
+  arm peak ms, pelvis open at impact, pelvis turn start vs top; pelvis and chest vs ball at impact from
+  the face-on camera when the swing has them), and the impact frame
   (`/api/still/{clip}`) of the first ball swing hit in a no-ball block (the toe-tap swing). Tested in
   `tests/test_programs.py` and `tests/programhistory.test.js`.
 - **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page ("Today's plan")

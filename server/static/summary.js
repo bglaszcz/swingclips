@@ -114,6 +114,8 @@
     ["leadHipP6", "Lead hip at P6", "in", "face", "p6", "leadHip"],
     ["trailHipTop", "Trail hip at top", "in", "face", "p4", "trailHip"],
     ["handsAhead", "Hands ahead of ball at impact", "in", "face", "p7", "handsBall"],
+    ["pelvisBall", "Pelvis vs ball at impact", "in", "face", "p7", "pelvisBall"],
+    ["chestBall", "Chest vs ball at impact", "in", "face", "p7", "chestBall"],
     ["headSway", "Head sway at impact", "in", "face", "p7", "headSway"],
     ["headRise", "Head rise at impact", "in", "face", "p7", "headRise"],
     ["spineTiltImpact", "Spine tilt at impact", "°", "face", "p7", "spineTilt"],

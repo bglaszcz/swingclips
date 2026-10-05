@@ -99,6 +99,7 @@
     const ears = [I.NOSE, I.L_EAR, I.R_EAR].map(px);
     out.head = { x: ears.reduce((a, p) => a + p.x, 0) / 3, y: ears.reduce((a, p) => a + p.y, 0) / 3 };
     out.hips = hip2;
+    out.shoulders = mid(px(I.L_SHOULDER), px(I.R_SHOULDER));
     out.grip = mid(px(I.L_INDEX), px(I.R_INDEX));
     // The wrists' middle: both models place the wrists (RTMPose leaves the fingers to MediaPipe).
     out.wrists = mid(px(I.L_WRIST), px(I.R_WRIST));
@@ -200,7 +201,13 @@
         // The outside of each hip against its line at address, + = toward the target.
         if (v.leadEdge != null && base.leadEdge != null) r.leadHip = s.m * (v.leadEdge - base.leadEdge) * inch;
         if (v.trailEdge != null && base.trailEdge != null) r.trailHip = s.m * (v.trailEdge - base.trailEdge) * inch;
-        if (ball && Number.isFinite(ball.x)) r.handsBall = s.m * (v.wrists.x - ball.x * aspect) * inch;
+        if (ball && Number.isFinite(ball.x)) {
+          r.handsBall = s.m * (v.wrists.x - ball.x * aspect) * inch;
+          // The pelvis's and the shoulders' middle against the ball, + = ahead of it (toward the target):
+          // the camera's estimate of the 3D pelvisBall / thoraxBall (metrics3d.js).
+          r.pelvisBall = s.m * (v.hips.x - ball.x * aspect) * inch;
+          r.chestBall = s.m * (v.shoulders.x - ball.x * aspect) * inch;
+        }
       }
       return r;
     });
