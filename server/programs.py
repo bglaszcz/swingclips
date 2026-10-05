@@ -728,7 +728,8 @@ def carry_spread(values: list) -> str:
 
 
 # Camera numbers reported per block when the swings have them (summary.js BODY key: label, unit).
-BODY_REPORT = {"handsAhead": ("hands ahead of ball at impact", "in")}
+BODY_REPORT = {"handsAhead": ("hands ahead of ball at impact", "in"), "pelvisBall": ("pelvis vs ball at impact", "in"),
+               "chestBall": ("chest vs ball at impact", "in")}
 
 
 def report(p: dict, run: dict, body=None) -> dict:
