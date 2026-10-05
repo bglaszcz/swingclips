@@ -154,6 +154,18 @@ class NightApiTest(unittest.TestCase):
             self.assertEqual(night.version_of(night.night_file(self.dir, self.name)), night.VERSION)
             self.assertEqual(self.client.post(f"/api/night/{self.name}", content=b"junk").status_code, 400)
 
+    def test_still_at_a_time(self):
+        """The frame at any time, for the Labels view's pick between the two analyses' frames."""
+        import fakes
+        app.CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+        name = "swing_face_960x540_60fps_1789000000_400ms.mp4"
+        fakes.clip(app.CLIPS_DIR / name)
+        with mock.patch.object(app, "checked_clip", lambda n: app.CLIPS_DIR / n):
+            r = self.client.get(f"/api/still/{name}?t=0.25")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.headers["content-type"], "image/jpeg")
+        self.assertEqual(r.content[:2], bytes([0xFF, 0xD8]))  # a JPEG
+
     def test_failed_isnt_handed_out_again(self):
         with mock.patch.object(app, "session_on", lambda now=None: False), mock.patch.object(app, "log_event"):
             self.client.post(f"/api/night/{self.name}?failed=boom", content=b"")

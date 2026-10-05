@@ -1898,9 +1898,12 @@ def program_report(started: float | None = None):
 
 
 @app.get("/api/still/{name}")
-def get_still(name: str):
-    """A clip's frame at impact (as found, else the heard strike) as a JPEG: the frame a coach asks for."""
+def get_still(name: str, t: float | None = Query(None, ge=0, le=60)):
+    """A clip's frame at impact (as found, else the heard strike) as a JPEG: the frame a coach asks for.
+    With `t` (clip seconds), the frame at that time instead (the Labels view's pick between two)."""
     path = checked_clip(name)
+    if t is not None:
+        return Response(pose.still_jpeg(str(path), t), media_type="image/jpeg")
     doc = json.loads(gzip.decompress(pose_file(name).read_bytes())) if pose_state(name) == "done" else {}
     t = doc.get("impact")
     if t is None:
