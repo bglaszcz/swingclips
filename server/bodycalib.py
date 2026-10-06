@@ -11,7 +11,10 @@ set", then "Place the cameras from my swings"). Nothing here runs by itself.
    refined by least squares on its rotation and baseline direction, the pairs triangulated and put
    back into both views each step.
 3. Scale: the golfer's height. Thigh + shin are LEG_SHARE of standing height (Drillis & Contini);
-   the legs are the most reliably seen bones and keep their length through the swing.
+   the legs are the most reliably seen bones and keep their length through the swing. Or, when the
+   owner gives it, a tape measure: the down-the-line phone's distance from the ball along the floor.
+   On the first real setup (Oct 6) the height put both phones ~10-14% too far (tracked hips and
+   ankles sit closer together than the joints), so the tape, when given, wins.
 4. Golf axes (x toward the target, y up, z toward the golfer's front, origin at the ball):
    up is square to both phones' picture rows (a phone on a tripod is level side to side), the
    target is along the feet (lead ankle minus trail ankle at address, a right-handed golfer), and
@@ -181,8 +184,11 @@ def rms_px(cam: tri.Camera, X, px) -> float:
     return float(np.sqrt(np.mean(np.sum((cam.project(X) - px) ** 2, axis=1))))
 
 
-def solve(swings: list[dict], face_lens: dict, dtl_lens: dict, height_m: float) -> tuple[dict, dict]:
-    """(cameras {face, dtl} in golf axes, report). Raises ValueError with what to do."""
+def solve(swings: list[dict], face_lens: dict, dtl_lens: dict, height_m: float,
+          dtl_floor_m: float | None = None) -> tuple[dict, dict]:
+    """(cameras {face, dtl} in golf axes, report). `dtl_floor_m`: the down-the-line phone's distance
+    from the ball along the floor, tape-measured: sets the size instead of the height. Raises
+    ValueError with what to do."""
     if len(swings) < MIN_SWINGS:
         raise ValueError(f"{len(swings)} swing(s) filmed from both phones: need {MIN_SWINGS} or more")
     if not 1.2 <= height_m <= 2.3:
@@ -266,6 +272,15 @@ def solve(swings: list[dict], face_lens: dict, dtl_lens: dict, height_m: float) 
     A = np.stack([x, up, z])
     R1, t1 = A.T, origin
     R2, t2 = R @ A.T, R @ origin + tm
+    # Everything so far is in proportion to the scale, so the tape measure just resizes it.
+    by_height = R2.T @ t2
+    resize = 1.0
+    if dtl_floor_m is not None:
+        resize = dtl_floor_m / max(float(np.hypot(by_height[0], by_height[2])), 1e-6)
+        t1, t2 = resize * t1, resize * t2
+        pts = [(resize * X, ok) for X, ok in pts]
+        if ball_spread is not None:
+            ball_spread *= resize
     cams = {}
     for angle, Rg, tg, lens in (("face", R1, t1, face_lens), ("dtl", R2, t2, dtl_lens)):
         cams[angle] = {"R": Rg.tolist(), "t": list(map(float, tg)), "position": list(map(float, -Rg.T @ tg)),
@@ -297,7 +312,8 @@ def solve(swings: list[dict], face_lens: dict, dtl_lens: dict, height_m: float) 
     report = {
         "swings": g["swings"], "points": int(inl.sum()), "rms": {"face": rms1, "dtl": rms2},
         "good": bool(rms1 < GOOD_RMS and rms2 < GOOD_RMS),
-        "height": height_m, "legLength": LEG_SHARE * height_m,
+        "height": height_m, "legLength": LEG_SHARE * height_m * resize,
+        "scaleFrom": "tape" if dtl_floor_m is not None else "height", "tapeVsHeight": resize,
         "upperArm": float(np.median(arms)) if arms else None, "upperArmExpected": UPPER_ARM_SHARE * height_m,
         "cameraHeights": {k: float(p[1]) for k, p in pos.items()},
         "fromBall": {k: float(np.hypot(p[0], p[2])) for k, p in pos.items()},
@@ -313,9 +329,15 @@ def describe(report: dict, cams: dict) -> str:
     lines = [f"From {report['swings']} swing(s), {report['points']} joint points seen by both phones."]
     lines.append(f"Fit: {report['rms']['face']:.1f} px face on, {report['rms']['dtl']:.1f} px down the line "
                  f"({'good' if report['good'] else f'NOT good: want under {GOOD_RMS:g} px'}).")
+    tape = report.get("scaleFrom") == "tape"
+    if tape:
+        lines.append(f"Sized by your tape measure (down-the-line phone {report['fromBall']['dtl'] * m_in:.0f} in from the "
+                     f"ball): {abs(report['tapeVsHeight'] - 1) * 100:.0f}% "
+                     f"{'bigger' if report['tapeVsHeight'] > 1 else 'smaller'} than your height alone made it.")
     for k, name in (("face", "Face-on phone"), ("dtl", "Down-the-line phone")):
-        lines.append(f"{name}: {report['cameraHeights'][k] * m_in:.0f} in high, {report['fromBall'][k] * m_in / 12:.1f} ft "
-                     f"from the ball (check with a tape measure).")
+        lines.append(f"{name}: {report['cameraHeights'][k] * m_in:.0f} in high, {report['fromBall'][k] * m_in:.0f} in "
+                     f"({report['fromBall'][k] * m_in / 12:.1f} ft) from the ball along the floor"
+                     + ("." if tape and k == "dtl" else " (check with a tape measure)."))
     lines.append(f"Phones {report['apart'] * m_in / 12:.1f} ft apart.")
     if report.get("upperArm"):
         lines.append(f"Upper arm {report['upperArm'] * m_in:.1f} in (about {report['upperArmExpected'] * m_in:.1f} in "

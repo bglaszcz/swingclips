@@ -159,7 +159,7 @@ class Runs:
             self._save()
             return self.tripods
 
-    def start_job(self, kind: str, height: float) -> dict:
+    def start_job(self, kind: str, height: float, dtl_floor: float | None = None) -> dict:
         """A job run in the server itself (placing the cameras from the swings: the swing worker)."""
         with self.lock:
             if self.job and self.job["code"] is None:
@@ -169,7 +169,7 @@ class Runs:
             self.height = height
             self._save()
             self.job = {"kind": kind, "angle": None, "clips": [], "started": round(self.clock(), 3), "code": None,
-                        "output": "", "since": self.tripods, "height": height}
+                        "output": "", "since": self.tripods, "height": height, "dtlFloor": dtl_floor}
             return dict(self.job)
 
     def finish_job(self, code: int, output: str, clips: list[str] | None = None) -> None:

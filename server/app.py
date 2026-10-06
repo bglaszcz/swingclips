@@ -829,7 +829,7 @@ def place_cameras(clips: dict[str, dict], summarizer: swings.Summarizer) -> None
     (bodycalib.py): saves a calibration session dated when the tripods were set, so it holds for
     those swings and the ones after, until a camera moves."""
     job = calib_runs.pending_job("body")
-    since, height = job["since"], job["height"]
+    since, height, floor = job["since"], job["height"], job.get("dtlFloor")
     both = [c for c in clips.values() if c["angle"] == "face" and c["partner"] and c["pose"] == "done"
             and clips.get(c["partner"], {}).get("pose") == "done" and not c.get("calib")
             and recorded_at(CLIPS_DIR / c["name"]) >= since]
@@ -855,7 +855,7 @@ def place_cameras(clips: dict[str, dict], summarizer: swings.Summarizer) -> None
                          "dtl": {"frames": di["frames"], "impact": di.get("impact"), "ball": di.get("ball")},
                          "offset": offset})
             used.append(c["name"])
-        cams, report = bodycalib.solve(data, lenses["face"], lenses["dtl"], height)
+        cams, report = bodycalib.solve(data, lenses["face"], lenses["dtl"], height, floor)
         out = calib.save_session(cams, None, since, {"method": "body", "report": report, "swings": used})
         text = bodycalib.describe(report, cams) + f"\nSaved {out.name}."
         for angle in ("face", "dtl"):
@@ -2283,6 +2283,7 @@ def camera_moved() -> dict | None:
 
 class BodyPlacement(BaseModel):
     heightIn: float   # the golfer's height in inches
+    dtlFloorIn: float | None = None   # tape measure: the down-the-line phone to the ball along the floor, inches
 
 
 @app.post("/api/calib/body")
@@ -2292,8 +2293,11 @@ def calib_body(body: BodyPlacement):
     height = body.heightIn * 0.0254
     if not 1.2 <= height <= 2.3:
         raise HTTPException(400, "Height should be between 48 and 90 inches")
+    floor = body.dtlFloorIn * 0.0254 if body.dtlFloorIn else None
+    if floor is not None and not 1.0 <= floor <= 10.0:
+        raise HTTPException(400, "The down-the-line phone's distance should be between 40 and 390 inches")
     try:
-        calib_runs.start_job("body", height)
+        calib_runs.start_job("body", height, floor)
     except ValueError as e:
         raise HTTPException(409, str(e))
     print(f"3D: placing the cameras from the swings (height {body.heightIn:g} in)", flush=True)

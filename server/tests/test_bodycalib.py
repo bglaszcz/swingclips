@@ -79,6 +79,21 @@ class SolveTest(unittest.TestCase):
         d = np.linalg.norm(np.array(cams["face"]["position"]))
         self.assertAlmostEqual(d / np.linalg.norm(self.ses["cameras"]["face"]["position"]), 1.1, delta=0.03)
 
+    def test_tape_measure_sets_the_size(self):
+        # A height 15% off (as the real setup's legs made it), and the down-the-line phone's floor
+        # distance from a tape measure: the phones come out where they are anyway.
+        want = {a: np.array(self.ses["cameras"][a]["position"]) for a in ("face", "dtl")}
+        floor = float(np.hypot(want["dtl"][0], want["dtl"][2]))
+        cams, report = bodycalib.solve(self.swings, lens(self.ses["cameras"]["face"]), lens(self.ses["cameras"]["dtl"]),
+                                       HEIGHT * 1.15, floor)
+        self.assertEqual(report["scaleFrom"], "tape")
+        self.assertAlmostEqual(report["fromBall"]["dtl"], floor, places=6)
+        self.assertAlmostEqual(report["tapeVsHeight"], 1 / 1.15, delta=0.03)
+        self.assertLess(np.linalg.norm(np.array(cams["face"]["position"]) - want["face"]), 0.15)
+        self.assertLess(np.linalg.norm(np.array(cams["dtl"]["position"]) - want["dtl"]), 0.05)
+        self.assertLess(report["rms"]["face"], bodycalib.GOOD_RMS)
+        self.assertIn("Sized by your tape measure", bodycalib.describe(report, cams))
+
     def test_no_ball_origin_between_the_feet(self):
         _, swings = made_up_swings(4, seed=2, with_ball=False)
         cams, report = bodycalib.solve(swings, lens(self.ses["cameras"]["face"]), lens(self.ses["cameras"]["dtl"]), HEIGHT)
@@ -131,6 +146,7 @@ class PlaceCamerasTest(unittest.TestCase):
                     made.append(path)
                     clips[names[a]] = {"name": names[a], "angle": a, "pose": "done", "strike": None, "calib": None,
                                        "partner": names["dtl" if a == "face" else "face"]}
+            self.assertEqual(client.post("/api/calib/body", json={"heightIn": 70, "dtlFloorIn": 5}).status_code, 400)
             st = client.post("/api/calib/body", json={"heightIn": HEIGHT / 0.0254}).json()
             self.assertEqual(st["job"]["kind"], "body")
             self.assertIsNone(st["job"]["code"])

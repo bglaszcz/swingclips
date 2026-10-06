@@ -98,7 +98,9 @@
       <li>Set both tripods, then tap <b>Tripods are set</b>.</li>
       <li>Hit about 10 swings as usual (any club), and wait for them to be analyzed.</li>
       <li>Tap <b>Place the cameras</b>. It works out where each phone stands from your joints in both pictures,
-        sized by your height. Check the heights and distances it prints with a tape measure.</li>
+        sized by your height. Check the heights and distances it prints with a tape measure. For the best size,
+        measure the down-the-line phone's distance to the ball along the floor (from the spot under the phone)
+        and type it in: it then sizes everything by that instead of your height.</li>
     </ol>
     <div class="moved" id="moved" hidden><b id="moved-text"></b>
       <div class="row"><button class="primary" id="moved-run">Place the cameras from those swings</button></div></div>
@@ -106,6 +108,7 @@
       <button id="tripods">Tripods are set</button>
       <button class="primary" id="body-run">Place the cameras</button>
       <label>Your height <input id="body-height" type="number" inputmode="decimal" placeholder="70" min="48" max="90"> in</label>
+      <label>Down-the-line phone to ball, along the floor <input id="body-dtl" type="number" inputmode="decimal" placeholder="optional" min="40" max="390"> in</label>
     </div>
     <div class="row"><span class="state" id="body-state"></span></div>
     <div id="body-result"></div>
@@ -191,14 +194,19 @@ $("moved-run").onclick = async () => {
   const h = parseFloat($("body-height").value);
   if (!(h >= 48 && h <= 90)) { note.body = "Type your height in inches first (e.g. 70 for 5 ft 10)."; render(); return; }
   $("moved-run").disabled = true;
-  if (await post("/api/calib/tripods", { since: state.moved.since - 1 }, "body")) await post("/api/calib/body", { heightIn: h }, "body");
+  if (await post("/api/calib/tripods", { since: state.moved.since - 1 }, "body")) await post("/api/calib/body", bodyArgs(h), "body");
   $("moved-run").disabled = false;
 };
 $("body-run").onclick = () => {
   const h = parseFloat($("body-height").value);
   if (!(h >= 48 && h <= 90)) { note.body = "Type your height in inches first (e.g. 70 for 5 ft 10)."; render(); return; }
-  post("/api/calib/body", { heightIn: h }, "body");
+  post("/api/calib/body", bodyArgs(h), "body");
 };
+// The tape-measured distance, when typed (it sizes the placement instead of the height).
+function bodyArgs(h) {
+  const d = parseFloat($("body-dtl").value);
+  return d >= 40 && d <= 390 ? { heightIn: h, dtlFloorIn: d } : { heightIn: h };
+}
 $("rec-start").onclick = async () => {
   $("rec-start").disabled = true;
   try {
