@@ -109,56 +109,30 @@
       };
     }
 
-    // Try computing with SwingSummary.positionTimes (same as p4check.js getServerP4)
+    // SwingSummary.positionTimes, as the server works them out: the face-on clip first (its rules are
+    // face-on ones), the down-the-line clip's times carried across by the sync; a clip with no partner on
+    // its own. The picture's shape from the clip's name and rotation (positionTimes: aspectOf).
     const summaryApi = (typeof SwingSummary !== "undefined" ? SwingSummary : (typeof Summary !== "undefined" ? Summary : null));
-    if (summaryApi && pose && Array.isArray(pose.frames) && pose.frames.length) {
+    if (summaryApi && typeof summaryApi.positionTimes === "function" && pose && Array.isArray(pose.frames) && pose.frames.length) {
       try {
-        const w = pose.video?.videoWidth || 1080;
-        const h = pose.video?.videoHeight || 1920;
-        const aspect = pose.aspect ?? (h ? w / h : 1);
-        const input = {
-          name: c?.name || "",
-          strike: c?.strike ?? null,
-          angle: c?.angle || pose.angle || "face",
-          aspect,
-          frames: pose.frames,
-          impact: pose.impact ?? null,
-          ball: pose.ball ?? null,
-          drill: c?.drill ?? null,
-          clubOnset: pose.clubOnset ?? null,
-        };
-        let otherInput = null;
-        if (otherPose && Array.isArray(otherPose.frames) && c?.partner) {
-          const ow = otherPose.video?.videoWidth || 1080;
-          const oh = otherPose.video?.videoHeight || 1920;
-          const oAspect = otherPose.aspect ?? (oh ? ow / oh : 1);
-          otherInput = {
-            name: c.partner,
-            strike: c.partnerStrike ?? null,
-            angle: otherPose.angle || (c?.angle === "dtl" ? "face" : "dtl"),
-            aspect: oAspect,
-            frames: otherPose.frames,
-            impact: otherPose.impact ?? null,
-            ball: otherPose.ball ?? null,
-            drill: null,
-            clubOnset: otherPose.clubOnset ?? null,
-          };
-        }
-        if (typeof summaryApi.positionTimes === "function") {
-          const pt = summaryApi.positionTimes(input, otherInput, leadSide);
-          if (pt?.main?.times && pt.main.times.p4 != null) {
-            const t = pt.main.times;
-            const refImp = t.p7 ?? (t.p4 != null ? t.p4 + 0.35 : null);
-            return {
-              p1: t.p1 ?? pos?.p1 ?? (refImp != null ? Number((refImp - 1.2).toFixed(6)) : null),
-              takeaway: t.takeaway ?? pos?.takeaway ?? (refImp != null ? Number((refImp - 0.95).toFixed(6)) : null),
-              p2: t.p2 ?? pos?.p2 ?? (refImp != null ? Number((refImp - 0.75).toFixed(6)) : null),
-              p3: t.p3 ?? pos?.p3 ?? (refImp != null ? Number((refImp - 0.55).toFixed(6)) : null),
-              p4: t.p4 ?? pos?.p4 ?? (refImp != null ? Number((refImp - 0.35).toFixed(6)) : null),
-              p7: t.p7 ?? pos?.p7 ?? (refImp != null ? Number(refImp.toFixed(6)) : null),
-              p8: t.p8 ?? pos?.p8 ?? (refImp != null ? Number((refImp + 0.15).toFixed(6)) : null),
-            };
-          }
+        const toInput = (name, angle, ps, strike) => ({
+          name, strike: strike ?? null, angle, rotation: ps.rotation || 0, frames: ps.frames,
+          impact: ps.impact ?? null, ball: ps.ball ?? null, drill: c?.drill ?? null, clubOnset: ps.clubOnset ?? null,
+        });
+        const dtl = c?.angle === "dtl";
+        const paired = otherPose && Array.isArray(otherPose.frames) && otherPose.frames.length && c?.partner;
+        const mine = toInput(c?.name || "", dtl ? "dtl" : "face", pose, c?.strike);
+        const theirs = paired ? toInput(c.partner, dtl ? "face" : "dtl", otherPose, null) : null;
+        const pt = dtl && paired ? summaryApi.positionTimes(theirs, mine, leadSide) : summaryApi.positionTimes(mine, theirs, leadSide);
+        const t = (dtl && paired ? pt?.dtl?.times : pt?.main?.times) || null;
+        if (t && t.p4 != null) {
+          const refImp = t.p7 ?? t.p4 + 0.35;
+          const at = (key, back) => t[key] ?? pos?.[key] ?? Number((refImp + back).toFixed(6));
+          const out = { p1: at("p1", -1.2), takeaway: at("takeaway", -0.95), p2: at("p2", -0.75), p3: at("p3", -0.55),
+                        p4: t.p4, p7: at("p7", 0), p8: at("p8", 0.15) };
+          // A shaft crossing found outside the backswing (the club model lost it) isn't P2.
+          if (!(out.p2 > out.takeaway && out.p2 < out.p3)) out.p2 = Number(((out.takeaway + out.p3) / 2).toFixed(6));
+          return out;
         }
       } catch (err) {
         // fall back below
