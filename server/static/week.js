@@ -258,6 +258,9 @@
    * @param {string|number|Date} weekStart (Monday)
    * @returns {{title: string, sections: Array<{title: string, lines: Array<string>}>, text: string}}
    */
+  // Held-up findings listed, strongest first.
+  const HELD_SHOWN = 5;
+
   function weekSummary(data, weekStart) {
     data = data || {};
     const mon = weekStartOf(weekStart);
@@ -265,8 +268,9 @@
     const endMs = startMs + 7 * 86400000;
     const lastWeekStartMs = startMs - 7 * 86400000;
     const lastWeekEndMs = startMs;
-    const past4WeeksStartMs = startMs - 28 * 86400000;
-    const past4WeeksEndMs = startMs;
+    // "The 4 weeks before": the four weeks before last week, so the three numbers don't overlap.
+    const past4WeeksStartMs = startMs - 35 * 86400000;
+    const past4WeeksEndMs = lastWeekStartMs;
 
     const title = formatWeekTitle(mon);
 
@@ -451,7 +455,7 @@
         if (spreadCarry != null) {
           let spStr = `spread ${Math.round(spreadCarry)} yd`;
           if (sigSpreadCarry) {
-            spStr += `, ${diffSpreadCarry > 0 ? "+" : ""}${Math.round(diffSpreadCarry)} vs last week`;
+            spStr += `, ${diffSpreadCarry > 0 ? "+" : ""}${Math.round(diffSpreadCarry)} yd vs last week`;
           }
           carryDetails.push(spStr);
         }
@@ -542,9 +546,9 @@
         };
 
         const focusLines = [];
-        let line1 = `${moveLabel}${fClub ? " (" + clubName(fClub) + ")" : ""}: median ${fmtVal(medThis)} this week`;
-        if (medLast != null) line1 += ` vs ${fmtVal(medLast)} last week`;
-        if (med4W != null) line1 += ` vs ${fmtVal(med4W)} past 4 weeks`;
+        let line1 = `${moveLabel}${fClub ? " (" + clubName(fClub) + ")" : ""}, median: this week ${fmtVal(medThis)}`;
+        if (medLast != null) line1 += `, last week ${fmtVal(medLast)}`;
+        if (med4W != null) line1 += `, the 4 weeks before ${fmtVal(med4W)}`;
         if (rangeStr) line1 += ` (good-shot range ${rangeStr})`;
         line1 += ".";
         focusLines.push(line1);
@@ -606,10 +610,12 @@
       } catch {}
     }
     if (replayed && Array.isArray(replayed)) {
-      const held = replayed.filter(x => x && x.verdict === "held");
+      // The strongest few (by the later sessions' r): a coach reads two minutes, not a list of 20.
+      const strength = x => Math.abs((x.later && x.later.r) || 0);
+      const held = replayed.filter(x => x && x.verdict === "held").sort((a, b) => strength(b) - strength(a));
       if (held.length > 0) {
         const heldLines = [];
-        for (const x of held) {
+        for (const x of held.slice(0, HELD_SHOWN)) {
           const sText = HoldUp ? HoldUp.sentence(x) : (x.sentence || "");
           let desc = "";
           if (x.finding) desc = x.finding;
@@ -624,6 +630,7 @@
           }
           heldLines.push(`${desc}: ${sText}`);
         }
+        if (held.length > HELD_SHOWN) heldLines.push(`And ${held.length - HELD_SHOWN} more (What helps, what hurts).`);
         if (heldLines.length > 0) {
           sections.push({ title: "What held up", lines: heldLines });
         }

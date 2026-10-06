@@ -264,7 +264,7 @@ test("a normal week with all 7 sections populated", () => {
 
   // Section 3: The focus move
   const focSec = summary.sections.find(s => s.title === "The focus move");
-  assert.match(focSec.lines[0], /Early extension \(7 iron\): median 2.2 in this week/);
+  assert.match(focSec.lines[0], /Early extension \(7 iron\), median: this week 2.2 in, last week 3.8 in/);
   assert.match(focSec.lines[1], /Swing thought: “Tush on the wall.”/);
 
   // Section 4: Faults
@@ -403,3 +403,25 @@ test("trends.js includes week in showView, tools-btn active list, and leaveTrend
 });
 
 
+
+test("held-up findings: the strongest five, then how many more", () => {
+  const holdUp = [0.1, 0.5, 0.2, 0.7, 0.3, 0.6, 0.4].map((r, i) => ({
+    move: "m" + i, result: "carry", foundStart: "2026-09-15", verdict: "held",
+    later: { sessions: 6, n: 84, r: i % 2 ? -r : r }, linkSentence: "Finding " + i,
+  }));
+  const summary = Week.weekSummary({ rows: [makeRow("2026-09-29", "7I", 150, 0, -10)], holdUp }, "2026-09-28");
+  const lines = summary.sections.find(s => s.title === "What held up").lines;
+  assert.equal(lines.length, 6);
+  assert.deepEqual(lines.slice(0, 5).map(l => l.split(":")[0]), ["Finding 3", "Finding 5", "Finding 1", "Finding 6", "Finding 4"]);
+  assert.match(lines[5], /And 2 more/);
+});
+
+test("the focus move's 4 weeks before leave out last week", () => {
+  const rows = [];
+  for (let i = 0; i < 5; i++) rows.push({ ...makeRow("2026-09-29", "7I", 150, 0, -10), earlyExt: 1 });
+  for (let i = 0; i < 5; i++) rows.push({ ...makeRow("2026-09-23", "7I", 150, 0, -10), earlyExt: 2 });
+  for (let i = 0; i < 5; i++) rows.push({ ...makeRow("2026-09-10", "7I", 150, 0, -10), earlyExt: 3 });
+  const summary = Week.weekSummary({ rows, journal: { focus: { move: "earlyExt", club: "7I" } } }, "2026-09-28");
+  const line = summary.sections.find(s => s.title === "The focus move").lines[0];
+  assert.match(line, /this week 1\.0 in, last week 2\.0 in, the 4 weeks before 3\.0 in/);
+});
