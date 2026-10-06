@@ -423,6 +423,12 @@ toward the ball". The phones face away from you, so voice is the channel.
   3. Before impact (initial): `{"key": "pelvisPeakMs", "max": -30}` (peaking at least 30 ms before impact)
   4. Final target: `{"key": "pelvisPeakMs", "max": -100}` (peaking 100 ms before impact).
   To advance the stage, edit the `pelvisPeakMs` check's `max` in `server/programs.json` under program `sequence`, block `tier3`.
+  **Brace and turn** (`braceturn`, Oct 6 coach plan): Tier 1 no-ball brace-and-turn reps (tapped: no-ball
+  reps make no clips, so the coach's 3D gate can't apply there); Tier 2 3/4-speed 7 irons, 8 of 15 with attack
+  -3 to -4.5, face to path within 2, pelvis open 10+ (3D) and the pelvis 3+ in ahead of the ball (the face-on
+  camera's `pelvisBall`, `programs.CAMERA_KEYS`: the 3D's distances aren't trusted for it); Tier 3 full speed,
+  5 in a row on the same. Strike height is reported, not gated. Every program's shot order now also gives club
+  path, face to target, start direction, ball speed, smash and carry per shot.
   **Setup notes** (Omni
   moved, mat changed, an update) are saved on the run in play or the last one and go into Copy for coach. No-ball reps are
   tapped Pass/Miss on the page, one at a time or the whole block at once after doing them (**All N passed**,

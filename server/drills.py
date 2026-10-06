@@ -23,6 +23,8 @@ DRILLS = {
     # Sequence Tier 1 (no ball: nothing should record, but a stray clip stays out of the trends).
     "stepfire": {"name": "Step and fire", "pre": 2},
     "pausetop": {"name": "Pause at the top", "pre": 2},
+    # Brace and turn (Oct 6): Tier 1 no ball, Tier 2 at 3/4 speed.
+    "braceturn": {"name": "Brace and turn", "pre": 2},
 }
 # The phones' usual seconds before the strike (capture app MainActivity PRE_S).
 PRE_S = 2

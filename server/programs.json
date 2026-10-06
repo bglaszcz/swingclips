@@ -1,6 +1,95 @@
 {
   "programs": [
     {
+      "id": "braceturn",
+      "name": "Brace and turn",
+      "from": "Golf coach chat, Oct 6 2026: the low point moved forward (pelvis ~5 in ahead, attack -3.6 at 3/4, -5 full) but steeper than about -4.5 the face stays open (7 iron, all sessions: face to path +3.4 median, 29% within 2, on 31 shots; -4.5 to -3: 50%). Likely a slide without a turn: stop adding slide, add spin. Strike height not gated (it scatters ~8 mm shot to shot). Lead foot only and step through are warm-ups now, not gates.",
+      "cap": 40,
+      "clubs": "7 iron only, no driver",
+      "bringBack": "Per swing: pelvis open at impact, pelvis and arm peak times, path, face, start direction, ball speed and smash, attack, loft, face to path, strike; block medians with the shot order. Lead wrist at impact by eye on the down-the-line video (flat or slightly bowed is the target): the app doesn't measure it.",
+      "blocks": [
+        {
+          "id": "tier1",
+          "name": "Tier 1: brace and turn (no ball)",
+          "drill": "braceturn",
+          "ball": false,
+          "reps": 10,
+          "how": "Warm up with a few lead-foot-only and step-through swings (not counted). Then: the lead foot lands like a hitter's, the lead leg firms into a post, the belt buckle turns to the pitcher. Stop adding slide, add spin. First 10 with a small turn, then aim for more open. No ball.",
+          "ask": "Lead leg firm, buckle turned toward the target, hips still ahead of the ball (not slid past it)?",
+          "gate": {
+            "kind": "streak",
+            "need": 10
+          }
+        },
+        {
+          "id": "tier2",
+          "name": "Tier 2: 3/4 speed 7 iron",
+          "drill": "braceturn",
+          "ball": true,
+          "club": "I7",
+          "reps": 15,
+          "how": "3/4 speed, 7 iron, same brace-and-turn feel. Attack -3 to -4.5, face to path within 2, pelvis open 10 or more at impact and still 3 in or more ahead of the ball. Gate 8 of 15 (the coach's 5 of 10, over the 15 shots). Strike height is reported, not gated.",
+          "gate": {
+            "kind": "count",
+            "need": 8,
+            "checks": [
+              {
+                "key": "attack",
+                "min": -4.5,
+                "max": -3
+              },
+              {
+                "key": "faceToPath",
+                "min": -2,
+                "max": 2
+              },
+              {
+                "key": "pelvisOpen",
+                "min": 10
+              },
+              {
+                "key": "pelvisBall",
+                "min": 3
+              }
+            ]
+          }
+        },
+        {
+          "id": "tier3",
+          "name": "Tier 3: full speed",
+          "ball": true,
+          "club": "I7",
+          "reps": 15,
+          "requires": "tier2",
+          "how": "Full speed 7 iron, full routine, one ball each. Same feel. Carry back near 160 with SD under 10 is the result check (reported, not gated).",
+          "gate": {
+            "kind": "streak",
+            "need": 5,
+            "checks": [
+              {
+                "key": "attack",
+                "min": -4.5,
+                "max": -3
+              },
+              {
+                "key": "faceToPath",
+                "min": -2,
+                "max": 2
+              },
+              {
+                "key": "pelvisOpen",
+                "min": 10
+              },
+              {
+                "key": "pelvisBall",
+                "min": 3
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "lowpoint",
       "name": "Low point forward",
       "from": "Golf coach chat, Sep 30 2026: stop casting by getting pressure and the low point forward. Gates reset Oct 1 to the owner's numbers: strike -20 to -8 (Square's reading), attack -3 to -6",

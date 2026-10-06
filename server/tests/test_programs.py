@@ -62,13 +62,13 @@ class ProgramsTest(unittest.TestCase):
     def said(self):
         return [e["text"] for e in self.p.latest(0)]
 
-    def hit(self, s, dt=30, mark=None, body3d=None, why3d=None):
+    def hit(self, s, dt=30, mark=None, body3d=None, why3d=None, body=None):
         """A ball swing now, its shot in (so step takes it), and the mark tapped, if any."""
         self.clock.t += dt
         t = self.clock.t
         name = f"swing_face_1920x1080_240fps_{int(t)}_2000ms.mp4"
         self.swings.append({"t": t, "name": name, "partner": name.replace("face", "dtl"),
-                            "shot": s, "body3d": body3d, "why3d": why3d})
+                            "shot": s, "body3d": body3d, "why3d": why3d, "body": body})
         if mark is not None:
             self.clock.t += 3
             self.p.tap(mark)
@@ -254,6 +254,26 @@ class ProgramsTest(unittest.TestCase):
         self.hit(shot())
         self.hit(shot())
         self.assertEqual("Pass. 2 in a row.", self.said()[-1])
+
+    def test_brace_and_turn(self):
+        # Oct 6 coach plan: attack -3 to -4.5, face to path within 2, pelvis open 10+ (3D) and the
+        # pelvis 3+ in ahead of the ball (the face-on camera's number, from the swing record).
+        self.p.start("braceturn")
+        self.assertEqual(self.drills[-1], "braceturn")
+        self.p.tap_block(10, 0)
+        self.assertEqual(self.block(), "tier2")
+        good = dict(body3d=body3d(pelvis_open=14), body={"pelvisBall": 4.5})
+        self.hit(shot(attack=-4.0, face=0.5, path=0.0), **good)
+        self.assertEqual("Pass.", self.said()[-1])
+        self.hit(shot(attack=-5.5, face=3.5, path=0.0), **good)
+        self.assertEqual("Miss: attack too steep, face open to path.", self.said()[-1])
+        self.hit(shot(attack=-4.0), body3d=body3d(pelvis_open=4), body={"pelvisBall": 1.0})
+        self.assertEqual("Miss: pelvis not open enough, pelvis not ahead enough.", self.said()[-1])
+        n = self.p.state()["program"]["blocks"][1]["judged"][0]["numbers"]
+        self.assertEqual((n["pelvisBall"], n["path"], n["face"]), (4.5, 0.0, 0.5))
+        rep = self.p.report()["text"]
+        self.assertIn("-4.0 / 24.0 / +0.5 / -12 (path +0.0°, face +0.5°, carry 150 yd)", rep)
+        self.assertIn("(in brackets: club path", rep)
 
     def test_retention_median_gate(self):
         self.p.start("retention")

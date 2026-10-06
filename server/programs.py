@@ -57,6 +57,9 @@ IDLE_END_S = 45 * 60
 SPLIT_AT = 10
 
 BODY3D_KEYS = {"pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs", "armAfterPelvis"}
+# The face-on camera's numbers a gate can check (the swing record's "body", summary.js). They're in
+# by the time the swing's 3D is, so a block checking them waits the way a 3D block does.
+CAMERA_KEYS = {"pelvisBall", "chestBall", "handsAhead"}
 
 
 def _finite(v):
@@ -79,6 +82,13 @@ NUMBERS = {
     "armAfterPelvis": ("Arm peak after pelvis", "", 0),
     "pelvisBall": ("Pelvis vs ball at impact", " in", 1),
     "chestBall": ("Chest vs ball at impact", " in", 1),
+    "handsAhead": ("Hands ahead of ball at impact", " in", 1),
+    # Reported, for where the ball went (the coach's ask, Oct 6).
+    "path": ("Club path", "°", 1),
+    "face": ("Face to target", "°", 1),
+    "startDir": ("Start direction", "°", 1),
+    "ballSpeed": ("Ball speed", " mph", 1),
+    "smash": ("Smash", "", 2),
 }
 
 
@@ -114,10 +124,15 @@ def block_needs_3d(block: dict) -> bool:
         return True
     gate = block.get("gate") or {}
     checks = gate.get("checks", []) + gate.get("medians", [])
-    return any(c.get("key") in BODY3D_KEYS for c in checks)
+    return any(c.get("key") in BODY3D_KEYS | CAMERA_KEYS for c in checks)
 
 
-def numbers_of(shot: dict | None, body3d: dict | None = None) -> dict:
+def camera_numbers(body: dict | None) -> dict:
+    """The face-on camera's numbers a gate can check, from the swing record's "body"."""
+    return {k: _finite((body or {}).get(k)) for k in CAMERA_KEYS}
+
+
+def numbers_of(shot: dict | None, body3d: dict | None = None, body: dict | None = None) -> dict:
     """A Square shot's and 3D kinematics numbers for the gates and the report. Face to path is face
     minus path (face +0.7, path +4.6 -> -3.9: closed to the path, the draw/hook side)."""
     c = (shot or {}).get("clubData") or {}
@@ -128,8 +143,11 @@ def numbers_of(shot: dict | None, body3d: dict | None = None) -> dict:
         "faceToPath": round(face - path, 2) if face is not None and path is not None else None,
         "strikeV": _finite(c.get("faceImpactV")), "strikeH": _finite(c.get("faceImpactH")),
         "clubSpeed": _finite(c.get("speed")), "carry": _finite(b.get("carry")),
+        "path": path, "face": face, "startDir": _finite(b.get("hla")), "ballSpeed": _finite(b.get("speed")),
+        "smash": _finite(c.get("smash")),
     }
     out.update(body3d_numbers(body3d))
+    out.update(camera_numbers(body))
     return out
 
 
@@ -222,6 +240,7 @@ CUES = {
     "pelvisPeakMs": ("pelvis peaks late", "pelvis peaks early"),
     "pelvisOpen": ("pelvis too open", "pelvis not open enough"),
     "pelvisStartMs": ("pelvis starts late", "pelvis starts early"),
+    "pelvisBall": ("pelvis too far ahead", "pelvis not ahead enough"),
 }
 
 
@@ -490,6 +509,7 @@ class Programs:
                 if s and s.get("body3d"):
                     r["waiting3d"] = False
                     r["numbers"].update(body3d_numbers(s["body3d"]))
+                    r["numbers"].update(camera_numbers(s.get("body")))
                     p, block = self._current()
                     if block["id"] == r["block"]:
                         self._say_shot(block, r["t"])
@@ -532,7 +552,7 @@ class Programs:
                 if not s.get("shot"):
                     r["kind"] = "noshot"
                 else:
-                    n = numbers_of(s["shot"], s.get("body3d"))
+                    n = numbers_of(s["shot"], s.get("body3d"), s.get("body"))
                     nr = no_read(n)
                     needs_3d = block_needs_3d(block)
                     waiting = False
@@ -747,7 +767,8 @@ def fmt(key: str, v) -> str:
         return "yes" if v else "no"
     dec = NUMBERS[key][2]
     return f"{v:+.{dec}f}" if key in ("attack", "faceToPath", "strikeV", "strikeH", "pelvisPeakMs", "armPeakMs", "pelvisOpen",
-                                       "pelvisStartMs", "pelvisBall", "chestBall") else f"{v:.{dec}f}"
+                                       "pelvisStartMs", "pelvisBall", "chestBall", "handsAhead", "path", "face",
+                                       "startDir") else f"{v:.{dec}f}"
 
 
 def spread(key: str, values: list) -> str:
@@ -844,6 +865,8 @@ def report(p: dict, run: dict, body=None) -> dict:
         lines.append(f"Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height | 3D: pelvis peak / arm peak / pelvis open / pelvis start{shift_head}, verdict):")
     else:
         lines.append(f"Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height{shift_head}, verdict):")
+    if any((r.get("numbers") or {}).get("path") is not None for r in reps):
+        lines.append("  (in brackets: club path, face to target and start direction, + = right; ball speed, smash, carry)")
     by_block = {b["id"]: {r["t"]: r for r in judged(b, run["reps"], run["marks"])} for b in p["blocks"]}
     names = {b["id"]: b["name"] for b in p["blocks"]}
     for i, r0 in enumerate(reps, 1):
@@ -855,6 +878,12 @@ def report(p: dict, run: dict, body=None) -> dict:
             continue
         n = r0["numbers"]
         nums = " / ".join(fmt(k, n[k]) for k in ("attack", "loft", "faceToPath", "strikeV"))
+        # Where the ball went (the coach's ask, Oct 6): path, face, start direction, ball speed, smash, carry.
+        flight = [f"{word} {fmt(k, n.get(k))}{unit}" for k, word, unit in
+                  (("path", "path", "°"), ("face", "face", "°"), ("startDir", "start", "°"), ("ballSpeed", "ball", " mph"),
+                   ("smash", "smash", ""), ("carry", "carry", " yd")) if n.get(k) is not None]
+        if n.get("path") is not None and flight:
+            nums = f"{nums} ({', '.join(flight)})"
         if any(n.get(k) is not None for k in ("pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs")):
             d3 = (f"pelvis peak {fmt('pelvisPeakMs', n.get('pelvisPeakMs'))} ms, "
                   f"arm peak {fmt('armPeakMs', n.get('armPeakMs'))} ms, "
@@ -869,6 +898,7 @@ def report(p: dict, run: dict, body=None) -> dict:
                  if cam.get(k) is not None]
         if shift:
             nums = f"{nums} | vs ball: " + ", ".join(shift)
+
         verdict = ("invalid read, not counted (" + r0["noRead"] + ")" if r0.get("noRead") else
                    "waiting for 3D" if r.get("waiting3d") else
                    "pass" if r.get("gate") else "miss" if r.get("gate") is False else "")

@@ -998,6 +998,7 @@ def swings_since(since: float) -> list[dict]:
             rec = swing_records.get(s["name"]) or {}
             s["body3d"] = rec.get("body3d")
             s["why3d"] = rec.get("why3d")
+            s["body"] = rec.get("body")
     return swings_now
 
 
