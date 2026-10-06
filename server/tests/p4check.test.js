@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { queue, window: p4Window, traces, mergeP4 } = require("../static/p4check.js");
+const { queue, window: p4Window, direction, mergeP4 } = require("../static/p4check.js");
 
 function makeClip(id, opts = {}) {
   const angle = opts.angle || "face";
@@ -154,62 +154,29 @@ test("window: bounds from -0.15s to +0.10s and starts at window start", () => {
   assert.equal(win.frames[0], 1.70);
 });
 
-test("traces: speed peaks where motion is fastest and leaves gaps empty", () => {
-  // Create synthetic pose frames over 1.0s to 2.0s
-  // Wrist stationary at 1.5s (top), moving fast at 1.8s (downswing)
-  // Clubhead present except missing around 1.3s - 1.4s (gap)
+test("direction: going back, then down, and the turn is the last frame going back", () => {
+  // The clubhead circles the shoulders' middle at 240 fps: its angle grows until 1.50 s, then falls.
   const frames = [];
-  const dt = 1 / 60; // 60 fps for test simplicity
-
-  for (let t = 1.0; t <= 2.0; t += dt) {
-    // Wrist motion: pos(t) = (t - 1.5)^2 -> speed = 2 * |t - 1.5|
-    // Slowest near 1.5s, fastest near 1.0s and 2.0s
-    const diff = t - 1.5;
-    const wx = 0.5 + diff * Math.abs(diff);
-    const wy = 0.5;
-
-    // Landmark array with left wrist at index 15
+  for (let k = 0; k <= 240; k++) {
+    const t = Number((1.0 + k / 240).toFixed(6));
+    const a = t <= 1.5 ? (t - 1.0) * 2 : 1.0 - (t - 1.5) * 6;
     const lm = new Array(33 * 3).fill(0);
-    lm[15 * 3] = wx;
-    lm[15 * 3 + 1] = wy;
-    lm[15 * 3 + 2] = 0.9; // visibility
-
-    // Clubhead with gap between 1.30 and 1.45
-    let clubhead = null;
-    if (t < 1.30 || t > 1.45) {
-      // Faster motion at 1.7s: speed proportional to (t - 1.5)^3
-      clubhead = [0.5 + diff * 2, 0.5, 0.8];
-    }
-
-    frames.push({
-      t: Number(t.toFixed(4)),
-      lm,
-      clubhead
-    });
+    lm[11 * 3] = 0.45; lm[11 * 3 + 1] = 0.4; lm[12 * 3] = 0.55; lm[12 * 3 + 1] = 0.4;
+    // A gap with no clubhead (blur) early on, which leaves the frames around it unknown.
+    const clubhead = t > 1.2 && t < 1.22 ? null : [0.5 + 0.3 * Math.cos(a), 0.4 + 0.3 * Math.sin(a), 0.9];
+    frames.push({ t, lm, clubhead });
   }
-
-  const tr = traces(frames, 1.35, 1.90, "left");
-  assert.ok(tr.length > 0);
-
-  // Wrist speed drops near 1.5s and peaks near 1.9s
-  const pNearTop = tr.find(p => Math.abs(p.t - 1.5) < 0.02);
-  const pFast = tr.find(p => Math.abs(p.t - 1.85) < 0.02);
-
-  assert.ok(pNearTop && pNearTop.wrist != null);
-  assert.ok(pFast && pFast.wrist != null);
-  assert.ok(pFast.wrist > pNearTop.wrist * 3, `Speed at 1.85s (${pFast.wrist}) should beat top (${pNearTop.wrist})`);
-
-  // Clubhead gap: at 1.40s clubhead was missing, so clubhead speed must be null
-  const pGap = tr.find(p => Math.abs(p.t - 1.40) < 0.02);
-  assert.ok(pGap);
-  assert.equal(pGap.clubhead, null);
-
-  // Where clubhead is present, speed is computed
-  const pClubheadFast = tr.find(p => Math.abs(p.t - 1.80) < 0.02);
-  assert.ok(pClubheadFast);
-  assert.ok(pClubheadFast.clubhead != null && pClubheadFast.clubhead > 0);
+  const d = direction(frames, 1.35, 1.6);
+  assert.ok(d.frames.length > 50);
+  assert.equal(d.frames.find(f => Math.abs(f.t - 1.40) < 0.003).dir, "back");
+  assert.equal(d.frames.find(f => Math.abs(f.t - 1.55) < 0.003).dir, "down");
+  assert.ok(d.turn != null && Math.abs(d.turn - 1.5) <= 2 / 240, `turn ${d.turn}`);
+  // Slowest at the turn.
+  const at = d.frames.find(f => Math.abs(f.t - d.turn) < 0.001);
+  assert.ok(at.speed < d.frames.find(f => Math.abs(f.t - 1.58) < 0.003).speed);
+  // No clubhead: nothing to say.
+  assert.equal(direction(frames.map(f => ({ ...f, clubhead: null })), 1.35, 1.6).turn, null);
 });
-
 test("mergeP4: sets events.p4, quick.p4 and removes picked.p4", () => {
   const doc = {
     schema: 1,

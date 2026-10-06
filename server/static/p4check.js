@@ -296,122 +296,58 @@
     return frames;
   }
 
+  // The clubhead's direction (the owner's ask, Oct 6: "where it stops going back and changes direction").
+  // Its angle round the shoulders' middle, turning one way going back and the other coming down; velocity
+  // over +-DIR_SPAN frames. On the 28 P4-check labels the turn found this way sat a median 8 ms from the
+  // label (bias -3 ms); the shaft's own angle did worse (17 ms, +17 late).
+  const DIR_SPAN = 2, DIR_MAX_GAP = 0.06, DIR_RUN = 4, CLUBHEAD_CONF = 0.25;
+
   /**
-   * Per-frame lead wrist and clubhead speed over the window.
+   * Which way the clubhead moves, per pose frame, and where it turns.
    *
    * @param {Array} poseFrames Frame objects from /api/pose/<clip> { t, lm, clubhead }
-   * @param {number} from Window start in seconds
+   * @param {number} from Window start in seconds (the backswing's direction is read before it)
    * @param {number} to Window end in seconds
-   * @param {string} [leadSide="left"] "left" for right-handed golfer, "right" for left-handed
-   * @returns {Array<{t: number, wrist: number|null, clubhead: number|null}>}
+   * @returns {{frames: Array<{t: number, dir: "back"|"down"|null, speed: number|null}>, turn: number|null}}
+   *   turn: the last frame going back before it comes down for DIR_RUN frames in a row, in the window.
    */
-  function traces(poseFrames, from, to, leadSide = "left") {
-    if (!Array.isArray(poseFrames) || !poseFrames.length) {
-      const empty = [];
-      empty.t = []; empty.wrist = []; empty.clubhead = [];
-      return empty;
+  function direction(poseFrames, from, to) {
+    const out = { frames: [], turn: null };
+    if (!Array.isArray(poseFrames) || !poseFrames.length) return out;
+    const pts = [];
+    for (const f of [...poseFrames].sort((a, b) => a.t - b.t)) {
+      const lm = f.lm, ch = f.clubhead;
+      if (!Array.isArray(lm) || lm.length < 39 || !Array.isArray(ch)) continue;
+      if (ch[0] == null || ch[1] == null || (ch.length > 2 && ch[2] < CLUBHEAD_CONF)) continue;
+      const cx = (lm[33] + lm[36]) / 2, cy = (lm[34] + lm[37]) / 2;
+      pts.push({ t: f.t, a: Math.atan2(ch[1] - cy, ch[0] - cx) });
     }
-
-    const sorted = [...poseFrames].sort((a, b) => a.t - b.t);
-    const wristIdx = leadSide === "right" ? 16 : 15;
-
-    function getWristPoint(f) {
-      if (!f || !f.lm) return null;
-      if (Array.isArray(f.lm)) {
-        if (f.lm.length >= (wristIdx + 1) * 3) {
-          const x = f.lm[wristIdx * 3], y = f.lm[wristIdx * 3 + 1];
-          if (x != null && y != null && (x !== 0 || y !== 0)) return { x, y };
-        }
-        if (f.lm[wristIdx] && typeof f.lm[wristIdx] === "object") {
-          const pt = f.lm[wristIdx];
-          if (pt.x != null && pt.y != null) return { x: pt.x, y: pt.y };
-        }
-      }
-      return null;
+    if (pts.length < 2 * DIR_SPAN + 5) return out;
+    for (let i = 1; i < pts.length; i++) {   // unwrapped
+      pts[i].a = pts[i - 1].a + ((((pts[i].a - pts[i - 1].a) + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI);
     }
-
-    function getClubheadPoint(f) {
-      if (!f || !f.clubhead) return null;
-      if (Array.isArray(f.clubhead)) {
-        const x = f.clubhead[0], y = f.clubhead[1];
-        const conf = f.clubhead.length >= 3 ? f.clubhead[2] : 1;
-        if (x != null && y != null && conf >= 0.25) return { x, y };
-      } else if (typeof f.clubhead === "object") {
-        const x = f.clubhead.x, y = f.clubhead.y;
-        const conf = f.clubhead.conf ?? 1;
-        if (x != null && y != null && conf >= 0.25) return { x, y };
-      }
-      return null;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i - DIR_SPAN], b = pts[i + DIR_SPAN];
+      pts[i].v = a && b && b.t - a.t > 0 && b.t - a.t < DIR_MAX_GAP ? (b.a - a.a) / (b.t - a.t) : null;
     }
-
-    // Compute raw derivatives
-    function computeSpeeds(extractor) {
-      const n = sorted.length;
-      const speeds = new Array(n).fill(null);
-      for (let i = 0; i < n; i++) {
-        const p = extractor(sorted[i]);
-        if (!p) continue;
-
-        // Find nearest valid neighbors within 0.05s
-        let prev = null, prevT = null;
-        for (let j = i - 1; j >= 0 && sorted[i].t - sorted[j].t <= 0.05; j--) {
-          const pt = extractor(sorted[j]);
-          if (pt) { prev = pt; prevT = sorted[j].t; break; }
+    // Going back turns the way it did over the 0.2 s before the window (the backswing).
+    const back = pts.filter(q => q.v != null && q.t >= from - 0.2 && q.t < from).map(q => q.v).sort((x, y) => x - y);
+    if (back.length < 5) return out;
+    const sign = back[Math.floor(back.length / 2)] > 0 ? 1 : -1;
+    let run = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const q = pts[i];
+      if (q.t < from - 0.0005 || q.t > to + 0.0005) continue;
+      const dir = q.v == null ? null : q.v * sign > 0 ? "back" : "down";
+      out.frames.push({ t: q.t, dir, speed: q.v == null ? null : Math.abs(q.v) });
+      if (dir === "down") {
+        run++;
+        if (run === DIR_RUN && out.turn == null) {
+          const before = out.frames[out.frames.length - 1 - DIR_RUN];
+          if (before && before.dir === "back") out.turn = before.t;
         }
-
-        let next = null, nextT = null;
-        for (let j = i + 1; j < n && sorted[j].t - sorted[i].t <= 0.05; j++) {
-          const pt = extractor(sorted[j]);
-          if (pt) { next = pt; nextT = sorted[j].t; break; }
-        }
-
-        if (prev && next) {
-          const dt = nextT - prevT;
-          if (dt > 0) speeds[i] = Math.hypot(next.x - prev.x, next.y - prev.y) / dt;
-        } else if (next) {
-          const dt = nextT - sorted[i].t;
-          if (dt > 0) speeds[i] = Math.hypot(next.x - p.x, next.y - p.y) / dt;
-        } else if (prev) {
-          const dt = sorted[i].t - prevT;
-          if (dt > 0) speeds[i] = Math.hypot(p.x - prev.x, p.y - prev.y) / dt;
-        }
-      }
-
-      // Light 3-point smoothing [1, 2, 1] / 4 where values exist; preserve null gaps
-      const smoothed = new Array(n).fill(null);
-      for (let i = 0; i < n; i++) {
-        if (speeds[i] == null) continue;
-        let sum = speeds[i] * 2, count = 2;
-        if (i > 0 && speeds[i - 1] != null) { sum += speeds[i - 1]; count += 1; }
-        if (i + 1 < n && speeds[i + 1] != null) { sum += speeds[i + 1]; count += 1; }
-        smoothed[i] = Number((sum / count).toFixed(4));
-      }
-      return smoothed;
+      } else run = 0;
     }
-
-    const wristSpeeds = computeSpeeds(getWristPoint);
-    const headSpeeds = computeSpeeds(getClubheadPoint);
-
-    const out = [];
-    for (let i = 0; i < sorted.length; i++) {
-      const t = sorted[i].t;
-      if (from != null && t < from - 0.0005) continue;
-      if (to != null && t > to + 0.0005) continue;
-      const w = wristSpeeds[i];
-      const h = headSpeeds[i];
-      out.push({
-        t,
-        wrist: w,
-        clubhead: h,
-        wristSpeed: w,
-        clubheadSpeed: h
-      });
-    }
-
-    out.t = out.map(p => p.t);
-    out.wrist = out.map(p => p.wrist);
-    out.clubhead = out.map(p => p.clubhead);
-
     return out;
   }
 
@@ -527,7 +463,7 @@
   let currentClip = null;
   let currentPose = null;
   let currentWindow = null;
-  let currentTraces = null;
+  let currentDirection = null;
   let currentFrameIndex = 0;
   let posesCache = {};
   let labelsSummary = [];
@@ -569,95 +505,65 @@
     counterEl.textContent = `Face-on hand P4 labels: ${totalHand} · today ${todayCount} · ${left} left`;
   }
 
-  function drawSpeedChart(chartTraces, currentT, windowFrom, windowTo) {
+  /** The direction strip: one bar per frame, blue going back, amber coming down, height = how fast;
+   * the turn marked, the current frame a white line. */
+  function drawDirection(dir, currentT, windowFrom, windowTo) {
     const canvas = document.getElementById("p4c-chart");
     if (!canvas) return;
-
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    const w = (rect.width > 0 ? rect.width : 300) * dpr;
-    const h = 60 * dpr;
-    if (canvas.width !== Math.round(w) || canvas.height !== Math.round(h)) {
-      canvas.width = Math.round(w);
-      canvas.height = Math.round(h);
-    }
-
+    const w = Math.round((rect.width > 0 ? rect.width : 300) * dpr), h = Math.round(60 * dpr);
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (!chartTraces || !chartTraces.length || windowTo <= windowFrom) {
+    ctx.clearRect(0, 0, w, h);
+    const turnBtn = document.getElementById("p4c-turn");
+    if (turnBtn) turnBtn.disabled = !(dir && dir.turn != null);
+    if (!dir || !dir.frames.length || windowTo <= windowFrom) {
       ctx.fillStyle = "#6b7280";
       ctx.font = `${11 * dpr}px sans-serif`;
       ctx.textAlign = "center";
-      ctx.fillText("No speed data", canvas.width / 2, canvas.height / 2);
+      ctx.fillText("Clubhead not tracked here", w / 2, h / 2);
       return;
     }
-
-    let maxSpeed = 0;
-    for (const pt of chartTraces) {
-      if (pt.wrist != null && pt.wrist > maxSpeed) maxSpeed = pt.wrist;
-      if (pt.clubhead != null && pt.clubhead > maxSpeed) maxSpeed = pt.clubhead;
+    const padX = 8 * dpr, padY = 6 * dpr, gw = w - 2 * padX, gh = h - 2 * padY;
+    const x = t => padX + ((t - windowFrom) / (windowTo - windowFrom)) * gw;
+    const max = Math.max(...dir.frames.map(f => f.speed || 0)) || 1;
+    const barW = Math.max(1, gw / Math.max(1, dir.frames.length) - 1 * dpr);
+    for (const f of dir.frames) {
+      const hh = f.speed == null ? gh * 0.15 : Math.max(gh * 0.15, (f.speed / max) * gh);
+      ctx.fillStyle = f.dir === "back" ? "#60a5fa" : f.dir === "down" ? "#f59e0b" : "#4b5563";
+      ctx.fillRect(x(f.t) - barW / 2, h - padY - hh, barW, hh);
     }
-    if (maxSpeed <= 0) maxSpeed = 1;
-
-    const padY = 6 * dpr;
-    const padX = 8 * dpr;
-    const graphW = canvas.width - padX * 2;
-    const graphH = canvas.height - padY * 2;
-    const dt = windowTo - windowFrom;
-
-    function timeToX(t) {
-      return padX + ((t - windowFrom) / dt) * graphW;
-    }
-    function speedToY(s) {
-      return canvas.height - padY - (s / maxSpeed) * graphH;
-    }
-
-    // Baseline
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
-    ctx.lineWidth = 1 * dpr;
-    ctx.beginPath();
-    ctx.moveTo(padX, canvas.height - padY);
-    ctx.lineTo(canvas.width - padX, canvas.height - padY);
-    ctx.stroke();
-
-    function drawSeries(key, color) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2 * dpr;
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
+    if (dir.turn != null) {
+      ctx.strokeStyle = "#e5e7eb";
+      ctx.setLineDash([3 * dpr, 2 * dpr]);
+      ctx.lineWidth = 1 * dpr;
       ctx.beginPath();
-      let inPath = false;
-      for (const pt of chartTraces) {
-        const val = pt[key];
-        if (val == null) {
-          inPath = false;
-          continue;
-        }
-        const x = timeToX(pt.t);
-        const y = speedToY(val);
-        if (!inPath) {
-          ctx.moveTo(x, y);
-          inPath = true;
-        } else {
-          ctx.lineTo(x, y);
-        }
-      }
+      ctx.moveTo(x(dir.turn), 2 * dpr);
+      ctx.lineTo(x(dir.turn), h - 2 * dpr);
       ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "#e5e7eb";
+      ctx.font = `${10 * dpr}px sans-serif`;
+      ctx.textAlign = "left";
+      ctx.fillText("turn", x(dir.turn) + 3 * dpr, 11 * dpr);
     }
-
-    // Wrist (cyan #22d3ee) and clubhead (green #4ade80)
-    drawSeries("wrist", "#22d3ee");
-    drawSeries("clubhead", "#4ade80");
-
-    // Current frame indicator line (white)
-    const curX = timeToX(currentT);
+    const curX = x(currentT);
     ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 2 * dpr;
     ctx.beginPath();
     ctx.moveTo(curX, 2 * dpr);
-    ctx.lineTo(curX, canvas.height - 2 * dpr);
+    ctx.lineTo(curX, h - 2 * dpr);
     ctx.stroke();
+  }
+
+  function goToTurn() {
+    if (!currentDirection || currentDirection.turn == null || !currentWindow) return;
+    let best = 0;
+    for (let i = 1; i < currentWindow.length; i++) {
+      if (Math.abs(currentWindow[i] - currentDirection.turn) < Math.abs(currentWindow[best] - currentDirection.turn)) best = i;
+    }
+    renderFrame(best);
   }
 
   function renderFrame(fIdx) {
@@ -676,7 +582,7 @@
       img.src = `/api/still/${encodeURIComponent(currentClip.name)}?t=${t.toFixed(6)}`;
     }
 
-    drawSpeedChart(currentTraces, t, currentWindow.from, currentWindow.to);
+    drawDirection(currentDirection, t, currentWindow.from, currentWindow.to);
 
     // Prefetch neighbours: -4, -2, -1, 1, 2, 4
     for (const delta of [-4, -2, -1, 1, 2, 4]) {
@@ -779,7 +685,7 @@
     const fps = getFps(c.name);
 
     currentWindow = p4Window(serverP4, fps);
-    currentTraces = traces(pose?.frames, currentWindow.from, currentWindow.to, lead);
+    currentDirection = direction(pose?.frames, currentWindow.from, currentWindow.to);
 
     // Prompt rule: "the first frame shown is the window's start, not the server's P4."
     currentFrameIndex = 0;
@@ -980,6 +886,9 @@
     } else if (e.key === "s" || e.key === "S") {
       e.preventDefault();
       skip();
+    } else if (e.key === "t" || e.key === "T") {
+      e.preventDefault();
+      goToTurn();
     }
   }
 
@@ -1021,11 +930,13 @@
     if (chartCanvas) {
       chartCanvas.addEventListener("pointerdown", handleChartClick);
     }
+    const turnBtn = document.getElementById("p4c-turn");
+    if (turnBtn) turnBtn.onclick = goToTurn;
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", () => {
-      if (isOpen && currentWindow && currentTraces) {
-        drawSpeedChart(currentTraces, currentWindow[currentFrameIndex], currentWindow.from, currentWindow.to);
+      if (isOpen && currentWindow && currentDirection) {
+        drawDirection(currentDirection, currentWindow[currentFrameIndex], currentWindow.from, currentWindow.to);
       }
     });
   }
@@ -1034,7 +945,7 @@
     queue,
     window: p4Window,
     p4Window,
-    traces,
+    direction,
     mergeP4,
     hasHandP4,
     getP4Disagreement,

@@ -374,7 +374,7 @@
   .p4c-img { display: block; width: auto; max-width: 100%; height: auto; max-height: calc(100dvh - 360px); min-height: 240px; border-radius: 8px; background: #000; object-fit: contain; }
   .p4c-chart-wrap { position: relative; width: 100%; display: flex; flex-direction: column; gap: 4px; }
   .p4c-chart { width: 100%; height: 60px; background: var(--panel-2, #181d28); border: 1px solid var(--line); border-radius: 6px; display: block; cursor: pointer; }
-  .p4c-chart-legend { display: flex; justify-content: flex-end; gap: 12px; font-size: 11px; color: var(--muted); padding: 0 4px; }
+  .p4c-chart-legend { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--muted); padding: 0 4px; }
   .p4c-chart-legend span { display: inline-flex; align-items: center; gap: 4px; }
   .p4c-leg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
   .p4c-controls { display: flex; flex-direction: column; gap: 12px; }
@@ -1349,10 +1349,11 @@
         <div class="p4c-viewport" id="p4c-viewport">
           <img id="p4c-img" class="p4c-img" alt="Frame still" />
           <div class="p4c-chart-wrap">
-            <canvas id="p4c-chart" class="p4c-chart" width="600" height="60" title="Wrist and clubhead speeds over window; white line is current frame"></canvas>
+            <canvas id="p4c-chart" class="p4c-chart" width="600" height="60" title="Which way the clubhead moves, frame by frame (taller = faster); the dashed line is where it turns; white line is the current frame. Click to jump there."></canvas>
             <div class="p4c-chart-legend">
-              <span><span class="p4c-leg-dot" style="background: #22d3ee;"></span> Wrist</span>
-              <span><span class="p4c-leg-dot" style="background: #4ade80;"></span> Clubhead</span>
+              <span><span class="p4c-leg-dot" style="background: #60a5fa;"></span> Clubhead going back</span>
+              <span><span class="p4c-leg-dot" style="background: #f59e0b;"></span> Coming down</span>
+              <button type="button" class="small" id="p4c-turn" title="Jump to the last frame the clubhead is still going back (T)">Go to the turn</button>
             </div>
           </div>
         </div>
