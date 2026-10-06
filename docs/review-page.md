@@ -438,6 +438,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   up-down number is filler) is left out of the gate. Face to path = face minus path. The phone says each
   shot's verdict short, without numbers (they're on the screen): "Pass." (with "3 in a row" on a streak
   gate) or "Miss:" and which way, e.g. "face open to path" (`programs.CUES`), through the practice feed (practice voice and games are turned off; one voice at a time).
+  On the Start page, a dedicated last-shot panel under the block gate displays the latest ball rep readable from 3 m on the mat: the verdict in 40 px, each gate check with its value, target band, and ✓ or ✗ in 28 px, and extra launch numbers in a summary row. Calm styling highlights passes in the accent colour and misses in muted text with ✗, never red.
   A block ends when its reps are in or its streak is made, then the next starts (`requires`: skipped unless
   that block passed); the program ends after the last block, at its cap (every swing counts, taps too), or
   45 minutes idle, and is logged to `programs-log.jsonl`. **Program history and trends**

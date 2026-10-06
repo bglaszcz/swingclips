@@ -273,3 +273,16 @@ test("formatMetricText helper handles zero, negative, positive, units", () => {
   assert.equal(formatMetricText("smash", 1.45), "1.45");
   assert.equal(formatMetricText("attack", null), "–");
 });
+
+test("start.html includes progshot.js script, last shot CSS, and removes old last shot string", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const html = fs.readFileSync(path.join(__dirname, "../static/start.html"), "utf-8");
+
+  assert.ok(html.includes('<script src="/static/progshot.js"></script>'), "includes progshot.js");
+  assert.ok(html.includes(".prog-last-shot"), "includes .prog-last-shot CSS");
+  assert.ok(html.includes(".prog-shot-verdict"), "includes .prog-shot-verdict CSS");
+  assert.ok(html.includes(".prog-shot-row"), "includes .prog-shot-row CSS");
+  assert.ok(html.includes(".prog-shot-extra"), "includes .prog-shot-extra CSS");
+  assert.ok(!html.includes("Last shot: attack"), "old one-line last shot string removed");
+});

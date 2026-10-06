@@ -132,6 +132,18 @@
   .prog-past-blocks div { display: flex; align-items: center; gap: 6px; }
   .prog-trend-box { margin: 8px 0; display: grid; gap: 4px; }
   .prog-trend-box .plan-note { font-weight: 500; color: var(--text); background: var(--panel-2); padding: 8px 10px; border-radius: 6px; margin: 0; }
+  .prog-last-shot { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+  .prog-shot-verdict { font-size: 40px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 10px; }
+  .prog-shot-verdict.ok { color: var(--accent); }
+  .prog-shot-verdict.miss, .prog-shot-verdict.wait { color: var(--muted); }
+  .prog-shot-checks { display: grid; gap: 8px; margin: 10px 0 12px; }
+  .prog-shot-row { font-size: 28px; font-weight: 700; line-height: 1.25; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .prog-shot-label { color: var(--text); }
+  .prog-shot-val { color: var(--text); font-variant-numeric: tabular-nums; }
+  .prog-shot-mark.ok { color: var(--accent); }
+  .prog-shot-mark.miss, .prog-shot-mark.wait { color: var(--muted); }
+  .prog-shot-want { font-size: 15px; font-weight: 500; color: var(--muted); }
+  .prog-shot-extra { font-size: 14px; color: var(--muted); margin-top: 10px; line-height: 1.45; overflow-wrap: anywhere; }
   /* ---- Steps: get ready, what you're doing, record ---- */
   .ready-sum { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; }
   .linkbtn { font: inherit; font-size: 13px; font-weight: 600; background: none; border: 0; padding: 4px 0; margin-left: auto;
@@ -166,7 +178,10 @@
   .since-last-details summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 12px; user-select: none; }
   .since-last-details[open] summary { margin-bottom: 6px; }
   .since-last-ok-list { display: grid; gap: 6px; margin-top: 4px; }
-  @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; } }
+  @media (max-width: 600px) {
+    main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; }
+    .prog-shot-verdict { font-size: 32px; } .prog-shot-row { font-size: 22px; gap: 8px; } .prog-shot-want { font-size: 13px; } .prog-shot-extra { font-size: 13px; }
+  }
 </style>
 <script src="/static/games.js"></script>
 <script src="/static/coach.js"></script>
@@ -180,6 +195,7 @@
 <script src="/static/drillsets.js"></script>
 <script src="/static/plan.js"></script>
 <script src="/static/programhistory.js"></script>
+<script src="/static/progshot.js"></script>
 <script src="/static/sincelast.js"></script>
 </head>
 <body>
@@ -881,20 +897,83 @@ function gateText(b) {
     if (c.key === "armAfterPelvis") return "arm peak after pelvis";
     const name = { strikeV: "strike", attack: "attack", faceToPath: "face to path",
                    pelvisPeakMs: "pelvis peak", pelvisOpen: "pelvis open",
-                   pelvisStartMs: "pelvis start" }[c.key] || c.key;
-    const unit = c.key === "strikeV" ? " mm" : (c.key.endsWith("Ms") ? " ms" : "°");
+                   pelvisStartMs: "pelvis start", pelvisBall: "pelvis ahead of ball",
+                   chestBall: "chest ahead of ball", handsAhead: "hands ahead of ball" }[c.key] || c.key;
+    const unit = c.key === "strikeV" ? " mm" : (c.key.endsWith("Ms") ? " ms" : (c.key.endsWith("Ball") || c.key === "handsAhead") ? " in" : "°");
     if (c.min != null && c.max != null && c.min === -c.max) return `${name} within ±${c.max}${unit}`;
     if (c.min != null && c.max != null) return `${name} ${c.min} to ${c.max}${unit}`;
     return c.max != null ? `${name} ≤ ${c.max}${unit}` : `${name} ≥ ${c.min}${unit}`;
   });
   for (const c of g.medians || []) {
-    const name = { strikeV: "strike", attack: "attack", loft: "dynamic loft" }[c.key] || c.key;
-    const unit = c.key === "strikeV" ? " mm" : (c.key.endsWith("Ms") ? " ms" : "°");
+    const name = { strikeV: "strike", attack: "attack", loft: "dynamic loft",
+                   pelvisBall: "pelvis ahead of ball", chestBall: "chest ahead of ball", handsAhead: "hands ahead of ball" }[c.key] || c.key;
+    const unit = c.key === "strikeV" ? " mm" : (c.key.endsWith("Ms") ? " ms" : (c.key.endsWith("Ball") || c.key === "handsAhead") ? " in" : "°");
     checks.push(`median ${name} ${c.max != null ? "≤ " + c.max : "≥ " + c.min}${unit}`);
   }
   if (g.mark) checks.push("mark at or ahead");
   const count = g.kind === "streak" ? `${g.need} in a row` : `${g.need} of ${b.reps}`;
   return count + (checks.length ? ": " + checks.join(", ") : "");
+}
+
+function renderLastShot(shot) {
+  const panel = document.createElement("div");
+  panel.className = "prog-last-shot";
+
+  const v = document.createElement("div");
+  v.className = "prog-shot-verdict " + (shot.verdict === "pass" ? "ok" : shot.verdict === "miss" ? "miss" : "wait");
+  if (shot.verdict === "pass") {
+    v.textContent = "Pass ✓";
+  } else if (shot.verdict === "miss") {
+    v.textContent = "Miss ✗";
+  } else if (shot.verdict === "waiting") {
+    v.textContent = "Waiting for 3D";
+  } else if (shot.verdict === "not counted") {
+    v.textContent = shot.why ? `Not counted: ${shot.why}` : "Not counted";
+  } else {
+    v.textContent = shot.verdict;
+  }
+  panel.append(v);
+
+  if (shot.checks && shot.checks.length) {
+    const list = document.createElement("div");
+    list.className = "prog-shot-checks";
+    for (const c of shot.checks) {
+      const row = document.createElement("div");
+      row.className = "prog-shot-row";
+
+      const lbl = document.createElement("span");
+      lbl.className = "prog-shot-label";
+      lbl.textContent = c.label;
+
+      const val = document.createElement("span");
+      val.className = "prog-shot-val";
+      val.textContent = c.text;
+
+      const mark = document.createElement("span");
+      mark.className = "prog-shot-mark " + (c.ok === true ? "ok" : c.ok === false ? "miss" : "wait");
+      mark.textContent = c.ok === true ? "✓" : c.ok === false ? "✗" : "…";
+
+      row.append(lbl, val, mark);
+
+      if (c.want) {
+        const want = document.createElement("span");
+        want.className = "prog-shot-want";
+        want.textContent = `(${c.want})`;
+        row.append(want);
+      }
+      list.append(row);
+    }
+    panel.append(list);
+  }
+
+  if (shot.extra && shot.extra.length) {
+    const ex = document.createElement("div");
+    ex.className = "prog-shot-extra";
+    ex.textContent = shot.extra.map(x => `${x.label} ${x.text}`).join(" · ");
+    panel.append(ex);
+  }
+
+  return panel;
 }
 
 function blockLine(b) {
@@ -976,6 +1055,10 @@ function renderProgram(data) {
     x.textContent = "Optional: " + b.extraBall;
     box.append(x);
   }
+  const shot = typeof SwingProgShot !== "undefined" ? SwingProgShot.lastShot(b) : null;
+  if (shot) {
+    box.append(renderLastShot(shot));
+  }
   const judged = b.judged.filter(r => r.gate != null || r.kind === "shot");
   const reps = document.createElement("div");
   reps.className = "prog-reps";
@@ -1038,18 +1121,6 @@ function renderProgram(data) {
         box.append(all);
       }
     }
-  }
-  const last = [...b.judged].reverse().find(r => r.numbers);
-  if (last && b.ball) {
-    const n = last.numbers, x = document.createElement("div");
-    x.className = "plan-note";
-    let txt = `Last shot: attack ${pgNum(n.attack)}°, strike ${pgNum(n.strikeV, 0)} mm, face to path ${pgNum(n.faceToPath)}°, dynamic loft ${n.loft == null ? "–" : n.loft.toFixed(1)}°`;
-    if (n.pelvisPeakMs != null) txt += `, pelvis peak ${pgNum(n.pelvisPeakMs, 0)} ms`;
-    if (n.pelvisOpen != null) txt += `, pelvis open ${pgNum(n.pelvisOpen, 0)}°`;
-    if (last.waiting3d) txt += " (waiting for 3D)";
-    else if (last.noRead) txt += ` (not counted: ${last.noRead})`;
-    x.textContent = txt;
-    box.append(x);
   }
   $("prog-blocks").replaceChildren(...run.blocks.map(blockLine));
 }
