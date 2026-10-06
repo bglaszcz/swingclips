@@ -17,6 +17,8 @@ let nightData = null;
 // two models differ by a steady amount at some positions (the key-position rules are tuned to the
 // server's), so each is measured from the usual difference at that position and angle (the median).
 const NIGHT_MIN_MS = 12.5, NIGHT_ROWS = 8;
+// Picks a day on the disagreement card (big ones are always shown on top of it).
+const DAILY_PICKS = 20;
 const POSITION_NAMES = { p1: "Address", takeaway: "Takeaway", p7: "Impact" };
 
 function lvEl(tag, props, ...kids) {
@@ -211,17 +213,20 @@ function renderNight(swings) {
   }
 
   const pickedDocs = [...pickedFilesCache.values()].filter(x => x.hasPicked).map(x => x.doc || x);
-  const todayRows = window.FramePicker && FramePicker.todaysSet
-    ? FramePicker.todaysSet(validRows, pickedDocs)
-    : validRows.slice(0, 20);
-
   const todayStr = new Date().toLocaleDateString("en-CA");
   const pickedToday = [...pickedFilesCache.values()].filter(x => x.hasPicked && x.updated && x.updated.slice(0, 10) === todayStr).length;
-  const bigLeft = todayRows.filter(r => Math.abs(r.ms) >= 50).length;
+  // A day's budget of picks, not a fresh set after each one (the total would keep growing): what's
+  // left of it today, plus every big one (always worth a look).
+  const set = window.FramePicker && FramePicker.todaysSet
+    ? FramePicker.todaysSet(validRows, pickedDocs, { max: validRows.length })
+    : validRows;
+  const big = set.filter(r => Math.abs(r.ms) >= 50);
+  const todayRows = [...big, ...set.filter(r => Math.abs(r.ms) < 50).slice(0, Math.max(0, DAILY_PICKS - pickedToday - big.length))];
+  const bigLeft = big.length;
 
   if (countEl) {
     if (todayRows.length > 0) {
-      const totalToday = Math.max(20, pickedToday + todayRows.length);
+      const totalToday = pickedToday + todayRows.length;
       countEl.textContent = `Today: ${pickedToday} of ${totalToday} · big ones: ${bigLeft} left`;
     } else {
       countEl.textContent = `Done for today: the next night uses these. ${validRows.length} more small ones aren't needed yet.`;
