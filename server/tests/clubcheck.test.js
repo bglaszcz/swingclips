@@ -228,3 +228,80 @@ test("merge: supports hidden points and all-hidden club format", () => {
   assert.equal(res.frames["1.903100"].hosel.hidden, true);
   assert.equal(res.frames["1.903100"].head.hidden, true);
 });
+
+test("balanceSwings: round-robin balances across (day, club) buckets", () => {
+  const ClubCheck = require("../static/clubcheck.js");
+  const swings = [
+    { name: "s1", recorded: "2026-10-04T12:00:00", shot: { club: "I7" } },
+    { name: "s2", recorded: "2026-10-04T12:01:00", shot: { club: "I7" } },
+    { name: "s3", recorded: "2026-10-04T12:02:00", shot: { club: "PW" } },
+    { name: "s4", recorded: "2026-10-02T10:00:00", shot: { club: "DR" } },
+  ];
+
+  const balanced = ClubCheck.balanceSwings(swings);
+  assert.equal(balanced.length, 4);
+  // Round 0 picks one from each bucket: 10-04_I7, 10-04_PW, 10-02_DR
+  const round0 = balanced.slice(0, 3).map(s => s.name);
+  assert.ok(round0.includes("s1"));
+  assert.ok(round0.includes("s3"));
+  assert.ok(round0.includes("s4"));
+  // Round 1 picks the remaining s2
+  assert.equal(balanced[3].name, "s2");
+});
+
+test("ClubCheck exports UI controller methods and balanceSwings", () => {
+  const ClubCheck = require("../static/clubcheck.js");
+  assert.equal(typeof ClubCheck.balanceSwings, "function");
+  assert.equal(typeof ClubCheck.open, "function");
+  assert.equal(typeof ClubCheck.close, "function");
+  assert.equal(typeof ClubCheck.save, "function");
+  assert.equal(typeof ClubCheck.skip, "function");
+  assert.equal(typeof ClubCheck.selectPoint, "function");
+  assert.equal(typeof ClubCheck.toggleBlur, "function");
+  assert.equal(typeof ClubCheck.toggleHidden, "function");
+  assert.equal(typeof ClubCheck.markAllHidden, "function");
+  assert.equal(typeof ClubCheck.cycleNextPoint, "function");
+  assert.equal(typeof ClubCheck.showFrame, "function");
+  assert.equal(typeof ClubCheck.loadQueue, "function");
+});
+
+test("index.html contains Club check markup, Tools menu item, and scripts", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const htmlPath = path.resolve(__dirname, "../static/index.html");
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.ok(html.includes('id="clubcheck-btn"'), "defines Tools menu Club check button");
+  assert.ok(html.includes('<section id="clubcheck" class="clubcheck-view" hidden>'), "defines #clubcheck section");
+  assert.ok(html.includes('id="clubcheck-view"'), "defines #clubcheck-view container");
+  assert.ok(html.includes('id="cc-close"'), "defines Close button");
+  assert.ok(html.includes('id="cc-status"'), "defines status span");
+  assert.ok(html.includes('id="cc-counter"'), "defines counter element");
+  assert.ok(html.includes('id="cc-img"'), "defines still image element");
+  assert.ok(html.includes('id="cc-overlay"'), "defines overlay canvas");
+  assert.ok(html.includes('id="cc-zoom"'), "defines zoom canvas");
+  assert.ok(html.includes('id="cc-zoom-wrap"'), "defines zoom inset wrapper");
+  assert.ok(html.includes('id="cc-save-btn"'), "defines Looks right / save button");
+  assert.ok(html.includes('id="cc-blur-btn"'), "defines Blurred button");
+  assert.ok(html.includes('id="cc-hide-btn"'), "defines Can't see button");
+  assert.ok(html.includes('id="cc-hideall-btn"'), "defines No club button");
+  assert.ok(html.includes('id="cc-skip-btn"'), "defines Skip button");
+  assert.ok(html.includes('id="cc-nightreport-link"'), "defines link to Night report");
+  assert.ok(html.includes('<script src="/static/clubcheck.js"></script>'), "loads clubcheck.js");
+  assert.ok(html.includes("#clubcheck {"), "defines #clubcheck CSS");
+  assert.ok(html.includes(".cc-viewport"), "defines .cc-viewport CSS");
+  assert.ok(html.includes(".cc-zoom-wrap"), "defines .cc-zoom-wrap CSS");
+});
+
+test("trends.js includes clubcheck in showView and leaveTrendViews", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const trendsPath = path.resolve(__dirname, "../static/trends.js");
+  const trends = fs.readFileSync(trendsPath, "utf8");
+
+  assert.ok(trends.includes('document.getElementById("clubcheck")'), "showView references clubcheck box");
+  assert.ok(trends.includes('document.getElementById("clubcheck-btn")'), "showView references clubcheck button");
+  assert.ok(trends.includes('which === "clubcheck"'), "showView checks for clubcheck");
+  assert.ok(trends.includes('!document.getElementById("clubcheck") || document.getElementById("clubcheck").hidden'), "leaveTrendViews checks clubcheck");
+});
+

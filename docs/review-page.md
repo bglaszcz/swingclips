@@ -137,6 +137,8 @@ What the server works out for each swing and what each part of the review page s
   worker progress from `/api/night`, folded earlier candidates, and past night lines. Tapping **Use it**
   (or **Go back to this one**) promotes the model via `POST /api/improve/<id>/use` to re-analyze clips over
   idle hours.
+- Club check: **Tools > Club check** (`static/clubcheck.js`):
+  rapidly checks and confirms or adjusts club points (grip end, hosel, clubhead) on high-value frames to feed the nightly club model retraining. Presents a balanced queue of downswing and address frames (up to 40) from swings without club points, preferring frames where the clubhead was missing or low-confidence. Displays upright stills with markers for grip, hosel, and head connected by a shaft line, accompanied by a 3.5× magnified zoom inset around the selected point for precision adjustment on mobile or desktop. Keyboard shortcuts and touch controls enable one-tap confirmation (Enter / Space), point cycling and dragging (1, 2, 3), streak blurring (B), marking can't see (X), or marking no club in picture (0). Saves directly to `/api/labels/<clip>?pass=1` without altering body landmarks or events.
 - Labels view and frame picker: **Tools > Labels** (`static/labelview.js`, `static/framepick.js`):
   tracks hand labels across clips and key positions. The **Where the two analyses disagree** card lists
   unlabeled positions where the server and night pass disagree by 2+ frames, sorted worst first, alongside

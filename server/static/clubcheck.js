@@ -81,6 +81,32 @@
     return null;
   }
 
+  /** Balances swings across (day, club) buckets, round-robin. */
+  function balanceSwings(list) {
+    const groups = new Map();
+    for (const c of (list || [])) {
+      const day = c.recorded ? c.recorded.slice(0, 10) : "";
+      const club = c.shot?.club || c.club || "";
+      const key = `${day}_${club}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(c);
+    }
+    const out = [];
+    let round = 0;
+    let added = true;
+    while (added) {
+      added = false;
+      for (const bucket of groups.values()) {
+        if (round < bucket.length) {
+          out.push(bucket[round]);
+          added = true;
+        }
+      }
+      round++;
+    }
+    return out;
+  }
+
   /** Selects a queue of frames to check, prioritizing swings without any club points yet,
    * spread over clubs and days. In each swing: opts.perSwing (default 4) frames between P4 and P8,
    * spread >= 0.03s apart, preferring frames where clubhead was missing/low confidence, then address.
@@ -148,32 +174,6 @@
       } else {
         unlabeledSwings.push(c);
       }
-    }
-
-    // Balance swings across (day, club)
-    function balanceSwings(list) {
-      const groups = new Map();
-      for (const c of list) {
-        const day = c.recorded ? c.recorded.slice(0, 10) : "";
-        const club = c.shot?.club || c.club || "";
-        const key = `${day}_${club}`;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(c);
-      }
-      const out = [];
-      let round = 0;
-      let added = true;
-      while (added) {
-        added = false;
-        for (const bucket of groups.values()) {
-          if (round < bucket.length) {
-            out.push(bucket[round]);
-            added = true;
-          }
-        }
-        round++;
-      }
-      return out;
     }
 
     const orderedSwings = [...balanceSwings(unlabeledSwings), ...balanceSwings(labeledSwings)];
@@ -271,15 +271,799 @@
     return updated;
   }
 
+  // ---- UI Controller ----
+  let isOpen = false;
+  let currentQueue = [];
+  let currentIndex = 0;
+  let currentPoints = { grip: null, hosel: null, head: null };
+  let selectedPoint = "head";
+  let hoselManuallyMoved = false;
+  const posesCache = {};
+  let isDragging = false;
+  let dragMoved = false;
+  let downClientPos = { x: 0, y: 0 };
+  let statusTimer = null;
+
+  function getTodayKey() {
+    return "clubcheck_today_" + new Date().toLocaleDateString("en-CA");
+  }
+
+  function getCheckedToday() {
+    try {
+      return parseInt(localStorage.getItem(getTodayKey()) || "0", 10);
+    } catch {
+      return 0;
+    }
+  }
+
+  function incrementCheckedToday() {
+    try {
+      const val = getCheckedToday() + 1;
+      localStorage.setItem(getTodayKey(), String(val));
+      return val;
+    } catch {
+      return 0;
+    }
+  }
+
+  function setStatusMessage(msg, isError = false) {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById("cc-status");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.classList.toggle("failed", !!isError);
+    if (msg && !isError) {
+      clearTimeout(statusTimer);
+      statusTimer = setTimeout(() => { if (el.textContent === msg) el.textContent = ""; }, 4000);
+    }
+  }
+
+  function updateCounter() {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById("cc-counter");
+    if (!el) return;
+    const checked = getCheckedToday();
+    const total = currentQueue.length;
+    const left = Math.max(0, total - currentIndex);
+    el.textContent = `${checked} frame${checked === 1 ? "" : "s"} checked today · ${left} left`;
+  }
+
+  function renderPointsUI() {
+    if (typeof document === "undefined") return;
+    const pts = ["grip", "hosel", "head"];
+    for (const key of pts) {
+      const btn = document.getElementById(`cc-pt-${key}`);
+      const stat = document.getElementById(`cc-stat-${key}`);
+      if (!btn) continue;
+      btn.classList.toggle("on", selectedPoint === key);
+      const pt = currentPoints ? currentPoints[key] : null;
+      if (stat) {
+        if (!pt) {
+          stat.textContent = "(not set)";
+        } else if (pt.hidden) {
+          stat.textContent = "(can't see)";
+        } else {
+          stat.textContent = pt.blur ? "(blur)" : `(${pt.x.toFixed(2)}, ${pt.y.toFixed(2)})`;
+        }
+      }
+    }
+  }
+
+  function drawOverlay() {
+    if (typeof document === "undefined") return;
+    const canvas = document.getElementById("cc-overlay");
+    const img = document.getElementById("cc-img");
+    if (!canvas || !img || !img.naturalWidth || !img.clientWidth) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const w = img.clientWidth;
+    const h = img.clientHeight;
+
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+    }
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!currentPoints) return;
+    const { grip, hosel, head } = currentPoints;
+
+    const hasGrip = grip && !grip.hidden && grip.x != null;
+    const hasHosel = hosel && !hosel.hidden && hosel.x != null;
+    const hasHead = head && !head.hidden && head.x != null;
+
+    const cw = canvas.width;
+    const ch = canvas.height;
+
+    // Draw connecting shaft line
+    if (hasGrip && hasHead) {
+      ctx.save();
+      // Drop shadow for high visibility on light & dark backgrounds
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.lineWidth = 4 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(grip.x * cw, grip.y * ch);
+      if (hasHosel) ctx.lineTo(hosel.x * cw, hosel.y * ch);
+      ctx.lineTo(head.x * cw, head.y * ch);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#facc15";
+      ctx.lineWidth = 2 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(grip.x * cw, grip.y * ch);
+      if (hasHosel) ctx.lineTo(hosel.x * cw, hosel.y * ch);
+      ctx.lineTo(head.x * cw, head.y * ch);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Draw markers
+    const markers = [
+      { key: "grip", label: "Grip", pt: grip, color: "#22d3ee", r: 6 },
+      { key: "hosel", label: "Hosel", pt: hosel, color: "#f59e0b", r: 5.5 },
+      { key: "head", label: "Clubhead", pt: head, color: "#4ade80", r: 7 },
+    ];
+
+    for (const m of markers) {
+      const { key, label, pt, color, r } = m;
+      if (!pt || pt.hidden || pt.x == null || pt.y == null) continue;
+      const px = pt.x * cw;
+      const py = pt.y * ch;
+      const isSelected = selectedPoint === key;
+
+      ctx.save();
+
+      // Outer ring for selected point
+      if (isSelected) {
+        ctx.beginPath();
+        ctx.arc(px, py, 14 * dpr, 0, Math.PI * 2);
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2.5 * dpr;
+        ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+        ctx.shadowBlur = 4 * dpr;
+        ctx.stroke();
+      }
+
+      // Blurred indicator ring
+      if (pt.blur) {
+        ctx.beginPath();
+        ctx.arc(px, py, 10 * dpr, 0, Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.setLineDash([3 * dpr, 3 * dpr]);
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Marker circle
+      ctx.beginPath();
+      ctx.arc(px, py, r * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+      ctx.shadowBlur = 3 * dpr;
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.stroke();
+
+      // Center dot
+      ctx.beginPath();
+      ctx.arc(px, py, 2 * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+
+      // Text tag
+      const tagText = label + (pt.blur ? " (blur)" : "");
+      ctx.font = `bold ${Math.round(11 * dpr)}px system-ui, -apple-system, sans-serif`;
+      ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+      ctx.shadowBlur = 3 * dpr;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(tagText, px + 12 * dpr, py + 4 * dpr);
+
+      ctx.restore();
+    }
+  }
+
+  function drawZoom() {
+    if (typeof document === "undefined") return;
+    const zoomCanvas = document.getElementById("cc-zoom");
+    const img = document.getElementById("cc-img");
+    const zoomWrap = document.getElementById("cc-zoom-wrap");
+    const zoomLabel = document.getElementById("cc-zoom-label");
+    if (!zoomCanvas || !img || !img.naturalWidth) return;
+
+    const zw = zoomCanvas.width;
+    const zh = zoomCanvas.height;
+    const zctx = zoomCanvas.getContext("2d");
+    zctx.clearRect(0, 0, zw, zh);
+
+    const pt = currentPoints ? currentPoints[selectedPoint] : null;
+
+    if (!pt || pt.hidden || pt.x == null || pt.y == null) {
+      zctx.fillStyle = "#111827";
+      zctx.fillRect(0, 0, zw, zh);
+      zctx.fillStyle = "#9ca3af";
+      zctx.font = "12px system-ui, sans-serif";
+      zctx.textAlign = "center";
+      zctx.fillText(pt?.hidden ? "Point marked hidden" : "No point placed", zw / 2, zh / 2);
+      if (zoomLabel) {
+        const names = { grip: "Grip", hosel: "Hosel", head: "Clubhead" };
+        zoomLabel.textContent = names[selectedPoint] || "";
+        zoomLabel.style.color = "#9ca3af";
+      }
+      return;
+    }
+
+    // Flip zoom inset to top-left if selected point is in upper right quadrant
+    if (zoomWrap) {
+      const isUpperRight = pt.x > 0.55 && pt.y < 0.45;
+      zoomWrap.classList.toggle("flip", isUpperRight);
+    }
+
+    const cx = pt.x * img.naturalWidth;
+    const cy = pt.y * img.naturalHeight;
+    const mag = 3.5;
+    const srcW = zw / mag;
+    const srcH = zh / mag;
+    const srcX = cx - srcW / 2;
+    const srcY = cy - srcH / 2;
+
+    zctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, zw, zh);
+
+    // Reticle crosshair
+    zctx.save();
+    zctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+    zctx.lineWidth = 1;
+    const midX = zw / 2;
+    const midY = zh / 2;
+    const gap = 4;
+    const arm = 22;
+
+    zctx.beginPath();
+    zctx.moveTo(midX - arm, midY);
+    zctx.lineTo(midX - gap, midY);
+    zctx.moveTo(midX + gap, midY);
+    zctx.lineTo(midX + arm, midY);
+
+    zctx.moveTo(midX, midY - arm);
+    zctx.lineTo(midX, midY - gap);
+    zctx.moveTo(midX, midY + gap);
+    zctx.lineTo(midX, midY + arm);
+    zctx.stroke();
+
+    const ptColors = { grip: "#22d3ee", hosel: "#f59e0b", head: "#4ade80" };
+    zctx.beginPath();
+    zctx.arc(midX, midY, 1.5, 0, Math.PI * 2);
+    zctx.fillStyle = ptColors[selectedPoint] || "#fff";
+    zctx.fill();
+    zctx.restore();
+
+    if (zoomLabel) {
+      const names = { grip: "Grip", hosel: "Hosel", head: "Clubhead" };
+      zoomLabel.textContent = `${names[selectedPoint]} (3.5×)`;
+      zoomLabel.style.color = ptColors[selectedPoint] || "#fff";
+    }
+  }
+
+  function updatePointPosition(key, { x, y }) {
+    if (!currentPoints) currentPoints = { grip: null, hosel: null, head: null };
+    const prev = currentPoints[key] || {};
+    currentPoints[key] = { x, y, blur: prev.blur || false };
+
+    if (key === "hosel") {
+      hoselManuallyMoved = true;
+    } else if (!hoselManuallyMoved && currentPoints.grip && currentPoints.head && !currentPoints.grip.hidden && !currentPoints.head.hidden) {
+      const gx = currentPoints.grip.x, gy = currentPoints.grip.y;
+      const hx = currentPoints.head.x, hy = currentPoints.head.y;
+      currentPoints.hosel = {
+        x: Number((gx + (hx - gx) * HOSEL_SHARE).toFixed(6)),
+        y: Number((gy + (hy - gy) * HOSEL_SHARE).toFixed(6)),
+        blur: currentPoints.hosel?.blur || false,
+      };
+    }
+  }
+
+  function cycleNextPoint() {
+    const order = { grip: "hosel", hosel: "head", head: "grip" };
+    selectedPoint = order[selectedPoint] || "grip";
+  }
+
+  function selectPoint(key) {
+    if (["grip", "hosel", "head"].includes(key)) {
+      selectedPoint = key;
+      if (key === "hosel") hoselManuallyMoved = true;
+      renderPointsUI();
+      drawOverlay();
+      drawZoom();
+    }
+  }
+
+  function toggleBlur() {
+    if (!currentPoints) return;
+    const pt = currentPoints[selectedPoint];
+    if (pt && !pt.hidden) {
+      pt.blur = !pt.blur;
+      renderPointsUI();
+      drawOverlay();
+      drawZoom();
+    }
+  }
+
+  function toggleHidden() {
+    if (!currentPoints) return;
+    const pt = currentPoints[selectedPoint];
+    if (pt && pt.hidden) {
+      currentPoints[selectedPoint] = null;
+    } else {
+      currentPoints[selectedPoint] = { hidden: true };
+      cycleNextPoint();
+    }
+    renderPointsUI();
+    drawOverlay();
+    drawZoom();
+  }
+
+  function markAllHidden() {
+    if (!currentPoints) currentPoints = {};
+    currentPoints.grip = { hidden: true };
+    currentPoints.hosel = { hidden: true };
+    currentPoints.head = { hidden: true };
+    renderPointsUI();
+    drawOverlay();
+    drawZoom();
+  }
+
+  function showFrame(idx) {
+    currentIndex = idx;
+    updateCounter();
+
+    if (typeof document === "undefined") return;
+    const banner = document.getElementById("cc-banner");
+    const titleEl = document.getElementById("cc-swing-title");
+    const posEl = document.getElementById("cc-frame-pos");
+    const img = document.getElementById("cc-img");
+
+    if (idx >= currentQueue.length) {
+      if (titleEl) titleEl.textContent = "All frames checked!";
+      if (posEl) posEl.textContent = "";
+      if (banner) {
+        banner.innerHTML = `<strong>Done for now!</strong> You've checked ${getCheckedToday()} frames today. The night worker will retrain the club model on these labels during its next improve run.`;
+      }
+      if (img) img.src = "";
+      const canvas = document.getElementById("cc-overlay");
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      drawZoom();
+      return;
+    }
+
+    const item = currentQueue[idx];
+    const c = item.clipObj;
+    const clipName = item.clip;
+
+    const club = c?.shot?.club || c?.club;
+    const clubStr = (typeof clubName === "function" && club) ? clubName(club) : (club || "Club");
+    const whenStr = (typeof fmtWhen === "function" && c?.recorded) ? fmtWhen(c.recorded) : (c?.recorded ? c.recorded.slice(0, 10) : "");
+    const angleStr = c?.angle === "dtl" ? "down the line" : "face-on";
+
+    if (titleEl) titleEl.textContent = `${clubStr} · ${whenStr} (${angleStr})`;
+
+    let phaseName = "Downswing";
+    if (item.pose?.positions?.p1 != null && Math.abs(item.t - item.pose.positions.p1) < 0.05) {
+      phaseName = "Address (P1)";
+    } else if (item.pose?.positions?.p7 != null && Math.abs(item.t - item.pose.positions.p7) < 0.02) {
+      phaseName = "Impact (P7)";
+    }
+    if (posEl) posEl.textContent = `· ${phaseName} · ${item.t.toFixed(3)} s`;
+
+    const g = guess(item.frame, item.pose);
+    currentPoints = { ...g };
+    hoselManuallyMoved = false;
+
+    if (currentPoints.head) {
+      selectedPoint = "head";
+      if (banner) {
+        banner.innerHTML = `Model guess drawn. <b>Hosel</b> starts at 93% along the shaft — adjust if needed.`;
+      }
+    } else {
+      selectedPoint = "grip";
+      if (banner) {
+        banner.innerHTML = `Clubhead wasn't detected by model. <b>Tap</b> picture to place <b>Grip</b> (or press <b>0</b> if no club).`;
+      }
+    }
+
+    renderPointsUI();
+
+    if (img) {
+      img.onload = () => {
+        drawOverlay();
+        drawZoom();
+      };
+      img.src = `/api/still/${encodeURIComponent(clipName)}?t=${item.t.toFixed(6)}`;
+    }
+
+    if (idx + 1 < currentQueue.length) {
+      const nextItem = currentQueue[idx + 1];
+      const pre = new Image();
+      pre.src = `/api/still/${encodeURIComponent(nextItem.clip)}?t=${nextItem.t.toFixed(6)}`;
+    }
+  }
+
+  async function save() {
+    if (!isOpen || currentIndex >= currentQueue.length) return;
+    const item = currentQueue[currentIndex];
+    if (!item) return;
+
+    const g = currentPoints?.grip;
+    const ho = currentPoints?.hosel;
+    const he = currentPoints?.head;
+
+    const gOk = g && (g.hidden || (g.x != null && g.y != null));
+    const hoOk = ho && (ho.hidden || (ho.x != null && ho.y != null));
+    const heOk = he && (he.hidden || (he.x != null && he.y != null));
+
+    if (!gOk || !hoOk || !heOk) {
+      setStatusMessage("Place all 3 points, or press 0 if no club in picture", true);
+      return;
+    }
+
+    setStatusMessage("Saving...", false);
+
+    const clipName = item.clip;
+    const t = item.t;
+
+    try {
+      let doc = null;
+      const res = await fetch(`/api/labels/${encodeURIComponent(clipName)}?pass=1`, { cache: "no-store" });
+      if (res.ok) {
+        doc = await res.json();
+      } else if (res.status === 404) {
+        const c = item.clipObj || (typeof clips !== "undefined" ? clips.find(x => x.name === clipName) : null);
+        const partner = c?.partner && typeof clips !== "undefined" ? clips.find(x => x.name === c.partner) : null;
+        doc = {
+          schema: 1,
+          clip: {
+            name: clipName,
+            angle: c?.angle || "face",
+            strike: c?.strike ?? null,
+          },
+          partner: partner ? {
+            name: partner.name,
+            angle: partner.angle || (c?.angle === "dtl" ? "face" : "dtl"),
+            strike: partner.strike ?? null,
+          } : null,
+          events: {},
+          picked: {},
+          frames: {},
+        };
+      } else {
+        throw new Error(`Failed to load labels: ${res.statusText}`);
+      }
+
+      const formatPt = (p) => {
+        if (!p) return null;
+        if (p.hidden) return { hidden: true };
+        const out = { x: Number(p.x.toFixed(6)), y: Number(p.y.toFixed(6)) };
+        if (p.blur) out.blur = true;
+        return out;
+      };
+
+      const pointsToMerge = {
+        grip: formatPt(currentPoints.grip),
+        hosel: formatPt(currentPoints.hosel),
+        head: formatPt(currentPoints.head),
+      };
+
+      const updatedDoc = merge(doc, t, pointsToMerge);
+
+      const postRes = await fetch(`/api/labels/${encodeURIComponent(clipName)}?pass=1`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedDoc),
+      });
+
+      if (!postRes.ok) {
+        const err = await postRes.json().catch(() => ({}));
+        throw new Error(err.detail || postRes.statusText);
+      }
+
+      incrementCheckedToday();
+      setStatusMessage("Saved", false);
+      currentIndex++;
+      showFrame(currentIndex);
+    } catch (err) {
+      setStatusMessage(`Error saving: ${err.message}`, true);
+    }
+  }
+
+  function skip() {
+    if (!isOpen || currentIndex >= currentQueue.length) return;
+    currentIndex++;
+    showFrame(currentIndex);
+  }
+
+  async function loadQueue() {
+    setStatusMessage("Loading frames to check...", false);
+    try {
+      const [clipsRes, summaryRes] = await Promise.all([
+        (typeof clips !== "undefined" && Array.isArray(clips)) ? Promise.resolve(clips) : fetch("/api/clips").then(r => r.json()),
+        fetch("/api/labels/summary", { cache: "no-store" }).then(r => r.json()).catch(() => ({ clips: [] })),
+      ]);
+
+      const allClips = Array.isArray(clipsRes) ? clipsRes : [];
+      const summaryList = summaryRes?.clips || [];
+      const labelMap = new Map(summaryList.map(c => [c.clip, c]));
+
+      function hasClubPoints(c) {
+        for (const name of [c.name, c.partner].filter(Boolean)) {
+          const doc = labelMap.get(name);
+          if (doc && doc.pointFrames > 0) return true;
+        }
+        return false;
+      }
+
+      const valid = allClips.filter(c => !c.excluded && c.pose === "done");
+      const unlabeled = valid.filter(c => !hasClubPoints(c));
+      const labeled = valid.filter(c => hasClubPoints(c));
+
+      const candidates = [...balanceSwings(unlabeled), ...balanceSwings(labeled)];
+
+      let q = [];
+      let idx = 0;
+      while (q.length < 40 && idx < candidates.length) {
+        const batch = candidates.slice(idx, idx + 10);
+        idx += 10;
+        await Promise.all(batch.map(async c => {
+          if (!posesCache[c.name]) {
+            try {
+              const r = await fetch("/api/pose/" + encodeURIComponent(c.name));
+              if (r.ok) posesCache[c.name] = await r.json();
+            } catch (e) {}
+          }
+        }));
+        q = queue(valid, posesCache, summaryList, { max: 40 });
+      }
+
+      currentQueue = q;
+      setStatusMessage("", false);
+      currentIndex = 0;
+      showFrame(0);
+    } catch (err) {
+      setStatusMessage(`Failed to load queue: ${err.message}`, true);
+    }
+  }
+
+  function open() {
+    isOpen = true;
+    if (typeof showView === "function") showView("clubcheck");
+    if (typeof renderList === "function") renderList();
+    const box = document.getElementById("clubcheck");
+    if (box) {
+      box.scrollTop = 0;
+      if (window.innerWidth < 900) box.scrollIntoView();
+    }
+    loadQueue();
+  }
+
+  function close() {
+    isOpen = false;
+    if (typeof closeTrendView === "function") {
+      closeTrendView();
+    } else {
+      const box = document.getElementById("clubcheck");
+      if (box) box.hidden = true;
+    }
+  }
+
+  function getPointerPoint(ev, canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+    return { x: Number(x.toFixed(6)), y: Number(y.toFixed(6)) };
+  }
+
+  // Bind DOM events when in browser environment
+  if (typeof document !== "undefined") {
+    const toolsBtn = document.getElementById("clubcheck-btn");
+    if (toolsBtn) {
+      toolsBtn.onclick = () => {
+        const box = document.getElementById("clubcheck");
+        if (box && box.hidden) open();
+        else close();
+      };
+    }
+
+    const closeBtn = document.getElementById("cc-close");
+    if (closeBtn) closeBtn.onclick = () => close();
+
+    const saveBtn = document.getElementById("cc-save-btn");
+    if (saveBtn) saveBtn.onclick = () => save();
+
+    const blurBtn = document.getElementById("cc-blur-btn");
+    if (blurBtn) blurBtn.onclick = () => toggleBlur();
+
+    const hideBtn = document.getElementById("cc-hide-btn");
+    if (hideBtn) hideBtn.onclick = () => toggleHidden();
+
+    const hideAllBtn = document.getElementById("cc-hideall-btn");
+    if (hideAllBtn) hideAllBtn.onclick = () => markAllHidden();
+
+    const skipBtn = document.getElementById("cc-skip-btn");
+    if (skipBtn) skipBtn.onclick = () => skip();
+
+    for (const key of ["grip", "hosel", "head"]) {
+      const b = document.getElementById(`cc-pt-${key}`);
+      if (b) b.onclick = () => selectPoint(key);
+    }
+
+    const nrLink = document.getElementById("cc-nightreport-link");
+    if (nrLink) {
+      nrLink.onclick = (e) => {
+        e.preventDefault();
+        if (typeof openNightReport === "function") openNightReport();
+      };
+    }
+
+    const overlayCanvas = document.getElementById("cc-overlay");
+    if (overlayCanvas) {
+      overlayCanvas.addEventListener("pointerdown", (ev) => {
+        ev.preventDefault();
+        try { overlayCanvas.setPointerCapture(ev.pointerId); } catch (e) {}
+        isDragging = true;
+        dragMoved = false;
+        downClientPos = { x: ev.clientX, y: ev.clientY };
+
+        const p = getPointerPoint(ev, overlayCanvas);
+        const rect = overlayCanvas.getBoundingClientRect();
+        const clickPx = { x: p.x * rect.width, y: p.y * rect.height };
+        const hitThreshold = 26;
+
+        let hit = null;
+        for (const key of ["head", "hosel", "grip"]) {
+          const pt = currentPoints ? currentPoints[key] : null;
+          if (pt && !pt.hidden && pt.x != null && pt.y != null) {
+            const d = Math.hypot(pt.x * rect.width - clickPx.x, pt.y * rect.height - clickPx.y);
+            if (d < hitThreshold) {
+              hit = key;
+              break;
+            }
+          }
+        }
+
+        if (hit) {
+          selectedPoint = hit;
+          if (hit === "hosel") hoselManuallyMoved = true;
+        } else {
+          updatePointPosition(selectedPoint, p);
+        }
+
+        renderPointsUI();
+        drawOverlay();
+        drawZoom();
+      });
+
+      overlayCanvas.addEventListener("pointermove", (ev) => {
+        if (!isDragging) return;
+        const dist = Math.hypot(ev.clientX - downClientPos.x, ev.clientY - downClientPos.y);
+        if (dist > 5) dragMoved = true;
+
+        const p = getPointerPoint(ev, overlayCanvas);
+        updatePointPosition(selectedPoint, p);
+        renderPointsUI();
+        drawOverlay();
+        drawZoom();
+      });
+
+      const onPointerEnd = (ev) => {
+        if (!isDragging) return;
+        isDragging = false;
+        try { overlayCanvas.releasePointerCapture(ev.pointerId); } catch (e) {}
+
+        if (!dragMoved) {
+          cycleNextPoint();
+        }
+
+        renderPointsUI();
+        drawOverlay();
+        drawZoom();
+      };
+
+      overlayCanvas.addEventListener("pointerup", onPointerEnd);
+      overlayCanvas.addEventListener("pointercancel", onPointerEnd);
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener("keydown", (e) => {
+      if (!isOpen) return;
+      const box = document.getElementById("clubcheck");
+      if (!box || box.hidden) return;
+      if (e.target.closest && e.target.closest("input, select, textarea")) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const k = e.key.toLowerCase();
+      if (k === "escape") {
+        e.preventDefault();
+        close();
+        return;
+      }
+      if (k === "enter" || k === " ") {
+        e.preventDefault();
+        save();
+        return;
+      }
+      if (k === "1") {
+        e.preventDefault();
+        selectPoint("grip");
+        return;
+      }
+      if (k === "2") {
+        e.preventDefault();
+        selectPoint("hosel");
+        return;
+      }
+      if (k === "3") {
+        e.preventDefault();
+        selectPoint("head");
+        return;
+      }
+      if (k === "b") {
+        e.preventDefault();
+        toggleBlur();
+        return;
+      }
+      if (k === "x") {
+        e.preventDefault();
+        toggleHidden();
+        return;
+      }
+      if (k === "0") {
+        e.preventDefault();
+        markAllHidden();
+        return;
+      }
+      if (k === "s") {
+        e.preventDefault();
+        skip();
+        return;
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      if (isOpen) {
+        drawOverlay();
+        drawZoom();
+      }
+    });
+  }
+
   const ClubCheck = {
     HOSEL_SHARE,
     guess,
     queue,
     merge,
+    balanceSwings,
+    open,
+    close,
+    save,
+    skip,
+    selectPoint,
+    toggleBlur,
+    toggleHidden,
+    markAllHidden,
+    cycleNextPoint,
+    showFrame,
+    loadQueue,
   };
 
   if (typeof window !== "undefined") {
     window.ClubCheck = ClubCheck;
+    window.openClubCheck = open;
   }
   if (typeof module !== "undefined" && module.exports) {
     module.exports = ClubCheck;

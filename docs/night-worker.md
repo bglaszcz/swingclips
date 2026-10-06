@@ -64,6 +64,12 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    comparison table, worker progress from `/api/night`, and past nights. Tapping **Use it** (or
    **Go back to this one**) adopts the model via `POST /api/improve/<id>/use`, queuing all clips to be
    analyzed again over idle hours.
+5. **Club check feeds the club model.** The club model learns only from clicked club points
+   (`grip`, `hosel`, `head`). **Tools > Club check** (`static/clubcheck.js`) gives the owner a
+   fast queue of high-value frames (between P4 and P8 in the downswing and through, prioritized
+   by missing or low-confidence detections and swings with no club points yet) for 1-tap confirmation
+   or adjustment. Confirmed frames save directly to `/api/labels/<clip>?pass=1`, providing the training
+   points that the night worker's improve step consumes to retrain `club-deep.onnx` on the GPU.
 
 ## Getting better every night: the improve step
 
