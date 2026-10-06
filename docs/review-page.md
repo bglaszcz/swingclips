@@ -470,3 +470,10 @@ toward the ball". The phones face away from you, so voice is the channel.
   pelvis vs ball at impact (one large number in inches, + = ahead), colored green/amber/gray from the target zone
   calibration (`static/pelviszone.js`, never red), with the one-line position and target sentence below. Shows
   "Analyzing…" while the clip is processed (~10-15 s) so the previous rep's number is never shown for a new swing.
+- **Start page morning check ("Since last time")** (`static/sincelast.js`, `SwingSinceLast`, `start.html` in step 1 Get ready `#sec-ready`):
+  before each session, summarizes the last ended session (ended >= 30 min ago) and the night worker run after it.
+  Shows headline ("Last session (<date>, <n> swings): <k> things to check" or "... all good"), with warnings open
+  (e.g. face-on or DTL misses >= 3% with phone setup todo, Square pairings < 90% with watcher todo, camera moved with calibrate link,
+  >= 5 false triggers) and confirmations folded behind "Show all" (both angles, Square paired, cameras in place).
+  Displays overnight worker sentence (`improve.nights[0]`), candidate model waiting notifications (`Tools > Night report`),
+  and club model retraining progress (`Tools > Club check`). Loads once on page open and manual refresh, never while recording.
