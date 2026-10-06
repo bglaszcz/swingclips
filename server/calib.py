@@ -298,6 +298,13 @@ def verdict(c: dict) -> str:
             if agree >= GOOD_AGREE_PCT:
                 why.append(f"the two halves of the recording disagree by {agree:.1f}% of the focal length (want under "
                            f"{GOOD_AGREE_PCT:g}%): more tilted views, and another clip or two (they add to these)")
+        elif c.get("model") == "simple":
+            # Noisy 240 fps video: the simple lens, held to NOISY_RMS and the halves agreeing.
+            why.append(f"RMS {c['rms']:.2f} px (want under {NOISY_RMS:g} with this phone's video): hold the board steadier, "
+                       f"wave it slower, more light")
+            if agree is not None and agree >= GOOD_AGREE_PCT:
+                why.append(f"the two halves of the recording disagree by {agree:.1f}% of the focal length (want under "
+                           f"{GOOD_AGREE_PCT:g}%)")
         else:
             why.append(f"RMS {c['rms']:.2f} px (want under {GOOD_RMS}): hold the board flatter and steadier, more light")
     if c["coverage"] < GOOD_COVERAGE:
