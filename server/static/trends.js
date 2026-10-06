@@ -212,15 +212,19 @@ function showView(which) {
   if (nrBox) nrBox.hidden = which !== "nightreport";
   const nrBtn = document.getElementById("nightreport-btn");
   if (nrBtn) nrBtn.classList.toggle("on", which === "nightreport");
+  const ccBox = document.getElementById("clubcheck");
+  if (ccBox) ccBox.hidden = which !== "clubcheck";
+  const ccBtn = document.getElementById("clubcheck-btn");
+  if (ccBtn) ccBtn.classList.toggle("on", which === "clubcheck");
   viewer.hidden = which !== "swing" || !current;
   tipEl.hidden = pTipEl.hidden = true;
   if (which !== "swing") video.pause();
   if (which !== "trends") trendsKey = null;
   progressOpen = which === "progress";
   document.getElementById("progress-btn").classList.toggle("on", progressOpen);
-  // The tabs: a session's trends belong to Swings; Labels, Night report and the shutter test are under Tools.
+  // The tabs: a session's trends belong to Swings; Labels, Club check, Night report and the shutter test are under Tools.
   document.getElementById("swings-btn").classList.toggle("on", which === "swing" || which === "trends");
-  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview" || which === "nightreport");
+  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck");
   document.body.dataset.view = which;
 }
 
@@ -228,7 +232,8 @@ function showView(which) {
 function leaveTrendViews() {
   if (!trendsKey && !progressOpen && document.getElementById("setup").hidden && document.getElementById("shutter").hidden
       && document.getElementById("practice").hidden && document.getElementById("labelview").hidden
-      && (!document.getElementById("nightreport") || document.getElementById("nightreport").hidden)) return;
+      && (!document.getElementById("nightreport") || document.getElementById("nightreport").hidden)
+      && (!document.getElementById("clubcheck") || document.getElementById("clubcheck").hidden)) return;
   showView("swing");
   renderList();
 }
