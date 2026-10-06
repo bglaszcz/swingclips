@@ -68,7 +68,9 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    (`grip`, `hosel`, `head`). **Tools > Club check** (`static/clubcheck.js`) gives the owner a
    fast queue of high-value frames (between P4 and P8 in the downswing and through, prioritized
    by missing or low-confidence detections and swings with no club points yet) for 1-tap confirmation
-   or adjustment. Confirmed frames save directly to `/api/labels/<clip>?pass=1`, providing the training
+   or adjustment. It also queues backswing frames between takeaway and P3 (including a frame near P2)
+   so nightly retraining receives enough backswing data to prevent P2 horizontal-shaft detection regressions.
+   Confirmed frames save directly to `/api/labels/<clip>?pass=1`, providing the training
    points that the night worker's improve step consumes to retrain `club-deep.onnx` on the GPU.
 
 ## Getting better every night: the improve step

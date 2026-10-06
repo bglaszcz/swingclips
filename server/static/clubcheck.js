@@ -201,6 +201,27 @@
     return getKeyPositions(c, pose, otherPose);
   }
 
+  /** Returns phase name label for timestamp t given key positions. */
+  function phaseNameOf(t, pTimes) {
+    if (!pTimes) return "Downswing";
+    if (pTimes.p1 != null && Math.abs(t - pTimes.p1) < 0.05) {
+      return "Address (P1)";
+    }
+    if (pTimes.p7 != null && Math.abs(t - pTimes.p7) < 0.02) {
+      return "Impact (P7)";
+    }
+    if (pTimes.p2 != null && Math.abs(t - pTimes.p2) <= 0.0305) {
+      return "Backswing (near P2)";
+    }
+    if (pTimes.p4 != null && t < pTimes.p4) {
+      return "Backswing";
+    }
+    if (pTimes.takeaway != null && t < (pTimes.p3 ?? pTimes.takeaway + 0.5)) {
+      return "Backswing";
+    }
+    return "Downswing";
+  }
+
   /** Balances swings across (day, club) buckets, round-robin. */
   function balanceSwings(list) {
     const groups = new Map();
@@ -355,7 +376,7 @@
 
       if (targetBack >= 1 && pTimes.p2 != null) {
         const p2Candidates = backCandidates
-          .filter(f => Math.abs(f.t - pTimes.p2) <= 0.03)
+          .filter(f => Math.abs(f.t - pTimes.p2) <= 0.0305)
           .sort((a, b) => conf(a) - conf(b));
         if (p2Candidates.length > 0) {
           pickedForSwing.push(p2Candidates[0]);
@@ -837,12 +858,8 @@
 
     if (titleEl) titleEl.textContent = `${clubStr} · ${whenStr} (${angleStr})`;
 
-    let phaseName = "Downswing";
-    if (item.pose?.positions?.p1 != null && Math.abs(item.t - item.pose.positions.p1) < 0.05) {
-      phaseName = "Address (P1)";
-    } else if (item.pose?.positions?.p7 != null && Math.abs(item.t - item.pose.positions.p7) < 0.02) {
-      phaseName = "Impact (P7)";
-    }
+    const pTimes = item.pTimes || (item.pose ? getKeyPositions(item.clipObj, item.pose) : null);
+    const phaseName = phaseNameOf(item.t, pTimes);
     if (posEl) posEl.textContent = `· ${phaseName} · ${item.t.toFixed(3)} s`;
 
     const g = guess(item.frame, item.pose, uprightAspect(item.clip, item.pose && item.pose.rotation));
@@ -1264,6 +1281,7 @@
     uprightAspect,
     getKeyPositions,
     getP1P4P8,
+    phaseName: phaseNameOf,
     queue,
     merge,
     balanceSwings,

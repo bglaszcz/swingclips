@@ -12,6 +12,7 @@ const {
   merge,
   getKeyPositions,
   getP1P4P8,
+  phaseName,
 } = require("../static/clubcheck.js");
 
 test("HOSEL_SHARE is 0.93", () => {
@@ -519,4 +520,30 @@ test("queue: respects max cap with perSwing 5", () => {
   const q = queue(clips, poses, {}, { max: 8 });
   assert.equal(q.length, 8);
 });
+
+test("phaseName: reports Backswing (near P2), Backswing, Downswing, Address (P1), Impact (P7)", () => {
+  const pTimes = {
+    p1: 1.00,
+    takeaway: 1.30,
+    p2: 1.50,
+    p3: 1.70,
+    p4: 1.90,
+    p7: 2.25,
+    p8: 2.35,
+  };
+
+  assert.equal(phaseName(1.00, pTimes), "Address (P1)");
+  assert.equal(phaseName(1.04, pTimes), "Address (P1)"); // within 0.05
+  assert.equal(phaseName(1.35, pTimes), "Backswing"); // in takeaway..p4, not near P2
+  assert.equal(phaseName(1.50, pTimes), "Backswing (near P2)"); // at P2
+  assert.equal(phaseName(1.48, pTimes), "Backswing (near P2)"); // within +-0.03 of P2
+  assert.equal(phaseName(1.53, pTimes), "Backswing (near P2)"); // within +-0.03 of P2
+  assert.equal(phaseName(1.70, pTimes), "Backswing"); // in takeaway..p4, outside +-0.03 of P2
+  assert.equal(phaseName(1.95, pTimes), "Downswing"); // >= p4, not near P7
+  assert.equal(phaseName(2.25, pTimes), "Impact (P7)"); // at P7
+  assert.equal(phaseName(2.26, pTimes), "Impact (P7)"); // within 0.02 of P7
+  assert.equal(phaseName(2.30, pTimes), "Downswing"); // after P7, before P8
+  assert.equal(phaseName(1.50, null), "Downswing"); // default when no pTimes
+});
+
 
