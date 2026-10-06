@@ -228,8 +228,9 @@ def summary(labels_dir: Path, pose_path) -> list[dict]:
         row["issues"] = list(row["issues"])
         row["fixes"] = list(row.get("fixes", []))
         # A file made only from picks between the two analyses' frames (the Labels view's Compare: a
-        # "picked" map, no points) is a key moment or two, not a labeling session: no nag for the other angle.
-        picks_only = bool(doc.get("picked")) and not doc.get("frames")
+        # "picked" map) or quick single-moment labels (P4 check: a "quick" map), with no points, is a key
+        # moment or two, not a labeling session: no nag for the other angle.
+        picks_only = bool(doc.get("picked") or doc.get("quick")) and not doc.get("frames")
         if partner and (label_pass, partner) not in labeled and not picks_only:
             row["issues"].append("The other camera angle of this swing isn't labeled yet.")
             row["fixes"].append({"kind": "other", "t": None, "points": [], "clip": partner,

@@ -129,6 +129,11 @@ class CheckTest(unittest.TestCase):
         rows = labelcheck.summary(tmp, lambda name: pose_file if name == NAME else None)
         self.assertFalse(any("other camera angle" in i for i in rows[0]["issues"]))
         self.assertFalse(any(f["kind"] == "other" for f in rows[0]["fixes"]))
+        doc.pop("picked")
+        doc["quick"] = {"p4": "p4check"}
+        (tmp / (NAME + ".json")).write_text(json.dumps(doc))
+        rows = labelcheck.summary(tmp, lambda name: pose_file if name == NAME else None)
+        self.assertFalse(any("other camera angle" in i for i in rows[0]["issues"]))
 
 
 if __name__ == "__main__":
