@@ -4013,8 +4013,12 @@ async function refresh() {
     const pair = window.SwingCompare && SwingCompare.parseHash(location.hash);
     let wanted = pair ? pair[0] : location.hash.slice(1);
     try { wanted = pair ? wanted : decodeURIComponent(wanted); } catch {}
+    // A link to a Tools view (#labels, #clubcheck, #nightreport: the Start page's "Since last time")
+    // opens it over the newest swing (read before open() puts the swing's name in the address).
+    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", nightreport: "nightreport-btn" }[location.hash.slice(1)];
     open(clips.some(c => c.name === wanted) ? wanted : (filteredClips()[0] || shownClips()[0]).name);
     if (pair && clips.some(c => c.name === pair[0])) Compare.show(pair[0], pair[1]);
+    if (view) setTimeout(() => document.getElementById(view)?.click(), 0);
   } else if (now && isSecondary(now)) {
     // Its face-on clip just arrived: open the swing through that.
     open(now.partner);
