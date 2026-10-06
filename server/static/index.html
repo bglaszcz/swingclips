@@ -300,25 +300,50 @@
   .nr-night-row:last-child { border-bottom: 0; }
   .nr-bottom-note { font-size: 12px; color: var(--muted); line-height: 1.45; }
   /* Club check (clubcheck.js): quick club points that feed the nightly club model */
-  #clubcheck { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 760px; margin: 0 auto; width: 100%; }
+  #clubcheck { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 1100px; margin: 0 auto; width: 100%; }
   #clubcheck .note { color: var(--muted); font-size: 12px; }
   .cc-card { display: flex; flex-direction: column; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
   .cc-meta-row { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
   .cc-meta-title { font-weight: 700; font-size: 15px; }
   .cc-meta-sub { color: var(--muted); font-size: 13px; margin-left: 6px; }
-  .cc-viewport { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: #000; user-select: none; touch-action: none; cursor: crosshair; }
-  .cc-img { display: block; width: 100%; height: auto; pointer-events: none; }
+  /* The picture fits the window (a portrait 1080x1920 frame at full width ran far below it): the zoom
+     and the buttons stay in sight while placing points. Wide screens: buttons beside the picture. */
+  .cc-viewport { position: relative; width: fit-content; max-width: 100%; margin: 0 auto; border-radius: 8px; overflow: hidden; background: #000; user-select: none; touch-action: none; cursor: crosshair; }
+  .cc-img { display: block; width: auto; max-width: 100%; height: auto; max-height: calc(100dvh - 330px); min-height: 240px; pointer-events: none; }
+  @media (min-width: 900px) {
+    .cc-card { display: grid; grid-template-columns: auto minmax(280px, 1fr); grid-template-areas: "meta meta" "view banner" "view controls"; align-content: start; align-items: start; }
+    .cc-meta-row { grid-area: meta; }
+    #cc-viewport { grid-area: view; }
+    #cc-banner { grid-area: banner; }
+    .cc-card .cc-controls { grid-area: controls; }
+    .cc-img { max-height: calc(100dvh - 200px); border-radius: 8px; }
+    /* The zoom beside the picture, above the buttons, not over the golfer. */
+    .cc-viewport { overflow: visible; }
+    .cc-zoom-wrap, .cc-zoom-wrap.flip { left: calc(100% + 16px); right: auto; top: 0; }
+    #cc-banner { margin-top: 196px; }
+  }
+  @media (max-width: 899px) {
+    .cc-zoom-wrap, .cc-zoom-canvas { width: 140px; height: 140px; }
+    /* Phone: picture, point buttons and Looks right on one screen. */
+    #clubcheck { padding: 10px; gap: 8px; }
+    .cc-card { padding: 10px; gap: 8px; }
+    .cc-img { max-height: calc(100dvh - 410px - var(--tabbar-h)); }
+    .cc-banner { font-size: 12px; padding: 6px 10px; }
+    .cc-pt-btn { padding: 5px 9px; gap: 4px; }
+    .cc-pt-stat, .cc-pt-btn kbd, .cc-actions-row kbd { display: none; }
+    .cc-points-row, .cc-actions-row { gap: 6px; }
+  }
   .cc-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-  .cc-zoom-wrap { position: absolute; top: 10px; right: 10px; width: 140px; height: 140px; border: 2px solid var(--accent); border-radius: 8px; overflow: hidden; background: #111; box-shadow: 0 4px 14px rgba(0,0,0,0.7); pointer-events: none; z-index: 5; transition: left 0.15s ease, right 0.15s ease; }
+  .cc-zoom-wrap { position: absolute; top: 10px; right: 10px; width: 180px; height: 180px; border: 2px solid var(--accent); border-radius: 8px; overflow: hidden; background: #111; box-shadow: 0 4px 14px rgba(0,0,0,0.7); z-index: 5; cursor: crosshair; touch-action: none; transition: left 0.15s ease, right 0.15s ease; }
   .cc-zoom-wrap.flip { left: 10px; right: auto; }
-  .cc-zoom-canvas { width: 140px; height: 140px; display: block; }
+  .cc-zoom-canvas { width: 180px; height: 180px; display: block; }
   .cc-zoom-label { position: absolute; bottom: 4px; left: 6px; font-size: 11px; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
   .cc-banner { padding: 8px 12px; border-radius: 8px; background: var(--panel-2); font-size: 13px; color: var(--text); border: 1px solid var(--line); line-height: 1.4; }
   .cc-banner b { font-weight: 650; }
   .cc-controls { display: flex; flex-direction: column; gap: 10px; }
   .cc-points-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .cc-pt-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); cursor: pointer; }
-  .cc-pt-btn.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: var(--panel); }
+  .cc-pt-btn.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: var(--panel); color: var(--text); }
   .cc-pt-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
   .cc-pt-stat { font-size: 11px; color: var(--muted); font-weight: normal; margin-left: 2px; }
   .cc-actions-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -1213,7 +1238,7 @@
           <img id="cc-img" class="cc-img" alt="Frame still" />
           <canvas id="cc-overlay" class="cc-overlay"></canvas>
           <div id="cc-zoom-wrap" class="cc-zoom-wrap">
-            <canvas id="cc-zoom" class="cc-zoom-canvas" width="140" height="140"></canvas>
+            <canvas id="cc-zoom" class="cc-zoom-canvas" width="180" height="180" title="Tap here to put the selected point exactly there"></canvas>
             <span id="cc-zoom-label" class="cc-zoom-label">Clubhead (3.5×)</span>
           </div>
         </div>

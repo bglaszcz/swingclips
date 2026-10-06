@@ -7,6 +7,8 @@
 
 (function () {
   const HOSEL_SHARE = 0.93;
+  // The zoom's magnification of the clip's own pixels.
+  const ZOOM_MAG = 3.5;
 
   /** Generates model's guess {grip, hosel, head} in upright picture shares (0..1).
    * head = frame.clubhead when confidence >= 0.25 (else null).
@@ -305,6 +307,7 @@
   let hoselManuallyMoved = false;
   const posesCache = {};
   let isDragging = false;
+  let hitSelected = false;
   let dragMoved = false;
   let downClientPos = { x: 0, y: 0 };
   let statusTimer = null;
@@ -428,9 +431,9 @@
 
     // Draw markers
     const markers = [
-      { key: "grip", label: "Grip", pt: grip, color: "#22d3ee", r: 6 },
-      { key: "hosel", label: "Hosel", pt: hosel, color: "#f59e0b", r: 5.5 },
-      { key: "head", label: "Clubhead", pt: head, color: "#4ade80", r: 7 },
+      { key: "grip", label: "Grip", pt: grip, color: "#22d3ee", r: 4 },
+      { key: "hosel", label: "Hosel", pt: hosel, color: "#f59e0b", r: 3.5 },
+      { key: "head", label: "Clubhead", pt: head, color: "#4ade80", r: 4 },
     ];
 
     for (const m of markers) {
@@ -445,7 +448,7 @@
       // Outer ring for selected point
       if (isSelected) {
         ctx.beginPath();
-        ctx.arc(px, py, 14 * dpr, 0, Math.PI * 2);
+        ctx.arc(px, py, 8 * dpr, 0, Math.PI * 2);
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 2.5 * dpr;
         ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
@@ -456,7 +459,7 @@
       // Blurred indicator ring
       if (pt.blur) {
         ctx.beginPath();
-        ctx.arc(px, py, 10 * dpr, 0, Math.PI * 2);
+        ctx.arc(px, py, 6.5 * dpr, 0, Math.PI * 2);
         ctx.strokeStyle = color;
         ctx.setLineDash([3 * dpr, 3 * dpr]);
         ctx.lineWidth = 1.5 * dpr;
@@ -477,17 +480,18 @@
 
       // Center dot
       ctx.beginPath();
-      ctx.arc(px, py, 2 * dpr, 0, Math.PI * 2);
+      ctx.arc(px, py, 1.2 * dpr, 0, Math.PI * 2);
       ctx.fillStyle = "#ffffff";
       ctx.fill();
 
-      // Text tag
+      // Text tag: the selected point's only (three tags crowd the hosel and clubhead, a few px apart)
+      if (!isSelected) { ctx.restore(); continue; }
       const tagText = label + (pt.blur ? " (blur)" : "");
       ctx.font = `bold ${Math.round(11 * dpr)}px system-ui, -apple-system, sans-serif`;
       ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
       ctx.shadowBlur = 3 * dpr;
       ctx.fillStyle = "#ffffff";
-      ctx.fillText(tagText, px + 12 * dpr, py + 4 * dpr);
+      ctx.fillText(tagText, px + 10 * dpr, py + 4 * dpr);
 
       ctx.restore();
     }
@@ -531,7 +535,7 @@
 
     const cx = pt.x * img.naturalWidth;
     const cy = pt.y * img.naturalHeight;
-    const mag = 3.5;
+    const mag = ZOOM_MAG;
     const srcW = zw / mag;
     const srcH = zh / mag;
     const srcX = cx - srcW / 2;
@@ -939,6 +943,30 @@
       };
     }
 
+    // Tapping in the zoom puts the selected point exactly there (the zoom shows ZOOM_MAG x the clip's own
+    // pixels round it): for the hosel and clubhead, a few px apart in the picture.
+    const zoomCanvasEl = document.getElementById("cc-zoom");
+    if (zoomCanvasEl) {
+      zoomCanvasEl.addEventListener("pointerdown", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const img = document.getElementById("cc-img");
+        const pt = currentPoints ? currentPoints[selectedPoint] : null;
+        if (!img || !img.naturalWidth || !pt || pt.hidden || pt.x == null) return;
+        const rect = zoomCanvasEl.getBoundingClientRect();
+        const dx = (ev.clientX - rect.left - rect.width / 2) / rect.width * (zoomCanvasEl.width / ZOOM_MAG);
+        const dy = (ev.clientY - rect.top - rect.height / 2) / rect.height * (zoomCanvasEl.height / ZOOM_MAG);
+        updatePointPosition(selectedPoint, {
+          x: Math.min(1, Math.max(0, pt.x + dx / img.naturalWidth)),
+          y: Math.min(1, Math.max(0, pt.y + dy / img.naturalHeight)),
+        });
+        if (selectedPoint === "hosel") hoselManuallyMoved = true;
+        renderPointsUI();
+        drawOverlay();
+        drawZoom();
+      });
+    }
+
     const overlayCanvas = document.getElementById("cc-overlay");
     if (overlayCanvas) {
       overlayCanvas.addEventListener("pointerdown", (ev) => {
@@ -951,7 +979,9 @@
         const p = getPointerPoint(ev, overlayCanvas);
         const rect = overlayCanvas.getBoundingClientRect();
         const clickPx = { x: p.x * rect.width, y: p.y * rect.height };
-        const hitThreshold = 26;
+        // Only a tap right on a point grabs it (the hosel and clubhead end up a few px apart); anywhere
+        // else puts the selected point there.
+        const hitThreshold = 10;
 
         let hit = null;
         for (const key of ["head", "hosel", "grip"]) {
@@ -965,6 +995,7 @@
           }
         }
 
+        hitSelected = !!hit && hit !== selectedPoint;
         if (hit) {
           selectedPoint = hit;
           if (hit === "hosel") hoselManuallyMoved = true;
@@ -994,9 +1025,11 @@
         isDragging = false;
         try { overlayCanvas.releasePointerCapture(ev.pointerId); } catch (e) {}
 
-        if (!dragMoved) {
+        // A tap that placed a point goes on to the next one; a tap that only picked a point stays on it.
+        if (!dragMoved && !hitSelected) {
           cycleNextPoint();
         }
+        hitSelected = false;
 
         renderPointsUI();
         drawOverlay();
