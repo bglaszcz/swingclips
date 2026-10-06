@@ -20,7 +20,7 @@ tune_positions.py --all-labels` scores them too.
 
 | | Rule |
 |---|---|
-| **Takeaway** | face-on after the deep pass: 17 ms after the camera sees the clubhead start to leave the ball (`clubOnset` in the pose file, `pose.club_onset`), moved at most 10 ms toward the shaft rule. Otherwise (during a session, no ball found) the shaft rule: where the shaft starts to turn away from its angle at address, the first frame from which the tracked angle stays off its address value (a 2° step) until P2, extended back to the address angle along the line through that step and the next one |
+| **Takeaway** | face-on after the deep pass: 17 ms after the camera sees the clubhead start to leave the ball (`clubOnset` in the pose file, `pose.club_onset`), moved at most 10 ms toward the shaft rule. A down-the-line clip with no face-on partner (the face-on phone missed the swing) gets its own onset, taken as it is (`onsetLeadDtl`, `onsetPullDtl` 0). Otherwise (during a session, no ball found) the shaft rule: where the shaft starts to turn away from its angle at address, the first frame from which the tracked angle stays off its address value (a 2° step) until P2, extended back to the address angle along the line through that step and the next one |
 | **P3** lead arm parallel, back | the lead **forearm** (elbow to wrist) rising through level, face-on |
 | **P4** top | half way between where the **hands start down** (the lead wrist's speed climbing into the downswing, extended back along a straight line to zero speed) and where the lead wrist is **slowest** (positions smoothed over ±50 ms) in the 0.2 s before that |
 | **P5** lead arm parallel, down | the lead forearm falling through level |
@@ -358,3 +358,15 @@ After labeling more swings and refreshing the fixtures (`fixtures_export.py`):
 If the tuning it picks on all swings differs from `SwingPhases.TUNING` and does better leave one
 swing out, put it there. After relabeling a swing listed in `labels-to-recheck.json`, take it out
 of that file.
+
+### Lone down-the-line swings: the takeaway from their own clubhead onset (2026-10-05)
+
+A swing only the down-the-line phone recorded had no clubhead onset (it was worked out for face-on
+clips only), so its takeaway came from the shaft rule. On 48 labeled down-the-line clips taken on
+their own, the shaft rule was off by a median 191 ms (90th percentile 358, +205 late, never within a
+frame); with the clip's own onset as phases.js used it for face-on (+17 ms, pulled toward the rule)
+median 25 / p90 112; the bare onset median 21 / p90 83, bias -4 ms (onset not found on 4 of 49).
+Four Oct 4 swings (face-on missed) had takeaways 300-390 ms late. Now the server works out the onset
+for down-the-line clips without a face-on partner too, and phases.js takes it as it is there
+(`options.angle` "dtl": `onsetLeadDtl` 0, `onsetPullDtl` 0). Paired swings are unchanged (their
+down-the-line takeaway comes across from the face-on clip).

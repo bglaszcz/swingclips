@@ -43,12 +43,15 @@
   //    takeaway is onsetLead after it, moved toward the shaft rule's by at most onsetPull. The onset
   //    catches the first creep, ~15 ms before the frame the labels mark as visibly moving, and wobbles
   //    ~15 ms; the shaft rule alone was off by 100 ms on one swing in ten (tune_positions.py).
+  //  - onsetLeadDtl, onsetPullDtl: the same for a down-the-line clip on its own (options.angle "dtl":
+  //    a swing the face-on phone missed). There the shaft rule is far off (median 191 ms on 48 labeled
+  //    clips) and the bare onset closest (median 21 ms, bias -4 ms): no lead, no pull.
   //  - topSlowSeconds, topRuleWeight: the top is then moved to where the lead wrist is slowest
   //    (positions smoothed over +- topSlowSeconds) in the TOP_SLOW_WINDOW round it, keeping
   //    topRuleWeight of the way back to the speed rule's (1 = the speed rule alone). The owner's
   //    top labels sit on the slowest moment; the speed rule alone runs ~15 ms late (see handsSlowest).
   const TUNING = { takeawayDegrees: 1, topSpeedShares: [0.1, 0.4], topSmoothSeconds: 0.03, onsetLead: 0.017, onsetPull: 0.01,
-                   topSlowSeconds: 0.05, topRuleWeight: 0.5 };
+                   topSlowSeconds: 0.05, topRuleWeight: 0.5, onsetLeadDtl: 0, onsetPullDtl: 0 };
   // Where handsSlowest looks, s round the speed rule's top: it runs late, so mostly before it.
   const TOP_SLOW_WINDOW = [0.2, 0.03];
   const TORSO_MIN_VISIBILITY = 0.25;
@@ -370,7 +373,8 @@
    * @param options {drill}: "pump" for a pump-drill swing (drills.py): P1-P3 come from the first
    *   backswing, P4 is the last top before the downswing, and the pump bottoms are returned too;
    *   {clubOnset}: clip seconds where the clubhead starts to leave the ball (the pose file's, face-on
-   *   after the deep pass): the takeaway then comes from it (TUNING.onsetLead, onsetPull)
+   *   after the deep pass): the takeaway then comes from it (TUNING.onsetLead, onsetPull);
+   *   {angle}: "dtl" for a down-the-line clip on its own (TUNING.onsetLeadDtl, onsetPullDtl)
    * @returns [{key, tag, label, t, index, estimated}] - index is into `frames` - with a `takeaway`
    *   property: {t, fromShaft, fromClubhead}, when the club starts back, and for a pump drill `drill` ("pump") and
    *   `pumps` ([{t, index}], where the hands turned back up at the bottom of each pump). When no swing
@@ -547,8 +551,10 @@
     const onset = options.clubOnset;
     let fromClubhead = false;
     if (onset != null) {
-      const t = onset + TUNING.onsetLead;
-      const at = nearestFrame(frames, t + Math.max(-TUNING.onsetPull, Math.min(TUNING.onsetPull, takeaway - t)));
+      const dtl = options.angle === "dtl";
+      const lead = dtl ? TUNING.onsetLeadDtl : TUNING.onsetLead, pull = dtl ? TUNING.onsetPullDtl : TUNING.onsetPull;
+      const t = onset + lead;
+      const at = nearestFrame(frames, t + Math.max(-pull, Math.min(pull, takeaway - t)));
       if (at >= 0) { takeaway = frames[at].t; fromClubhead = true; }
     }
     const p1 = found.find(p => p.key === "p1");

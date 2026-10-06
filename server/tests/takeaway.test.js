@@ -43,3 +43,14 @@ test("the takeaway says where it came from", () => {
   const q = Phases.detect(doc.frames, 1080 / 1920, "left", null, doc.impact, {});
   assert.equal(q.takeaway.fromClubhead, false);
 });
+
+test("a down-the-line clip on its own: the bare onset (onsetLeadDtl, onsetPullDtl), the shaft rule far off there", () => {
+  const { onsetLeadDtl, onsetPullDtl } = Phases.TUNING;
+  assert.equal(onsetLeadDtl, 0);
+  assert.equal(onsetPullDtl, 0);
+  const onset = doc.clubOnset;
+  const dtl = Phases.detect(doc.frames, 1080 / 1920, "left", null, doc.impact, { clubOnset: onset, angle: "dtl" });
+  assert.ok(Math.abs(dtl.takeaway.t - onset) <= 0.0025);
+  const face = Phases.detect(doc.frames, 1080 / 1920, "left", null, doc.impact, { clubOnset: onset, angle: "face" });
+  assert.ok(face.takeaway.t > dtl.takeaway.t);  // face-on keeps its lead
+});

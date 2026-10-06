@@ -412,7 +412,8 @@ def find_ball_again(clip: Path, pool: ProcessPoolExecutor) -> ProcessPoolExecuto
 
 def add_club_onset(clip: dict, pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> ProcessPoolExecutor:
     """Where the clubhead starts to leave the ball (pose.club_onset), saved in a face-on clip's pose
-    file, looked for around the shaft rule's takeaway (phases.js without it). None when there's no
+    file (or a down-the-line clip's with no face-on partner: its takeaway can't come across from one),
+    looked for around the shaft rule's takeaway (phases.js without it). None when there's no
     ball or swing, so it isn't looked for again. Returns the pool (a fresh one if a worker died)."""
     global pose_busy
     name = clip["name"]
@@ -580,8 +581,10 @@ def pose_worker(stop: threading.Event):
                     if deepen:
                         pool = analyze_clip(max(deepen, key=recorded_at), pool, again=True, deep=deep)
                         continue
-                # Then the clubhead onset (the takeaway) of face-on clips without one, newest first.
-                onsets = [c for c in listed_clips(with_shots=False) if c["angle"] == "face" and c["pose"] == "done"
+                # Then the clubhead onset (the takeaway) of face-on clips without one, and of down-the-line
+                # clips with no face-on partner, newest first.
+                onsets = [c for c in listed_clips(with_shots=False)
+                          if (c["angle"] == "face" or not c["partner"]) and c["pose"] == "done"
                           and c["name"] not in _onset_failed and not (_pose_stamp(c["name"]) or (0, 0, 0, True))[3]]
                 if onsets:
                     if summarizer is None:
