@@ -208,6 +208,29 @@ def say_limit(c: dict, v) -> str:
     return f"{say_number(key, lo)} {up}"
 
 
+# What a missed check was, in a few words for the phone (the number is on the screen): (too high, too low).
+CUES = {
+    "attack": ("attack too shallow", "attack too steep"),
+    "strikeV": ("strike high on the face", "strike low on the face"),
+    "faceToPath": ("face open to path", "face closed to path"),
+    "loft": ("too much loft", "too little loft"),
+    "clubSpeed": ("too fast", "too slow"),
+    "carry": ("long", "short"),
+    "pelvisPeakMs": ("pelvis peaks late", "pelvis peaks early"),
+    "pelvisOpen": ("pelvis too open", "pelvis not open enough"),
+    "pelvisStartMs": ("pelvis starts late", "pelvis starts early"),
+}
+
+
+def cue(c: dict, v) -> str:
+    """A failed check (value v) as a short cue: which way it missed, no numbers."""
+    key, hi = c["key"], c.get("max")
+    if key == "armAfterPelvis":
+        return "arms before pelvis"
+    up, down = CUES.get(key, (f"{NUMBERS[key][0].lower()} too high", f"{NUMBERS[key][0].lower()} too low"))
+    return up if hi is not None and (v is None or v > hi) else down
+
+
 def medians_of(block: dict, js: list[dict]) -> dict:
     """The median of each number a block's median gate checks, over its judged shots."""
     out = {}
@@ -374,6 +397,25 @@ class Programs:
                 self.run["marks"].append({"t": now, "block": block["id"], "ok": bool(ok)})
             else:
                 self.run["reps"].append({"t": now, "block": block["id"], "kind": "tap", "pass": bool(ok)})
+            self._settle(p, now)
+            self._save()
+            return self._state()
+
+    def tap_block(self, passes: int, misses: int) -> dict:
+        """A no-ball block's reps at once, tapped after doing them all (one walk off the mat, not one
+        per rep). The misses go first, so on a streak gate the passes count as the run in a row."""
+        with self.lock:
+            if not self.run:
+                raise ValueError("No program in play")
+            p, block = self._current()
+            if block["ball"]:
+                raise ValueError("This block is judged on Square's numbers")
+            left = block["reps"] - block_state(block, self.run["reps"], self.run["marks"])["reps"]
+            if passes < 0 or misses < 0 or passes + misses < 1 or passes + misses > left:
+                raise ValueError(f"Between 1 and {left} reps")
+            now = self.clock()
+            for i, ok in enumerate([False] * misses + [True] * passes):
+                self.run["reps"].append({"t": now + i * 0.001, "block": block["id"], "kind": "tap", "pass": ok})
             self._settle(p, now)
             self._save()
             return self._state()
@@ -567,7 +609,7 @@ class Programs:
                           f"usual {cal['center']}. Strike isn't gated this session; attack and loft still are.")
 
     def _block_intro(self, block: dict, number: int) -> str:
-        judge = ("Tap pass or miss on the Start page after each rep." if not block["ball"]
+        judge = (f"Do the {block['reps']} reps, then tap how many passed on the Start page." if not block["ball"]
                  else "Tap where the mark starts after each shot." if block["gate"].get("mark") else "")
         return f"Block {number}: {block['name']}. {block['how']} Gate: {gate_text(block)}. {judge}".strip()
 
@@ -575,19 +617,18 @@ class Programs:
         js = judged(block, self.run["reps"], self.run["marks"])
         r = next(x for x in js if x["t"] == t)
         st = block_state(block, self.run["reps"], self.run["marks"])
+        # Short: pass or miss and which way, no numbers (the owner reads them on the screen; Oct 6).
         if r.get("noRead"):
             self._say(f"Invalid read ({r['noRead']}): not counted.")
             return
-        keys = [c["key"] for c in block["gate"].get("checks", []) + block["gate"].get("medians", [])]
-        nums = ", ".join(say_number(k, r["numbers"][k]) for k in keys if r["numbers"].get(k) is not None)
         if r["gate"] is None:
-            self._say(f"{nums}.")
             return
+        streak = f" {st['streak']} in a row." if block["gate"]["kind"] == "streak" and st["streak"] >= 2 else ""
         if r["gate"]:
-            self._say(f"Pass: {nums}. {progress_text(block, st)}.")
+            self._say(f"Pass.{streak}")
         else:
-            why = " and ".join(say_limit(c, r["numbers"][c["key"]]) for c in r["fails"]) if r["fails"] else "the mark at or ahead of the ball"
-            self._say(f"Miss: needs {why}. You had {nums}. {progress_text(block, st)}.")
+            why = ", ".join(cue(c, r["numbers"][c["key"]]) for c in r["fails"]) if r["fails"] else "mark behind the ball"
+            self._say(f"Miss: {why}.")
 
     def _settle(self, p: dict, now: float) -> bool:
         """Ends the block in play if its gate is decided, and the program at its cap. False once the
@@ -654,7 +695,7 @@ class Programs:
         p = self.programs[self.run["id"]]
         passed = [b["name"] for b in p["blocks"] if self.run["results"].get(b["id"]) == "passed"]
         spoken = (f"{self._swings_used()} swings, gates passed: {', '.join(passed)}." if passed
-                  else f"{self._swings_used()} swings, no gate passed yet.") + " The report for your coach is on the Start page."
+                  else f"{self._swings_used()} swings, no gate passed yet.") + " The report for your coach is in Week for coach."
         done = {**self.run, "ended": self.clock(), "how": how, "spoken": spoken,
                 "day": datetime.fromtimestamp(self.run["started"]).isoformat(timespec="seconds")}
         if self.run["reps"]:

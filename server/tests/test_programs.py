@@ -162,7 +162,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertIsNone(self.drills[-1])           # the transfer block isn't a rehearsal
         # Block 4: 5 in a row, face to path within 2 too.
         self.hit(shot(face=3.0))                     # miss: face to path +3
-        self.assertIn("face to path within 2", self.said()[-1])
+        self.assertEqual("Miss: face open to path.", self.said()[-1])
         for _ in range(5):
             self.hit(shot())
         self.assertIsNone(self.p.run)
@@ -229,8 +229,31 @@ class ProgramsTest(unittest.TestCase):
         self.p.next_block()
         self.p.next_block()
         self.hit(shot(v=-4.0, attack=-7.0))
-        self.assertIn("Miss: needs strike minus 8 or lower and attack angle minus 6 or shallower. You had strike minus 4, attack angle minus 7.",
-                      self.said()[-1])
+        # Pass or miss and which way, no numbers (they're on the screen).
+        self.assertEqual("Miss: strike high on the face, attack too steep.", self.said()[-1])
+
+    def test_block_tapped_at_once(self):
+        # A no-ball block's reps after doing them all: one walk off the mat.
+        self.p.start("lowpoint")
+        self.assertIn("then tap how many passed", self.said()[-1])
+        with self.assertRaises(ValueError):
+            self.p.tap_block(11, 0)
+        self.p.tap_block(10, 0)                       # 10 in a row: passed, on to the next block
+        self.assertEqual(self.block(), "stepthrough")
+        self.p.tap_block(7, 3)                        # needs 10 of 10: not passed, on to the ball blocks
+        self.assertEqual(self.block(), "flush")
+        self.assertIn("Step through gate not passed", " ".join(self.said()))
+        with self.assertRaises(ValueError):
+            self.p.tap_block(1, 0)                    # a ball block now
+
+    def test_streak_said_short(self):
+        self.p.start("lowpoint")
+        self.p.programs["lowpoint"]["blocks"][3]["requires"] = None
+        for _ in range(3):
+            self.p.next_block()                       # to Transfer: 5 in a row
+        self.hit(shot())
+        self.hit(shot())
+        self.assertEqual("Pass. 2 in a row.", self.said()[-1])
 
     def test_retention_median_gate(self):
         self.p.start("retention")
@@ -339,13 +362,13 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(self.block(), "tier2")
         # Pass: pelvis peak before impact (<= 0) and pelvis open >= 15 deg
         self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=18))
-        self.assertIn("Pass:", self.said()[-1])
+        self.assertTrue(self.said()[-1].startswith("Pass."))
         # Miss: pelvis peak after impact
         self.hit(shot(), body3d=body3d(pelvis_peak=20, pelvis_open=18))
-        self.assertIn("Miss: needs pelvis peak 0 or earlier", self.said()[-1])
+        self.assertEqual("Miss: pelvis peaks late.", self.said()[-1])
         # Miss: pelvis not open enough
         self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=10))
-        self.assertIn("Miss: needs pelvis open 15 or more", self.said()[-1])
+        self.assertEqual("Miss: pelvis not open enough.", self.said()[-1])
         # Hit 6 more passes to reach 7 passes out of 10
         for _ in range(6):
             self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=18))
@@ -369,7 +392,7 @@ class ProgramsTest(unittest.TestCase):
         st = self.p.state()["program"]["blocks"][1]["state"]
         self.assertEqual(st["reps"], 1)
         self.assertEqual(st["passes"], 1)
-        self.assertIn("Pass:", self.said()[-1])
+        self.assertTrue(self.said()[-1].startswith("Pass."))
 
     def test_3d_never_arrived_timeout_and_why3d(self):
         self.p.start("sequence")
@@ -411,10 +434,10 @@ class ProgramsTest(unittest.TestCase):
         # Tier 3 checks: pelvisPeakMs <= -30, armAfterPelvis: true, attack [-6, -3], faceToPath [-2, 2], median loft <= 26.5
         # Miss 1: pelvis peak not early enough (-20 > -30)
         self.hit(shot(attack=-4.0, loft=24.0, face=0.0, path=0.0), body3d=body3d(pelvis_peak=-20, arm_peak=-10, pelvis_open=20))
-        self.assertIn("pelvis peak minus 30 or earlier", self.said()[-1])
+        self.assertEqual("Miss: pelvis peaks late.", self.said()[-1])
         # Miss 2: arm before pelvis
         self.hit(shot(attack=-4.0, loft=24.0, face=0.0, path=0.0), body3d=body3d(pelvis_peak=-40, arm_peak=-50, pelvis_open=20))
-        self.assertIn("arm peak after pelvis", self.said()[-1])
+        self.assertEqual("Miss: arms before pelvis.", self.said()[-1])
         # 5 passes in a row
         for _ in range(5):
             self.hit(shot(attack=-4.0, loft=24.0, face=0.0, path=0.0), body3d=body3d(pelvis_peak=-40, arm_peak=-20, pelvis_open=20, pelvis_start=-110))

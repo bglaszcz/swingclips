@@ -160,7 +160,7 @@ What the server works out for each swing and what each part of the review page s
   `Start server.cmd` needs a restart by hand (cmd reads a running batch file from disk).
   `POST /api/restart` restarts without updating. By hand: `git -C D:\SwingClips\app pull`, then
 - Week for coach: **Tools > Week for coach** (`static/week-view.js`, `static/week.js`):
-  provides a concise weekly summary designed for the owner to share with their coach in under two minutes. Covers sessions practiced (days, duration, swings by club, drills, and coach program runs), ball flight changes for clubs hit 15+ times where change exceeds weekly noise, progress on the journal focus move vs past weeks alongside coach thoughts, top 3 named faults vs the prior week, findings that held up in subsequent sessions (`holdup.js`), game scores vs all-time bests, and journal notes. Features a week picker (`‹`/`›`) starting on this week, phone-friendly calm card styling without red highlights, and a one-tap **Copy for coach** button that formats the report as plain text ready to paste directly into a coaching chat. Openable via `/#week`.
+  provides a concise weekly summary designed for the owner to share with their coach in under two minutes. Covers sessions practiced (days, duration, swings by club, drills, and coach program runs), ball flight changes for clubs hit 15+ times where change exceeds weekly noise, progress on the journal focus move vs past weeks alongside coach thoughts, top 3 named faults vs the prior week, findings that held up in subsequent sessions (`holdup.js`), game scores vs all-time bests, and journal notes. Features a week picker (`‹`/`›`) starting on this week, phone-friendly calm card styling without red highlights, and a one-tap **Copy for coach** button that formats the report as plain text ready to paste directly into a coaching chat. Below the summary, the week's coach program runs, each folded with its full report (`/api/program/report`) and its own **Copy this run for coach**, so a run hit at the sim can be read and sent from the house. Openable via `/#week`.
 
 ## Trust per number: ok, shaky, no reading
 Every body number on the page (the swing numbers table and tempo line, the numbers over the video,
@@ -425,10 +425,13 @@ toward the ball". The phones face away from you, so voice is the channel.
   To advance the stage, edit the `pelvisPeakMs` check's `max` in `server/programs.json` under program `sequence`, block `tier3`.
   **Setup notes** (Omni
   moved, mat changed, an update) are saved on the run in play or the last one and go into Copy for coach. No-ball reps are
-  tapped Pass/Miss on the page (clips the phones record during them are ignored). Ball shots are judged
+  tapped Pass/Miss on the page, one at a time or the whole block at once after doing them (**All N passed**,
+  or how many passed: one walk off the mat; misses are entered first, so on a streak gate the passes are the
+  run in a row) (clips the phones record during them are ignored). Ball shots are judged
   once the shot pairs; a shot Square didn't read (club speed 0, or strike across the face exactly 0.0, whose
   up-down number is filler) is left out of the gate. Face to path = face minus path. The phone says each
-  shot's verdict through the practice feed (practice voice and games are turned off; one voice at a time).
+  shot's verdict short, without numbers (they're on the screen): "Pass." (with "3 in a row" on a streak
+  gate) or "Miss:" and which way, e.g. "face open to path" (`programs.CUES`), through the practice feed (practice voice and games are turned off; one voice at a time).
   A block ends when its reps are in or its streak is made, then the next starts (`requires`: skipped unless
   that block passed); the program ends after the last block, at its cap (every swing counts, taps too), or
   45 minutes idle, and is logged to `programs-log.jsonl`. **Program history and trends**

@@ -38,12 +38,13 @@ end).
 | Today's plan | Record, the plan | **Start** on the first block, hit its balls, **Next**. |
 | Coach program | Record, the program | Pick it, **Start program**. Follow the block on screen: no-ball reps, tap **Pass / Miss**; ball shots, listen for the verdict (flush line: tap where the mark started). Blocks move on by themselves. |
 | Play a game | Record, the game | Pick it, **Start game**; the phone says each target. |
-| Drills, no ball | The program only (no phones, no Square) | A no-ball program is picked; **Start program**, tap **Pass / Miss** each rep. |
+| Drills, no ball | The program only (no phones, no Square) | A no-ball program is picked; **Start program**, do the block's reps, then tap **All N passed** (or how many passed) once. |
 
 **After**
 
 1. **Coach program**: **Copy for coach**, paste into the coach chat (save the
-   down-the-line picture if one shows). Older runs: **Past runs**, each has its own button.
+   down-the-line picture if one shows). Older runs: **Past runs**, each has its own button. From the
+   house: review page **Tools > Week for coach** lists the week's runs, each with **Copy this run for coach**.
 2. **Stop** under Record (each phone says "Stopped"), or just close the apps.
 3. Leave the server alone: about 10 minutes after the last swing it re-analyzes the session the
    careful way (the review page's Ready bar shows "deep pass: n clips to go").

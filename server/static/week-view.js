@@ -114,7 +114,53 @@
           weekCards.append(card);
         }
       }
+      renderRuns();
     }
+  }
+
+  // The week's coach program runs, each with its full report (programs.py report) to read and copy:
+  // the owner hits at the sim and reads at home, so the report lives here too, not only on the Start page.
+  function renderRuns() {
+    const from = currentWeekStart.getTime(), to = from + 7 * 86400000;
+    const runs = ((cachedData && cachedData.programLog) || [])
+      .filter(r => r.started * 1000 >= from && r.started * 1000 < to)
+      .sort((a, b) => b.started - a.started);
+    if (!runs.length) return;
+    const card = document.createElement("div");
+    card.className = "t-card week-card";
+    const h = document.createElement("div");
+    h.className = "week-card-title";
+    h.textContent = runs.length === 1 ? "Coach program run" : `Coach program runs (${runs.length})`;
+    card.append(h);
+    for (const run of runs) {
+      const when = new Date(run.started * 1000).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      const fold = document.createElement("details");
+      const sum = document.createElement("summary");
+      const passed = Object.values(run.results || {}).filter(v => v === "passed").length;
+      sum.textContent = `${run.name}, ${when}: ${passed} of ${Object.keys(run.results || {}).length} gates passed`;
+      const pre = document.createElement("pre");
+      pre.className = "week-run-report";
+      pre.textContent = "Loading…";
+      const copy = document.createElement("button");
+      copy.className = "small";
+      copy.type = "button";
+      copy.textContent = "Copy this run for coach";
+      let text = null;
+      const load = async () => {
+        if (text != null) return text;
+        try {
+          const r = await fetch(`/api/program/report?started=${encodeURIComponent(run.started)}`);
+          text = r.ok ? ((await r.json()) || {}).text || "" : "";
+        } catch { text = ""; }
+        pre.textContent = text || "No report for this run.";
+        return text;
+      };
+      fold.addEventListener("toggle", () => { if (fold.open) load(); });
+      copy.onclick = async () => { const t = await load(); if (t) copyText(t, copy); };
+      fold.append(sum, copy, pre);
+      card.append(fold);
+    }
+    weekCards.append(card);
   }
 
   async function openWeekView() {
@@ -133,12 +179,15 @@
 
   function copyForCoach() {
     if (!currentSummary || !currentSummary.text) return;
-    const text = currentSummary.text;
+    copyText(currentSummary.text, weekCopyBtn);
+  }
+
+  function copyText(text, btn) {
     const onSuccess = () => {
-      if (weekCopyBtn) {
-        const orig = weekCopyBtn.textContent;
-        weekCopyBtn.textContent = "Copied";
-        setTimeout(() => { weekCopyBtn.textContent = orig; }, 2000);
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = "Copied";
+        setTimeout(() => { btn.textContent = orig; }, 2000);
       }
       if (weekCopied) {
         weekCopied.textContent = "Copied to clipboard: paste into coach chat.";

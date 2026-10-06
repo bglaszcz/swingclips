@@ -1855,6 +1855,20 @@ def program_tap(body: ProgramTap):
         raise HTTPException(400, str(e))
 
 
+class ProgramBlockTaps(BaseModel):
+    passes: int
+    misses: int = 0
+
+
+@app.post("/api/program/taps")
+def program_taps(body: ProgramBlockTaps):
+    """A no-ball block's reps at once, after doing them all: how many passed and missed."""
+    try:
+        return programs_state.tap_block(body.passes, body.misses)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 class ProgramNote(BaseModel):
     text: str = Field("", max_length=1000)
     started: float | None = None

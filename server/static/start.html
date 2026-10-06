@@ -1008,6 +1008,36 @@ function renderProgram(data) {
     taps.append(b.ball ? tap("At or ahead ✓", "yes", true) : tap("Pass ✓", "yes", true),
                 b.ball ? tap("Behind ✗", "no", false) : tap("Miss ✗", "no", false), undo);
     box.append(ask, taps);
+    if (!b.ball) {
+      // The whole block at once: do the reps, then one walk off the mat (not one per rep).
+      const left = b.reps - b.judged.filter(r => r.gate !== null && r.gate !== undefined).length;
+      if (left > 0) {
+        const all = document.createElement("div");
+        all.className = "prog-taps";
+        const allBtn = document.createElement("button");
+        allBtn.className = "yes";
+        allBtn.textContent = `All ${left} passed ✓`;
+        allBtn.onclick = () => { allBtn.disabled = true; programPost("/api/program/taps", { passes: left, misses: 0 }); };
+        const some = document.createElement("label");
+        some.className = "plan-note";
+        some.textContent = "or passed ";
+        const n = document.createElement("input");
+        Object.assign(n, { type: "number", min: 0, max: left, inputMode: "numeric", value: "" });
+        n.style.width = "4em";
+        const save = document.createElement("button");
+        save.className = "undo";
+        save.textContent = `of ${left}: save`;
+        save.onclick = () => {
+          const k = parseInt(n.value, 10);
+          if (!(k >= 0 && k <= left)) { n.focus(); return; }
+          save.disabled = true;
+          programPost("/api/program/taps", { passes: k, misses: left - k });
+        };
+        some.append(n);
+        all.append(allBtn, some, save);
+        box.append(all);
+      }
+    }
   }
   const last = [...b.judged].reverse().find(r => r.numbers);
   if (last && b.ball) {
