@@ -390,3 +390,9 @@ Known miss: the turn is the clubhead's angle round the shoulders' middle, and wh
 first that angle turns while the clubhead is still going back (1790972121: 80 ms early, checked on the
 video; the top then moves 40 ms early). Measuring the clubhead's own motion in the picture instead was
 worse against the labels (25-33 ms median), so the shoulders' angle stays.
+
+The owner's P4 (Oct 6): the clubhead changes direction, the hands start down, the lead hip starts toward
+the target. The three don't coincide: on 59 swings with 3D the pelvis started turning toward the target a
+median 46 ms before the top (68% before it; quartiles -117 / -46 / +33 ms). P4 stays the hands and the
+clubhead (the rule above); the hip's start is its own number, "pelvis turn start vs top"
+(`pelvisStartMs`, metrics3d.js), which is the transition the coach watches.
