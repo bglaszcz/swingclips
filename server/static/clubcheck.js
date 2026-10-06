@@ -13,14 +13,31 @@
    * grip = midpoint of index knuckles (19, 20) or wrists (15, 16).
    * hosel = HOSEL_SHARE (0.93) of the way from grip to head.
    * Null head -> all three null. */
-  function guess(frame, pose) {
+  /** The upright picture's height over its width, from a clip name's WxH and the pose's rotation. */
+  function uprightAspect(name, rotation) {
+    const m = /_(\d+)x(\d+)_/.exec(name || "");
+    if (!m) return null;
+    const w = Number(m[1]), h = Number(m[2]);
+    return Math.abs(rotation || 0) % 180 === 90 ? w / h : h / w;
+  }
+
+  /**
+   * The model's guess for a frame: the clubhead where the club model found it; where it didn't (most
+   * downswing frames), along the server's shaft line from the hands, `clubLength` long (as the swing
+   * page draws the shaft), marked `estimated`. `aspect`: uprightAspect, needed for the estimate.
+   */
+  function guess(frame, pose, aspect = null) {
     if (!frame) return { grip: null, hosel: null, head: null };
     const headArr = frame.clubhead;
     const headConf = headArr && headArr.length >= 3 ? headArr[2] : 0;
-    if (!headArr || headConf < 0.25) {
+    let head = headArr && headConf >= 0.25 ? { x: Number(headArr[0].toFixed(6)), y: Number(headArr[1].toFixed(6)) } : null;
+    const shaft = frame.club;
+    // Any tracked shaft angle will do (in the downswing it's mostly a low-confidence prediction): it's
+    // only where the owner starts moving the clubhead from, and said so.
+    const canEstimate = !head && aspect && pose && pose.clubLength && Array.isArray(shaft) && shaft[0] != null;
+    if (!head && !canEstimate) {
       return { grip: null, hosel: null, head: null };
     }
-    const head = { x: Number(headArr[0].toFixed(6)), y: Number(headArr[1].toFixed(6)) };
 
     // Grip from index knuckles (19, 20) or wrists (15, 16)
     let grip = null;
@@ -49,13 +66,21 @@
     if (!grip) {
       return { grip: null, hosel: null, head: null };
     }
+    let estimated = false;
+    if (!head) {
+      const a = shaft[0] * Math.PI / 180;
+      const x = grip.x + pose.clubLength * aspect * Math.cos(a), y = grip.y + pose.clubLength * Math.sin(a);
+      if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return { grip: null, hosel: null, head: null };
+      head = { x: Number(x.toFixed(6)), y: Number(y.toFixed(6)) };
+      estimated = true;
+    }
 
     const hosel = {
       x: Number((grip.x + (head.x - grip.x) * HOSEL_SHARE).toFixed(6)),
       y: Number((grip.y + (head.y - grip.y) * HOSEL_SHARE).toFixed(6)),
     };
 
-    return { grip, hosel, head };
+    return estimated ? { grip, hosel, head, estimated } : { grip, hosel, head };
   }
 
   /** Helper to get P1, P4, P8 key timestamps for a clip/pose. */
@@ -662,14 +687,18 @@
     }
     if (posEl) posEl.textContent = `· ${phaseName} · ${item.t.toFixed(3)} s`;
 
-    const g = guess(item.frame, item.pose);
+    const g = guess(item.frame, item.pose, uprightAspect(item.clip, item.pose && item.pose.rotation));
+    const estimated = !!g.estimated;
+    delete g.estimated;
     currentPoints = { ...g };
     hoselManuallyMoved = false;
 
     if (currentPoints.head) {
       selectedPoint = "head";
       if (banner) {
-        banner.innerHTML = `Model guess drawn. <b>Hosel</b> starts at 93% along the shaft — adjust if needed.`;
+        banner.innerHTML = estimated
+          ? `The model didn't find the clubhead: it's <b>placed along the shaft</b> from the hands. Move it onto the clubhead (or <b>B</b> for a streak).`
+          : `Model guess drawn. <b>Hosel</b> starts at 93% along the shaft — adjust if needed.`;
       }
     } else {
       selectedPoint = "grip";
@@ -1045,6 +1074,7 @@
   const ClubCheck = {
     HOSEL_SHARE,
     guess,
+    uprightAspect,
     queue,
     merge,
     balanceSwings,

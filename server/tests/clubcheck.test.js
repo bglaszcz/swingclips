@@ -305,3 +305,29 @@ test("trends.js includes clubcheck in showView and leaveTrendViews", () => {
   assert.ok(trends.includes('!document.getElementById("clubcheck") || document.getElementById("clubcheck").hidden'), "leaveTrendViews checks clubcheck");
 });
 
+
+test("no clubhead found: placed along the shaft from the hands, marked estimated", () => {
+  const ClubCheck = require("../static/clubcheck.js");
+  // Hands at (0.5, 0.5) in a portrait picture (1920x1080 turned: 1080 wide, 1920 tall), shaft pointing down-right at 45 degrees.
+  const lm = new Array(33 * 3).fill(0);
+  lm[19 * 3] = 0.5; lm[19 * 3 + 1] = 0.5; lm[20 * 3] = 0.5; lm[20 * 3 + 1] = 0.5;
+  const aspect = ClubCheck.uprightAspect("swing_face_1920x1080_240fps_1790000000_2000ms.mp4", 90);
+  assert.ok(Math.abs(aspect - 1920 / 1080) < 1e-9);
+  assert.equal(ClubCheck.uprightAspect("swing_face_1920x1080_240fps_1790000000_2000ms.mp4", 0), 1080 / 1920);
+  const frame = { lm, clubhead: null, club: [45, 0.8] };
+  const g = ClubCheck.guess(frame, { clubLength: 0.2 }, aspect);
+  assert.equal(g.estimated, true);
+  // 0.2 of the height long: 0.2 * 1920 px = 384 px, so 384 * cos45 / 1080 across and 0.2 * sin45 down.
+  assert.ok(Math.abs(g.head.x - (0.5 + 0.2 * aspect * Math.SQRT1_2)) < 1e-5);
+  assert.ok(Math.abs(g.head.y - (0.5 + 0.2 * Math.SQRT1_2)) < 1e-5);
+  assert.ok(g.hosel.x > g.grip.x && g.hosel.x < g.head.x);
+  // A low-confidence shaft is still a starting point; without the aspect, a shaft, or off the picture: nothing.
+  assert.equal(ClubCheck.guess({ ...frame, club: [45, 0.05] }, { clubLength: 0.2 }, aspect).estimated, true);
+  assert.equal(ClubCheck.guess(frame, { clubLength: 0.2 }).head, null);
+  assert.equal(ClubCheck.guess({ ...frame, club: null }, { clubLength: 0.2 }, aspect).head, null);
+  assert.equal(ClubCheck.guess(frame, { clubLength: 0.9 }, aspect).head, null);
+  // A found clubhead is used as it is, not estimated.
+  const found = ClubCheck.guess({ ...frame, clubhead: [0.6, 0.7, 0.9] }, { clubLength: 0.2 }, aspect);
+  assert.equal(found.estimated, undefined);
+  assert.deepEqual(found.head, { x: 0.6, y: 0.7 });
+});
