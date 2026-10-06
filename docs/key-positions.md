@@ -22,7 +22,7 @@ tune_positions.py --all-labels` scores them too.
 |---|---|
 | **Takeaway** | face-on after the deep pass: 17 ms after the camera sees the clubhead start to leave the ball (`clubOnset` in the pose file, `pose.club_onset`), moved at most 10 ms toward the shaft rule. A down-the-line clip with no face-on partner (the face-on phone missed the swing) gets its own onset, taken as it is (`onsetLeadDtl`, `onsetPullDtl` 0). Otherwise (during a session, no ball found) the shaft rule: where the shaft starts to turn away from its angle at address, the first frame from which the tracked angle stays off its address value (a 2° step) until P2, extended back to the address angle along the line through that step and the next one |
 | **P3** lead arm parallel, back | the lead **forearm** (elbow to wrist) rising through level, face-on |
-| **P4** top | half way between where the **hands start down** (the lead wrist's speed climbing into the downswing, extended back along a straight line to zero speed) and where the lead wrist is **slowest** (positions smoothed over ±50 ms) in the 0.2 s before that |
+| **P4** top | half way between where the **hands start down** (the lead wrist's speed climbing into the downswing, extended back along a straight line to zero speed) and where the lead wrist is **slowest** (positions smoothed over ±50 ms) in the 0.2 s before that; then, when the club model tracked the clubhead there (deep pass), moved **half way to where the clubhead turns** (its angle round the shoulders' middle stops going back and comes down for 4 frames; `clubheadTurn`, `topTurnWeight` 0.5) |
 | **P5** lead arm parallel, down | the lead forearm falling through level |
 
 P1 is still 0.1 s before the takeaway. P3, P4 and P5 use only the wrists and elbows, which both
@@ -370,3 +370,23 @@ Four Oct 4 swings (face-on missed) had takeaways 300-390 ms late. Now the server
 for down-the-line clips without a face-on partner too, and phases.js takes it as it is there
 (`options.angle` "dtl": `onsetLeadDtl` 0, `onsetPullDtl` 0). Paired swings are unchanged (their
 down-the-line takeaway comes across from the face-on clip).
+
+## P4 and the clubhead turn (Oct 6 2026)
+
+The owner defined P4 as where the clubhead stops going back and changes direction. Scored with the
+window on the server's P4 (not the label), ms median / 90th percentile / bias / within one frame:
+
+| P4 | labels | rule before | clubhead turn alone | shipped (half way) |
+|---|---|---|---|---|
+| face-on | 28 P4-check (made blind) | 17 / 37 / +14 / 18% | 8 / 33 / -3 / 30% | 8 / 29 / +3 / 36% |
+| face-on | 57 older | 12.5 / 42 / +1 / 33% | 17 / 50 / -9 / 23% | 17 / 46 / -5 / 23% |
+| down the line | 58 older | 21 / 46 / +1 / 26% | 17 / 42 / -5 / 23% | 17 / 46 / -4 / 16% |
+
+The two label sets sit ~13 ms apart. Many older labels were made with the rule's answer on screen (the
+20 redone Sep 30 had copied it), so they favour the rule; the P4-check labels were made blind. The
+fixtures hold only older labels, so `tune_positions.py` picks `topTurnWeight` 0 on them: the owner chose
+half way. Labels made in P4 check after Oct 6 show the clubhead direction strip, so they lean to the turn.
+Known miss: the turn is the clubhead's angle round the shoulders' middle, and when the body starts down
+first that angle turns while the clubhead is still going back (1790972121: 80 ms early, checked on the
+video; the top then moves 40 ms early). Measuring the clubhead's own motion in the picture instead was
+worse against the labels (25-33 ms median), so the shoulders' angle stays.

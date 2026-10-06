@@ -31,9 +31,10 @@ PREDICTED = {"impact": "p7"}
 GRID = {"takeawayDegrees": [1, 3, 5], "topSpeedShares": [[0.1, 0.4], [0.2, 0.5], [0.3, 0.6]],
         "topSmoothSeconds": [0.02, 0.03, 0.04], "onsetLead": [0.004, 0.008, 0.012, 0.017],
         "onsetPull": [0.0, 0.01, 0.02, 0.03], "topSlowSeconds": [0.03, 0.05, 0.07],
-        "topRuleWeight": [0.0, 0.2, 0.33, 0.5, 1.0]}
+        "topRuleWeight": [0.0, 0.2, 0.33, 0.5, 1.0], "topTurnWeight": [0.0, 0.25, 0.5, 0.75, 1.0]}
 KNOB_EVENTS = {"takeawayDegrees": ["takeaway"], "topSpeedShares": ["p4"], "topSmoothSeconds": ["p4"],
-               "onsetLead": ["takeaway"], "onsetPull": ["takeaway"], "topSlowSeconds": ["p4"], "topRuleWeight": ["p4"]}
+               "onsetLead": ["takeaway"], "onsetPull": ["takeaway"], "topSlowSeconds": ["p4"], "topRuleWeight": ["p4"],
+               "topTurnWeight": ["p4"]}
 PRIMARY, SECONDARY = "pose-rtmpose-m", "pose"
 # The errors test_fixtures.py holds phases.js to (tune_positions.py --baseline writes it).
 BASELINE = REAL / "key-positions.json"

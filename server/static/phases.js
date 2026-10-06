@@ -50,8 +50,19 @@
   //    (positions smoothed over +- topSlowSeconds) in the TOP_SLOW_WINDOW round it, keeping
   //    topRuleWeight of the way back to the speed rule's (1 = the speed rule alone). The owner's
   //    top labels sit on the slowest moment; the speed rule alone runs ~15 ms late (see handsSlowest).
+  //  - topTurnWeight: then moved this share of the way to where the clubhead turns (stops going back and
+  //    starts down: clubheadTurn), when the club model tracked it there. The owner's P4 is that turn
+  //    (Oct 6); on the 28 P4-check labels the turn alone was 8 ms off (median) against 17 for the rule, but
+  //    on the 57 older labels 17 against 8: the two label sets sit ~13 ms apart. Half way leaned neither
+  //    way on either and had the smallest 90th percentile on both (docs/key-positions.md).
   const TUNING = { takeawayDegrees: 1, topSpeedShares: [0.1, 0.4], topSmoothSeconds: 0.03, onsetLead: 0.017, onsetPull: 0.01,
-                   topSlowSeconds: 0.05, topRuleWeight: 0.5, onsetLeadDtl: 0, onsetPullDtl: 0 };
+                   topSlowSeconds: 0.05, topRuleWeight: 0.5, onsetLeadDtl: 0, onsetPullDtl: 0, topTurnWeight: 0.5 };
+  // clubheadTurn: the clubhead's angle round the shoulders' middle (the owner's labels follow it; the
+  // clubhead's own motion in the picture was 25-33 ms off them). Known miss: the body starting down first
+  // turns that angle while the clubhead is still going back (1790972121: 80 ms early); its velocity over +-TURN_SPAN frames;
+  // going back is the way it turned TURN_BACK seconds before the top; the turn is the last frame going
+  // back before TURN_RUN frames in a row coming down, within TURN_WINDOW of the top.
+  const TURN_SPAN = 2, TURN_RUN = 4, TURN_BACK = [0.35, 0.15], TURN_WINDOW = [0.15, 0.10], TURN_CONF = 0.25;
   // Where handsSlowest looks, s round the speed rule's top: it runs late, so mostly before it.
   const TOP_SLOW_WINDOW = [0.2, 0.03];
   const TORSO_MIN_VISIBILITY = 0.25;
@@ -136,6 +147,46 @@
       m.speed = dt > 0 ? Math.hypot(out[b].hand.x - out[a].hand.x, out[b].hand.y - out[a].hand.y) / dt : 0;
     }
     return out;
+  }
+
+  /**
+   * Where the clubhead turns at the top (clip seconds) near time `near`, or null when the club model
+   * didn't track it there (frames[i].clubhead: [x, y, confidence], after the deep pass).
+   */
+  function clubheadTurn(frames, near) {
+    const pts = [];
+    for (const f of frames) {
+      const lm = f.lm, ch = f.clubhead;
+      if (!lm || !ch || ch[0] == null || ch[1] == null || (ch.length > 2 && ch[2] < TURN_CONF)) continue;
+      const cx = (lm[LM.L_SHOULDER * 3] + lm[LM.R_SHOULDER * 3]) / 2, cy = (lm[LM.L_SHOULDER * 3 + 1] + lm[LM.R_SHOULDER * 3 + 1]) / 2;
+      pts.push({ t: f.t, a: Math.atan2(ch[1] - cy, ch[0] - cx), v: null });
+    }
+    if (pts.length < 10) return null;
+    for (let i = 1; i < pts.length; i++) {
+      const d = pts[i].a - pts[i - 1].a;
+      pts[i].a = pts[i - 1].a + d - 2 * Math.PI * Math.round(d / (2 * Math.PI));
+    }
+    for (let i = TURN_SPAN; i + TURN_SPAN < pts.length; i++) {
+      const dt = pts[i + TURN_SPAN].t - pts[i - TURN_SPAN].t;
+      if (dt > 0 && dt < 0.06) pts[i].v = (pts[i + TURN_SPAN].a - pts[i - TURN_SPAN].a) / dt;
+    }
+    const back = pts.filter(p => p.v != null && p.t >= near - TURN_BACK[0] && p.t < near - TURN_BACK[1]).map(p => p.v)
+      .sort((a, b) => a - b);
+    if (back.length < 5) return null;
+    const sign = back[Math.floor(back.length / 2)] > 0 ? 1 : -1;
+    const seen = [];   // [{t, dir}] in the window
+    let run = 0;
+    for (const p of pts) {
+      if (p.t < near - TURN_WINDOW[0] || p.t > near + TURN_WINDOW[1]) continue;
+      const dir = p.v == null ? null : p.v * sign > 0 ? "back" : "down";
+      seen.push({ t: p.t, dir });
+      if (dir !== "down") { run = 0; continue; }
+      if (++run === TURN_RUN) {
+        const before = seen[seen.length - 1 - TURN_RUN];
+        if (before && before.dir === "back") return before.t;
+      }
+    }
+    return null;
   }
 
   /**
@@ -478,6 +529,10 @@
       const slow = handsSlowest(frames, aspect, leadSide, Math.max(downFrom, turn - TOP_SLOW_WINDOW[0]),
                                 Math.min(ms[impact].t, turn + TOP_SLOW_WINDOW[1]));
       if (slow != null) turn = slow + TUNING.topRuleWeight * (turn - slow);
+    }
+    if (turn != null && !pumps.length && TUNING.topTurnWeight > 0) {
+      const club = clubheadTurn(frames, turn);
+      if (club != null) turn += TUNING.topTurnWeight * (club - turn);
     }
     if (turn != null) top = nearest(ms, turn);
     if (!pumps.length) backTop = top;

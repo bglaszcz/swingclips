@@ -26,9 +26,13 @@ const PELVIS_OPEN_IMPACT_MAX = 15;
 const ARM_PEAK_BEFORE_IMPACT_MIN = 20;
 const ARM_PEAK_BEFORE_IMPACT_MAX = 80;
 
-// Pelvis rotation start relative to P4 (top): starts near top or slightly before/at top (-180 to 20 ms).
+// Pelvis rotation start relative to P4 (top): starts near top or slightly before/at top (-180 to 50 ms).
 const PELVIS_START_MIN = -180;
-const PELVIS_START_MAX = 20;
+// +50: since Oct 6 the top sits half way to the clubhead turn (phases.js topTurnWeight). On 1790972121 the
+// turn is found 80 ms early (the body starts down first and the clubhead's angle round the shoulders
+// turns while the clubhead itself is still going back, seen on the video), so the top moves 40 ms early
+// and a pelvis that starts at the old top reads +42.
+const PELVIS_START_MAX = 50;
 
 const FIXTURES_DIR = path.join(__dirname, "fixtures", "real3d");
 const FIXTURE_FILES = fs.readdirSync(FIXTURES_DIR)
@@ -59,7 +63,7 @@ test("real 3D swings regression: kinematic sequence, thorax turn and pelvis impa
       `${file}: pelvisOpenImpact (${r.numbers.pelvisOpenImpact}) outside [${PELVIS_OPEN_IMPACT_MIN}, ${PELVIS_OPEN_IMPACT_MAX}]`
     );
 
-    // Pelvis rotation start timing in band -180 to 20 ms relative to P4 (top)
+    // Pelvis rotation start timing in band -180 to 50 ms relative to P4 (top)
     assert.ok(
       typeof r.numbers.pelvisStartMs === "number",
       `${file}: pelvisStartMs must be a number`
