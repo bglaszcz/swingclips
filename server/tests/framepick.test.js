@@ -13,6 +13,8 @@ const {
   pickSource,
   frameDiff,
   filterDisagreements,
+  nightBroken,
+  todaysSet,
 } = require("../static/framepick.js");
 
 test("labelEvent: maps key position names to label event names, skips p1", () => {
@@ -172,3 +174,110 @@ test("filterDisagreements: drops only labeled (clip, position) pairs and skips p
   rows = filterDisagreements(nightSwings, clips, labelRows);
   assert.equal(rows.length, 0);
 });
+
+test("nightBroken: detects inverted or equal night pass timestamps in swing order", () => {
+  assert.equal(nightBroken(null), false);
+  assert.equal(nightBroken({}), false);
+
+  // Normal order
+  const normal = {
+    ms: { takeaway: 0, p2: 10, p3: 20, p4: 0, p5: 0, p6: 0, p7: 0, p8: 0 },
+    t: { takeaway: 1.0, p2: 1.2, p3: 1.4, p4: 1.8, p5: 2.0, p6: 2.1, p7: 2.2, p8: 2.3 },
+  };
+  assert.equal(nightBroken(normal), false);
+
+  // Multi-angle object with normal face and broken dtl (p2 after p3)
+  const multi = {
+    face: normal,
+    dtl: {
+      ms: { p2: 500, p3: 0 }, // p2 night time = 1.2 + 0.5 = 1.7s, p3 night time = 1.4s (inverted!)
+      t: { p2: 1.2, p3: 1.4 },
+    },
+  };
+  assert.equal(nightBroken(multi), true);
+
+  // Equal timestamps (not strictly increasing)
+  const equalTimes = {
+    ms: { p4: 0, p5: 0 },
+    t: { p4: 1.8, p5: 1.8 },
+  };
+  assert.equal(nightBroken(equalTimes), true);
+
+  // Partial positions still in order
+  const partial = {
+    ms: { takeaway: 0, p4: 10, p7: -10 },
+    t: { takeaway: 1.0, p4: 1.8, p7: 2.2 },
+  };
+  assert.equal(nightBroken(partial), false);
+});
+
+test("todaysSet: prioritizes big disagreements and takes a balanced sample across sessions/clubs", () => {
+  const mkRow = (name, key, ms, day, club) => ({
+    c: { name, recorded: `${day}T12:00:00`, club },
+    angle: "face",
+    key,
+    ms,
+    t: 1.5,
+  });
+
+  const rows = [
+    // Big ones (>= 50ms)
+    mkRow("s1", "p4", 65, "2026-10-01", "7I"),
+    mkRow("s2", "p4", -80, "2026-10-02", "7I"),
+    mkRow("s3", "takeaway", 55, "2026-10-01", "DR"),
+
+    // Small ones (< 50ms) for takeaway
+    mkRow("s4", "takeaway", 30, "2026-10-01", "7I"),
+    mkRow("s5", "takeaway", 28, "2026-10-01", "7I"), // duplicate session/club
+    mkRow("s6", "takeaway", 25, "2026-10-02", "7I"), // different session
+    mkRow("s7", "takeaway", 22, "2026-10-01", "DR"), // different club
+    mkRow("s8", "takeaway", 20, "2026-10-03", "5I"), // different session & club
+
+    // Small ones for p4
+    mkRow("s9", "p4", 45, "2026-10-01", "7I"),
+    mkRow("s10", "p4", 40, "2026-10-02", "7I"),
+
+    // Small ones for p2
+    mkRow("s11", "p2", 20, "2026-10-01", "7I"),
+    mkRow("s12", "p2", 18, "2026-10-02", "7I"),
+  ];
+
+  // Case 1: No previous picks -> big ones first (worst first: -80, 65, 55), then small
+  const res1 = todaysSet(rows, [], { max: 10, perPosition: 3 });
+  assert.equal(res1[0].c.name, "s2"); // |ms| = 80
+  assert.equal(res1[1].c.name, "s1"); // |ms| = 65
+  assert.equal(res1[2].c.name, "s3"); // |ms| = 55
+
+  // Big ones are 3. Max is 10, so 7 small slots.
+  assert.equal(res1.length, 10);
+
+  // Takeaway balanced sample should prefer diverse session/club (s4, s6, s7) over duplicate (s5)
+  const takeawaySmall = res1.filter(r => r.key === "takeaway" && Math.abs(r.ms) < 50);
+  const takeawayNames = takeawaySmall.map(r => r.c.name);
+  assert.equal(takeawayNames.includes("s4"), true);
+  assert.equal(takeawayNames.includes("s6"), true);
+  assert.equal(takeawayNames.includes("s7"), true);
+  assert.equal(takeawayNames.includes("s5"), false); // s5 had duplicate 2026-10-01_7I
+
+  // Case 2: p4 already has 12 picks -> p4 small ones excluded, but big p4 (s1, s2) remain!
+  const pickedDocs = Array.from({ length: 12 }, () => ({
+    picked: { p4: "night" },
+  }));
+  const res2 = todaysSet(rows, pickedDocs, { max: 20 });
+  const p4InRes2 = res2.filter(r => r.key === "p4");
+  assert.equal(p4InRes2.length, 2); // only s1 and s2 (big ones)
+  assert.equal(p4InRes2[0].c.name, "s2");
+  assert.equal(p4InRes2[1].c.name, "s1");
+
+  // Case 3: More big rows than max cap -> all big rows returned, 0 small rows added
+  const bigOnly = [
+    mkRow("b1", "p4", 90, "2026-10-01", "7I"),
+    mkRow("b2", "p4", 80, "2026-10-01", "7I"),
+    mkRow("b3", "p4", 70, "2026-10-01", "7I"),
+    mkRow("sm1", "p2", 20, "2026-10-01", "7I"),
+  ];
+  const res3 = todaysSet(bigOnly, [], { max: 2 });
+  assert.equal(res3.length, 3); // all 3 big rows included
+  assert.equal(res3.every(r => Math.abs(r.ms) >= 50), true);
+});
+

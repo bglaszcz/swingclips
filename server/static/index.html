@@ -327,6 +327,10 @@
                   border-bottom: 1px solid var(--line); }
   .lv-work-angle { color: var(--muted); min-width: 92px; }
   .lv-work-text { flex: 1; min-width: 0; }
+  details.lv-fold { margin-top: 8px; }
+  details.lv-fold > summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 600; padding: 4px 0; }
+  details.lv-fold[open] > summary { margin-bottom: 6px; }
+  details.lv-fold .lv-work-line { margin-top: 2px; }
   @media (max-width: 600px) { .lv-work-angle { min-width: 0; } }
   /* Frame picker (framepick.js): side-by-side frames from night disagreements */
   #framepick-panel { margin: 12px 0 16px; padding: 14px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); }

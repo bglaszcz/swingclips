@@ -96,6 +96,120 @@
     return out.sort((a, b) => Math.abs(b.ms) - Math.abs(a.ms));
   }
 
+  /** Returns true when the night pass's own times (server t + ms) are out of swing order
+   * (takeaway < p2 < ... < p8) on an angle. */
+  function nightBroken(angles) {
+    if (!angles) return false;
+    const order = ["takeaway", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
+    const checkAngle = a => {
+      if (!a || !a.t || !a.ms) return false;
+      let prevT = -Infinity;
+      for (const k of order) {
+        if (a.t[k] != null && a.ms[k] != null) {
+          const curT = a.t[k] + a.ms[k] / 1000;
+          if (curT <= prevT) return true;
+          prevT = curT;
+        }
+      }
+      return false;
+    };
+
+    if (angles.ms && angles.t) return checkAngle(angles);
+    for (const a of Object.values(angles)) {
+      if (checkAngle(a)) return true;
+    }
+    return false;
+  }
+
+  /** Selects today's set: all big disagreements (|ms| >= bigMs, worst first), followed by
+   * a balanced sample of small disagreements across different sessions and clubs before taking
+   * a second from the same session/club, then by size. Rows whose position was picked enough
+   * times are left out of the small sample. Total capped at opts.max (default 20). */
+  function todaysSet(rows, picked, opts = {}) {
+    const perPosition = opts.perPosition ?? 4;
+    const max = opts.max ?? 20;
+    const enoughPerPosition = opts.enoughPerPosition ?? 12;
+    const bigMs = opts.bigMs ?? 50;
+
+    // Tally picks per position/event
+    const pickCounts = {};
+    if (Array.isArray(picked)) {
+      for (const doc of picked) {
+        for (const ev of Object.keys(doc.picked || {})) {
+          pickCounts[ev] = (pickCounts[ev] || 0) + 1;
+        }
+      }
+    } else if (picked && typeof picked === "object") {
+      Object.assign(pickCounts, picked);
+    }
+
+    const getPickCount = key => {
+      const ev = labelEvent(key) || key;
+      return pickCounts[key] || pickCounts[ev] || 0;
+    };
+
+    const bigRows = [];
+    const smallRowsByPos = {};
+
+    for (const r of (rows || [])) {
+      if (Math.abs(r.ms) >= bigMs) {
+        bigRows.push(r);
+      } else {
+        if (getPickCount(r.key) >= enoughPerPosition) continue;
+        (smallRowsByPos[r.key] = smallRowsByPos[r.key] || []).push(r);
+      }
+    }
+
+    // Sort big rows worst first (|ms| descending)
+    bigRows.sort((a, b) => Math.abs(b.ms) - Math.abs(a.ms));
+
+    // Balanced sample per position
+    const sampledByPos = {};
+    for (const [pos, candList] of Object.entries(smallRowsByPos)) {
+      candList.sort((a, b) => Math.abs(b.ms) - Math.abs(a.ms));
+      const selected = [];
+      const seenGroups = new Set();
+      const remaining = [];
+
+      for (const r of candList) {
+        const day = r.c?.recorded ? r.c.recorded.slice(0, 10) : (r.c?.day || "");
+        const club = r.c?.shot?.club || r.c?.club || "";
+        const gKey = `${day}_${club}`;
+        if (!seenGroups.has(gKey) && selected.length < perPosition) {
+          seenGroups.add(gKey);
+          selected.push(r);
+        } else {
+          remaining.push(r);
+        }
+      }
+      for (const r of remaining) {
+        if (selected.length >= perPosition) break;
+        selected.push(r);
+      }
+      sampledByPos[pos] = selected;
+    }
+
+    // Combine across positions up to max total cap
+    const remainingSlots = Math.max(0, max - bigRows.length);
+    const smallSample = [];
+    let round = 0;
+    let added = true;
+    while (smallSample.length < remainingSlots && added) {
+      added = false;
+      for (const pos of Object.keys(sampledByPos)) {
+        if (round < sampledByPos[pos].length) {
+          smallSample.push(sampledByPos[pos][round]);
+          added = true;
+          if (smallSample.length >= remainingSlots) break;
+        }
+      }
+      round++;
+    }
+
+    smallSample.sort((a, b) => Math.abs(b.ms) - Math.abs(a.ms));
+    return [...bigRows, ...smallSample];
+  }
+
   // ---- UI Controller ----
 
   let isOpen = false;
@@ -276,6 +390,26 @@
     focusedIdx = 0;
     busy = false;
     renderUI();
+    prefetchNext();
+  }
+
+  function prefetchNext() {
+    if (typeof Image === "undefined") return;
+    if (currentIndex + 1 < allRows.length) {
+      const next = allRows[currentIndex + 1];
+      if (next && next.c) {
+        const nextTarget = next.angle === "dtl"
+          ? (next.c.angle === "dtl" ? next.c.name : next.c.partner)
+          : (next.c.angle === "face" ? next.c.name : next.c.partner);
+        if (nextTarget) {
+          const img1 = new Image();
+          img1.src = `/api/still/${encodeURIComponent(nextTarget)}?t=${next.t}`;
+          const nTime = nightTime(next.t, next.ms);
+          const img2 = new Image();
+          img2.src = `/api/still/${encodeURIComponent(nextTarget)}?t=${nTime}`;
+        }
+      }
+    }
   }
 
   function renderUI() {
@@ -541,6 +675,8 @@
     pickSource,
     frameDiff,
     filterDisagreements,
+    nightBroken,
+    todaysSet,
     open,
     close,
     step,

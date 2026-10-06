@@ -129,7 +129,7 @@ async function syncPickedCounts() {
       if (res.ok) {
         const doc = await res.json();
         const hasPicked = Boolean(doc.picked && Object.keys(doc.picked).length > 0);
-        pickedFilesCache.set(r.clip, { updated: r.updated, hasPicked });
+        pickedFilesCache.set(r.clip, { updated: r.updated, hasPicked, doc });
       } else {
         pickedFilesCache.set(r.clip, { updated: r.updated, hasPicked: false });
       }
@@ -198,27 +198,54 @@ function renderNight(swings) {
   status.textContent = `${nightData.done} of ${nightData.clips} clips done${seen}`;
   const rows = nightDisagreements(swings);
 
-  const pickedCount = [...pickedFilesCache.values()].filter(x => x.hasPicked).length;
-  if (countEl) {
-    countEl.textContent = `${pickedCount} picked so far · ${rows.length} left`;
+  // Separate valid rows from broken rows where night pass positions are out of swing order
+  const validRows = [];
+  const brokenRows = [];
+  for (const r of rows) {
+    const angles = nightData?.swings?.[r.c.name];
+    if (window.FramePicker && FramePicker.nightBroken && FramePicker.nightBroken(angles)) {
+      brokenRows.push(r);
+    } else {
+      validRows.push(r);
+    }
   }
 
-  box.replaceChildren(...(rows.length ? rows.slice(0, NIGHT_ROWS).map(r => {
+  const pickedDocs = [...pickedFilesCache.values()].filter(x => x.hasPicked).map(x => x.doc || x);
+  const todayRows = window.FramePicker && FramePicker.todaysSet
+    ? FramePicker.todaysSet(validRows, pickedDocs)
+    : validRows.slice(0, 20);
+
+  const todayStr = new Date().toLocaleDateString("en-CA");
+  const pickedToday = [...pickedFilesCache.values()].filter(x => x.hasPicked && x.updated && x.updated.slice(0, 10) === todayStr).length;
+  const bigLeft = todayRows.filter(r => Math.abs(r.ms) >= 50).length;
+
+  if (countEl) {
+    if (todayRows.length > 0) {
+      const totalToday = Math.max(20, pickedToday + todayRows.length);
+      countEl.textContent = `Today: ${pickedToday} of ${totalToday} · big ones: ${bigLeft} left`;
+    } else {
+      countEl.textContent = `Done for today: the next night uses these. ${validRows.length} more small ones aren't needed yet.`;
+    }
+  }
+
+  const onSavePick = (clipName, ev, doc) => {
+    pickedFilesCache.set(clipName, { updated: doc.updated, hasPicked: true, doc });
+    const rowInSummary = (labelData?.clips || []).find(c => c.pass === 1 && c.clip === clipName);
+    if (rowInSummary) {
+      rowInSummary.updated = doc.updated;
+      if (rowInSummary.missing) {
+        rowInSummary.missing = rowInSummary.missing.filter(m => m !== ev);
+        rowInSummary.events = 8 - rowInSummary.missing.length;
+      }
+    }
+    renderLabelView();
+  };
+
+  const makeRowLine = (r, rowList) => {
     const compare = lvEl("button", { className: "small", textContent: "Compare" });
     compare.onclick = () => {
       if (window.FramePicker) {
-        FramePicker.open(r, rows, (clipName, ev, doc) => {
-          pickedFilesCache.set(clipName, { updated: doc.updated, hasPicked: true });
-          const rowInSummary = (labelData?.clips || []).find(c => c.pass === 1 && c.clip === clipName);
-          if (rowInSummary) {
-            rowInSummary.updated = doc.updated;
-            if (rowInSummary.missing) {
-              rowInSummary.missing = rowInSummary.missing.filter(m => m !== ev);
-              rowInSummary.events = 8 - rowInSummary.missing.length;
-            }
-          }
-          renderLabelView();
-        });
+        FramePicker.open(r, rowList, onSavePick);
       }
     };
     const go = lvEl("button", { className: "small", textContent: "Go" });
@@ -228,8 +255,47 @@ function renderNight(swings) {
     return lvEl("div", { className: "lv-work-line" },
       lvEl("span", { className: "lv-work-angle", textContent: fmtWhen(r.c.recorded) + (r.c.shot ? " · " + clubName(r.c.shot.club) : "") }),
       lvEl("span", { className: "lv-work-text", textContent: what }), compare, go);
-  }) : [lvEl("span", { className: "lv-muted", textContent: nightData.done
-    ? "No unlabeled swing where they disagree by 3 frames more than usual." : "Nothing compared yet." })]));
+  };
+
+  const kids = [];
+  if (todayRows.length > 0) {
+    kids.push(...todayRows.map(r => makeRowLine(r, todayRows)));
+  } else if (validRows.length === 0) {
+    kids.push(lvEl("span", { className: "lv-muted", textContent: nightData.done
+      ? "No unlabeled swing where they disagree by 3 frames more than usual." : "Nothing compared yet." }));
+  }
+
+  // Show all N fold for the rest of the disagreements
+  if (validRows.length > todayRows.length) {
+    const restRows = validRows.filter(r => !todayRows.includes(r));
+    const allDetails = lvEl("details", { className: "lv-fold" },
+      lvEl("summary", { textContent: `Show all ${validRows.length}` }),
+      ...restRows.map(r => makeRowLine(r, validRows))
+    );
+    kids.push(allDetails);
+  }
+
+  // Folded line for broken swings
+  if (brokenRows.length > 0) {
+    const brokenClips = new Map();
+    for (const r of brokenRows) {
+      if (!brokenClips.has(r.c.name)) brokenClips.set(r.c.name, r);
+    }
+    const brokenDetails = lvEl("details", { className: "lv-fold" },
+      lvEl("summary", { textContent: `The night pass lost the swing on ${brokenClips.size} clips: nothing to pick` }),
+      ...[...brokenClips.values()].map(r => {
+        const go = lvEl("button", { className: "small", textContent: "Go" });
+        go.onclick = () => openForLabeling(r.c.name, { angle: r.angle, t: r.t });
+        const what = `${POSITION_NAMES[r.key] || r.key.toUpperCase()} (night pass out of order)`;
+        return lvEl("div", { className: "lv-work-line" },
+          lvEl("span", { className: "lv-work-angle", textContent: fmtWhen(r.c.recorded) + (r.c.shot ? " · " + clubName(r.c.shot.club) : "") }),
+          lvEl("span", { className: "lv-work-text", textContent: what }), go);
+      })
+    );
+    kids.push(brokenDetails);
+  }
+
+  box.replaceChildren(...kids);
 }
 
 /** The worklist: every fix from the label checks, by swing and angle, with repeats of the same fix
