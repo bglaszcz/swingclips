@@ -22,7 +22,10 @@ numbers stay here for the gate and the report for the coach (report()).
 Square's strike height can shift as a whole (about -14 mm on every club between Sep 16 and Sep 23 2026,
 and on Aug 21 alone), so a program may set a "calibration": the median of the session's first readable
 shots with that club must sit near the usual value, or the strike checks are dropped for the session
-("calibration shifted") while attack and loft still gate. The golfer's setup notes (Omni moved, mat
+("calibration shifted") while attack and loft still gate. The band is wide (+-8 mm on 10 shots): the owner's
+7 iron strikes scatter ~8 mm (SD), so a 10-shot median wanders +-6 mm by chance; +-4 dropped the strike
+checks wrongly in ~1 session in 7 (Oct 6: -21 on a day within chance), +-8 in ~1 in 100, and the real
+shift was ~14 mm. The golfer's setup notes (Omni moved, mat
 changed, an update) go with the run into the report, so a jump like that can be traced.
 """
 import json

@@ -102,8 +102,8 @@
       "calibration": {
         "key": "strikeV",
         "club": "I7",
-        "center": -13,
-        "within": 4,
+        "center": -14,
+        "within": 8,
         "shots": 10
       }
     },
@@ -148,8 +148,8 @@
       "calibration": {
         "key": "strikeV",
         "club": "I7",
-        "center": -13,
-        "within": 4,
+        "center": -14,
+        "within": 8,
         "shots": 10
       }
     },
