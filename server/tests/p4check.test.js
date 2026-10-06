@@ -247,3 +247,71 @@ test("mergeP4: sets events.p4, quick.p4 and removes picked.p4", () => {
   assert.deepEqual(updated.clip, doc.clip);
   assert.deepEqual(updated.partner, doc.partner);
 });
+
+test("queue: respects cantTell option (skips swings marked cant-tell today)", () => {
+  const clips = [
+    makeClip(1),
+    makeClip(2),
+    makeClip(3)
+  ];
+  const cantTellSet = new Set(["swing_face_1.mp4"]);
+  const q = queue(clips, {}, null, { max: 10, cantTell: cantTellSet });
+  assert.equal(q.length, 2);
+  assert.equal(q[0].name, "swing_face_2.mp4");
+  assert.equal(q[1].name, "swing_face_3.mp4");
+});
+
+test("getServerP4: resolves from night entry, positions, or fallback", () => {
+  const { getServerP4, getFps } = require("../static/p4check.js");
+  const c = { name: "swing_face_1920x1080_240fps_12345_2000ms.mp4", angle: "face" };
+
+  // 1. From night entry
+  const night = {
+    swings: {
+      [c.name]: {
+        face: { t: { p4: 1.888 } }
+      }
+    }
+  };
+  assert.equal(getServerP4(c, null, night), 1.888);
+
+  // 2. From pose positions
+  const poseWithPos = { positions: { p4: 1.777 } };
+  assert.equal(getServerP4(c, poseWithPos, null), 1.777);
+
+  // 3. Fallback from impact
+  const poseWithImpact = { impact: 2.15 };
+  assert.equal(getServerP4(c, poseWithImpact, null), 1.80);
+
+  // 4. getFps
+  assert.equal(getFps(c.name), 240);
+  assert.equal(getFps("swing_face_1280x720_60fps_12345.mp4"), 60);
+});
+
+test("index.html contains P4 check markup, Tools menu item, scripts, and hash router", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const htmlPath = path.resolve(__dirname, "../static/index.html");
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.ok(html.includes('id="p4check-btn"'), "defines Tools menu P4 check button");
+  assert.ok(html.includes('<section id="p4check"'), "defines #p4check section");
+  assert.ok(html.includes('id="p4c-close"'), "defines Close button");
+  assert.ok(html.includes('id="p4c-save-btn"'), "defines Save (This is the top) button");
+  assert.ok(html.includes('id="p4c-cant-btn"'), "defines Can't tell button");
+  assert.ok(html.includes('id="p4c-skip-btn"'), "defines Skip button");
+  assert.ok(html.includes('id="p4c-chart"'), "defines speed chart canvas");
+  assert.ok(html.includes('<script src="/static/p4check.js"></script>'), "loads p4check.js script");
+  assert.ok(html.includes('p4check: "p4check-btn"'), "routes #p4check hash to p4check-btn");
+});
+
+test("trends.js includes p4check in showView, tools-btn active list, and leaveTrendViews", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const jsPath = path.resolve(__dirname, "../static/trends.js");
+  const js = fs.readFileSync(jsPath, "utf8");
+
+  assert.ok(js.includes('document.getElementById("p4check")'), "checks #p4check in showView / leaveTrendViews");
+  assert.ok(js.includes('document.getElementById("p4check-btn")'), "toggles #p4check-btn in showView");
+  assert.ok(js.includes('which === "p4check"'), "includes p4check in tools-btn tab activation");
+});

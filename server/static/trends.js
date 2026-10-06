@@ -216,15 +216,19 @@ function showView(which) {
   if (ccBox) ccBox.hidden = which !== "clubcheck";
   const ccBtn = document.getElementById("clubcheck-btn");
   if (ccBtn) ccBtn.classList.toggle("on", which === "clubcheck");
+  const p4Box = document.getElementById("p4check");
+  if (p4Box) p4Box.hidden = which !== "p4check";
+  const p4Btn = document.getElementById("p4check-btn");
+  if (p4Btn) p4Btn.classList.toggle("on", which === "p4check");
   viewer.hidden = which !== "swing" || !current;
   tipEl.hidden = pTipEl.hidden = true;
   if (which !== "swing") video.pause();
   if (which !== "trends") trendsKey = null;
   progressOpen = which === "progress";
   document.getElementById("progress-btn").classList.toggle("on", progressOpen);
-  // The tabs: a session's trends belong to Swings; Labels, Club check, Night report and the shutter test are under Tools.
+  // The tabs: a session's trends belong to Swings; Labels, Club check, P4 check, Night report and the shutter test are under Tools.
   document.getElementById("swings-btn").classList.toggle("on", which === "swing" || which === "trends");
-  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck");
+  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck" || which === "p4check");
   document.body.dataset.view = which;
 }
 
@@ -233,7 +237,8 @@ function leaveTrendViews() {
   if (!trendsKey && !progressOpen && document.getElementById("setup").hidden && document.getElementById("shutter").hidden
       && document.getElementById("practice").hidden && document.getElementById("labelview").hidden
       && (!document.getElementById("nightreport") || document.getElementById("nightreport").hidden)
-      && (!document.getElementById("clubcheck") || document.getElementById("clubcheck").hidden)) return;
+      && (!document.getElementById("clubcheck") || document.getElementById("clubcheck").hidden)
+      && (!document.getElementById("p4check") || document.getElementById("p4check").hidden)) return;
   showView("swing");
   renderList();
 }

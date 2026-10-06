@@ -239,7 +239,7 @@
   #t-good-bad-body { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
   .t-gb-line { font-size: 14px; font-weight: 550; }
   .t-gb-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-  @media (max-width: 899px) { #trends, #progress, #setup, #shutter, #practice, #labelview, #nightreport, #clubcheck { order: -1; border-bottom: 1px solid var(--line); } }
+  @media (max-width: 899px) { #trends, #progress, #setup, #shutter, #practice, #labelview, #nightreport, #clubcheck, #p4check { order: -1; border-bottom: 1px solid var(--line); } }
   #setup { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   #setup .note, .s-note { color: var(--muted); font-size: 12px; }
   .s-note { flex: 1; }
@@ -350,6 +350,43 @@
   .cc-actions-row button { display: inline-flex; align-items: center; gap: 6px; }
   .cc-actions-row button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 650; }
   .cc-actions-row kbd, .cc-pt-btn kbd { font-size: 10px; padding: 1px 4px; border-radius: 3px; background: rgba(128,128,128,0.2); }
+  /* P4 check (p4check.js): quick hand labels for the top of the backswing */
+  #p4check { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 1100px; margin: 0 auto; width: 100%; }
+  #p4check .note { color: var(--muted); font-size: 12px; }
+  .p4c-card { display: flex; flex-direction: column; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .p4c-meta-row { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+  .p4c-meta-title { font-weight: 700; font-size: 15px; }
+  .p4c-meta-sub { color: var(--muted); font-size: 13px; margin-left: 6px; }
+  .p4c-viewport { position: relative; width: fit-content; max-width: 100%; margin: 0 auto; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; user-select: none; }
+  .p4c-img { display: block; width: auto; max-width: 100%; height: auto; max-height: calc(100dvh - 360px); min-height: 240px; border-radius: 8px; background: #000; object-fit: contain; }
+  .p4c-chart-wrap { position: relative; width: 100%; display: flex; flex-direction: column; gap: 4px; }
+  .p4c-chart { width: 100%; height: 60px; background: var(--panel-2, #181d28); border: 1px solid var(--line); border-radius: 6px; display: block; cursor: pointer; }
+  .p4c-chart-legend { display: flex; justify-content: flex-end; gap: 12px; font-size: 11px; color: var(--muted); padding: 0 4px; }
+  .p4c-chart-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .p4c-leg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .p4c-controls { display: flex; flex-direction: column; gap: 12px; }
+  .p4c-step-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .p4c-step-btn { min-width: 80px; padding: 7px 14px; font-size: 14px; font-weight: 600; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); cursor: pointer; }
+  .p4c-step-btn:hover { background: var(--line); }
+  .p4c-frame-num { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); min-width: 90px; text-align: center; }
+  .p4c-actions-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; }
+  .p4c-actions-row button { display: inline-flex; align-items: center; gap: 6px; }
+  .p4c-actions-row button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 650; }
+  .p4c-actions-row kbd { font-size: 10px; padding: 1px 4px; border-radius: 3px; background: rgba(128,128,128,0.2); }
+  @media (min-width: 900px) {
+    .p4c-card { display: grid; grid-template-columns: auto minmax(280px, 1fr); grid-template-areas: "meta meta" "view controls"; align-content: start; align-items: start; }
+    .p4c-meta-row { grid-area: meta; }
+    #p4c-viewport { grid-area: view; }
+    .p4c-card .p4c-controls { grid-area: controls; padding-left: 16px; }
+    .p4c-img { max-height: calc(100dvh - 220px); }
+  }
+  @media (max-width: 899px) {
+    #p4check { padding: 10px; gap: 8px; }
+    .p4c-card { padding: 10px; gap: 8px; }
+    .p4c-img { max-height: calc(100dvh - 410px - var(--tabbar-h)); }
+    .p4c-step-btn { min-width: 64px; padding: 8px 10px; font-size: 14px; }
+    .p4c-actions-row kbd { display: none; }
+  }
   .link-btn { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
   .lv-muted { color: var(--muted); }
   .lv-bar { display: flex; flex-direction: column; gap: 4px; }
@@ -713,7 +750,7 @@
   .t-head { align-items: center; }
   .t-head strong { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
   .t-head > button.small { background: none; }
-  #trends, #progress, #setup, #shutter, #practice, #labelview, #nightreport, #compare, #clubcheck { padding: 20px; gap: 16px; scroll-margin-top: var(--appbar-h); }
+  #trends, #progress, #setup, #shutter, #practice, #labelview, #nightreport, #compare, #clubcheck, #p4check { padding: 20px; gap: 16px; scroll-margin-top: var(--appbar-h); }
 
   /* ---- Session list ---- */
   #side { background: var(--panel); }
@@ -989,6 +1026,7 @@
         <button class="small" data-page="/calibrate" title="3D from both phones: the lens board per phone, then place the cameras from your swings">3D calibration</button>
         <button id="labels-btn" class="small" title="Hand labels for the scorecard: what's done, what to check, what to label next">Labels</button>
         <button id="clubcheck-btn" class="small" title="Quick club points (grip, hosel, clubhead) that feed the nightly club model">Club check</button>
+        <button id="p4check-btn" class="small" title="P4 check: quick hand labels for the top of the backswing">P4 check</button>
         <button id="nightreport-btn" class="small" title="The gaming PC's nightly improve run: model candidate scores, worker progress, and nights">Night report</button>
         <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button>
         <button id="update-btn" class="small" title="Get the latest version from GitHub; the server restarts itself when the change needs it">Update the server</button>
@@ -1276,6 +1314,57 @@
       </div>
       <div class="note" style="text-align: center; margin-top: 6px;">
         These frames teach the club model. The night worker retrains it when the labels change; see <a href="#" id="cc-nightreport-link">Tools &gt; Night report</a>.
+      </div>
+    </div>
+  </section>
+  <section id="p4check" class="p4check-view" hidden>
+    <div id="p4check-view">
+      <div class="t-head">
+        <strong>P4 check</strong>
+        <span class="s-note" id="p4c-status"></span>
+        <button id="p4c-close" class="small">Close</button>
+      </div>
+      <div class="p4c-card">
+        <div class="p4c-meta-row">
+          <div>
+            <span class="p4c-meta-title" id="p4c-swing-title">Swing</span>
+            <span class="p4c-meta-sub" id="p4c-frame-time"></span>
+          </div>
+          <span id="p4c-counter" class="s-note" style="text-align: right; flex: none;"></span>
+        </div>
+        <div class="p4c-viewport" id="p4c-viewport">
+          <img id="p4c-img" class="p4c-img" alt="Frame still" />
+          <div class="p4c-chart-wrap">
+            <canvas id="p4c-chart" class="p4c-chart" width="600" height="60" title="Wrist and clubhead speeds over window; white line is current frame"></canvas>
+            <div class="p4c-chart-legend">
+              <span><span class="p4c-leg-dot" style="background: #22d3ee;"></span> Wrist</span>
+              <span><span class="p4c-leg-dot" style="background: #4ade80;"></span> Clubhead</span>
+            </div>
+          </div>
+        </div>
+        <div class="p4c-controls">
+          <div class="p4c-step-row">
+            <button type="button" class="small" id="p4c-prev4" title="Step back 4 frames (Shift+Left)">-4</button>
+            <button type="button" class="p4c-step-btn" id="p4c-prev1" title="Step back 1 frame (Left)">&#8592; Prev</button>
+            <span id="p4c-frame-num" class="p4c-frame-num">Frame 1 / 61</span>
+            <button type="button" class="p4c-step-btn" id="p4c-next1" title="Step forward 1 frame (Right)">Next &#8594;</button>
+            <button type="button" class="small" id="p4c-next4" title="Step forward 4 frames (Shift+Right)">+4</button>
+          </div>
+          <div class="p4c-actions-row">
+            <button type="button" class="primary" id="p4c-save-btn" title="Save current frame as P4 and go to next swing (Enter)">
+              This is the top <kbd>Enter</kbd>
+            </button>
+            <button type="button" class="small" id="p4c-cant-btn" title="Can't tell: skip and remember for today (C)">
+              Can't tell <kbd>C</kbd>
+            </button>
+            <button type="button" class="small" id="p4c-skip-btn" title="Skip to next swing without saving (S)">
+              Skip <kbd>S</kbd>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="note" style="text-align: center; margin-top: 6px;">
+        Mark the last frame before the hands and clubhead start down. These labels decide whether the bigger model should set P4 (Claude checks them).
       </div>
     </div>
   </section>
@@ -4013,9 +4102,9 @@ async function refresh() {
     const pair = window.SwingCompare && SwingCompare.parseHash(location.hash);
     let wanted = pair ? pair[0] : location.hash.slice(1);
     try { wanted = pair ? wanted : decodeURIComponent(wanted); } catch {}
-    // A link to a Tools view (#labels, #clubcheck, #nightreport: the Start page's "Since last time")
+    // A link to a Tools view (#labels, #clubcheck, #p4check, #nightreport: the Start page's "Since last time")
     // opens it over the newest swing (read before open() puts the swing's name in the address).
-    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", nightreport: "nightreport-btn" }[location.hash.slice(1)];
+    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", p4check: "p4check-btn", nightreport: "nightreport-btn" }[location.hash.slice(1)];
     open(clips.some(c => c.name === wanted) ? wanted : (filteredClips()[0] || shownClips()[0]).name);
     if (pair && clips.some(c => c.name === pair[0])) Compare.show(pair[0], pair[1]);
     if (view) setTimeout(() => document.getElementById(view)?.click(), 0);
@@ -4095,6 +4184,7 @@ setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 <script src="/static/status.js"></script>
 <script src="/static/framepick.js"></script>
 <script src="/static/clubcheck.js"></script>
+<script src="/static/p4check.js"></script>
 <script src="/static/labelview.js"></script>
 <script src="/static/labels.js"></script>
 <script src="/static/nightreport.js"></script>

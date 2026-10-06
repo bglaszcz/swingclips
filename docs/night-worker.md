@@ -142,5 +142,7 @@ two at that position (the median over all swings compared), not by the raw gap, 
 from 3 frames (12.5 ms). First case found: Sep 25 swing 1790353993, where the night pass puts P4 79
 ms before the server's, the swing whose P4 the server finds 62 ms late against the label.
 
+To decide whether the night pass's larger body model should set P4 (55 face-on hand labels were too few to decide), **Tools > P4 check** (`static/p4check.js`) collects quick, unbiased hand labels for the top of the backswing without showing either analysis's answer. The owner steps through frames around the top (0.15 s before to 0.10 s after server P4) and marks the last moment before motion starts down; saved labels (`quick: {p4: "p4check"}`) expand the evaluation sample to measure whether the larger model's P4 timestamps beat the server's.
+
 Next with the files (not built): the night body points as training data for the server's body
 model (hips and wrists especially), and retuning phases.js on them if the server ever runs RTMW.
