@@ -1,8 +1,9 @@
 """The night worker's improve step, server side: candidates for a better model, judged against the one
 in use, and nothing changes until the owner taps Use it (the Night report, /api/improve in app.py).
 
-When the hand labels have changed since the last try (labels_sig), the gaming PC (night_improve.py)
-trains a new club model on them and scores it and the model in use with eval.py's deep pass on the
+When there are enough new club points since the last scored try (club_frames, MIN_NEW_FRAMES: the
+club model learns only from them, not from key moments or body points), the gaming PC
+(night_improve.py) trains a new club model on them and scores it and the model in use with eval.py's deep pass on the
 labeled swings neither trained on (the dataset's validation split). It sends the model and the two
 scorecards (scores_from) here; judge() says whether it's better: better on average, and no key
 position or club table clearly worse. A model scored better on its own training metric once made P2
@@ -27,6 +28,11 @@ WORSE_WITHIN1, WORSE_P90 = 10.0, 8.4
 BETTER_P90, BETTER_WITHIN1 = 1.0, 3.0
 # The club found this many points less often in the downswing counts as worse; more often as better.
 CLUB_FOUND = 5.0
+# A new club model is trained only with at least this many club-labeled frames (grip, hosel, clubhead)
+# new or changed since the last scored try: a handful more can't change the model, and a try costs the
+# GPU ~40 min.
+MIN_NEW_FRAMES = 40
+CLUB_POINTS = ("grip", "hosel", "head")
 # Night entries kept.
 NIGHTS_KEPT = 60
 STATUSES = ("better", "not better", "failed", "in use", "used before")
@@ -48,6 +54,25 @@ def labels_sig(labels_dir: Path) -> str:
             st = f.stat()
             h.update(f"{f.name}:{st.st_size}:{st.st_mtime_ns}\n".encode())
     return h.hexdigest()[:12]
+
+
+def club_frames(labels_dir: Path) -> set[str]:
+    """Every pass-1 labeled frame with club points, as "clip|time|points": a new or moved point makes
+    a new entry. What club_dataset.py trains on."""
+    out = set()
+    if labels_dir.is_dir():
+        for f in sorted(labels_dir.glob("*.json")):
+            if f.name.endswith(".pass2.json"):
+                continue
+            try:
+                doc = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            for t, pts in (doc.get("frames") or {}).items():
+                club = {k: (pts or {}).get(k) for k in CLUB_POINTS if (pts or {}).get(k)}
+                if club:
+                    out.add(f"{f.name}|{t}|{hashlib.sha1(json.dumps(club, sort_keys=True).encode()).hexdigest()[:8]}")
+    return out
 
 
 def scores_from(tables: dict) -> dict:
@@ -153,6 +178,8 @@ class Store:
         report = {**report, "id": cid}
         if report.get("status") not in STATUSES:
             raise ValueError("bad status")
+        if report.get("status") in ("better", "not better"):
+            self.note_scored((report.get("train") or {}).get("labelsSig"))
         (d / "report.json").write_text(json.dumps(report, separators=(",", ":")), encoding="utf-8")
         return report
 
@@ -165,6 +192,28 @@ class Store:
                 except (OSError, ValueError):
                     pass
         return sorted(out, key=lambda r: r.get("made", ""), reverse=True)
+
+    def new_club_frames(self, frames: set[str], sig: str) -> int | None:
+        """How many of `frames` (club_frames) the last scored try didn't have; None before any try.
+        Keeps `frames` as pending under `sig` (labelsSig), to become "the last try's" when a candidate
+        trained on it is reported (note_scored)."""
+        self.folder.mkdir(parents=True, exist_ok=True)
+        last = self.folder / "club-frames.json"
+        if not last.is_file() and any(r.get("status") != "failed" for r in self.reports()):
+            # Tried before this was kept (the first runs): count from now.
+            last.write_text(json.dumps(sorted(frames)), encoding="utf-8")
+        (self.folder / f"club-frames-{sig}.json").write_text(json.dumps(sorted(frames)), encoding="utf-8")
+        if not last.is_file():
+            return None
+        return len(frames - set(json.loads(last.read_text(encoding="utf-8"))))
+
+    def note_scored(self, sig: str | None) -> None:
+        """A candidate trained on `sig`'s club frames was scored: those are the last try's now."""
+        pending = self.folder / f"club-frames-{sig}.json"
+        if sig and pending.is_file():
+            pending.replace(self.folder / "club-frames.json")
+        for f in self.folder.glob("club-frames-*.json"):
+            f.unlink()
 
     def tried(self, sig: str) -> bool:
         """Whether a candidate was already trained and scored on these labels. A failed try doesn't

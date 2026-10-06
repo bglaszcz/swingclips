@@ -2710,18 +2710,22 @@ def improve_report():
 
 @app.get("/api/improve/next")
 def improve_next():
-    """For the night worker: whether a new club model is worth training (the labels changed since
-    the last try), the labeled clips to fetch, and the models to score against."""
+    """For the night worker: whether a new club model is worth training (at least improve.MIN_NEW_FRAMES
+    club-labeled frames new since the last scored try), the labeled clips to fetch, and the models to
+    score against."""
     sig = improve.labels_sig(LABELS_DIR)
     labeled = list_labels()["1"]
     _, stamp = club_in_use()
-    due, why = True, "The labels changed since the last try."
+    new = improve_store.new_club_frames(improve.club_frames(LABELS_DIR), sig)
+    due, why = True, (f"{new} new club-labeled frames since the last try." if new is not None
+                      else "No club model trained here yet.")
     if not labeled:
         due, why = False, "No labels yet."
     elif stamp is None:
         due, why = False, "No club model in use to compare with."
-    elif improve_store.tried(sig):
-        due, why = False, "Nothing new to learn: no new labels since the last try."
+    elif new is not None and new < improve.MIN_NEW_FRAMES:
+        due, why = False, (f"Nothing to train: {new} new club-labeled frame{'s' if new != 1 else ''} since the "
+                           f"last try (needs {improve.MIN_NEW_FRAMES}; Tools > Club check adds them).")
     return {"due": due, "why": why, "labelsSig": sig, "labels": labeled, "bodyModel": models.backend(),
             "clubStamp": stamp}
 

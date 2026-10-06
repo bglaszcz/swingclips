@@ -143,6 +143,38 @@ class StoreTest(unittest.TestCase):
         self.assertTrue(self.store.tried("s1"))
         self.assertFalse(self.store.tried("s2"))
 
+    def test_train_only_with_enough_new_club_frames(self):
+        """Picks and body points don't count; new or moved club points do; MIN_NEW_FRAMES of them."""
+        labels = self.dir / "labels"
+        labels.mkdir()
+        head = lambda x: {"grip": {"x": 0.5, "y": 0.4}, "hosel": {"x": x, "y": 0.4}, "head": {"x": x + 0.02, "y": 0.4}}
+        frames = {f"{1 + i / 240:.6f}": head(0.8) for i in range(10)}
+        doc = {"schema": 1, "events": {"p4": 1.7}, "picked": {"p4": "night"}, "frames": frames}
+        (labels / "a.mp4.json").write_text(json.dumps(doc))
+        self.assertEqual(len(improve.club_frames(labels)), 10)
+        self.assertIsNone(self.store.new_club_frames(improve.club_frames(labels), "s1"))  # never trained
+        self.store.save_report("club-1", {"kind": "club", "made": "2026-10-07T02:51:00", "status": "not better",
+                                          "model": "m@1", "train": {"labelsSig": "s1"}})
+        self.assertEqual(self.store.new_club_frames(improve.club_frames(labels), "s2"), 0)
+        # A pick and a body point: nothing new for the club model.
+        doc["events"]["p3"] = 1.5
+        doc["frames"]["1.000000"]["l_wrist"] = {"x": 0.5, "y": 0.5}
+        (labels / "a.mp4.json").write_text(json.dumps(doc))
+        self.assertEqual(self.store.new_club_frames(improve.club_frames(labels), "s3"), 0)
+        # One clubhead moved, and 45 new frames.
+        doc["frames"]["1.000000"]["head"] = {"x": 0.9, "y": 0.41}
+        doc["frames"].update({f"{2 + i / 240:.6f}": head(0.7) for i in range(45)})
+        (labels / "a.mp4.json").write_text(json.dumps(doc))
+        self.assertEqual(self.store.new_club_frames(improve.club_frames(labels), "s4"), 46)
+        self.assertGreaterEqual(46, improve.MIN_NEW_FRAMES)
+        # Scored on s4: those are the last try's now; a failed try wouldn't have moved it.
+        self.store.save_report("club-2", {"kind": "club", "made": "2026-10-08T02:51:00", "status": "failed",
+                                          "model": None, "train": {"labelsSig": "s4"}})
+        self.assertEqual(self.store.new_club_frames(improve.club_frames(labels), "s4"), 46)
+        self.store.save_report("club-3", {"kind": "club", "made": "2026-10-08T03:51:00", "status": "not better",
+                                          "model": "m@3", "train": {"labelsSig": "s4"}})
+        self.assertEqual(self.store.new_club_frames(improve.club_frames(labels), "s5"), 0)
+
     def test_bad_ids(self):
         for bad in ("", "..", "a/b", "../x"):
             with self.assertRaises(ValueError):

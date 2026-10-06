@@ -70,9 +70,13 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
 Once every clip is done, the worker runs the improve step once (`server/night_improve.py`; server
 side `server/improve.py`, `/api/improve`):
 
-1. **Only when there's something new to learn**: the server fingerprints the pass-1 label files
-   (`improve.labels_sig`); a try that was trained and scored on these labels isn't repeated (a failed
-   one is, the next night). Not with less than 50 minutes left before `--stop-at`.
+1. **Only when there's a reason**: the club model learns only from club points (grip, hosel,
+   clubhead), so a try needs at least 40 club-labeled frames (`improve.MIN_NEW_FRAMES`) new or moved
+   since the last scored try (`improve.club_frames`, kept in `improve/club-frames.json`). Picks, key
+   moments and body points don't count. Tools > Club check is the quick way to add them. A failed try
+   is tried again the next night. Not with less than 50 minutes left before `--stop-at`. The Night
+   report's line for the night says why it didn't train ("Nothing to train: 12 new club-labeled
+   frames since the last try (needs 40)").
 2. **Train**: the labels and labeled clips are copied to the gaming PC (`%USERPROFILE%\SwingClips-night`,
    only new clips download), `club_dataset.py` makes the dataset (validation = ~20% of swings by swing
    name, the same swings each time), and `train/club_train.py` trains a YOLO11s club model in
