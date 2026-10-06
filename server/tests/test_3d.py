@@ -356,6 +356,11 @@ class SwingWorkerTest(unittest.TestCase):
         doc = {"reprojection": {"address": {"median": 9.0}}}
         self.assertIn("camera seems to have moved", swing3d.moved(doc, {"id": "s"}))
         self.assertIsNone(swing3d.moved({"reprojection": {"address": {"median": 1.2}}}, {"id": "s"}))
+        # Placed from the golfer's swings: 6 px is that kind of calibration's own looseness, 45 px a real move.
+        body = {"id": "b", "method": "body"}
+        self.assertIsNone(swing3d.moved({"reprojection": {"address": {"median": 6.0}}}, body))
+        self.assertIn("want under 12", swing3d.moved({"reprojection": {"address": {"median": 45.0}}}, body))
+        self.assertIsNotNone(swing3d.moved({"reprojection": {"address": {"median": 6.0}}}, {"id": "s"}))
 
     def test_scorecard(self):
         """Labels on both angles (the true joints): the 3D joints put back into each view land on them."""

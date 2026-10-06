@@ -24,6 +24,12 @@ import tri
 # The core joints at address miss their rays by more than this (median px, both views): a camera
 # moved since the calibration.
 MOVED_PX = 5.0
+# The same for cameras placed from the golfer's own swings (bodycalib.py): their swings land looser at
+# address (5-7 px on the first real setup, Oct 6, with the cameras still: the ball hadn't moved in
+# either picture), while a camera that really moved missed by 43-50 px.
+MOVED_PX_BODY = 12.0
+# In the 3D key (app.pass_3d): changing how "moved" is judged checks the swings again.
+CHECK_VERSION = 2
 # The ball's place in a picture (share of its width, height) moved more than this: that camera moved.
 BALL_MOVED = (0.04, 0.015)
 BALL_SWINGS = 5
@@ -44,9 +50,10 @@ def session_for(name: str, times: dict, all_sessions: list[dict]) -> tuple[dict 
 def moved(doc: dict, session: dict) -> str | None:
     """Why the swing's 3D doesn't hold (a camera moved since the calibration), or None."""
     at = (doc.get("reprojection") or {}).get("address") or {}
-    if at.get("median") is not None and at["median"] > MOVED_PX:
+    limit = MOVED_PX_BODY if session.get("method") == "body" else MOVED_PX
+    if at.get("median") is not None and at["median"] > limit:
         return (f"a camera seems to have moved since calibration {session.get('id')}: at address the joints miss "
-                f"by {at['median']:.0f} px (want under {MOVED_PX:g})")
+                f"by {at['median']:.0f} px (want under {limit:g})")
     return None
 
 

@@ -267,6 +267,12 @@ function render() {
     if (key !== "mat" && lensAll) bits.push(`Calibrate uses all ${lensAll} lens clip(s) of this phone (each try adds to them; the trash button clears them).`);
     else if (key === "mat" && !on && clips.length) bits.push(`${clips.length} clip(s) from the last recording.`);
     if (key === "mat" && on && clips.length) bits.push(`Face-on ${clips.some(c => c.angle === "face") ? "✓" : "–"}, down the line ${clips.some(c => c.angle === "dtl") ? "✓" : "–"}.`);
+    if (key !== "mat" && !on) {
+      // A good lens stays good: it belongs to the phone and its recording mode, not to where the tripod stands.
+      const good = (state.lenses || []).filter(l => l.phone === state.phones[key] && l.good && /240fps/.test(l.mode || ""));
+      if (good.length) bits.push(`Done ${new Date(good[0].created * 1000).toLocaleDateString([], { month: "short", day: "numeric" })}: ` +
+                                 "no need to redo this after moving a tripod, only for a new phone, a phone update or another recording mode.");
+    }
     if (note[key]) bits.push(note[key]);
     $(key + "-state").textContent = bits.join(" ");
     $(key + "-state").className = "state" + (on ? " on" : "");
@@ -304,6 +310,8 @@ function render() {
               `${n} swing(s) from both phones since${n < 10 ? ` (about 10 is best${n < 3 ? ", 3 at least" : ""})` : ""}.`);
   } else bits.push("Not set yet.");
   if (bodyBusy) bits.push("Working…");
+  else if (busy) bits.push(`Wait for the ${job.kind === "lens" ? (job.angle === "dtl" ? "down-the-line lens" : "face-on lens") : job.kind} calibration ` +
+                           "that's running to finish (a minute or two): the buttons come back then.");
   if (note.body) bits.push(note.body);
   $("body-state").textContent = bits.join(" ");
   renderJob("body", job && job.kind === "body" ? job : null);
