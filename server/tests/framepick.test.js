@@ -15,6 +15,7 @@ const {
   filterDisagreements,
   nightBroken,
   todaysSet,
+  tally,
 } = require("../static/framepick.js");
 
 test("labelEvent: maps key position names to label event names, skips p1", () => {
@@ -280,4 +281,78 @@ test("todaysSet: prioritizes big disagreements and takes a balanced sample acros
   assert.equal(res3.length, 3); // all 3 big rows included
   assert.equal(res3.every(r => Math.abs(r.ms) >= 50), true);
 });
+
+test("tally: counts picks by position, angle, and source, with plain-words summary sentence", () => {
+  // Empty or null
+  const emptyRes = tally(null);
+  assert.equal(emptyRes.totalPicks, 0);
+  assert.equal(emptyRes.summary, "too few picks yet");
+
+  const docs = [
+    // P4 picks (12 total: 9 night, 3 server)
+    ...Array.from({ length: 6 }, () => ({
+      clip: { name: "c_face.mp4", angle: "face" },
+      picked: { p4: "night" },
+    })),
+    ...Array.from({ length: 3 }, () => ({
+      clip: { name: "c_dtl.mp4", angle: "dtl" },
+      picked: { p4: "night" },
+    })),
+    ...Array.from({ length: 2 }, () => ({
+      clip: { name: "c_face.mp4", angle: "face" },
+      picked: { p4: "server" },
+    })),
+    {
+      clip: { name: "c_dtl.mp4", angle: "dtl" },
+      picked: { p4: "server" },
+    },
+
+    // Takeaway picks (17 total: 14 server, 2 night, 1 onset)
+    ...Array.from({ length: 14 }, () => ({
+      clip: { name: "c_face.mp4", angle: "face" },
+      picked: { takeaway: "server" },
+    })),
+    ...Array.from({ length: 2 }, () => ({
+      clip: { name: "c_dtl.mp4", angle: "dtl" },
+      picked: { takeaway: "night" },
+    })),
+    {
+      clip: { name: "c_face.mp4", angle: "face" },
+      picked: { takeaway: "onset" },
+    },
+
+    // P2 picks (4 total: < 5 picks, so not in sentence)
+    {
+      clip: { name: "c_face.mp4", angle: "face" },
+      picked: { p2: "adjusted" },
+    },
+    ...Array.from({ length: 3 }, () => ({
+      clip: { name: "c_face.mp4", angle: "face" },
+      picked: { p2: "server" },
+    })),
+  ];
+
+  const res = tally(docs);
+  assert.equal(res.totalPicks, 12 + 17 + 4);
+
+  // P4 breakdown
+  assert.equal(res.positions.p4.total, 12);
+  assert.equal(res.positions.p4.night, 9);
+  assert.equal(res.positions.p4.server, 3);
+  assert.equal(res.positions.p4.byAngle.face.night, 6);
+  assert.equal(res.positions.p4.byAngle.dtl.night, 3);
+
+  // Takeaway breakdown
+  assert.equal(res.positions.takeaway.total, 17);
+  assert.equal(res.positions.takeaway.server, 14);
+  assert.equal(res.positions.takeaway.night, 2);
+  assert.equal(res.positions.takeaway.onset, 1);
+
+  // P2 breakdown (< 5)
+  assert.equal(res.positions.p2.total, 4);
+
+  // Plain-words sentence: Takeaway (server won 14 of 17) and P4 (night pass won 9 of 12)
+  assert.equal(res.summary, "Takeaway: the server won 14 of 17. P4: the night pass won 9 of 12.");
+});
+
 

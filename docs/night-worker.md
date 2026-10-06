@@ -42,6 +42,12 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    `1`-`4`), and custom adjustment ("Neither" / `N`) save directly to `/api/labels/<clip>?pass=1` with source
    attribution (`picked[event] = "server" | "night" | "onset" | "adjusted"`), protecting existing hand labels
    from overwrite with a confirmation dialog and dropping only the resolved `(clip, position)` pair from the list.
+   To keep daily labeling manageable, the card presents a short daily session (`todaysSet`, default 20 swings): all
+   big disagreements (|ms| >= 50 ms) first, then a balanced sample of small disagreements across different sessions
+   and clubs before repeating, capped at 4 per position and skipping positions already picked 12+ times. Clips
+   where night pass positions are out of swing order (`nightBroken`) are folded separately ("lost the swing: nothing
+   to pick"). A folded **Who's winning** table tallies picks per position and angle across server, night pass, club
+   onset, and adjusted frames, summarizing model performance in plain words (e.g. "P4: the night pass won 14 of 20.").
 2. **Training data.** The night files are a second set of body points on every frame of every clip,
    from a stronger model: the start of training data for the next models without labeling by hand.
    Not used yet.

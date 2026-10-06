@@ -295,6 +295,60 @@ function renderNight(swings) {
     kids.push(brokenDetails);
   }
 
+  // Who's winning fold
+  const tallyRes = window.FramePicker && FramePicker.tally ? FramePicker.tally(pickedDocs) : null;
+  if (tallyRes && tallyRes.totalPicks > 0) {
+    const winDetails = lvEl("details", { className: "lv-fold" });
+    const winSummary = lvEl("summary", { textContent: `Who's winning (${tallyRes.totalPicks} picks)` });
+    const table = lvEl("table", { className: "q-table", style: "width: 100%; margin: 6px 0;" });
+    const thead = lvEl("thead", {},
+      lvEl("tr", {},
+        lvEl("th", { style: "text-align: left;", textContent: "Position" }),
+        lvEl("th", { style: "text-align: left;", textContent: "Angle" }),
+        lvEl("th", { textContent: "Server" }),
+        lvEl("th", { textContent: "Night" }),
+        lvEl("th", { textContent: "Onset" }),
+        lvEl("th", { textContent: "Adjusted" }),
+        lvEl("th", { textContent: "Total" })
+      )
+    );
+    const tbody = lvEl("tbody");
+    for (const posKey of Object.keys(tallyRes.positions)) {
+      const p = tallyRes.positions[posKey];
+      if (p.total === 0) continue;
+      const anglesWithPicks = Object.keys(p.byAngle).filter(a => p.byAngle[a].total > 0);
+      for (const a of anglesWithPicks) {
+        const ad = p.byAngle[a];
+        const angleLabel = a === "dtl" ? "down the line" : "face-on";
+        tbody.append(lvEl("tr", {},
+          lvEl("td", { textContent: p.name }),
+          lvEl("td", { textContent: angleLabel }),
+          lvEl("td", { textContent: String(ad.server) }),
+          lvEl("td", { textContent: String(ad.night) }),
+          lvEl("td", { textContent: String(ad.onset) }),
+          lvEl("td", { textContent: String(ad.adjusted) }),
+          lvEl("td", { textContent: String(ad.total) })
+        ));
+      }
+      if (anglesWithPicks.length > 1) {
+        tbody.append(lvEl("tr", { style: "font-weight: 600;" },
+          lvEl("td", { textContent: p.name }),
+          lvEl("td", { textContent: "both" }),
+          lvEl("td", { textContent: String(p.server) }),
+          lvEl("td", { textContent: String(p.night) }),
+          lvEl("td", { textContent: String(p.onset) }),
+          lvEl("td", { textContent: String(p.adjusted) }),
+          lvEl("td", { textContent: String(p.total) })
+        ));
+      }
+    }
+    table.append(thead, tbody);
+    const sentenceDiv = lvEl("div", { style: "font-size: 13px; font-weight: 600; margin: 6px 0 2px;", textContent: tallyRes.summary });
+    const noteDiv = lvEl("div", { style: "font-size: 11px; color: var(--muted);", textContent: tallyRes.neitherNote });
+    winDetails.append(winSummary, table, sentenceDiv, noteDiv);
+    kids.push(winDetails);
+  }
+
   box.replaceChildren(...kids);
 }
 

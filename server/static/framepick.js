@@ -210,6 +210,93 @@
     return [...bigRows, ...smallSample];
   }
 
+  /** Tallies picks across pass-1 label documents per position and angle.
+   * Returns { positions, totalPicks, summary, neitherNote }. */
+  function tally(pickedDocs) {
+    const ORDER = ["takeaway", "p2", "p3", "p4", "p5", "p6", "impact", "p8"];
+    const byPos = {};
+    for (const pos of ORDER) {
+      byPos[pos] = {
+        pos,
+        name: POSITION_NAMES[pos] || pos.toUpperCase(),
+        server: 0,
+        night: 0,
+        onset: 0,
+        adjusted: 0,
+        total: 0,
+        byAngle: {
+          face: { server: 0, night: 0, onset: 0, adjusted: 0, total: 0 },
+          dtl: { server: 0, night: 0, onset: 0, adjusted: 0, total: 0 },
+        },
+      };
+    }
+
+    let grandTotal = 0;
+    for (const doc of (pickedDocs || [])) {
+      if (!doc || !doc.picked) continue;
+      const angle = doc.clip?.angle === "dtl" ? "dtl" : "face";
+      for (const [k, src] of Object.entries(doc.picked)) {
+        const pos = labelEvent(k) || k;
+        if (!byPos[pos]) {
+          byPos[pos] = {
+            pos,
+            name: POSITION_NAMES[pos] || pos.toUpperCase(),
+            server: 0,
+            night: 0,
+            onset: 0,
+            adjusted: 0,
+            total: 0,
+            byAngle: {
+              face: { server: 0, night: 0, onset: 0, adjusted: 0, total: 0 },
+              dtl: { server: 0, night: 0, onset: 0, adjusted: 0, total: 0 },
+            },
+          };
+        }
+        const entry = byPos[pos];
+        const angleEntry = entry.byAngle[angle] || entry.byAngle.face;
+        const s = (src === "server" || src === "night" || src === "onset" || src === "adjusted") ? src : "adjusted";
+        entry[s]++;
+        entry.total++;
+        angleEntry[s]++;
+        angleEntry.total++;
+        grandTotal++;
+      }
+    }
+
+    // Summary sentence in plain words for positions with 5+ picks
+    const sentences = [];
+    for (const pos of ORDER) {
+      const e = byPos[pos];
+      if (e && e.total >= 5) {
+        let winner = "the server";
+        let count = e.server;
+        if (e.night > count) {
+          winner = "the night pass";
+          count = e.night;
+        } else if (e.onset > count) {
+          winner = "club onset";
+          count = e.onset;
+        } else if (e.adjusted > count) {
+          winner = "adjusted";
+          count = e.adjusted;
+        }
+        if (e.server === e.night && e.server === count) {
+          sentences.push(`${e.name}: server and night pass tied at ${count} of ${e.total}`);
+        } else {
+          sentences.push(`${e.name}: ${winner} won ${count} of ${e.total}`);
+        }
+      }
+    }
+
+    const summary = sentences.length > 0 ? sentences.join(". ") + "." : "too few picks yet";
+    return {
+      positions: byPos,
+      totalPicks: grandTotal,
+      summary,
+      neitherNote: "Neither left out (requires night comparison times).",
+    };
+  }
+
   // ---- UI Controller ----
 
   let isOpen = false;
@@ -677,6 +764,7 @@
     filterDisagreements,
     nightBroken,
     todaysSet,
+    tally,
     open,
     close,
     step,
