@@ -372,3 +372,34 @@ test("extractRows and extractSessions handle raw clips and swings objects", () =
   assert.match(pSec.lines[1], /Swings: 1 total \(7 iron 1\)/);
 });
 
+test("index.html contains Week for coach markup, Tools menu item, scripts, and hash router", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const htmlPath = path.resolve(__dirname, "../static/index.html");
+  const html = fs.readFileSync(htmlPath, "utf8");
+
+  assert.ok(html.includes('id="week-btn"'), "defines Tools menu Week for coach button");
+  assert.ok(html.includes('<section id="week"'), "defines #week section");
+  assert.ok(html.includes('id="week-close"'), "defines Close button");
+  assert.ok(html.includes('id="week-prev-btn"'), "defines Prev week button");
+  assert.ok(html.includes('id="week-next-btn"'), "defines Next week button");
+  assert.ok(html.includes('id="week-copy-btn"'), "defines Copy for coach button");
+  assert.ok(html.includes('id="week-title"'), "defines week title element");
+  assert.ok(html.includes('id="week-cards"'), "defines week cards container");
+  assert.ok(html.includes('<script src="/static/week.js"></script>'), "loads week.js script");
+  assert.ok(html.includes('<script src="/static/week-view.js"></script>'), "loads week-view.js script");
+  assert.ok(html.includes('week: "week-btn"'), "routes #week hash to week-btn");
+});
+
+test("trends.js includes week in showView, tools-btn active list, and leaveTrendViews", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const jsPath = path.resolve(__dirname, "../static/trends.js");
+  const js = fs.readFileSync(jsPath, "utf8");
+
+  assert.ok(js.includes('document.getElementById("week")'), "checks #week in showView / leaveTrendViews");
+  assert.ok(js.includes('document.getElementById("week-btn")'), "toggles #week-btn in showView");
+  assert.ok(js.includes('which === "week"'), "includes week in tools-btn tab activation");
+});
+
+

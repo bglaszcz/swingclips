@@ -159,7 +159,8 @@ What the server works out for each swing and what each part of the review page s
   (`swings.JS_FILES`, `metrics3d.js`, `games.js`) count as server code. A change to
   `Start server.cmd` needs a restart by hand (cmd reads a running batch file from disk).
   `POST /api/restart` restarts without updating. By hand: `git -C D:\SwingClips\app pull`, then
-  `Stop server.cmd` and `Start server.cmd` (Stop also finds the background copy the auto-start task runs).
+- Week for coach: **Tools > Week for coach** (`static/week-view.js`, `static/week.js`):
+  provides a concise weekly summary designed for the owner to share with their coach in under two minutes. Covers sessions practiced (days, duration, swings by club, drills, and coach program runs), ball flight changes for clubs hit 15+ times where change exceeds weekly noise, progress on the journal focus move vs past weeks alongside coach thoughts, top 3 named faults vs the prior week, findings that held up in subsequent sessions (`holdup.js`), game scores vs all-time bests, and journal notes. Features a week picker (`‹`/`›`) starting on this week, phone-friendly calm card styling without red highlights, and a one-tap **Copy for coach** button that formats the report as plain text ready to paste directly into a coaching chat. Openable via `/#week`.
 
 ## Trust per number: ok, shaky, no reading
 Every body number on the page (the swing numbers table and tempo line, the numbers over the video,

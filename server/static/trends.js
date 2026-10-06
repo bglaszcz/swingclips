@@ -220,15 +220,19 @@ function showView(which) {
   if (p4Box) p4Box.hidden = which !== "p4check";
   const p4Btn = document.getElementById("p4check-btn");
   if (p4Btn) p4Btn.classList.toggle("on", which === "p4check");
+  const weekBox = document.getElementById("week");
+  if (weekBox) weekBox.hidden = which !== "week";
+  const weekBtn = document.getElementById("week-btn");
+  if (weekBtn) weekBtn.classList.toggle("on", which === "week");
   viewer.hidden = which !== "swing" || !current;
   tipEl.hidden = pTipEl.hidden = true;
   if (which !== "swing") video.pause();
   if (which !== "trends") trendsKey = null;
   progressOpen = which === "progress";
   document.getElementById("progress-btn").classList.toggle("on", progressOpen);
-  // The tabs: a session's trends belong to Swings; Labels, Club check, P4 check, Night report and the shutter test are under Tools.
+  // The tabs: a session's trends belong to Swings; Labels, Club check, P4 check, Night report, Week for coach and the shutter test are under Tools.
   document.getElementById("swings-btn").classList.toggle("on", which === "swing" || which === "trends");
-  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck" || which === "p4check");
+  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck" || which === "p4check" || which === "week");
   document.body.dataset.view = which;
 }
 
@@ -238,7 +242,8 @@ function leaveTrendViews() {
       && document.getElementById("practice").hidden && document.getElementById("labelview").hidden
       && (!document.getElementById("nightreport") || document.getElementById("nightreport").hidden)
       && (!document.getElementById("clubcheck") || document.getElementById("clubcheck").hidden)
-      && (!document.getElementById("p4check") || document.getElementById("p4check").hidden)) return;
+      && (!document.getElementById("p4check") || document.getElementById("p4check").hidden)
+      && (!document.getElementById("week") || document.getElementById("week").hidden)) return;
   showView("swing");
   renderList();
 }

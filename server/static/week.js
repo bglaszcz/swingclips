@@ -180,7 +180,10 @@
   function extractRows(data) {
     if (Array.isArray(data.rows)) return data.rows;
     const clips = Array.isArray(data.clips) ? data.clips : [];
-    const swings = data.swings || {};
+    const swings = (data.swings && data.swings.swings) ? data.swings.swings : (data.swings || {});
+    if (!data.noiseTable && data.swings && data.swings.noise) {
+      data.noiseTable = data.swings.noise;
+    }
     const rows = [];
     for (const c of clips) {
       if (c.excluded) continue;
@@ -213,11 +216,13 @@
 
   function extractSessions(data, rows) {
     if (Array.isArray(data.sessions)) return data.sessions;
-    if (SinceLast && Array.isArray(data.clips)) {
-      const sList = SinceLast.sessionsOf(data.clips);
-      if (sList && sList.length) return sList;
+    if (!rows || !rows.length) {
+      if (SinceLast && Array.isArray(data.clips)) {
+        const sList = SinceLast.sessionsOf(data.clips);
+        if (sList && sList.length) return sList;
+      }
+      return [];
     }
-    if (!rows || !rows.length) return [];
     const sorted = [...rows].sort((a, b) => a.t - b.t);
     const sessions = [];
     let cur = null;
@@ -439,16 +444,20 @@
       // Build text for this club
       const parts = [];
       if (medCarry != null) {
-        let carryStr = `carry ${Math.round(medCarry)} yd`;
+        const carryDetails = [];
+        if (sigCarry) {
+          carryDetails.push(`${diffCarry > 0 ? "+" : ""}${Math.round(diffCarry)} yd vs last week`);
+        }
         if (spreadCarry != null) {
           let spStr = `spread ${Math.round(spreadCarry)} yd`;
           if (sigSpreadCarry) {
             spStr += `, ${diffSpreadCarry > 0 ? "+" : ""}${Math.round(diffSpreadCarry)} vs last week`;
           }
-          carryStr += ` (${spStr})`;
+          carryDetails.push(spStr);
         }
-        if (sigCarry) {
-          carryStr += ` [${diffCarry > 0 ? "+" : ""}${Math.round(diffCarry)} yd vs last week]`;
+        let carryStr = `carry ${Math.round(medCarry)} yd`;
+        if (carryDetails.length > 0) {
+          carryStr += ` (${carryDetails.join(", ")})`;
         }
         parts.push(carryStr);
       }
@@ -588,9 +597,12 @@
     // findings from What helps, what hurts that held up in later sessions (holdup.js),
     // with their sentence; not the ones that didn't.
     let replayed = data.holdUp || data.heldUp || null;
-    if (!replayed && HoldUp && allSessions.length >= 4) {
+    if (!replayed && HoldUp && rowsThisWeek.length > 0 && allSessions.length >= 4) {
       try {
-        replayed = HoldUp.replay(allSessions);
+        const sessionsForReplay = allSessions.filter(s => s.start < endMs);
+        if (sessionsForReplay.length >= 4) {
+          replayed = HoldUp.replay(sessionsForReplay);
+        }
       } catch {}
     }
     if (replayed && Array.isArray(replayed)) {
@@ -606,8 +618,8 @@
           else {
             const mv = Summary ? Summary.BODY.find(b => b.key === x.move) : null;
             const rs = Helps ? Helps.RESULTS.find(r => r.key === x.result) : null;
-            const mName = mv ? mv.label.toLowerCase() : x.move;
-            const rName = rs ? rs.label.toLowerCase() : x.result;
+            const mName = mv ? mv.label : x.move;
+            const rName = rs ? rs.label : x.result;
             desc = `${mName} → ${rName}`;
           }
           heldLines.push(`${desc}: ${sText}`);
@@ -726,6 +738,8 @@
     formatWeekTitle,
     clubName,
     formatDate,
+    extractRows,
+    extractSessions,
   };
 
   return api;
