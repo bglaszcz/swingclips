@@ -85,27 +85,120 @@
     return estimated ? { grip, hosel, head, estimated } : { grip, hosel, head };
   }
 
-  /** Helper to get P1, P4, P8 key timestamps for a clip/pose. */
-  function getP1P4P8(c, pose) {
-    if (pose?.positions?.p4 != null && pose?.positions?.p8 != null) {
-      return { p1: pose.positions.p1, p4: pose.positions.p4, p8: pose.positions.p8 };
+  /**
+   * Helper to get key timestamps (takeaway, p1, p2, p3, p4, p7, p8) for a clip/pose.
+   * Computes them using SwingSummary.positionTimes when available (as p4check does),
+   * or falls back to pose/clip positions or impact-based offsets.
+   */
+  function getKeyPositions(c, pose, otherPose = null, leadSide = "left") {
+    let pos = null;
+    if (pose?.positions) pos = { ...pose.positions };
+    else if (pose?.positionTimes) pos = { ...pose.positionTimes };
+    else if (c?.positions) pos = { ...c.positions };
+
+    // If pos already contains complete key positions (e.g. test mock), use it directly
+    if (pos && pos.takeaway != null && pos.p2 != null && pos.p3 != null && pos.p4 != null && pos.p8 != null) {
+      return {
+        p1: pos.p1 ?? null,
+        takeaway: pos.takeaway,
+        p2: pos.p2,
+        p3: pos.p3,
+        p4: pos.p4,
+        p7: pos.p7 ?? null,
+        p8: pos.p8,
+      };
     }
-    if (pose?.positionTimes?.p4 != null && pose?.positionTimes?.p8 != null) {
-      return { p1: pose.positionTimes.p1, p4: pose.positionTimes.p4, p8: pose.positionTimes.p8 };
+
+    // Try computing with SwingSummary.positionTimes (same as p4check.js getServerP4)
+    const summaryApi = (typeof SwingSummary !== "undefined" ? SwingSummary : (typeof Summary !== "undefined" ? Summary : null));
+    if (summaryApi && pose && Array.isArray(pose.frames) && pose.frames.length) {
+      try {
+        const w = pose.video?.videoWidth || 1080;
+        const h = pose.video?.videoHeight || 1920;
+        const aspect = pose.aspect ?? (h ? w / h : 1);
+        const input = {
+          name: c?.name || "",
+          strike: c?.strike ?? null,
+          angle: c?.angle || pose.angle || "face",
+          aspect,
+          frames: pose.frames,
+          impact: pose.impact ?? null,
+          ball: pose.ball ?? null,
+          drill: c?.drill ?? null,
+          clubOnset: pose.clubOnset ?? null,
+        };
+        let otherInput = null;
+        if (otherPose && Array.isArray(otherPose.frames) && c?.partner) {
+          const ow = otherPose.video?.videoWidth || 1080;
+          const oh = otherPose.video?.videoHeight || 1920;
+          const oAspect = otherPose.aspect ?? (oh ? ow / oh : 1);
+          otherInput = {
+            name: c.partner,
+            strike: c.partnerStrike ?? null,
+            angle: otherPose.angle || (c?.angle === "dtl" ? "face" : "dtl"),
+            aspect: oAspect,
+            frames: otherPose.frames,
+            impact: otherPose.impact ?? null,
+            ball: otherPose.ball ?? null,
+            drill: null,
+            clubOnset: otherPose.clubOnset ?? null,
+          };
+        }
+        if (typeof summaryApi.positionTimes === "function") {
+          const pt = summaryApi.positionTimes(input, otherInput, leadSide);
+          if (pt?.main?.times && pt.main.times.p4 != null) {
+            const t = pt.main.times;
+            const refImp = t.p7 ?? (t.p4 != null ? t.p4 + 0.35 : null);
+            return {
+              p1: t.p1 ?? pos?.p1 ?? (refImp != null ? Number((refImp - 1.2).toFixed(6)) : null),
+              takeaway: t.takeaway ?? pos?.takeaway ?? (refImp != null ? Number((refImp - 0.95).toFixed(6)) : null),
+              p2: t.p2 ?? pos?.p2 ?? (refImp != null ? Number((refImp - 0.75).toFixed(6)) : null),
+              p3: t.p3 ?? pos?.p3 ?? (refImp != null ? Number((refImp - 0.55).toFixed(6)) : null),
+              p4: t.p4 ?? pos?.p4 ?? (refImp != null ? Number((refImp - 0.35).toFixed(6)) : null),
+              p7: t.p7 ?? pos?.p7 ?? (refImp != null ? Number(refImp.toFixed(6)) : null),
+              p8: t.p8 ?? pos?.p8 ?? (refImp != null ? Number((refImp + 0.15).toFixed(6)) : null),
+            };
+          }
+        }
+      } catch (err) {
+        // fall back below
+      }
     }
-    if (c?.positions?.p4 != null && c?.positions?.p8 != null) {
-      return { p1: c.positions.p1, p4: c.positions.p4, p8: c.positions.p8 };
-    }
-    const imp = pose?.impact ?? c?.strike ?? c?.quality?.positions?.p7;
+
+    // Impact-based fallback
+    const imp = pose?.impact ?? c?.strike ?? c?.quality?.positions?.p7 ?? pos?.p7 ?? (pos?.p4 != null ? pos.p4 + 0.35 : null);
     if (imp != null) {
-      return { p1: imp - 1.2, p4: imp - 0.35, p8: imp + 0.15 };
+      return {
+        p1: pos?.p1 ?? Number((imp - 1.2).toFixed(6)),
+        takeaway: pos?.takeaway ?? Number((imp - 0.95).toFixed(6)),
+        p2: pos?.p2 ?? Number((imp - 0.75).toFixed(6)),
+        p3: pos?.p3 ?? Number((imp - 0.55).toFixed(6)),
+        p4: pos?.p4 ?? Number((imp - 0.35).toFixed(6)),
+        p7: pos?.p7 ?? Number(imp.toFixed(6)),
+        p8: pos?.p8 ?? Number((imp + 0.15).toFixed(6)),
+      };
     }
+
+    // Mid-frame fallback
     const frames = pose?.frames || [];
     if (frames.length > 0) {
       const mid = frames[Math.floor(frames.length / 2)].t;
-      return { p1: frames[0].t, p4: mid - 0.2, p8: mid + 0.2 };
+      return {
+        p1: pos?.p1 ?? frames[0].t,
+        takeaway: pos?.takeaway ?? Number((mid - 0.65).toFixed(6)),
+        p2: pos?.p2 ?? Number((mid - 0.50).toFixed(6)),
+        p3: pos?.p3 ?? Number((mid - 0.35).toFixed(6)),
+        p4: pos?.p4 ?? Number((mid - 0.20).toFixed(6)),
+        p7: pos?.p7 ?? Number(mid.toFixed(6)),
+        p8: pos?.p8 ?? Number((mid + 0.20).toFixed(6)),
+      };
     }
+
     return null;
+  }
+
+  function getP1P4P8(c, pose, otherPose = null) {
+    return getKeyPositions(c, pose, otherPose);
   }
 
   /** Balances swings across (day, club) buckets, round-robin. */
@@ -134,12 +227,13 @@
     return out;
   }
 
-  /** Selects a queue of frames to check, prioritizing swings without any club points yet,
-   * spread over clubs and days. In each swing: opts.perSwing (default 4) frames between P4 and P8,
-   * spread >= 0.03s apart, preferring frames where clubhead was missing/low confidence, then address.
-   * Total capped at opts.max (default 40). */
+  /** Selects a queue of frames to check, prioritizing swings without club points yet
+   * (and swings with no club points in takeaway..P3 before those that do), spread over clubs and days.
+   * In each swing: opts.perSwing (default 5) frames: 2 backswing frames between takeaway and P3
+   * (one within +-0.03s of P2, preferring low clubhead confidence), 2 downswing frames between P4 and P8,
+   * then address. Spread >= 0.03s apart. Total capped at opts.max (default 40). */
   function queue(clips, poses, labeled, opts = {}) {
-    const perSwing = opts.perSwing ?? 4;
+    const perSwing = opts.perSwing ?? 5;
     const max = opts.max ?? 40;
     const minGap = opts.minGap ?? 0.03;
 
@@ -171,6 +265,23 @@
       return false;
     }
 
+    function swingHasBackswingClubPoints(clipName, partnerName, pTimes) {
+      if (!pTimes || pTimes.takeaway == null || pTimes.p3 == null) return false;
+      const tStart = Math.min(pTimes.takeaway, pTimes.p3) - 0.01;
+      const tEnd = Math.max(pTimes.takeaway, pTimes.p3) + 0.01;
+      for (const name of [clipName, partnerName].filter(Boolean)) {
+        const doc = labelMap.get(name);
+        if (!doc || !doc.frames) continue;
+        for (const [key, pts] of Object.entries(doc.frames)) {
+          if (pts && (pts.grip || pts.hosel || pts.head || pts.allHidden)) {
+            const t = parseFloat(key);
+            if (t >= tStart && t <= tEnd) return true;
+          }
+        }
+      }
+      return false;
+    }
+
     function frameHasClubPoints(clipName, t) {
       const doc = labelMap.get(clipName);
       if (!doc || !doc.frames) return false;
@@ -191,19 +302,34 @@
     // Filter valid clips (non-excluded)
     const validClips = (clips || []).filter(c => !c.excluded);
 
-    // Group swings into unlabeled (no club points yet) vs labeled
+    // Group swings into:
+    // 1. unlabeledSwings: swings without any club points anywhere
+    // 2. noBackswingSwings: swings with club points, but none in takeaway..P3
+    // 3. hasBackswingSwings: swings that already have club points in takeaway..P3
     const unlabeledSwings = [];
-    const labeledSwings = [];
+    const noBackswingSwings = [];
+    const hasBackswingSwings = [];
 
     for (const c of validClips) {
-      if (swingHasClubPoints(c.name, c.partner)) {
-        labeledSwings.push(c);
-      } else {
+      if (!swingHasClubPoints(c.name, c.partner)) {
         unlabeledSwings.push(c);
+      } else {
+        const p = getPose(c.name);
+        const otherP = c.partner ? getPose(c.partner) : null;
+        const pTimes = p ? getKeyPositions(c, p, otherP) : null;
+        if (swingHasBackswingClubPoints(c.name, c.partner, pTimes)) {
+          hasBackswingSwings.push(c);
+        } else {
+          noBackswingSwings.push(c);
+        }
       }
     }
 
-    const orderedSwings = [...balanceSwings(unlabeledSwings), ...balanceSwings(labeledSwings)];
+    const orderedSwings = [
+      ...balanceSwings(unlabeledSwings),
+      ...balanceSwings(noBackswingSwings),
+      ...balanceSwings(hasBackswingSwings),
+    ];
 
     const outQueue = [];
 
@@ -212,33 +338,54 @@
       const p = getPose(c.name);
       if (!p || !p.frames || p.frames.length === 0) continue;
 
-      const pTimes = getP1P4P8(c, p);
+      const otherP = c.partner ? getPose(c.partner) : null;
+      const pTimes = getKeyPositions(c, p, otherP);
       if (!pTimes) continue;
 
-      // Downswing frames between P4 and P8
-      const downCandidates = p.frames.filter(f => f.t >= pTimes.p4 && f.t <= pTimes.p8 && !frameHasClubPoints(c.name, f.t));
-
-      // Prefer missing clubhead or low confidence
-      downCandidates.sort((a, b) => {
-        const ca = a.clubhead && a.clubhead.length >= 3 ? a.clubhead[2] : 0;
-        const cb = b.clubhead && b.clubhead.length >= 3 ? b.clubhead[2] : 0;
-        return ca - cb;
-      });
+      const conf = (f) => (f.clubhead && f.clubhead.length >= 3 ? f.clubhead[2] : 0);
 
       const pickedForSwing = [];
 
-      // Pick downswing frames spaced >= minGap apart (up to perSwing - 1 to leave room for address)
-      const targetDown = Math.max(1, perSwing - 1);
-      for (const f of downCandidates) {
-        if (pickedForSwing.length >= targetDown) break;
+      // 1. Backswing frames between takeaway and P3 (prefer 2, one within +-0.03s of P2, prefer low clubhead confidence)
+      const tk = pTimes.takeaway != null ? pTimes.takeaway : (pTimes.p1 != null ? pTimes.p1 + 0.2 : 0);
+      const p3 = pTimes.p3 != null ? pTimes.p3 : (pTimes.p4 != null ? pTimes.p4 - 0.2 : 0);
+      const backCandidates = p.frames.filter(f => f.t >= tk && f.t <= p3 && !frameHasClubPoints(c.name, f.t));
+
+      const targetBack = Math.min(2, Math.max(0, perSwing - 3));
+
+      if (targetBack >= 1 && pTimes.p2 != null) {
+        const p2Candidates = backCandidates
+          .filter(f => Math.abs(f.t - pTimes.p2) <= 0.03)
+          .sort((a, b) => conf(a) - conf(b));
+        if (p2Candidates.length > 0) {
+          pickedForSwing.push(p2Candidates[0]);
+        }
+      }
+
+      backCandidates.sort((a, b) => conf(a) - conf(b));
+      for (const f of backCandidates) {
+        if (pickedForSwing.length >= targetBack) break;
         if (pickedForSwing.every(x => Math.abs(x.t - f.t) >= minGap)) {
           pickedForSwing.push(f);
         }
       }
 
-      // Address frame
-      if (pTimes.p1 != null) {
-        // Find frame closest to p1
+      // 2. Downswing frames between P4 and P8 (prefer 2, prefer low clubhead confidence)
+      const downCandidates = p.frames.filter(f => f.t >= pTimes.p4 && f.t <= pTimes.p8 && !frameHasClubPoints(c.name, f.t));
+      downCandidates.sort((a, b) => conf(a) - conf(b));
+
+      const targetDown = Math.min(2, Math.max(0, perSwing - pickedForSwing.length - 1));
+      let downCount = 0;
+      for (const f of downCandidates) {
+        if (downCount >= targetDown) break;
+        if (pickedForSwing.every(x => Math.abs(x.t - f.t) >= minGap)) {
+          pickedForSwing.push(f);
+          downCount++;
+        }
+      }
+
+      // 3. Address frame near P1
+      if (pTimes.p1 != null && pickedForSwing.length < perSwing) {
         let bestAddr = null;
         let bestDist = Infinity;
         for (const f of p.frames) {
@@ -253,8 +400,14 @@
         }
       }
 
-      // If still room, pick additional downswing frames
+      // 4. If still room up to perSwing, pick additional downswing frames, then backswing
       for (const f of downCandidates) {
+        if (pickedForSwing.length >= perSwing) break;
+        if (pickedForSwing.every(x => Math.abs(x.t - f.t) >= minGap)) {
+          pickedForSwing.push(f);
+        }
+      }
+      for (const f of backCandidates) {
         if (pickedForSwing.length >= perSwing) break;
         if (pickedForSwing.every(x => Math.abs(x.t - f.t) >= minGap)) {
           pickedForSwing.push(f);
@@ -272,6 +425,7 @@
           t: f.t,
           frame: f,
           pose: p,
+          pTimes,
         });
       }
     }
@@ -1108,6 +1262,8 @@
     HOSEL_SHARE,
     guess,
     uprightAspect,
+    getKeyPositions,
+    getP1P4P8,
     queue,
     merge,
     balanceSwings,

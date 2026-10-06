@@ -10,6 +10,8 @@ const {
   guess,
   queue,
   merge,
+  getKeyPositions,
+  getP1P4P8,
 } = require("../static/clubcheck.js");
 
 test("HOSEL_SHARE is 0.93", () => {
@@ -331,3 +333,190 @@ test("no clubhead found: placed along the shaft from the hands, marked estimated
   assert.equal(found.estimated, undefined);
   assert.deepEqual(found.head, { x: 0.6, y: 0.7 });
 });
+
+test("queue: selects 2 backswing frames (one near P2 +-0.03s), 2 downswing frames, and address (perSwing 5)", () => {
+  const clips = [
+    { name: "swing1.mp4", recorded: "2026-10-01T10:00:00", club: "7I" },
+  ];
+  // Key positions:
+  // p1: 1.0, takeaway: 1.30, p2: 1.50, p3: 1.70, p4: 1.90, p7: 2.25, p8: 2.35
+  const frames = [
+    { t: 0.99, lm: [], clubhead: [0.5, 0.8, 0.9] }, // Address near P1 (1.0)
+    { t: 1.32, lm: [], clubhead: [0.5, 0.5, 0.4] }, // Backswing in takeaway..p3
+    { t: 1.49, lm: [], clubhead: [0.5, 0.5, 0.2] }, // Backswing near P2 (1.50, diff 0.01 <= 0.03)
+    { t: 1.52, lm: [], clubhead: [0.5, 0.5, 0.8] }, // Backswing near P2, higher conf (0.8 vs 0.2)
+    { t: 1.68, lm: [], clubhead: [0.5, 0.5, 0.3] }, // Backswing in takeaway..p3
+    { t: 1.95, lm: [], clubhead: [0.5, 0.6, 0.1] }, // Downswing (P4..P8)
+    { t: 2.05, lm: [], clubhead: [0.5, 0.7, 0.2] }, // Downswing
+    { t: 2.15, lm: [], clubhead: [0.5, 0.8, 0.5] }, // Downswing
+    { t: 2.30, lm: [], clubhead: [0.5, 0.9, 0.9] }, // Downswing
+  ];
+  const poses = {
+    "swing1.mp4": {
+      positions: { p1: 1.0, takeaway: 1.30, p2: 1.50, p3: 1.70, p4: 1.90, p7: 2.25, p8: 2.35 },
+      frames,
+    },
+  };
+
+  const q = queue(clips, poses, {});
+  assert.equal(q.length, 5);
+
+  const times = q.map(item => item.t);
+
+  // Address frame included near P1
+  assert.ok(times.includes(0.99));
+
+  // Exactly 2 backswing frames between takeaway (1.30) and p3 (1.70)
+  const backFrames = q.filter(item => item.t >= 1.30 && item.t <= 1.70);
+  assert.equal(backFrames.length, 2);
+
+  // One backswing frame is within +-0.03s of P2 (1.50), specifically 1.49 because of lower confidence (0.2 vs 0.8)
+  assert.ok(backFrames.some(item => Math.abs(item.t - 1.50) <= 0.03));
+  assert.ok(backFrames.some(item => item.t === 1.49));
+
+  // Exactly 2 downswing frames between p4 (1.90) and p8 (2.35)
+  const downFrames = q.filter(item => item.t >= 1.90 && item.t <= 2.35);
+  assert.equal(downFrames.length, 2);
+  // Downswing prefers low confidence (1.95 [conf 0.1] and 2.05 [conf 0.2])
+  assert.ok(downFrames.some(item => item.t === 1.95));
+  assert.ok(downFrames.some(item => item.t === 2.05));
+
+  // Spacing >= minGap (0.03s)
+  for (let i = 0; i < q.length - 1; i++) {
+    assert.ok(Math.abs(q[i + 1].t - q[i].t) >= 0.029);
+  }
+});
+
+test("queue: skips frames that already have club points", () => {
+  const clips = [
+    { name: "swing1.mp4", recorded: "2026-10-01T10:00:00", club: "7I" },
+  ];
+  const frames = [
+    { t: 1.00, lm: [] },
+    { t: 1.49, lm: [] }, // Near P2 (labeled!)
+    { t: 1.52, lm: [] }, // Also near P2 (unlabeled)
+    { t: 1.68, lm: [] },
+    { t: 1.95, lm: [] }, // Downswing (labeled!)
+    { t: 2.05, lm: [] }, // Downswing
+    { t: 2.15, lm: [] }, // Downswing
+  ];
+  const poses = {
+    "swing1.mp4": {
+      positions: { p1: 1.0, takeaway: 1.30, p2: 1.50, p3: 1.70, p4: 1.90, p7: 2.25, p8: 2.35 },
+      frames,
+    },
+  };
+  const labeled = {
+    "swing1.mp4": {
+      frames: {
+        "1.490000": { grip: { x: 0.5, y: 0.5 } },
+        "1.950000": { head: { x: 0.5, y: 0.8 } },
+      },
+    },
+  };
+
+  const q = queue(clips, poses, labeled, { perSwing: 5 });
+  const times = q.map(item => item.t);
+  assert.ok(!times.includes(1.49), "Already labeled P2 frame should be skipped");
+  assert.ok(!times.includes(1.95), "Already labeled downswing frame should be skipped");
+  // Should have picked 1.52 near P2 instead
+  assert.ok(times.includes(1.52), "Alternative frame near P2 should be chosen");
+});
+
+test("getKeyPositions and queue: impact fallback works without positions or SwingSummary", () => {
+  const clip = { name: "swing_impact.mp4", strike: 2.0, club: "8I", recorded: "2026-10-01" };
+  const pose = {
+    frames: [
+      { t: 0.80, lm: [] }, // Address (imp - 1.2 = 0.8)
+      { t: 1.05, lm: [] }, // Takeaway (imp - 0.95 = 1.05)
+      { t: 1.25, lm: [] }, // P2 (imp - 0.75 = 1.25)
+      { t: 1.45, lm: [] }, // P3 (imp - 0.55 = 1.45)
+      { t: 1.65, lm: [] }, // P4 (imp - 0.35 = 1.65)
+      { t: 1.80, lm: [] }, // Downswing
+      { t: 2.10, lm: [] }, // Downswing
+    ],
+  };
+
+  const keyPos = getKeyPositions(clip, pose);
+  assert.equal(keyPos.p1, 0.8);
+  assert.equal(keyPos.takeaway, 1.05);
+  assert.equal(keyPos.p2, 1.25);
+  assert.equal(keyPos.p3, 1.45);
+  assert.equal(keyPos.p4, 1.65);
+  assert.equal(keyPos.p7, 2.0);
+  assert.equal(keyPos.p8, 2.15);
+
+  const q = queue([clip], { "swing_impact.mp4": pose }, {});
+  assert.equal(q.length, 5);
+  const times = q.map(item => item.t);
+  assert.ok(times.includes(0.80), "Address at p1");
+  assert.ok(times.includes(1.25), "Near P2 in backswing");
+  assert.ok(times.some(t => t >= 1.05 && t <= 1.45 && t !== 1.25), "Second backswing frame");
+});
+
+test("queue: prefers swings without backswing club points before swings that already have them", () => {
+  const clips = [
+    { name: "swing_has_backswing.mp4", recorded: "2026-10-01T10:00:00", club: "7I" },
+    { name: "swing_no_backswing.mp4", recorded: "2026-10-01T10:00:00", club: "7I" },
+  ];
+  const mkPose = () => ({
+    positions: { p1: 1.0, takeaway: 1.30, p2: 1.50, p3: 1.70, p4: 1.90, p7: 2.25, p8: 2.35 },
+    frames: [
+      { t: 1.00, lm: [] },
+      { t: 1.35, lm: [] },
+      { t: 1.50, lm: [] },
+      { t: 1.95, lm: [] },
+      { t: 2.05, lm: [] },
+    ],
+  });
+  const poses = {
+    "swing_has_backswing.mp4": mkPose(),
+    "swing_no_backswing.mp4": mkPose(),
+  };
+
+  // Both swings have club points, but:
+  // - swing_has_backswing has a point at 1.50 (in takeaway..p3)
+  // - swing_no_backswing has a point at 2.05 (in downswing, none in takeaway..p3)
+  const labeled = {
+    "swing_has_backswing.mp4": {
+      frames: {
+        "1.500000": { head: { x: 0.5, y: 0.5 } },
+      },
+    },
+    "swing_no_backswing.mp4": {
+      frames: {
+        "2.050000": { head: { x: 0.5, y: 0.5 } },
+      },
+    },
+  };
+
+  const q = queue(clips, poses, labeled, { perSwing: 5 });
+  assert.ok(q.length > 0);
+  // First item in queue must be from swing_no_backswing.mp4
+  assert.equal(q[0].clip, "swing_no_backswing.mp4");
+});
+
+test("queue: respects max cap with perSwing 5", () => {
+  const clips = Array.from({ length: 5 }, (_, i) => ({
+    name: `c_${i}.mp4`,
+    recorded: "2026-10-01",
+    club: "7I",
+  }));
+  const poses = Object.fromEntries(clips.map(c => [
+    c.name,
+    {
+      positions: { p1: 1.0, takeaway: 1.3, p2: 1.5, p3: 1.7, p4: 1.9, p7: 2.2, p8: 2.3 },
+      frames: [
+        { t: 1.0, lm: [] },
+        { t: 1.35, lm: [] },
+        { t: 1.5, lm: [] },
+        { t: 1.95, lm: [] },
+        { t: 2.05, lm: [] },
+      ],
+    },
+  ]));
+
+  const q = queue(clips, poses, {}, { max: 8 });
+  assert.equal(q.length, 8);
+});
+
