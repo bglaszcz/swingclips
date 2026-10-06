@@ -254,11 +254,11 @@
       const nStart = parseTime(n0.started);
       if (nStart == null || nStart >= session.end) {
         let sentence = "";
-        if (n0.clips != null && n0.improve) {
+        if (n0.clips && n0.improve) {
           sentence = `Night: ${n0.clips} clips analyzed again; ${n0.improve}`;
         } else if (n0.improve) {
           sentence = `Night: ${n0.improve}`;
-        } else if (n0.clips != null) {
+        } else if (n0.clips) {
           sentence = `Night: ${n0.clips} clips analyzed again`;
         }
         if (sentence) {

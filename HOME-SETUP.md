@@ -21,8 +21,9 @@ end).
    range**, **GSPro connector**, **Drills, no ball**). It starts only what that needs and opens the
    Start page. (First time: double-click `Golf launcher.cmd` in `Dropbox\SwingClips` and press "Put an
    icon on the desktop".) In Square's app, pick the **driving range**. (The server runs by itself; nothing to do there.)
-3. **Start page, 1 Get ready**: every check green, both camera pictures framed with the skeleton on
-   you. Fix what it says if not. (It folds to one line once both phones record.)
+3. **Start page, 1 Get ready**: "Since last time" checks the previous session and the night worker
+   (camera misses, Square pairing, false triggers, camera moves). Every check green, both camera pictures
+   framed with the skeleton on you. Fix what it says if not. (It folds to one line once both phones record.)
 4. **2 What are you doing?**: pick one. Only what it needs shows below it (the launcher's **Drills, no
    ball** button picks "Drills, no ball" for you).
 5. **3 Record: Start recording.** Each phone says "Recording". (A phone that joins late starts by itself.)

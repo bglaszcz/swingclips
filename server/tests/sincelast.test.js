@@ -261,3 +261,14 @@ test("down-the-line missed (> 3%) and Square pairing warning (< 90%)", () => {
   assert.equal(sqLine.kind, "warn");
   assert.equal(sqLine.todo, "Check the Square app is open on the sim laptop and the watcher is running");
 });
+
+test("start.html contains Since last markup, script tag, and styles", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const html = fs.readFileSync(path.join(__dirname, "../static/start.html"), "utf-8");
+
+  assert.ok(html.includes('<script src="/static/sincelast.js"></script>'), "loads sincelast.js");
+  assert.ok(html.includes('id="since-last"'), "has #since-last element");
+  assert.ok(html.includes('.since-last'), "has .since-last css styles");
+});
+

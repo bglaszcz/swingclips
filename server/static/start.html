@@ -151,6 +151,21 @@
   .pelvis-card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
   .pelvis-card-num { font-size: 40px; font-weight: 750; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; margin: 4px 0 6px; }
   .pelvis-card-sentence { font-size: 13px; color: var(--muted); line-height: 1.4; }
+  .since-last { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; display: grid; gap: 8px; }
+  .since-last-head { font-size: 14px; font-weight: 700; color: var(--text); display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .since-last-item { font-size: 13px; line-height: 1.4; display: flex; align-items: flex-start; gap: 8px; }
+  .since-last-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; }
+  .since-last-dot.warn { background: var(--warn); }
+  .since-last-dot.ok { background: var(--accent); }
+  .since-last-dot.info { background: var(--muted); }
+  .since-last-body { flex: 1; min-width: 0; }
+  .since-last-text { color: var(--text); }
+  .since-last-todo { display: block; color: var(--warn); font-weight: 600; font-size: 12px; margin-top: 2px; }
+  .since-last-link { color: var(--accent); text-decoration: underline; margin-left: 6px; font-size: 12px; white-space: nowrap; }
+  .since-last-details { margin-top: 4px; font-size: 13px; }
+  .since-last-details summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 12px; user-select: none; }
+  .since-last-details[open] summary { margin-bottom: 6px; }
+  .since-last-ok-list { display: grid; gap: 6px; margin-top: 4px; }
   @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; } }
 </style>
 <script src="/static/games.js"></script>
@@ -165,6 +180,7 @@
 <script src="/static/drillsets.js"></script>
 <script src="/static/plan.js"></script>
 <script src="/static/programhistory.js"></script>
+<script src="/static/sincelast.js"></script>
 </head>
 <body>
 <header>
@@ -177,6 +193,7 @@
 <main>
   <section id="sec-ready">
     <h2><span class="n" id="n1">1</span>Get ready</h2>
+    <div id="since-last" class="since-last" hidden></div>
     <div class="ready-sum" id="ready-sum" hidden><span id="ready-text"></span>
       <button class="linkbtn" id="ready-show">Show the cameras</button></div>
     <div id="ready-full">
@@ -1258,6 +1275,7 @@ function renderReady() {
   const open = readyOpen != null ? readyOpen : needed && !recording;
   $("ready-full").hidden = !open;
   $("ready-sum").hidden = open;
+  if ($("since-last")) $("since-last").hidden = recording || !hasSinceLastData;
   const sq = status && status.rows.find(r => r.key === "square");
   $("ready-text").textContent = !needed ? "No phones or Square needed for drills without a ball."
     : recording ? "● Both phones recording" + (sq ? ` · ${sq.label}: ${sq.text}` : "")
@@ -1265,6 +1283,79 @@ function renderReady() {
   $("ready-show").textContent = open ? "Hide the cameras" : "Show the cameras";
 }
 $("ready-show").onclick = () => { readyOpen = $("ready-full").hidden; renderReady(); };
+
+// ---- 1b. Since last time (the morning check) ----
+let sinceLastLoaded = false, hasSinceLastData = false;
+
+function renderSinceLast(data) {
+  if (typeof SwingSinceLast === "undefined") return;
+  const res = SwingSinceLast.summary(data, Date.now());
+  const box = $("since-last");
+  if (!box) return;
+
+  if (!res || !res.headline) {
+    box.hidden = true;
+    hasSinceLastData = false;
+    return;
+  }
+
+  hasSinceLastData = true;
+  const p = (status && status.phones) || {};
+  const recording = !!(p.face && p.face.recording && p.dtl && p.dtl.recording);
+  box.hidden = recording;
+
+  const warnAndInfoLines = (res.lines || []).filter(l => l.kind !== "ok");
+  const okLines = (res.lines || []).filter(l => l.kind === "ok");
+
+  const renderLine = l => {
+    const dotCls = l.kind === "warn" ? "warn" : l.kind === "ok" ? "ok" : "info";
+    const linkHtml = l.link ? ` <a href="${esc(l.link)}" class="since-last-link">Open it</a>` : "";
+    const todoHtml = l.todo ? `<span class="since-last-todo">${esc(l.todo)}</span>` : "";
+    return `<div class="since-last-item">
+      <span class="since-last-dot ${dotCls}"></span>
+      <div class="since-last-body">
+        <span class="since-last-text">${esc(l.text)}</span>${linkHtml}
+        ${todoHtml}
+      </div>
+    </div>`;
+  };
+
+  const openHtml = warnAndInfoLines.map(renderLine).join("");
+  const okHtml = okLines.length ? `<details class="since-last-details">
+    <summary>Show all</summary>
+    <div class="since-last-ok-list">
+      ${okLines.map(renderLine).join("")}
+    </div>
+  </details>` : "";
+
+  box.innerHTML = `<div class="since-last-head">
+    <span>${esc(res.headline)}</span>
+  </div>
+  ${openHtml}
+  ${okHtml}`;
+}
+
+async function loadSinceLast() {
+  if (sinceLastLoaded) return;
+  const p = (status && status.phones) || {};
+  const recording = !!(p.face && p.face.recording && p.dtl && p.dtl.recording);
+  if (recording) return;
+
+  sinceLastLoaded = true;
+  try {
+    const [clips, events, calib, improve, next, night] = await Promise.all([
+      getJson("/api/clips"),
+      getJson("/api/events?limit=500"),
+      getJson("/api/calib"),
+      getJson("/api/improve"),
+      getJson("/api/improve/next"),
+      getJson("/api/night")
+    ]);
+    renderSinceLast({ clips, events, calib, improve, next, night });
+  } catch (e) {
+    console.warn("Could not load Since last summary:", e);
+  }
+}
 
 function blockNeeds3d(b) {
   if (!b || !b.gate) return false;
@@ -1343,6 +1434,7 @@ async function pollStatus() {
   camsGood = good.every(Boolean);
   renderGo(s);
   renderReady();
+  if (!sinceLastLoaded) loadSinceLast();
   statusTimer = setTimeout(pollStatus, document.hidden ? 10000 : 1000);
 }
 async function pollSwings() {
