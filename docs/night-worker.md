@@ -74,6 +74,8 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    points that the night worker's improve step consumes to retrain `club-deep.onnx` on the GPU.
    When the club extends out of frame (such as at the top of the backswing), "Club leaves the picture"
    (key O) preserves the grip point while marking the hosel and clubhead hidden.
+   The Back button (key Backspace) reloads and displays the points previously saved for earlier queue
+   frames so mistakes can be corrected, tracked alongside a session save counter.
 
 ## Getting better every night: the improve step
 

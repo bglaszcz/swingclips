@@ -1278,7 +1278,10 @@
         <span class="s-note" id="cc-status"></span>
         <button id="cc-close" class="small">Close</button>
       </div>
-      <div id="cc-progress" class="note cc-progress" style="margin-bottom: 2px; display: none;"></div>
+      <div class="cc-progress-row" style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 2px;">
+        <div id="cc-progress" class="note cc-progress" style="display: none;"></div>
+        <div id="cc-session-saved" class="note cc-session-saved" style="margin-left: auto;">This session: 0 saved</div>
+      </div>
       <div class="cc-card">
         <div class="cc-meta-row">
           <div>
@@ -1309,6 +1312,9 @@
             </button>
           </div>
           <div class="cc-actions-row">
+            <button type="button" class="small" id="cc-back-btn" title="Go back to previous frame (Backspace)">
+              Back <kbd>Backspace</kbd>
+            </button>
             <button type="button" class="primary" id="cc-save-btn" title="Save current points and go to next frame (Enter / Space)">
               Looks right <kbd>Enter</kbd>
             </button>

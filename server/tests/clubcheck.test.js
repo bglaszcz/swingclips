@@ -15,6 +15,7 @@ const {
   phaseName,
   progressText,
   clubLeavesPicture,
+  savedPointsFor,
 } = require("../static/clubcheck.js");
 
 test("HOSEL_SHARE is 0.93", () => {
@@ -267,6 +268,9 @@ test("ClubCheck exports UI controller methods and balanceSwings", () => {
   assert.equal(typeof ClubCheck.markAllHidden, "function");
   assert.equal(typeof ClubCheck.cycleNextPoint, "function");
   assert.equal(typeof ClubCheck.clubLeavesPicture, "function");
+  assert.equal(typeof ClubCheck.savedPointsFor, "function");
+  assert.equal(typeof ClubCheck.back, "function");
+  assert.ok(ClubCheck.savedThisSession instanceof Set);
   assert.equal(typeof ClubCheck.showFrame, "function");
   assert.equal(typeof ClubCheck.loadQueue, "function");
 });
@@ -282,11 +286,14 @@ test("index.html contains Club check markup, Tools menu item, and scripts", () =
   assert.ok(html.includes('id="clubcheck-view"'), "defines #clubcheck-view container");
   assert.ok(html.includes('id="cc-close"'), "defines Close button");
   assert.ok(html.includes('id="cc-status"'), "defines status span");
+  assert.ok(html.includes('id="cc-progress"'), "defines progress container");
+  assert.ok(html.includes('id="cc-session-saved"'), "defines session saved counter");
   assert.ok(html.includes('id="cc-counter"'), "defines counter element");
   assert.ok(html.includes('id="cc-img"'), "defines still image element");
   assert.ok(html.includes('id="cc-overlay"'), "defines overlay canvas");
   assert.ok(html.includes('id="cc-zoom"'), "defines zoom canvas");
   assert.ok(html.includes('id="cc-zoom-wrap"'), "defines zoom inset wrapper");
+  assert.ok(html.includes('id="cc-back-btn"'), "defines Back button");
   assert.ok(html.includes('id="cc-save-btn"'), "defines Looks right / save button");
   assert.ok(html.includes('id="cc-blur-btn"'), "defines Blurred button");
   assert.ok(html.includes('id="cc-hide-btn"'), "defines Can't see button");
@@ -344,6 +351,114 @@ test("clubLeavesPicture: returns grip null when grip was not placed or was hidde
     hosel: { hidden: true },
     head: { hidden: true },
   });
+});
+
+test("savedPointsFor: extracts saved points for exact matching timestamp", () => {
+  const doc = {
+    frames: {
+      "1.500000": {
+        grip: { x: 0.45, y: 0.55 },
+        hosel: { x: 0.50, y: 0.70 },
+        head: { x: 0.55, y: 0.85, blur: true },
+      },
+    },
+  };
+  const pts = savedPointsFor(doc, 1.5);
+  assert.deepEqual(pts, {
+    grip: { x: 0.45, y: 0.55 },
+    hosel: { x: 0.50, y: 0.70 },
+    head: { x: 0.55, y: 0.85, blur: true },
+  });
+});
+
+test("savedPointsFor: matches within 1.5ms float tolerance", () => {
+  const doc = {
+    frames: {
+      "1.500000": {
+        grip: { x: 0.45, y: 0.55 },
+        hosel: { hidden: true },
+        head: { hidden: true },
+      },
+    },
+  };
+  // 1.5004 is within 0.0015 of 1.500000
+  const pts = savedPointsFor(doc, 1.5004);
+  assert.deepEqual(pts, {
+    grip: { x: 0.45, y: 0.55 },
+    hosel: { hidden: true },
+    head: { hidden: true },
+  });
+});
+
+test("savedPointsFor: handles allHidden flag and all-hidden points", () => {
+  const docAllFlag = {
+    frames: {
+      "1.500000": {
+        allHidden: true,
+      },
+    },
+  };
+  assert.deepEqual(savedPointsFor(docAllFlag, 1.5), {
+    grip: { hidden: true },
+    hosel: { hidden: true },
+    head: { hidden: true },
+  });
+
+  const docHiddenPts = {
+    frames: {
+      "1.500000": {
+        grip: { hidden: true },
+        hosel: { hidden: true },
+        head: { hidden: true },
+      },
+    },
+  };
+  assert.deepEqual(savedPointsFor(docHiddenPts, 1.5), {
+    grip: { hidden: true },
+    hosel: { hidden: true },
+    head: { hidden: true },
+  });
+});
+
+test("savedPointsFor: returns null for frames without club points or missing docs", () => {
+  // Only body landmarks, no club points
+  const docOnlyLm = {
+    frames: {
+      "1.500000": {
+        lm: [0.1, 0.2, 0.9],
+      },
+    },
+  };
+  assert.equal(savedPointsFor(docOnlyLm, 1.5), null);
+
+  // Frame not in doc
+  assert.equal(savedPointsFor(docOnlyLm, 2.5), null);
+
+  // Missing doc or doc.frames
+  assert.equal(savedPointsFor(null, 1.5), null);
+  assert.equal(savedPointsFor({}, 1.5), null);
+  assert.equal(savedPointsFor({ frames: null }, 1.5), null);
+  assert.equal(savedPointsFor(docOnlyLm, null), null);
+});
+
+test("session saves: savedThisSession Set tracks saves without double-counting re-saves", () => {
+  const set = new Set();
+  const key1 = "clipA.mp4|1.500000";
+  const key2 = "clipB.mp4|2.100000";
+
+  assert.equal(set.has(key1), false);
+  set.add(key1);
+  assert.equal(set.size, 1);
+
+  // Re-save same frame
+  const isNewSave = !set.has(key1);
+  assert.equal(isNewSave, false);
+  set.add(key1);
+  assert.equal(set.size, 1);
+
+  // Save different frame
+  set.add(key2);
+  assert.equal(set.size, 2);
 });
 
 test("trends.js includes clubcheck in showView and leaveTrendViews", () => {
