@@ -584,6 +584,12 @@
            background: var(--panel); color: var(--text); max-width: 100%; }
   .t-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
             position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  #t-story { display: flex; flex-direction: column; gap: 8px; }
+  .t-story-head { font-size: 15px; font-weight: 600; line-height: 1.4; }
+  .t-story-clubs { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .t-story-fault { font-size: 13px; }
+  .t-story-thought { font-weight: 500; cursor: help; border-bottom: 1px dotted var(--muted); }
+  .t-story-best { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; font-size: 13px; }
   #t-chart svg { display: block; width: 100%; height: 320px; overflow: visible; }
   .t-axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
   .t-title { fill: var(--text); font-size: 12px; }
@@ -785,6 +791,8 @@
   .menu-pop button:hover { background: var(--panel-2); }
   .menu-pop button.on { background: var(--accent-soft); color: var(--accent); }
   .menu-pop kbd { border: 0; background: none; padding: 0; }
+  .menu-divider { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
+  .menu-heading { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding: 6px 10px 2px; }
   .tabs .menu-pop { min-width: 210px; }
 
   /* Cards: the sections of a page. */
@@ -1097,16 +1105,18 @@
       <span class="menu-pop right" hidden>
         <button class="small" data-page="/start" title="The session start page: checks, both cameras, Start / Stop recording, coach program, plan and games">Start a session</button>
         <button class="small" data-page="/tripods" title="Find the tripod spots: live pictures, framing meters, level and alignment-stick tools, saved spots">Tripod setup</button>
+        <button id="week-btn" class="small" title="Week for coach: one page a week for the coach with practice, ball flight, focus move, faults, and games">Week for coach</button>
+        <button id="update-btn" class="small" title="Get the latest version from GitHub; the server restarts itself when the change needs it">Update the server</button>
+        <button id="help-menu-btn" class="small" title="Keyboard shortcuts and what the page shows">Shortcuts &amp; help <kbd>?</kbd></button>
+        <hr class="menu-divider">
+        <div class="menu-heading">Tracking and setup checks</div>
         <button class="small" data-page="/calibrate" title="3D from both phones: the lens board per phone, then place the cameras from your swings">3D calibration</button>
         <button id="labels-btn" class="small" title="Hand labels for the scorecard: what's done, what to check, what to label next">Labels</button>
         <button id="clubcheck-btn" class="small" title="Quick club points (grip, hosel, clubhead) that feed the nightly club model">Club check</button>
         <button id="p4check-btn" class="small" title="P4 check: quick hand labels for the top of the backswing">P4 check</button>
-        <button id="nightreport-btn" class="small" title="The gaming PC's nightly improve run: model candidate scores, worker progress, and nights">Night report</button>
-        <button id="week-btn" class="small" title="Week for coach: one page a week for the coach with practice, ball flight, focus move, faults, and games">Week for coach</button>
         <button id="wristcheck-btn" class="small" title="Wrist check: judge lead wrist at impact (flat, slightly bowed, cupped) on coach program shots">Wrist check</button>
+        <button id="nightreport-btn" class="small" title="The gaming PC's nightly improve run: model candidate scores, worker progress, and nights">Night report</button>
         <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button>
-        <button id="update-btn" class="small" title="Get the latest version from GitHub; the server restarts itself when the change needs it">Update the server</button>
-        <button id="help-menu-btn" class="small" title="Keyboard shortcuts and what the page shows">Shortcuts &amp; help <kbd>?</kbd></button>
       </span>
     </span>
   </nav>
@@ -1213,37 +1223,49 @@
       <strong id="t-title">Session trends</strong><span id="t-status"></span>
       <button id="t-close" class="small">Close</button>
     </div>
-    <div class="t-filters">
-      <label>Result <select id="t-y"></select></label>
-      <label>against <select id="t-x"></select></label>
-      <label id="t-club-wrap">Club <select id="t-club"></select></label>
-      <label title="Shaky numbers: tracking noise or the conditions could account for them (hollow dots). Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
-      <span class="t-fix" id="t-fix"></span>
+    <div class="t-card" id="t-story">
+      <div id="t-story-headline" class="t-story-head"></div>
+      <div id="t-story-clubs" class="t-story-clubs"></div>
+      <div id="t-story-fault" class="t-story-fault"></div>
+      <div id="t-story-best" class="t-story-best">
+        <button id="t-story-best-btn" class="small">Watch my best swing</button>
+        <span id="t-story-best-why" class="hint"></span>
+      </div>
     </div>
-    <div class="t-card" id="t-good-bad" hidden>
-      <strong>Good vs bad this session</strong>
-      <div id="t-good-bad-body"></div>
-    </div>
-    <div class="t-card" id="t-chart">
-      <svg role="img"></svg>
-      <div id="t-tip" hidden></div>
-      <div id="t-r"></div>
-      <div class="note">One dot per swing; tap one to open it; hollow = a shaky number on either axis (tracking
-        noise or the conditions could account for it; hover for why). The line is the straight-line fit. Launch
-        monitor: left is -, right is + (path + = in-to-out, face + = open, for a right-hander).</div>
-    </div>
-    <div class="t-card">
-      <strong id="t-rank-title"></strong>
-      <div id="t-rank"></div>
-      <div class="note">r runs from -1 to +1: how closely the two go up and down together (0 = no link;
-        - = one goes up as the other goes down). The tick marks how big it must be to stand out from
-        chance with this many swings; below that it could easily be luck. Even one that stands out is a
-        lead to test, not proof that one causes the other.</div>
-    </div>
-    <div class="t-card">
-      <strong>All swings</strong>
-      <div style="overflow-x: auto"><table id="t-table"></table></div>
-    </div>
+    <details class="t-card p-fold" data-fold="trends-advanced">
+      <summary><strong>Advanced data</strong></summary>
+      <div class="t-filters">
+        <label>Result <select id="t-y"></select></label>
+        <label>against <select id="t-x"></select></label>
+        <label id="t-club-wrap">Club <select id="t-club"></select></label>
+        <label title="Shaky numbers: tracking noise or the conditions could account for them (hollow dots). Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
+        <span class="t-fix" id="t-fix"></span>
+      </div>
+      <div class="t-card" id="t-good-bad" hidden>
+        <strong>Good vs bad this session</strong>
+        <div id="t-good-bad-body"></div>
+      </div>
+      <div class="t-card" id="t-chart">
+        <svg role="img"></svg>
+        <div id="t-tip" hidden></div>
+        <div id="t-r"></div>
+        <div class="note">One dot per swing; tap one to open it; hollow = a shaky number on either axis (tracking
+          noise or the conditions could account for it; hover for why). The line is the straight-line fit. Launch
+          monitor: left is -, right is + (path + = in-to-out, face + = open, for a right-hander).</div>
+      </div>
+      <div class="t-card">
+        <strong id="t-rank-title"></strong>
+        <div id="t-rank"></div>
+        <div class="note">r runs from -1 to +1: how closely the two go up and down together (0 = no link;
+          - = one goes up as the other goes down). The tick marks how big it must be to stand out from
+          chance with this many swings; below that it could easily be luck. Even one that stands out is a
+          lead to test, not proof that one causes the other.</div>
+      </div>
+      <div class="t-card">
+        <strong>All swings</strong>
+        <div style="overflow-x: auto"><table id="t-table"></table></div>
+      </div>
+    </details>
   </section>
   <section id="setup" hidden>
     <div class="t-head">
@@ -1768,6 +1790,7 @@
 <script src="/static/shotstory.js"></script>
 <script src="/static/scorecard.js"></script>
 <script src="/static/sessionscore.js"></script>
+<script src="/static/sessionstory.js"></script>
 <script src="/static/habits.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
@@ -4132,6 +4155,79 @@ function clipRow(c) {
   return li;
 }
 
+let sessionScoreHeaderCache = {};
+
+function sessionHeaderSub(s) {
+  const byClub = new Map();
+  for (const c of s.clips) if (c.shot && c.shot.club) byClub.set(c.shot.club, (byClub.get(c.shot.club) || 0) + 1);
+  const top = [...byClub].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${clubShort(k)} ${n}`);
+  const clubCounts = [`${s.clips.length} swing${s.clips.length === 1 ? "" : "s"}`, ...top].join(" · ");
+
+  const loaded = typeof trendDataLoaded !== "undefined" && trendDataLoaded;
+  if (!loaded || typeof SwingSessionScore === "undefined" || typeof goodShotData !== "function") {
+    return { sub: clubCounts, title: clubCounts };
+  }
+
+  const cacheKey = s.key + "|" + dataSig + "|" + s.clips.length;
+  if (sessionScoreHeaderCache[cacheKey]) {
+    return { sub: sessionScoreHeaderCache[cacheKey], title: clubCounts };
+  }
+
+  const rows = s.clips.filter(c => !c.excluded).map(swingRow);
+  const data = goodShotData();
+  const ctx = {
+    clubs: data ? data.clubs : null,
+    name: r => r.c ? r.c.name : r.name,
+    settings: goodSettings && goodSettings.settings,
+  };
+  const sc = SwingSessionScore.score(rows, ctx);
+  if (!sc || !sc.judged) {
+    sessionScoreHeaderCache[cacheKey] = clubCounts;
+    return { sub: clubCounts, title: clubCounts };
+  }
+
+  // Count judged and good per club for clubs with 5+ judged shots
+  const clubStats = {};
+  const st = SwingGoodShots.withDefaults(ctx.settings);
+  for (const r of rows) {
+    const club = r.club || (r.c && r.c.shot && r.c.shot.club);
+    if (!club) continue;
+    const group = SwingGoodShots.groupOf(club);
+    if (!group) continue;
+    const c = ctx.clubs && ctx.clubs[club], base = c && c.baseline;
+    if (!base) continue;
+    const v = c.verdicts && c.verdicts[ctx.name(r)];
+    const judgedHere = v || (Number.isFinite(r.carry) && r.carry > 0 ? SwingGoodShots.judgeShot(r, base, group, st) : null);
+    if (judgedHere && Number.isFinite(r.carry) && r.carry > 0) {
+      let cs = clubStats[club];
+      if (!cs) { cs = { club, judged: 0, good: 0 }; clubStats[club] = cs; }
+      cs.judged++;
+      if (judgedHere.good) cs.good++;
+    }
+  }
+
+  let bestClub = null;
+  let bestRate = -1;
+  for (const club in clubStats) {
+    const cs = clubStats[club];
+    if (cs.judged >= 5) {
+      const rate = cs.good / cs.judged;
+      if (rate > bestRate || (rate === bestRate && bestClub && cs.judged > clubStats[bestClub].judged)) {
+        bestRate = rate;
+        bestClub = club;
+      }
+    }
+  }
+
+  const plainName = typeof SwingSessionStory !== "undefined" && SwingSessionStory.plainClub
+    ? SwingSessionStory.plainClub
+    : c => clubName(c).toLowerCase();
+  const bestStr = bestClub ? ` · best: ${plainName(bestClub)}` : "";
+  const sub = `${Math.round(sc.goodRate * 100)}% good shots${bestStr}`;
+  sessionScoreHeaderCache[cacheKey] = sub;
+  return { sub, title: clubCounts };
+}
+
 function renderList() {
   const n = shownClips().length;
   const nf = findQuery ? filteredClips().length : null;
@@ -4158,11 +4254,10 @@ function renderList() {
     head.className = "shead";
     head.innerHTML = `<span class="chev">▾</span><div class="stitle"><div class="sname"></div><div class="ssub"></div></div>`;
     head.querySelector(".sname").textContent = sessionTitle(s);
-    // "40 swings · 7i 22 · DR 12 · GW 6": the clubs hit most.
-    const byClub = new Map();
-    for (const c of s.clips) if (c.shot && c.shot.club) byClub.set(c.shot.club, (byClub.get(c.shot.club) || 0) + 1);
-    const top = [...byClub].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${clubShort(k)} ${n}`);
-    head.querySelector(".ssub").textContent = [`${s.clips.length} swing${s.clips.length === 1 ? "" : "s"}`, ...top].join(" · ");
+    const { sub, title } = sessionHeaderSub(s);
+    head.title = title;
+    head.querySelector(".stitle").title = title;
+    head.querySelector(".ssub").textContent = sub;
     if (selecting) {
       const all = document.createElement("input");
       all.type = "checkbox";
