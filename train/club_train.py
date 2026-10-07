@@ -163,7 +163,7 @@ def train(model: str, data: Path, args, name: str, epochs: int) -> Path:
     from ultralytics import YOLO
     yolo = YOLO(model)
     yolo.train(data=str(data), epochs=epochs, imgsz=args.imgsz, batch=args.batch, device=args.device,
-               workers=args.workers, project=str(args.project), name=name, exist_ok=True, seed=0,
+               workers=args.workers, project=str(args.project), name=name, exist_ok=True, seed=args.seed,
                augmentations=augmentations(), **TRAIN_ARGS)
     best = Path(yolo.trainer.best)
     if not best.is_file():
@@ -195,6 +195,8 @@ def main(argv=None) -> int:
     ap.add_argument("--model", default="yolo11s-pose.pt", help="starting weights: yolo11s-pose.pt (default) or "
                     "yolo11n-pose.pt (downloaded by Ultralytics), or a .pt of your own")
     ap.add_argument("--epochs", type=int, default=150)
+    ap.add_argument("--seed", type=int, default=0, help="training's random seed (the night's improve step trains twice, "
+                    "seeds 0 and 1: the GPU's results vary run to run anyway)")
     ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--batch", type=int, default=16, help="16 fits yolo11s at 640 in 16 GB with room to spare")
     ap.add_argument("--device", default="0", help="GPU index, or cpu")

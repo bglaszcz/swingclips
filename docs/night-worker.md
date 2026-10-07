@@ -90,17 +90,20 @@ side `server/improve.py`, `/api/improve`):
 2. **Train**: the labels and labeled clips are copied to the gaming PC (`%USERPROFILE%\SwingClips-night`,
    only new clips download), `club_dataset.py` makes the dataset (validation = ~20% of swings by swing
    name, the same swings each time), and `train/club_train.py` trains a YOLO11s club model in
-   `train\.venv` (~20 min on the 5070 Ti). The worker's own processes are stopped first: they hold
-   ~15 GB of the card.
-3. **Score**: `eval.py --rerun --deep --only-val` twice, with the model in use (the server's,
-   downloaded) and with the new one, the server's body model: the key positions, shaft and clubhead
+   `train\.venv` (~20 min on the 5070 Ti), **twice** (`improve.RUNS`, seeds 0 and 1): on Oct 6 two
+   trainings on almost the same frames scored face-on P2 within one frame 25% and 75%, so one run's
+   verdict was as much luck as model. The worker's own processes are stopped first: they hold ~15 GB of
+   the card. A try now takes ~50-60 min (`night_improve.MINUTES` 75).
+3. **Score**: `eval.py --rerun --deep --only-val` with the model in use (the server's,
+   downloaded) and with each new one, the server's body model: the key positions, shaft and clubhead
    on the validation swings neither model trained on.
-4. **Judge** (`improve.judge`): better when no key position is clearly worse (within one frame 10
+4. **Judge** (`improve.judge`, on the two runs' average: `improve.average_scores`): better when no key position is clearly worse (within one frame 10
    points lower, or 90th percentile 2 frames higher), the shaft and clubhead aren't found clearly less
    often in the downswing, and the key positions are better on average (90th percentile 1 ms lower or
    within one frame 3 points higher) or the club is found clearly more often. Club model v3 is the
    reason for the "no position clearly worse" rule: better on its training metric, worse at P2 and P8.
-5. **Report**: the model and both scorecards go to the server as a candidate (`improve/candidates/<id>`).
+5. **Report**: the better of the two runs (`improve.best_run`) and the scorecards (the model in use,
+   the average, and each run) go to the server as a candidate (`improve/candidates/<id>`).
    **Nothing changes until the owner taps Use it** on the Night report. Use it copies the model over
    the deep pass's `club-deep.onnx` (the old one goes to `trash\models` and stays as a "used before"
    candidate: going back is the same tap), and every clip gets the deep pass again when the server is

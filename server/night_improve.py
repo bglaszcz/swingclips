@@ -6,10 +6,12 @@ Use it on the Night report.
   1. Fetch the labels and the labeled clips (kept in a cache folder, so only new clips download).
   2. club_dataset.py: the club labels as a YOLO dataset; validation = ~20% of swings, by swing name, so
      the same swings stay out of training every time (the model in use left them out too).
-  3. train/club_train.py in train\\.venv (PyTorch on the GPU, ~20 min).
-  4. eval.py --rerun --deep --only-val twice, with the model in use and with the new one, the server's
-     body model, on the validation swings (~10 min).
-  5. improve.judge, and the model, scores and report to the server.
+  3. train/club_train.py in train\\.venv (PyTorch on the GPU, ~20 min), improve.RUNS times (seeds 0, 1):
+     one training's verdict was as much luck as model (Oct 6).
+  4. eval.py --rerun --deep --only-val with the model in use and with each new one, the server's body
+     model, on the validation swings (~5 min each).
+  5. improve.judge on the runs' average (improve.average_scores); the best run (improve.best_run) is the
+     candidate sent to the server, with the scores and report.
 
 night_worker.py runs it once a night, after the clips are done and with enough time left (MINUTES).
 By hand: .venv-gpu\\Scripts\\python.exe night_improve.py [--server URL] [--force]
@@ -35,7 +37,7 @@ TRAIN_PY = HERE.parent / "train" / ".venv" / "Scripts" / "python.exe"
 TRAIN_SCRIPT = HERE.parent / "train" / "club_train.py"
 CACHE = Path(os.environ.get("SWINGCLIPS_NIGHT_CACHE") or Path.home() / "SwingClips-night")
 # About how long a try takes; night_worker.py doesn't start one with less time left.
-MINUTES = 50
+MINUTES = 75
 # Longest each step may take (s).
 DATASET_S, TRAIN_S, EVAL_S = 30 * 60, 120 * 60, 60 * 60
 # For trying the step out quickly (tests, a PC without a free GPU): fewer epochs, train on the CPU,
@@ -127,20 +129,29 @@ def try_once(server: str, current_of, force: bool = False, cache: Path = CACHE, 
         run([sys.executable, HERE / "club_dataset.py", "--out", dataset, "--force"], env, work / "dataset.log",
             DATASET_S, HERE)
         info = json.loads((dataset / "dataset.json").read_text(encoding="utf-8"))
-        model = work / "model.onnx"
         clock = time.time()
-        run([TRAIN_PY, TRAIN_SCRIPT, "--data", dataset / "data.yaml", "--project", work / "runs", "--name", "club",
-             "--out", model, "--epochs", EPOCHS, "--device", TRAIN_DEVICE], {"PYTHONIOENCODING": "utf-8"}, work / "train.log", TRAIN_S, TRAIN_SCRIPT.parent)
+        models_made = []
+        for seed in range(improve.RUNS):
+            model = work / ("model.onnx" if seed == 0 else f"model-{seed}.onnx")
+            run([TRAIN_PY, TRAIN_SCRIPT, "--data", dataset / "data.yaml", "--project", work / "runs",
+                 "--name", "club" if seed == 0 else f"club-{seed}", "--out", model, "--epochs", EPOCHS,
+                 "--device", TRAIN_DEVICE, "--seed", seed], {"PYTHONIOENCODING": "utf-8"},
+                work / ("train.log" if seed == 0 else f"train-{seed}.log"), TRAIN_S, TRAIN_SCRIPT.parent)
+            models_made.append(model)
         minutes = round((time.time() - clock) / 60, 1)
-        say(f"Improve: trained in {minutes} min; scoring both models on the swings it didn't train on")
+        say(f"Improve: trained {len(models_made)} in {minutes} min; scoring them and the model in use on the swings "
+            "they didn't train on")
         current = improve.scores_from(scorecard(env, current_model, work / "eval-current", dataset / "dataset.json",
                                                 work / "eval-current.log"))
-        candidate = improve.scores_from(scorecard(env, model, work / "eval-candidate", dataset / "dataset.json",
-                                                  work / "eval-candidate.log"))
-        stamp = post(server, f"/api/improve/{cid}/model", model.read_bytes(), "application/octet-stream")["stamp"]
+        runs = [improve.scores_from(scorecard(env, m, work / f"eval-candidate-{i}", dataset / "dataset.json",
+                                              work / f"eval-candidate-{i}.log")) for i, m in enumerate(models_made)]
+        candidate = improve.average_scores(runs)
+        best = improve.best_run(runs)
+        stamp = post(server, f"/api/improve/{cid}/model", models_made[best].read_bytes(), "application/octet-stream")["stamp"]
         verdict = improve.judge(current, candidate)
-        train = {**report["train"], **counts(info), "epochs": EPOCHS, "minutes": minutes}
-        report.update(model=stamp, train=train, scores={"current": current, "candidate": candidate}, verdict=verdict,
+        train = {**report["train"], **counts(info), "epochs": EPOCHS, "minutes": minutes, "runs": len(runs), "kept": best}
+        report.update(model=stamp, train=train, scores={"current": current, "candidate": candidate, "runs": runs},
+                      verdict=verdict,
                       status="better" if verdict["better"] else "not better",
                       summary=improve.summary(train, current, candidate, verdict))
         line = (f"Trained a club model on {train['swings']} labeled swings: "

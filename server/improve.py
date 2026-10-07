@@ -137,6 +137,46 @@ def judge(current: dict, candidate: dict) -> dict:
     return {"better": False, "why": f"About the same: {avg}."}
 
 
+# Each candidate is trained this many times (different seeds) and judged on the runs' average: on Oct 6
+# two trainings on almost the same frames (872 vs 875) scored face-on P2 within one frame 25% and 75%,
+# so one run's verdict was as much luck as model.
+RUNS = 2
+_AVERAGED = ("median", "p90", "within1", "found")
+
+
+def average_scores(runs: list[dict]) -> dict:
+    """Several runs' scores (scores_from) as one: each row's numbers averaged over the runs that have it."""
+    keys = {"positions": lambda r: (r["angle"], r["event"]), "club": lambda r: (r["angle"], r["phase"]),
+            "clubhead": lambda r: (r["angle"], r["phase"])}
+    out = {}
+    for table, key in keys.items():
+        rows = {}
+        for run in runs:
+            for r in run.get(table, []):
+                rows.setdefault(key(r), []).append(r)
+        merged = []
+        for group in rows.values():
+            row = dict(group[0], n=min(r["n"] for r in group))
+            for f in _AVERAGED:
+                vals = [r[f] for r in group if r.get(f) is not None]
+                if f in group[0]:
+                    row[f] = round(sum(vals) / len(vals), 1) if len(vals) == len(group) else None
+            merged.append(row)
+        out[table] = merged
+    return out
+
+
+def best_run(runs: list[dict]) -> int:
+    """Which of several runs to keep: the most key positions within one frame on average, then the lowest
+    90th percentiles."""
+    def rank(sc):
+        rows = [r for r in sc.get("positions", []) if r["n"] >= MIN_N and r.get("within1") is not None]
+        if not rows:
+            return (0.0, 0.0)
+        return (sum(r["within1"] for r in rows) / len(rows), -sum(r["p90"] or 0 for r in rows) / len(rows))
+    return max(range(len(runs)), key=lambda i: rank(runs[i]))
+
+
 def _within1_all(scores: dict) -> float | None:
     rows = [r for r in scores.get("positions", []) if r.get("within1") is not None and r["n"] >= MIN_N]
     return sum(r["within1"] for r in rows) / len(rows) if rows else None
@@ -145,7 +185,8 @@ def _within1_all(scores: dict) -> float | None:
 def summary(train: dict, current: dict, candidate: dict, verdict: dict) -> str:
     """The plain sentence at the top of a candidate."""
     a, b = _within1_all(current), _within1_all(candidate)
-    out = f"Trained on {train['swings']} labeled swings ({train['frames']:,} frames)."
+    out = f"Trained on {train['swings']} labeled swings ({train['frames']:,} frames)" + (
+        f", {train['runs']} times, judged on their average." if train.get("runs", 1) > 1 else ".")
     if a is not None and b is not None:
         out += (f" On {train['valSwings']} swings it never saw, key positions within one frame "
                 f"went from {a:.0f}% to {b:.0f}% on average.")

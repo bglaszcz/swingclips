@@ -36,6 +36,28 @@ def scores(*positions, clubs=(), heads=()):
     return {"positions": list(positions), "club": list(clubs), "clubhead": list(heads)}
 
 
+class TwoRunsTest(unittest.TestCase):
+    # Oct 6: two trainings on almost the same frames scored face-on P2 25% and 75%: judged on the average.
+    def test_average_and_best(self):
+        a = scores(pos("p2", 20.4, 25), pos("p8", 10, 75), heads=[club(76)])
+        b = scores(pos("p2", 14.6, 75), pos("p8", 12, 50, n=7), heads=[club(84)])
+        avg = improve.average_scores([a, b])
+        p2 = next(r for r in avg["positions"] if r["event"] == "p2")
+        self.assertEqual((p2["within1"], p2["p90"]), (50.0, 17.5))
+        p8 = next(r for r in avg["positions"] if r["event"] == "p8")
+        self.assertEqual((p8["within1"], p8["n"]), (62.5, 7))
+        self.assertEqual(avg["clubhead"][0]["found"], 80.0)
+        self.assertEqual(improve.best_run([a, b]), 1)          # 62.5% within one frame on average vs 50%
+        # A row one run lacks a number for isn't averaged from the other alone.
+        c = scores(pos("p2", None, None))
+        self.assertIsNone(next(r for r in improve.average_scores([a, c])["positions"] if r["event"] == "p2")["within1"])
+
+    def test_summary_says_two_runs(self):
+        text = improve.summary({"swings": 45, "frames": 875, "valSwings": 11, "runs": 2},
+                               scores(pos("p2", 14, 75)), scores(pos("p2", 14, 75)), {"better": False})
+        self.assertIn("875 frames), 2 times, judged on their average.", text)
+
+
 class JudgeTest(unittest.TestCase):
     base = scores(pos("takeaway", 38, 33), pos("p2", 21, 55), pos("p8", 8.3, 78), clubs=[club(90)], heads=[club(68)])
 
