@@ -899,7 +899,8 @@ function gateText(b) {
                    pelvisPeakMs: "pelvis peak", pelvisOpen: "pelvis open",
                    pelvisStartMs: "pelvis start", pelvisBall: "pelvis ahead of ball",
                    chestBall: "chest ahead of ball", handsAhead: "hands ahead of ball" }[c.key] || c.key;
-    const unit = c.key === "strikeV" ? " mm" : (c.key.endsWith("Ms") ? " ms" : (c.key.endsWith("Ball") || c.key === "handsAhead") ? " in" : "°");
+    const numInfo = (typeof SwingProgramHistory !== "undefined" && SwingProgramHistory.NUMBERS[c.key]) || null;
+    const unit = numInfo ? numInfo.unit : (c.key === "strikeV" ? " mm" : (c.key.endsWith("Ms") ? " ms" : (c.key.endsWith("Ball") || c.key === "handsAhead") ? " in" : "°"));
     if (c.min != null && c.max != null && c.min === -c.max) return `${name} within ±${c.max}${unit}`;
     if (c.min != null && c.max != null) return `${name} ${c.min} to ${c.max}${unit}`;
     return c.max != null ? `${name} ≤ ${c.max}${unit}` : `${name} ≥ ${c.min}${unit}`;
@@ -907,7 +908,8 @@ function gateText(b) {
   for (const c of g.medians || []) {
     const name = { strikeV: "strike", attack: "attack", loft: "dynamic loft",
                    pelvisBall: "pelvis ahead of ball", chestBall: "chest ahead of ball", handsAhead: "hands ahead of ball" }[c.key] || c.key;
-    const unit = c.key === "strikeV" ? " mm" : (c.key.endsWith("Ms") ? " ms" : (c.key.endsWith("Ball") || c.key === "handsAhead") ? " in" : "°");
+    const numInfo = (typeof SwingProgramHistory !== "undefined" && SwingProgramHistory.NUMBERS[c.key]) || null;
+    const unit = numInfo ? numInfo.unit : (c.key === "strikeV" ? " mm" : (c.key.endsWith("Ms") ? " ms" : (c.key.endsWith("Ball") || c.key === "handsAhead") ? " in" : "°"));
     checks.push(`median ${name} ${c.max != null ? "≤ " + c.max : "≥ " + c.min}${unit}`);
   }
   if (g.mark) checks.push("mark at or ahead");

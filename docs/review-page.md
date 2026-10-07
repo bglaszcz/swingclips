@@ -447,7 +447,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   out of cap, and for each block its passed / not passed / skipped tag and gate count) with a **Copy for coach**
   button per run (`/api/program/report?started=<run.started>`). Folded under `<details>` "Past runs" when more
   than 2 runs exist. For ball blocks with 2+ runs with read shots, trend lines show gate progression and launch
-  monitor medians moving toward the gate, away, or about the same. In Progress step 3 ("Is it working?"),
+  monitor medians moving toward the gate, away, or about the same; every check is covered in the gate's order (including 3D angles, timings, and camera distances), noting missing 3D swings when fewer than all had them. In Progress step 3 ("Is it working?"),
   each program with 2+ runs gets a folded trend line. **Copy for coach** (`/api/program/report`): per
   block the gate result and medians (range) of attack angle, dynamic loft and face to path for shots 1-10
   and 11 on, the club order, every shot in order with its verdict and bring-back metrics (pelvis peak ms,
