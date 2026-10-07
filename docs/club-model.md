@@ -70,6 +70,13 @@ py -3.12 -m venv .venv
   classes and keypoints, then give their order, e.g. `--pretrain-points 0,-1,1` (-1 for one it
   doesn't have). If its keypoints aren't these points at all (say, only the shaft's ends), skip it.
   Compare the scorecard with and without it; the pretraining only helps if it helps there.
+- Public club **outline** sets work too, through `train/public_club.py`: Roboflow Universe instance
+  segmentation exports with a shaft ("stick"/"shaft") and clubhead ("clubhead"/"head") outline (and
+  "hand" where outlined) become a club pose set: the shaft outline's ends are the grip and hosel (the one
+  nearer the clubhead is the hosel; else the one nearer the hand; else the frame is left out), the
+  clubhead outline's middle the clubhead. Oct 7: "Golf Swing" v9 (5,577 images, CC BY 4.0) and
+  "Golf-Swing-Analyzer-DTL" v8 (3,262) gave 8,223 frames (`D:\SwingClips-dev\public-data\club-pose`);
+  `--pretrain <that>\data.yaml --pretrain-points 0,1,2 --pretrain-class club`.
 
 **First results (2026-09-26, 20 labeled swings: 482 club frames, 16 swings to train, 4 to score).**
 Training takes ~10 minutes (150 epochs) for any size on the 5070 Ti. Scored on the 4 swings it never
