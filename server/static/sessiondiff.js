@@ -34,7 +34,7 @@
   }
 
   const FRIENDLY_NAMES = {
-    handsPlaneP6: "hands to the trail pocket at P6",
+    handsPlaneP6: "hands to the trail pocket in the downswing",
   };
 
   const finite = v => typeof v === "number" && Number.isFinite(v);
@@ -275,6 +275,7 @@
     MIN_PER_SIDE,
     clubName,
     formatClubPlural,
+    FRIENDLY_NAMES,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

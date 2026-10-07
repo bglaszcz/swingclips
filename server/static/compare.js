@@ -116,17 +116,36 @@
     return [days > 0 ? now - days * 86400000 : 0, Infinity];
   }
 
-  const api = { KEYS, anchors, warp, rate, unwarp, hashFor, parseHash, lineUp, periodRange };
+  const POSITION_TAGS = {
+    p1: "Setup",
+    p2: "Early backswing",
+    p3: "Backswing",
+    p4: "Top of swing",
+    p5: "Early downswing",
+    p6: "Downswing",
+    p7: "Impact",
+    p8: "Follow-through",
+  };
+
+  const api = { KEYS, POSITION_TAGS, anchors, warp, rate, unwarp, hashFor, parseHash, lineUp, periodRange };
   if (typeof module !== "undefined" && module.exports) { module.exports = api; return; }
   root.SwingCompare = api;
   if (typeof document === "undefined") return;
+
+  function plainBodyLabel(key, fallback) {
+    const ss = root.SwingShotStory || (typeof require !== "undefined" && require("./shotstory.js"));
+    if (ss) {
+      if (ss.LABELS && ss.LABELS[key]) return ss.LABELS[key];
+      if (ss.plain) return ss.plain(fallback || key);
+    }
+    return fallback || key;
+  }
 
   // ---- The compare view (browser only) ----
 
   const box = document.getElementById("compare");
   const ANGLES = [["face", "Face-on"], ["dtl", "Down the line"]];
   const NUMBER_POSITIONS = ["p1", "p4", "p6", "p7"];
-  const POSITION_TAGS = { p1: "P1 Address", p2: "P2", p3: "P3", p4: "P4 Top", p5: "P5", p6: "P6", p7: "P7 Impact", p8: "P8" };
   const GHOST_COLOR = "rgba(232, 121, 249, 0.8)", GHOST_JOINT = "rgba(232, 121, 249, 0.9)";
   const SORTS = [
     ["newest", "Newest", null], ["carry", "Carry", -1], ["ballSpeed", "Ball speed", -1],
@@ -460,6 +479,7 @@
     const i = frameIndexAt(t, p), f = p.frames[i], r = fitRect(stage.canvas.width, stage.canvas.height, v);
     const key = positionAt(S, g, i);
     stage.pos.textContent = key ? POSITION_TAGS[key] + (S.estimated[key] ? " ~" : "") : "";
+    stage.pos.title = key ? `${key.toUpperCase()}: ${POSITION_TAGS[key]}` : "";
     stage.pos.hidden = !key;
     if (which === "A" && g === cmp.rows[0]) {
       box.querySelectorAll(".c-card").forEach(b => b.classList.toggle("here", !!key && b.dataset.key === key));
@@ -620,7 +640,7 @@
            "The reference swing's skeleton over this one, lined up at address by the feet and hips, scaled by height (G)"),
       el("span", { className: "sep" }),
       ...SwingCompare.KEYS.map((k, n) => {
-        const b = chip(k.toUpperCase(), false, () => jumpToPosition(k), `${POSITION_TAGS[k]} (${n + 1})`);
+        const b = chip(POSITION_TAGS[k], false, () => jumpToPosition(k), `${k.toUpperCase()} (${n + 1})`);
         b.disabled = cmp.A.times[k] == null;
         return b;
       }));
@@ -688,14 +708,14 @@
     const grid = el("div", { className: "c-cardgrid" });
     grid.style.gridTemplateColumns = `auto repeat(${cols.length}, minmax(64px, 1fr))`;
     grid.append(el("span"));
-    for (const col of cols) grid.append(el("span", { className: "c-cardhead", textContent: col.key.toUpperCase() }));
+    for (const col of cols) grid.append(el("span", { className: "c-cardhead", textContent: POSITION_TAGS[col.key] || col.key, title: col.key.toUpperCase() }));
     for (const [which, who] of [["a", "This"], ["b", "Ref"]]) {
       grid.append(el("span", { className: "c-cardwho", textContent: who }));
       for (const col of cols) {
         const p = col[which], S = which === "a" ? cmp.A : cmp.B;
         if (!p) { grid.append(el("span", { className: "c-card none", textContent: "not found" })); continue; }
         const b = el("button", { className: `sc-tile c-card ${p.color}` + (which === "b" ? " ref" : ""),
-                                 title: "Put both swings at " + POSITION_TAGS[col.key] + " and show its numbers" },
+                                 title: "Put both swings at " + POSITION_TAGS[col.key] + " (" + col.key.toUpperCase() + ") and show its numbers" },
           el("span", { textContent: p.name + (S.estimated[col.key] ? " ~" : "") }));
         b.dataset.key = col.key;
         b.onclick = () => jumpToPosition(col.key);
@@ -734,7 +754,7 @@
       const fmt = (m, shaky, ref) => el("span", { className: "val" + (ref ? " ref" : "") + (shaky ? " shaky" : ""), textContent: m && finite(m.value) ? scValue(m.value, first.unit) : "--",
                                              title: shaky ? "Shaky: " + (m.trust.text || "read with low confidence") : "" });
       const diff = a && b && finite(a.value) && finite(b.value) ? a.value - b.value : null;
-      const line = el("div", { className: "row" }, el("span", { textContent: first.label }),
+      const line = el("div", { className: "row" }, el("span", { textContent: plainBodyLabel(first.key, first.label) }),
         el("span", { className: "c-cardvals" }, fmt(a, shakyA), el("span", { className: "vs", textContent: "vs" }), fmt(b, shakyB, true),
            el("span", { className: "c-delta", textContent: diff == null ? "" : "Δ " + (diff > 0 ? "+" : diff < 0 ? "−" : "") + SwingGoodShots.amount(diff, first.unit) })));
       const row = el("div", { className: "sc-num" }, line);
@@ -758,7 +778,7 @@
       }
       return row;
     });
-    out.replaceChildren(el("div", { className: "c-cardtitle", textContent: `${key.toUpperCase()} ${(col.a || col.b).name}` }),
+    out.replaceChildren(el("div", { className: "c-cardtitle", textContent: POSITION_TAGS[key] || (col.a || col.b).name, title: key.toUpperCase() }),
       ...(rows.length ? rows : [el("div", { className: "sc-none", textContent: Object.keys(byKey).length
         ? "Neither swing has a reading at this position." : "No numbers are measured at this position." })]));
     if (rows.length) out.append(el("div", { className: "note", textContent: "Bars: the green band is the middle 50% of your good shots; the dark mark is this swing, the pink one the reference." }));
@@ -824,14 +844,14 @@
       const h2 = el("tr", {}, el("th"));
       for (const k of cols) {
         const est = A.estimated[k] || B.estimated[k] ? " ~" : "";
-        h1.append(el("th", { colSpan: 3, className: "c-poshead", textContent: POSITION_TAGS[k] + est }));
+        h1.append(el("th", { colSpan: 3, className: "c-poshead", textContent: POSITION_TAGS[k] + est, title: k.toUpperCase() }));
         h2.append(el("th", { textContent: "This" }), el("th", { textContent: "Ref" }), el("th", { textContent: "Δ" }));
       }
       table.append(h1, h2);
       for (const [g, title, readout] of sections) {
         table.append(el("tr", { className: "group" }, el("th", { colSpan: cols.length * 3 + 1, textContent: title })));
         for (const [label, key, unit] of readout) {
-          const tr = el("tr", {}, el("td", { textContent: label }));
+          const tr = el("tr", {}, el("td", { textContent: plainBodyLabel(key, label) }));
           for (const k of cols) {
             const va = valuesAt(A, g, k), vb = valuesAt(B, g, k);
             const x = va && va[key], y = vb && vb[key];
@@ -908,7 +928,7 @@
       if (!r || !r.enough) continue;
       rows++;
       const shaky = r.reliable ? "" : "shaky";
-      table.append(el("tr", {}, el("td", { textContent: f.label + (r.reliable ? "" : " (range not reliable)"), title: r.why }),
+      table.append(el("tr", {}, el("td", { textContent: plainBodyLabel(f.key, f.label) + (r.reliable ? "" : " (range not reliable)"), title: r.why }),
         el("td", { className: shaky, textContent: SwingGoodShots.rangeText(r.q25, r.q75, f.unit) }),
         el("td", { className: shaky, textContent: SwingGoodShots.rangeText(r.q10, r.q90, f.unit) }),
         el("td", { textContent: String(r.n) }), at(A, bA, f, r), at(B, bB, f, r)));

@@ -112,3 +112,44 @@ test("the picker's periods", () => {
   // No focus: nothing is cut off.
   assert.deepEqual(C.periodRange("focus", null, now), [0, Infinity]);
 });
+
+test("POSITION_TAGS uses plain names without P[1-8] jargon", () => {
+  assert.ok(C.POSITION_TAGS, "POSITION_TAGS should be exported");
+  const expected = {
+    p1: "Setup",
+    p2: "Early backswing",
+    p3: "Backswing",
+    p4: "Top of swing",
+    p5: "Early downswing",
+    p6: "Downswing",
+    p7: "Impact",
+    p8: "Follow-through",
+  };
+  assert.deepEqual(C.POSITION_TAGS, expected);
+  for (const [k, v] of Object.entries(C.POSITION_TAGS)) {
+    assert.doesNotMatch(v, /\bP[1-8]\b/);
+  }
+});
+
+test("no P[1-8] jargon in touched string tables", () => {
+  const SD = require("../static/sessiondiff.js");
+  const ShotStory = require("../static/shotstory.js");
+
+  // Check compare POSITION_TAGS
+  for (const [k, v] of Object.entries(C.POSITION_TAGS || {})) {
+    assert.doesNotMatch(v, /\bP[1-8]\b/, `POSITION_TAGS[${k}] contains P-number`);
+  }
+
+  // Check sessiondiff FRIENDLY_NAMES
+  for (const [k, v] of Object.entries(SD.FRIENDLY_NAMES || {})) {
+    assert.doesNotMatch(v, /\bP[1-8]\b/, `sessiondiff FRIENDLY_NAMES[${k}] contains P-number`);
+  }
+
+  // Check ShotStory LABELS and PHASES
+  for (const [k, v] of Object.entries(ShotStory.LABELS || {})) {
+    assert.doesNotMatch(v, /\bP[1-8]\b/, `ShotStory LABELS[${k}] contains P-number`);
+  }
+  for (const [k, v] of Object.entries(ShotStory.PHASES || {})) {
+    assert.doesNotMatch(v, /\bP[1-8]\b/, `ShotStory PHASES[${k}] contains P-number`);
+  }
+});

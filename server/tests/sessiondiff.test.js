@@ -78,7 +78,7 @@ function makeRow(name, club, shotData, bodyData, trustData = null, excluded = fa
   };
 }
 
-test("clear difference: good shots have less hands to trail pocket at P6", () => {
+test("clear difference: good shots have less hands to trail pocket in the downswing", () => {
   const rows = [];
   // 9 good 7-iron shots: carry 155, offline 1, handsPlaneP6 around -0.5 in
   for (let i = 1; i <= 9; i++) {
@@ -119,7 +119,7 @@ test("clear difference: good shots have less hands to trail pocket at P6", () =>
   assert.equal(top.coach.thought, "Hands drop to the trail pocket.");
 
   assert.equal(res.lines.length, 1);
-  assert.equal(res.lines[0], "Good 7 irons this session (9 of 24): 4.1 in less hands to the trail pocket at P6 than your misses.");
+  assert.equal(res.lines[0], "Good 7 irons this session (9 of 24): 4.1 in less hands to the trail pocket in the downswing than your misses.");
 });
 
 test("none: enough good and rest shots, but no body number clearly separates", () => {
