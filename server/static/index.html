@@ -200,8 +200,8 @@
   .pos.two { width: 192px; }
   .pos.two canvas { width: 192px; }
   .pos span { display: block; padding: 4px 6px; font-size: 11px; line-height: 1.25; }
-  .pos b { color: var(--accent); }
-  .pos i { color: var(--warn); font-style: normal; }
+  .pos b { color: var(--muted); font-size: 10px; font-weight: 600; }
+  .pos i { color: var(--warn); font-style: normal; font-size: 10px; }
   #numbers { display: flex; flex-direction: column; gap: 8px; }
   #tempo { font-variant-numeric: tabular-nums; }
   #num-faults:empty { display: none; }
@@ -2973,13 +2973,17 @@ async function buildPositions(name) {
   // With both angles analyzed, each card shows the position from both.
   const other = partner && partner.pose;
   const cards = positions.map(p => {
+    const plainName = (typeof SwingScorecard !== "undefined" && SwingScorecard.PHASE_NAMES && SwingScorecard.PHASE_NAMES[p.key])
+      || (typeof SwingShotStory !== "undefined" && SwingShotStory.PHASES && SwingShotStory.PHASES[p.key])
+      || p.label;
+    const capName = plainName ? plainName[0].toUpperCase() + plainName.slice(1) : p.label;
     const b = document.createElement("button");
     b.className = other ? "pos two" : "pos";
-    b.title = `${p.tag} ${p.label} - ${p.t.toFixed(3)} s`;
+    b.title = `${p.tag ? p.tag + " " : ""}${capName} - ${p.t.toFixed(3)} s`;
     b.innerHTML = `<canvas width="${other ? 384 : 192}" height="256"></canvas><span><b></b> <i></i><br></span>`;
     b.querySelector("b").textContent = p.tag;
     b.querySelector("i").textContent = p.estimated ? "~" : "";
-    b.querySelector("span").append(p.label);
+    b.querySelector("span").append(capName);
     b.onclick = () => jumpTo(p.index);
     return b;
   });
@@ -3141,7 +3145,7 @@ function showNumbers() {
         if (i > 0) faultsEl.append(", ");
         const span = document.createElement("span");
         span.textContent = f.name;
-        if (f.thought) span.title = f.thought;
+        if (f.thought) span.title = typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(f.thought) : f.thought;
         faultsEl.append(span);
       });
     }
@@ -3151,7 +3155,9 @@ function showNumbers() {
   head.innerHTML = "<th></th>";
   for (const p of cols) {
     const th = document.createElement("th");
-    th.textContent = `${p.tag} ${p.label}${p.estimated ? " ~" : ""}`;
+    const plainName = (typeof SwingScorecard !== "undefined" && SwingScorecard.PHASE_NAMES && SwingScorecard.PHASE_NAMES[p.key]) || p.label;
+    th.textContent = `${plainName}${p.estimated ? " ~" : ""}`;
+    th.title = `${p.tag}${p.estimated ? " ~" : ""}`;
     head.append(th);
   }
   if (good.any) head.append(Object.assign(document.createElement("th"), { className: "gs-text", textContent: `vs my good shots (${clubName(good.club)})` }));
@@ -3175,7 +3181,7 @@ function showNumbers() {
     for (const [label, key, unit] of readout) {
       const tr = document.createElement("tr");
       const name = document.createElement("td");
-      name.textContent = label;
+      name.textContent = typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(label) : label;
       tr.append(name);
       const said = [];
       idx.forEach((i, c) => {
@@ -3192,7 +3198,8 @@ function showNumbers() {
             td.classList.add(at.status === "in" ? "gs-in" : "gs-out");
             td.title = (td.title ? td.title + "\n" : "") + `My good shots: ${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)} (middle 50% of ${r.n})`;
           }
-          said.push(`${cols[c].tag}: ${at.text}` + (r && r.enough ? ` (${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)})` : ""));
+          const colName = (typeof SwingScorecard !== "undefined" && SwingScorecard.PHASE_NAMES && SwingScorecard.PHASE_NAMES[cols[c].key]) || cols[c].tag;
+          said.push(`${colName}: ${at.text}` + (r && r.enough ? ` (${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)})` : ""));
         }
         tr.append(td);
       });
@@ -3395,7 +3402,7 @@ function renderScorecard(body, trust, faults, ranges) {
     const pos = positions.find(q => q.key === p.key);
     const t = scEl("button", `sc-tile ${p.color}`);
     t.dataset.phase = p.key;
-    t.append(scEl("b", null, pos ? pos.tag : ""), scEl("span", null, (pos ? pos.label : p.name) + (pos && pos.estimated ? " ~" : "")));
+    t.append(scEl("b", null, pos ? pos.tag : ""), scEl("span", null, p.name + (pos && pos.estimated ? " ~" : "")));
     t.title = p.metrics.length ? "Show this phase's numbers and jump the video to it" : "Jump the video to this position";
     t.onclick = () => selectPhase(p.key, true);
     tiles.append(t);
@@ -3410,7 +3417,12 @@ function renderScorecard(body, trust, faults, ranges) {
     const d = scEl("details", "sc-fault");
     const sum = scEl("summary");
     sum.append(scEl("span", `sc-sev s${f.severity}`, sev[f.severity] || ""), f.name[0].toUpperCase() + f.name.slice(1));
-    const link = scEl("button", "sc-phase-link", `at ${f.phaseName.toLowerCase()}`);
+    const atPhase = typeof SwingShotStory !== "undefined"
+      ? (SwingShotStory.plain(`at ${f.phase.toUpperCase()}`) !== `at ${f.phase.toUpperCase()}`
+          ? SwingShotStory.plain(`at ${f.phase.toUpperCase()}`)
+          : `at ${f.phaseName.toLowerCase()}`)
+      : `at ${f.phaseName.toLowerCase()}`;
+    const link = scEl("button", "sc-phase-link", atPhase);
     link.onclick = e => { e.preventDefault(); selectPhase(f.phase, true); };
     sum.append(link);
     if (f.linkNote) sum.append(scEl("div", "sc-link-sub", f.linkNote.toLowerCase()));

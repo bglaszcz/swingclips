@@ -3,18 +3,27 @@
   const Faults = root.SwingFaults || (typeof require !== "undefined" && require("./faults.js"));
   const FaultLinks = root.SwingFaultLinks || (typeof require !== "undefined" && require("./faultlinks.js"));
   const GoodShots = root.SwingGoodShots || (typeof require !== "undefined" && require("./goodshots.js"));
+  const ShotStory = root.SwingShotStory || (typeof require !== "undefined" && require("./shotstory.js"));
 
-  const PHASE_NAMES = {
-    p1: "Address",
-    takeaway: "Takeaway",
-    p2: "Halfway Back",
-    p3: "Lead Arm Parallel",
-    p4: "Top",
-    p5: "Halfway Down",
-    p6: "Delivery",
-    p7: "Impact",
-    p8: "Finish"
-  };
+  const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+  const PHASE_NAMES = {};
+  if (ShotStory && ShotStory.PHASES) {
+    for (const [k, v] of Object.entries(ShotStory.PHASES)) {
+      PHASE_NAMES[k] = cap(v);
+    }
+  } else {
+    Object.assign(PHASE_NAMES, {
+      p1: "Setup",
+      takeaway: "Takeaway",
+      p2: "Early backswing",
+      p3: "Backswing",
+      p4: "Top of swing",
+      p5: "Early downswing",
+      p6: "Downswing",
+      p7: "Impact",
+      p8: "Follow-through"
+    });
+  }
 
   function faultSeverity(faultDef, value) {
     if (!faultDef || typeof faultDef.threshold !== 'number') return 1;
@@ -73,13 +82,14 @@
           const place = GoodShots.place(val, range, f.unit);
           goodStatus = place;
 
+          const metricLabel = (ShotStory && ShotStory.LABELS && ShotStory.LABELS[f.key]) || f.label;
           if (t.level === 'shaky') {
             color = 'grey';
           } else if (place.status === 'in') {
             color = 'green';
             hasGreen = true;
             nInside++;
-            if (!bestMetric) bestMetric = f;
+            if (!bestMetric) bestMetric = { ...f, label: metricLabel };
           } else if (place.wide && (place.status === 'above' || place.status === 'below')) {
             color = 'amber';
             hasAmber = true;
@@ -95,9 +105,10 @@
           }
         }
 
+        const metricLabel = (ShotStory && ShotStory.LABELS && ShotStory.LABELS[f.key]) || f.label;
         metricDetails.push({
           key: f.key,
-          label: f.label,
+          label: metricLabel,
           value: val,
           unit: f.unit,
           trust: t,
