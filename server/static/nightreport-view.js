@@ -202,6 +202,16 @@
         actionBtnHtml = `<div class="nr-action-row"><button class="small nr-use-btn" data-id="${escapeHtml(newest.id)}">Go back to this one</button></div>`;
       }
 
+      const progressLineText = window.SwingNightReport ? SwingNightReport.progressLine(reportData.progress) : "";
+      const almostSameText = window.SwingNightReport ? SwingNightReport.almostSameNote(candidates) : null;
+      let progressSectionHtml = "";
+      if (progressLineText) {
+        progressSectionHtml += `<div class="note nr-progress-line" style="margin-top: 8px;">${escapeHtml(progressLineText)}</div>`;
+      }
+      if (almostSameText) {
+        progressSectionHtml += `<div class="note nr-almost-same" style="margin-top: 4px;">${escapeHtml(almostSameText)}</div>`;
+      }
+
       html += `
         <div class="t-card nr-candidate-card">
           <div class="nr-card-header">
@@ -213,8 +223,18 @@
           ${tableHtml}
           ${trainHtml}
           ${actionBtnHtml}
+          ${progressSectionHtml}
         </div>
       `;
+    } else if (reportData.progress) {
+      const line = window.SwingNightReport ? SwingNightReport.progressLine(reportData.progress) : "";
+      if (line) {
+        html += `
+          <div class="t-card">
+            <div class="note nr-progress-line">${escapeHtml(line)}</div>
+          </div>
+        `;
+      }
     }
 
     // 3. Earlier candidates, folded
@@ -394,6 +414,25 @@
       }
 
       reportData = await improveRes.json();
+      if (!reportData.progress) {
+        try {
+          const nextRes = await fetch("/api/improve/next", { cache: "no-store" });
+          if (nextRes.ok) {
+            const nextData = await nextRes.json();
+            let newFrames = nextData.newFrames;
+            let need = nextData.need;
+            if (newFrames == null && typeof nextData.why === "string") {
+              const m = /(\d+)\s+new club-labeled frames/.exec(nextData.why);
+              if (m) newFrames = Number(m[1]);
+              const mn = /\(needs\s+(\d+)\)/.exec(nextData.why);
+              if (mn) need = Number(mn[1]);
+            }
+            if (newFrames != null || need != null) {
+              reportData.progress = { newFrames: newFrames != null ? newFrames : null, need: need != null ? need : 40 };
+            }
+          }
+        } catch (_) {}
+      }
       if (nrStatus) nrStatus.textContent = "";
       renderNightReportView();
     } catch (e) {

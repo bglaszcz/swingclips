@@ -471,6 +471,50 @@
     }
   }
 
+  let currentProgress = null;
+
+  function progressText(progress) {
+    if (!progress) return "";
+    const newFrames = progress.newFrames != null ? progress.newFrames : 0;
+    const need = progress.need != null ? progress.need : 40;
+    if (newFrames >= need) {
+      return "Enough for a new club model: the night worker trains it tonight.";
+    }
+    return `New club frames since the last training: ${newFrames} of ${need}`;
+  }
+
+  function renderProgress() {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById("cc-progress");
+    if (!el) return;
+    const text = progressText(currentProgress);
+    el.textContent = text;
+    el.style.display = text ? "" : "none";
+  }
+
+  async function refreshProgress() {
+    if (typeof fetch !== "function") return;
+    try {
+      const res = await fetch("/api/improve/next", { cache: "no-store" });
+      if (res && res.ok) {
+        const data = await res.json();
+        let newFrames = data.newFrames;
+        let need = data.need;
+        if (newFrames == null && typeof data.why === "string") {
+          const m = /(\d+)\s+new club-labeled frames/.exec(data.why);
+          if (m) newFrames = Number(m[1]);
+          const mn = /\(needs\s+(\d+)\)/.exec(data.why);
+          if (mn) need = Number(mn[1]);
+        }
+        currentProgress = {
+          newFrames: newFrames != null ? newFrames : null,
+          need: need != null ? need : 40,
+        };
+        renderProgress();
+      }
+    } catch (_) {}
+  }
+
   function setStatusMessage(msg, isError = false) {
     if (typeof document === "undefined") return;
     const el = document.getElementById("cc-status");
@@ -940,6 +984,13 @@
       }
 
       incrementCheckedToday();
+      if (!currentProgress) {
+        currentProgress = { newFrames: 1, need: 40 };
+      } else {
+        currentProgress.newFrames = (currentProgress.newFrames != null ? currentProgress.newFrames : 0) + 1;
+      }
+      renderProgress();
+      refreshProgress();
       setStatusMessage("Saved", false);
       currentIndex++;
       showFrame(currentIndex);
@@ -1011,6 +1062,7 @@
       box.scrollTop = 0;
       if (window.innerWidth < 900) box.scrollIntoView();
     }
+    refreshProgress();
     loadQueue();
   }
 
@@ -1232,6 +1284,8 @@
         drawZoom();
       }
     });
+
+    renderProgress();
   }
 
   const ClubCheck = {
@@ -1244,6 +1298,9 @@
     queue,
     merge,
     balanceSwings,
+    progressText,
+    renderProgress,
+    refreshProgress,
     open,
     close,
     save,

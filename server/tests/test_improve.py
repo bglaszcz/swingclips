@@ -175,6 +175,24 @@ class StoreTest(unittest.TestCase):
                                           "model": "m@3", "train": {"labelsSig": "s4"}})
         self.assertEqual(self.store.new_club_frames(improve.club_frames(labels), "s5"), 0)
 
+    def test_progress(self):
+        """progress returns {newFrames, need} where need is MIN_NEW_FRAMES (40)."""
+        labels = self.dir / "labels"
+        labels.mkdir()
+        head = lambda x: {"grip": {"x": 0.5, "y": 0.4}, "hosel": {"x": x, "y": 0.4}, "head": {"x": x + 0.02, "y": 0.4}}
+        frames = {f"{1 + i / 240:.6f}": head(0.8) for i in range(5)}
+        doc = {"schema": 1, "frames": frames}
+        (labels / "a.mp4.json").write_text(json.dumps(doc))
+        self.assertEqual(self.store.progress(improve.club_frames(labels), "s1"), {"newFrames": None, "need": 40})
+        # Note a scored try:
+        self.store.save_report("club-1", {"kind": "club", "made": "2026-10-07T02:51:00", "status": "not better",
+                                          "model": "m@1", "train": {"labelsSig": "s1"}})
+        self.assertEqual(self.store.progress(improve.club_frames(labels), "s2"), {"newFrames": 0, "need": 40})
+        # Add 3 new club frames:
+        doc["frames"].update({f"{2 + i / 240:.6f}": head(0.7) for i in range(3)})
+        (labels / "a.mp4.json").write_text(json.dumps(doc))
+        self.assertEqual(self.store.progress(improve.club_frames(labels), "s3"), {"newFrames": 3, "need": 40})
+
     def test_bad_ids(self):
         for bad in ("", "..", "a/b", "../x"):
             with self.assertRaises(ValueError):
@@ -198,12 +216,12 @@ class ImproveApiTest(unittest.TestCase):
         self.model = self.dir / "models" / "club-deep.onnx"
         self.model.parent.mkdir()
         self.model.write_bytes(b"old")
-        labels = self.dir / "labels"
-        labels.mkdir()
-        (labels / "a.mp4.json").write_text("{}")
+        self.labels = self.dir / "labels"
+        self.labels.mkdir()
+        (self.labels / "a.mp4.json").write_text("{}")
         stamp = lambda p: "club-deep@" + Path(p).read_bytes().decode()
         patches = [mock.patch.object(app, "improve_store", improve.Store(self.dir / "improve")),
-                   mock.patch.object(app, "LABELS_DIR", labels), mock.patch.object(app, "TRASH_DIR", self.dir / "trash"),
+                   mock.patch.object(app, "LABELS_DIR", self.labels), mock.patch.object(app, "TRASH_DIR", self.dir / "trash"),
                    mock.patch.object(app, "club_in_use", lambda: (self.model, stamp(self.model))),
                    mock.patch.object(app.models, "club_stamp", stamp), mock.patch.object(app, "deep_left", lambda s: 7),
                    mock.patch.object(app, "log_event")]
@@ -216,18 +234,35 @@ class ImproveApiTest(unittest.TestCase):
         self.assertTrue(nxt["due"])
         self.assertEqual(nxt["labels"], ["a.mp4"])
         self.assertEqual(nxt["clubStamp"], "club-deep@old")
+        self.assertIsNone(nxt["newFrames"])
+        self.assertEqual(nxt["need"], 40)
         self.assertEqual(self.client.post("/api/improve/club-1/model", content=b"new").json()["stamp"], "club-deep@new")
         report = {"kind": "club", "made": "2026-10-07T02:51:00", "status": "better", "model": "club-deep@new",
                   "train": {"labelsSig": nxt["labelsSig"]}, "summary": "s", "verdict": {"better": True, "why": "w"}}
         self.assertEqual(self.client.post("/api/improve/club-1/report", json=report).status_code, 200)
         self.assertEqual(self.client.post("/api/improve/club-2/report", json={**report, "status": "odd"}).status_code, 400)
         # Tried on these labels: not again until they change.
-        self.assertFalse(self.client.get("/api/improve/next").json()["due"])
+        nxt_tried = self.client.get("/api/improve/next").json()
+        self.assertFalse(nxt_tried["due"])
+        self.assertEqual(nxt_tried["newFrames"], 0)
+        self.assertEqual(nxt_tried["need"], 40)
         self.client.post("/api/improve/night", json={"started": "2026-10-07T02:00:04", "worker": "pc", "clips": 4})
         got = self.client.get("/api/improve").json()
         self.assertEqual(got["inUse"]["club"], "club-deep@old")
         self.assertEqual([c["status"] for c in got["candidates"]], ["better"])
         self.assertEqual(got["nights"][0]["clips"], 4)
+        self.assertEqual(got["progress"], {"newFrames": 0, "need": 40})
+
+        # Add 3 club frames to labels: newFrames counts them in both endpoints
+        head = lambda x: {"grip": {"x": 0.5, "y": 0.4}, "hosel": {"x": x, "y": 0.4}, "head": {"x": x + 0.02, "y": 0.4}}
+        doc = {"schema": 1, "frames": {f"{1 + i / 240:.6f}": head(0.8) for i in range(3)}}
+        (self.labels / "a.mp4.json").write_text(json.dumps(doc))
+        nxt_more = self.client.get("/api/improve/next").json()
+        self.assertEqual(nxt_more["newFrames"], 3)
+        self.assertEqual(nxt_more["need"], 40)
+        got_more = self.client.get("/api/improve").json()
+        self.assertEqual(got_more["progress"], {"newFrames": 3, "need": 40})
+
         used = self.client.post("/api/improve/club-1/use").json()
         self.assertEqual(used, {"ok": True, "inUse": {"club": "club-deep@new"}, "deepLeft": 7})
         self.assertEqual(self.model.read_bytes(), b"new")

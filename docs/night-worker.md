@@ -84,7 +84,9 @@ side `server/improve.py`, `/api/improve`):
    moments and body points don't count. Tools > Club check is the quick way to add them. A failed try
    is tried again the next night. Not with less than 50 minutes left before `--stop-at`. The Night
    report's line for the night says why it didn't train ("Nothing to train: 12 new club-labeled
-   frames since the last try (needs 40)").
+   frames since the last try (needs 40)"). Club check and the Night report show progress toward the
+   40 new frames needed for the next run. When a try was trained on fewer than 40 more frames than the try
+   before it, the Night report warns that it trained on almost the same frames.
 2. **Train**: the labels and labeled clips are copied to the gaming PC (`%USERPROFILE%\SwingClips-night`,
    only new clips download), `club_dataset.py` makes the dataset (validation = ~20% of swings by swing
    name, the same swings each time), and `train/club_train.py` trains a YOLO11s club model in

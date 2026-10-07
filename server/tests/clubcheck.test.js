@@ -13,6 +13,7 @@ const {
   getKeyPositions,
   getP1P4P8,
   phaseName,
+  progressText,
 } = require("../static/clubcheck.js");
 
 test("HOSEL_SHARE is 0.93", () => {
@@ -544,6 +545,37 @@ test("phaseName: reports Backswing (near P2), Backswing, Downswing, Address (P1)
   assert.equal(phaseName(2.26, pTimes), "Impact (P7)"); // within 0.02 of P7
   assert.equal(phaseName(2.30, pTimes), "Downswing"); // after P7, before P8
   assert.equal(phaseName(1.50, null), "Downswing"); // default when no pTimes
+});
+
+test("progressText: formats count of need, and says enough at or above 40", () => {
+  assert.equal(
+    progressText({ newFrames: 5, need: 40 }),
+    "New club frames since the last training: 5 of 40"
+  );
+  assert.equal(
+    progressText({ newFrames: 0, need: 40 }),
+    "New club frames since the last training: 0 of 40"
+  );
+  assert.equal(
+    progressText({ newFrames: null, need: 40 }),
+    "New club frames since the last training: 0 of 40"
+  );
+  assert.equal(
+    progressText({ newFrames: 40, need: 40 }),
+    "Enough for a new club model: the night worker trains it tonight."
+  );
+  assert.equal(
+    progressText({ newFrames: 55, need: 40 }),
+    "Enough for a new club model: the night worker trains it tonight."
+  );
+  assert.equal(progressText(null), "");
+});
+
+test("index.html: contains #cc-progress element in #clubcheck-view", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const html = fs.readFileSync(path.join(__dirname, "../static/index.html"), "utf8");
+  assert.ok(html.includes('id="cc-progress"'), "index.html has #cc-progress element");
 });
 
 
