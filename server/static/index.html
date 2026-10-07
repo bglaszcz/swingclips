@@ -492,6 +492,17 @@
   .q-table td.bad { color: var(--warn); }
   #p-status { color: var(--muted); font-size: 13px; flex: 1; }
   #p-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  /* Every club at once: the verdict, four tiles, the session's most common fault. */
+  .p-ov-head { font-size: 17px; line-height: 1.4; font-weight: 600; margin-bottom: 10px; }
+  .p-ov-head .better { color: var(--accent); }
+  .p-ov-head .worse { color: var(--warn); }
+  .p-ov-head .sub { display: block; font-size: 13px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+  .p-ov-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .p-ov-tiles .p-tile { cursor: default; }
+  #p-ov-fault { margin-top: 10px; font-size: 14px; }
+  #p-ov-fault:empty { display: none; }
+  .p-club-pick { margin-left: 10px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text); }
+  .p-second { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
   .p-tile { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line);
             border-radius: 6px; cursor: pointer; min-width: 0; }
   .p-tile:hover { background: var(--sel); }
@@ -1546,7 +1557,6 @@
       <button id="p-close" class="small">Close</button>
     </div>
     <div class="t-filters">
-      <label>Club <select id="p-club"></select></label>
       <label>Period <select id="p-period">
         <option value="30">Last 30 days</option><option value="90">Last 90 days</option>
         <option value="365">Last year</option><option value="0">All</option>
@@ -1554,17 +1564,15 @@
       <label title="Shaky numbers: tracking noise or the conditions could account for them. Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
     </div>
 
-    <div class="p-step"><span class="p-step-n">1</span><span id="p-today-title">How did the last session go?</span></div>
-    <div class="t-card" id="p-today">
-      <div id="p-headline" class="p-headline"></div>
-      <div id="p-tiles"></div>
-      <details class="p-more" data-fold="tiles-more">
-        <summary>All numbers from this session</summary>
-        <div id="p-tiles-more" class="p-tiles-grid"></div>
-      </details>
+    <!-- Steps 1-3: every club at once (sessionscore.js); one club at a time further down. -->
+    <div class="p-step"><span class="p-step-n">1</span><span id="p-ov-title">Did your last session go better than the one before?</span></div>
+    <div class="t-card" id="p-overall">
+      <div id="p-ov-head" class="p-ov-head"></div>
+      <div id="p-ov-tiles" class="p-ov-tiles"></div>
+      <div id="p-ov-fault" class="p-faults"></div>
       <details class="explain">
         <summary>How it's worked out</summary>
-        <div class="note" id="p-tiles-note"></div>
+        <div class="note" id="p-ov-note"></div>
       </details>
     </div>
 
@@ -1617,7 +1625,22 @@
       </details>
     </div>
 
-    <div class="p-step p-step-more">More with this club</div>
+    <div class="p-step p-step-more">One club at a time <label class="p-club-pick">Club <select id="p-club"></select></label></div>
+    <details class="t-card p-fold" data-fold="today">
+      <summary><strong id="p-today-title">Last session with this club</strong></summary>
+      <div id="p-today">
+        <div id="p-headline" class="p-headline"></div>
+        <div id="p-tiles"></div>
+        <details class="p-more" data-fold="tiles-more">
+          <summary>All numbers from this session</summary>
+          <div id="p-tiles-more" class="p-tiles-grid"></div>
+        </details>
+        <details class="explain">
+          <summary>How it's worked out</summary>
+          <div class="note" id="p-tiles-note"></div>
+        </details>
+      </div>
+    </details>
     <details class="t-card p-fold" data-fold="pattern">
       <summary><strong>Shot pattern</strong></summary>
       <svg id="p-pattern" role="img" aria-label="Where shots finished: carry against offline"></svg>
@@ -1732,6 +1755,7 @@
 <script src="/static/faultlinks.js"></script>
 <script src="/static/scorecard.js"></script>
 <script src="/static/shotstory.js"></script>
+<script src="/static/sessionscore.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script src="/static/programhistory.js"></script>

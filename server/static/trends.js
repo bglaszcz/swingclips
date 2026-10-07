@@ -32,7 +32,8 @@ const DECIMALS = { ":1": 1, s: 2, in: 1, "°": 1, yd: 1, mph: 1, rpm: 0, "": 2, 
 const FIELDS = [
   { key: "order", label: "Swing order", unit: "", group: "", dec: 0 },
   ...SwingSummary.SHOT.map(f => ({ ...f, group: "Launch monitor", shot: true })),
-  ...SwingSummary.BODY.map(f => ({ ...f, group: f.view === "dtl" ? "Down the line" : "Face-on" })),
+  ...SwingSummary.BODY.map(f => ({ ...f, label: SwingShotStory.LABELS[f.key] || f.label,
+                                    group: f.view === "dtl" ? "Down the line" : "Face-on" })),
 ].map(f => ({ dec: DECIMALS[f.unit] ?? 1, ...f }));
 // How spread out a session's shots are (standard deviation): consistency, which is most of scoring.
 const SPREADS = [
@@ -736,12 +737,14 @@ const dayOf = t => new Date(t).toLocaleDateString(undefined, { month: "short", d
 
 /**
  * The club's sessions, oldest first: {key, start, rows, moved: {face, dtl}} where moved says the
- * camera had moved since the session before that used it.
+ * camera had moved since the session before that used it. club "*": every club (not the putter, not
+ * swings without a shot).
  */
 function progressSessions(club) {
   const out = [];
   for (const s of sessionsOf(shownClips()).reverse()) {
-    const rows = [...s.clips].reverse().filter(c => !c.excluded).map(swingRow).filter(r => r.club === club);
+    const rows = [...s.clips].reverse().filter(c => !c.excluded).map(swingRow)
+      .filter(r => club === "*" ? !!SwingGoodShots.groupOf(r.club) : r.club === club);
     if (rows.length) out.push({ key: s.key, start: s.start, rows, moved: {} });
   }
   for (const cam of ["face", "dtl"]) {
@@ -761,6 +764,9 @@ function progressSessions(club) {
 /** The camera a body number is measured from ("face" / "dtl"), or null for launch monitor numbers. */
 const cameraOf = f => f.shot ? null : SwingSummary.BODY.find(b => b.key === f.key)?.view ?? null;
 
+// Numbers that mean the same with any club: the chart's choices when every club is pooled.
+const POOLED_SHOT = ["path", "face", "faceToPath"];
+
 function renderProgress() {
   const allRows = shownClips().filter(c => !c.excluded).map(swingRow);
   const clubs = clubOptions(document.getElementById("p-club"), allRows, progressPick, null);
@@ -768,32 +774,40 @@ function renderProgress() {
   const club = progressPick.club;
   const days = Number(progressPick.period);
   const since = days ? Date.now() - days * 86400000 : -Infinity;
+  const all = progressSessions("*").filter(s => s.start >= since);
   const sessions = progressSessions(club).filter(s => s.start >= since);
   const pending = allRows.filter(r => !r.body && swingPending(r.c)).length;
   // The count up front; the caveats behind the ⓘ.
   const status = document.getElementById("p-status");
-  const swings = sessions.reduce((n, s) => n + s.rows.length, 0);
-  const caveats = [unseenNote(sessions.flatMap(s => s.rows)),
+  const swings = all.reduce((n, s) => n + s.rows.length, 0);
+  const caveats = [unseenNote(all.flatMap(s => s.rows)),
     pending ? `${pending} swing${pending === 1 ? "" : "s"} still being worked out on the server` : ""].filter(Boolean);
   status.textContent = !clubs.length ? "No swings with launch monitor numbers yet."
-    : `${sessions.length} session${sessions.length === 1 ? "" : "s"} · ${swings} swings with the ${clubName(club).toLowerCase()}`
-      + (caveats.length ? " ⓘ" : "");
+    : `${all.length} session${all.length === 1 ? "" : "s"} · ${swings} swings, all clubs` + (caveats.length ? " ⓘ" : "");
   status.title = caveats.join("\n");
 
-  const focusHere = journal.focus && journal.focus.club === club ? journal.focus : null;
-  // Until a number is picked, the chart shows the focus move.
-  if (!progressMetricPicked && focusHere) progressPick.metric = focusHere.move;
+  // Steps 2 and 3: every club at once, each swing against its own session-and-club usual.
+  const helps = pooledHelps(all);
+  const top = SwingSessionScore.priorities(helps.a.links);
+  const focus = journal.focus || null;
+  // Until a number is picked, the chart shows the focus move, else the first thing to work on.
+  const lead = focus ? focus.move : top[0] ? top[0].move : null;
+  if (!progressMetricPicked && lead) progressPick.metric = lead;
   const metricSel = document.getElementById("p-metric");
-  fillSelect(metricSel, [["Consistency", SPREADS], ...byGroup(["Launch monitor", "Face-on", "Down the line"])], progressPick.metric);
-  if (metricSel.value !== progressPick.metric) { progressPick.metric = "carrySpread"; metricSel.value = "carrySpread"; }
+  const pooled = FIELDS.filter(f => POOLED_SHOT.includes(f.key));
+  fillSelect(metricSel, [["Club path and face", pooled], ...byGroup(["Face-on", "Down the line"])], progressPick.metric);
+  if (metricSel.value !== progressPick.metric) { progressPick.metric = lead || "earlyExt"; metricSel.value = progressPick.metric; }
 
-  const helps = helpsModel(club, sessions);
+  renderOverall(all);
+  renderPriority(helps, top);
+  renderHelpsEvidence(null, helps.subs, helps);
+  renderChips(focus, top[0]);
+  const chartSessions = focus && focus.club ? progressSessions(focus.club).filter(s => s.start >= since) : all;
+  drawOverTime(chartSessions, field(progressPick.metric), focus);
+
+  // One club at a time.
   renderTiles(sessions, club);
-  renderCoach(club, helps);
-  renderHelpsEvidence(club, sessions, helps);
   renderGoodShots(club);
-  renderChips(focusHere);
-  drawOverTime(sessions, field(progressPick.metric), focusHere);
   if (foldOpen("pattern")) drawPattern(sessions);
   if (foldOpen("hcp")) renderHandicap();
   renderSessionTable(sessions);
@@ -801,9 +815,83 @@ function renderProgress() {
   renderWedges();
   renderProgressCombine();
   renderProgressPrograms();
-  renderProgressDrillSets(club);
+  renderProgressDrillSets(focus && focus.club ? focus.club : null);
   const latestHcp = journal.handicap[journal.handicap.length - 1];
   document.getElementById("p-hcp-now").textContent = latestHcp ? `${latestHcp.index.toFixed(1)} on ${dayOf(new Date(latestHcp.date + "T12:00"))}` : "";
+}
+
+/**
+ * helps.js over every club: each session split by club, so each swing is taken against its own
+ * session-and-club usual and clubs pool. Worked out once per data change and period (~1 s).
+ */
+let pooledHelpsCache = { sig: null, value: null };
+function pooledHelps(all) {
+  const sig = `${dataSig}|${clips.length}|${progressPick.period}|${leaveOutShaky}`;
+  if (pooledHelpsCache.sig === sig) return pooledHelpsCache.value;
+  const subs = [];
+  for (const s of all) {
+    const by = {};
+    for (const r of s.rows) (by[r.club] = by[r.club] || []).push(r);
+    for (const [c, rows] of Object.entries(by)) subs.push({ key: s.key, start: s.start, rows, moved: s.moved, club: c });
+  }
+  const value = { ...helpsModel(null, subs), subs };
+  pooledHelpsCache = { sig, value };
+  return value;
+}
+
+/** Step 1: the latest session against the last one, every club (sessionscore.js). */
+function renderOverall(all) {
+  const head = document.getElementById("p-ov-head"), tiles = document.getElementById("p-ov-tiles");
+  const faultEl = document.getElementById("p-ov-fault"), note = document.getElementById("p-ov-note");
+  const title = document.getElementById("p-ov-title");
+  const data = goodShotData();
+  const cmp = SwingSessionScore.compare(all.map(s => ({ start: s.start, key: s.key, rows: s.rows })),
+    { clubs: data.clubs, name: r => r.c.name, settings: goodSettings && goodSettings.settings });
+  if (!cmp) {
+    title.textContent = "Did your last session go better than the one before?";
+    head.textContent = "No sessions in this period.";
+    tiles.replaceChildren(); faultEl.textContent = ""; note.textContent = "";
+    return;
+  }
+  const when = dayOf(cmp.latest.start), lastWhen = cmp.last ? dayOf(cmp.last.start) : null;
+  title.textContent = cmp.last ? `Did ${when} go better than ${lastWhen}?` : `How did ${when} go?`;
+  const clubsHit = Object.keys(cmp.latest.score.clubs).length;
+  const sub = `${cmp.latest.score.n} swings with ${clubsHit} club${clubsHit === 1 ? "" : "s"}`
+    + (cmp.last ? `; ${lastWhen}: ${cmp.last.score.n} swings` : "");
+  // Coloured only when the change is clear; "a little better" stays plain.
+  const lead = pEl("span", cmp.items[0].clear ? cmp.verdict : "", cmp.headline);
+  head.replaceChildren(lead, pEl("span", "sub", sub));
+
+  const pct = v => v == null ? "–" : `${Math.round(v * 100)}%`;
+  const fmt = it => v => it.key === "distance" ? (v == null ? "–" : `${Math.round(v)}%`) : pct(v);
+  tiles.replaceChildren(...cmp.items.map(it => {
+    const f = fmt(it), tile = pEl("div", "p-tile");
+    const delta = pEl("span", "p-delta");
+    if (it.last != null) {
+      delta.append(`last time ${f(it.last)}`);
+      if ((it.change === "better" || it.change === "worse") && (it.clear || !it.k)) delta.append(" · ", pEl("em", it.change, it.change));
+      else if (it.change === "better" || it.change === "worse") delta.append(` · a little ${it.change}`);
+      else if (it.change === "same") delta.append(" · about the same");
+    } else delta.append(cmp.last ? "no reading last time" : "nothing to compare yet");
+    if (it.usual != null) delta.append(` · usual ${f(it.usual)}`);
+    tile.title = `${it.label}: ${it.hint}`;
+    tile.append(pEl("span", "p-label", it.label), pEl("b", null, f(it.now)), delta, sparkline(cmp.series[it.key]));
+    return tile;
+  }));
+
+  // The session's most common fault, in a line, with its swing thought.
+  const faults = SwingFaults.sessionFaults(cmp.latest.rows, isShaky).filter(x => x.top);
+  const tf = faults[0];
+  faultEl.textContent = tf ? `Most common fault on ${when}: ${tf.name} (${tf.count} of ${tf.readable ?? tf.total} swings). `
+    + (tf.thought ? `Swing thought: “${SwingShotStory.plain(tf.thought)}”` : "") : "";
+
+  note.textContent = `Every club in one: each shot against that club's own usual, so wedges and long irons compare. `
+    + `Good shots pass your good-shot rules (set under One club at a time > Good shots); on line = within the club's `
+    + `offline allowance; solid strikes = ball speed off the face (smash) at or above your usual with that club; distance = `
+    + `the median carry as a share of your usual carry with each club. "Last time" is the latest earlier session with `
+    + `${SwingSessionScore.MIN_JUDGED} or more shots with a verdict; "usual" the median of up to ${SwingSessionScore.USUAL} earlier ones. `
+    + `A change is clear when it's unlikely to be luck (two-proportion test, about 95% one-sided); smaller gaps of 5 points `
+    + `or more read "a little better / worse".`;
 }
 
 async function renderProgressPrograms() {
@@ -1001,15 +1089,18 @@ for (const d of progressBox.querySelectorAll("details[data-fold]")) {
 }
 
 /** Quick picks for the chart: the focus move and the results it's meant to change, then the usual consistency numbers. */
-function renderChips(focus) {
+function renderChips(focus, top) {
   const keys = [];
   if (focus) keys.push(focus.move, ...(focus.results || []).map(k => HELPS_TREND_FIELD[k] || k));
-  keys.push("carrySpread", "offlineSpread", "carry");
+  else if (top) keys.push(top.move, ...top.items.map(x => HELPS_TREND_FIELD[x.l.result] || x.l.result));
+  keys.push("path", "faceToPath");
   const seen = new Set();
-  const chips = keys.filter(k => FIELDS.some(f => f.key === k) || SPREADS.some(f => f.key === k))
+  // Every club pooled: only numbers that mean the same with any club (a focus with one club can chart its own).
+  const ok = k => SwingSummary.BODY.some(f => f.key === k) || POOLED_SHOT.includes(k) || (focus && focus.club && FIELDS.some(f => f.key === k));
+  const chips = keys.filter(ok)
     .filter(k => !seen.has(k) && seen.add(k)).map((k, i) => {
       const b = Object.assign(document.createElement("button"), { className: "small", type: "button",
-        textContent: (focus && i === 0 ? "Focus: " : "") + field(k).label });
+        textContent: ((focus || top) && i === 0 ? (focus ? "Focus: " : "Work on: ") : "") + field(k).label });
       b.classList.toggle("on", k === progressPick.metric);
       b.onclick = () => pickMetric(k);
       return b;
@@ -1080,11 +1171,11 @@ function renderTiles(sessions, club) {
   const head = document.getElementById("p-headline");
   if (!latest) {
     box.replaceChildren(); more.replaceChildren(); note.textContent = "";
-    title.textContent = "How did the last session go?";
+    title.textContent = "Last session with this club";
     head.textContent = club ? `No sessions with the ${clubName(club).toLowerCase()} in this period.` : "";
     return;
   }
-  title.textContent = `How did ${dayOf(latest.start)} go?`;
+  title.textContent = `${dayOf(latest.start)} with the ${clubName(club).toLowerCase()}`;
   note.textContent = `${dayOf(latest.start)} (${latest.rows.length} swings with the ${clubName(club).toLowerCase()}) against the median of the sessions before it in this period. `
     + "A change counts as better or worse only when it's bigger than the usual session-to-session difference (it takes 4 sessions to know that); "
     + "smaller ones are \"normal variation\". Spreads are the standard deviation of the session's shots. Tap a number to chart it below.";
@@ -1609,7 +1700,7 @@ function helpsModel(club, sessions) {
 /** The evidence under "Why this?": every link, in golf terms, strongest first. */
 function renderHelpsEvidence(club, sessions, h) {
   const status = document.getElementById("p-helps-status"), box = document.getElementById("p-helps-list");
-  const name = club ? clubName(club).toLowerCase() : "club";
+  const name = club ? clubName(club).toLowerCase() : "clubs";
   const { a, listed, coached, holdUp } = h;
   const replayMap = new Map((holdUp?.replayed || []).map(r => [`${r.move}:${r.result}`, r]));
   const verdictTags = {
@@ -1664,7 +1755,7 @@ function renderHelpsEvidence(club, sessions, h) {
       const sumText = `Checked forward: of ${t.found} finding${t.found === 1 ? "" : "s"}, ${t.held} held up in later sessions, ${t.faded} not clear since, ${t.reversed} reversed, ${t.early} too early to tell.`;
       fold.append(pEl("summary", null, sumText));
       const body = pEl("div");
-      const mv = k => SwingSummary.BODY.find(f => f.key === k)?.label || k;
+      const mv = k => field(k).label || k;
       const rs = k => (SwingHelps.RESULTS.find(r => r.key === k)?.label || k).toLowerCase();
       for (const item of (holdUp.replayed || [])) {
         body.append(pEl("div", "note", `${mv(item.move)} → ${rs(item.result)}: ${SwingHoldUp.sentence(item)}`));
@@ -1699,11 +1790,12 @@ function focusFmt(key, v) {
   const dec = r && (r.unit === "rpm" ? 0 : r.unit === "" ? 2 : 1);
   return v.toFixed(dec ?? 1) + (r && r.unit ? (r.unit === "°" ? "°" : " " + r.unit) : "");
 }
-const focusLabel = key => (SwingSummary.BODY.find(f => f.key === key) || SwingHelps.RESULTS.find(r => r.key === key) || { label: key }).label;
+const focusLabel = key => (SwingSummary.BODY.some(f => f.key === key) ? field(key)
+  : SwingHelps.RESULTS.find(r => r.key === key) || { label: key }).label;
 
 /** The range that means "better than my usual" for the move: from the median of the latest swings toward the aim. */
 function focusPracticeRange(f) {
-  const vals = progressSessions(f.club).flatMap(s => s.rows).reverse().map(r => r[f.move]).filter(v => v != null).slice(0, PR_SUGGEST_N);
+  const vals = progressSessions(f.club || "*").flatMap(s => s.rows).reverse().map(r => r[f.move]).filter(v => v != null).slice(0, PR_SUGGEST_N);
   if (vals.length < 5) return null;
   vals.sort((a, b) => a - b);
   const med = quantile(vals, 0.5), spread = quantile(vals, 0.9) - quantile(vals, 0.1);
@@ -1751,80 +1843,69 @@ function focusButton(m, club, text) {
 }
 
 /**
- * The card: one thing to work on. The focus when there is one (with how it's going), else the plan's
- * first move; the plan's other moves as alternatives; the evidence folded under "Why this?".
+ * Step 2: one thing to work on, every club at once. The focus when there is one (with how it's
+ * going), else the first of SwingSessionScore.priorities; a second only when it's nearly as big.
+ * The evidence stays folded under "Why this?".
  */
-function renderCoach(club, h) {
+function renderPriority(h, top) {
   const box = document.getElementById("p-focus-body");
-  const name = club ? clubName(club).toLowerCase() : "club";
+  const plain = SwingShotStory.plain;
   const f = journal.focus;
-  const plan = h.moves.filter(m => !m.tradeOff);
   const kids = [];
-  let main = null;   // the plan move shown as the main thing, if any
-  if (f && f.club !== club) {
-    // The focus is with another club: a pointer to it, then this club's own suggestion.
-    const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim], fname = clubName(f.club).toLowerCase();
-    const row = pEl("div", "p-alt");
-    const go = pEl("button", "small", `Show the ${fname}`);
-    go.onclick = () => { progressPick.club = f.club; savePicks(); renderProgress(); };
-    row.append(pEl("span", "muted", `Your focus is with the ${fname}: ${fix ? fix.name : focusLabel(f.move)}.`), go);
-    kids.push(row);
-  }
-  if (f && f.club === club) {
-    kids.push(...focusBlock(f, club, h));
-  } else if (plan.length) {
-    main = plan[0];
-    const nameEl = pEl("div", "p-focus-name", `Work on ${main.fix.name}`);
+  if (f) {
+    kids.push(...focusBlock(f, h));
+    // The numbers now point somewhere else: one line, to switch.
+    const next = top.find(m => m.move !== f.move || m.aim !== f.aim);
+    if (next && top[0] === next) {
+      const row = pEl("div", "p-alt p-second");
+      row.append(pEl("span", "muted", `The numbers now point most to ${plain(next.fix.name)}.`), focusButton(next, null, "Switch focus to this"));
+      kids.push(row);
+    }
+  } else if (top.length) {
+    const main = top[0];
+    const nameEl = pEl("div", "p-focus-name", `Work on ${plain(main.fix.name)}`);
     nameEl.append(badge(main.label));
-    kids.push(pEl("div", "p-focus-kicker", `Suggested for the ${name}`), nameEl,
-      pEl("div", null, `For ${main.goals.join("; ")}. ${main.fix.how}`), ...drillAndThought(main.fix));
-    const note = goodShotsNote(club, main.move, main.aim);
-    if (note) kids.push(note);
+    kids.push(pEl("div", "p-focus-kicker", "Your #1 priority, from every club"), nameEl,
+      pEl("div", null, (main.goals.length ? `For ${main.goals.map(plain).join("; ")}. ` : "") + plain(main.fix.how)),
+      ...drillAndThought({ drill: plain(main.fix.drill), thought: plain(main.fix.thought) }));
     if (main.label !== "confirmed") kids.push(pEl("div", "muted", "Not proven yet: try it for a session or two and see whether the numbers follow."));
     const buttons = pEl("div", "t-filters");
-    buttons.append(focusButton(main, club));
+    buttons.append(focusButton(main, null));
     kids.push(buttons);
+    if (top[1]) {
+      const m = top[1], second = pEl("div", "p-second");
+      const row = pEl("div", "p-alt");
+      row.append(pEl("span", null, `Also worth it: ${plain(m.fix.name)}`), badge(m.label), focusButton(m, null));
+      second.append(row, pEl("div", "muted", `Swing thought: “${plain(m.fix.thought)}”`));
+      kids.push(second);
+    }
   } else {
     kids.push(pEl("div", "p-focus-name", "Nothing to work on yet"),
       pEl("div", "muted", h.a.tested
-        ? `No move stands out from chance with the ${name} yet. Keep hitting balls: it takes 5 to 10 sessions of 20+ swings to say much.`
-        : `Not enough swings with body numbers with the ${name} yet.`));
-  }
-  // The plan's other moves.
-  const isFocus = m => f && f.move === m.move && f.aim === m.aim && f.club === club;
-  const others = plan.filter(m => m !== main && !isFocus(m));
-  if (others.length) {
-    kids.push(pEl("div", "p-why-sub", main ? "Or" : "The numbers also point to"));
-    for (const m of others) {
-      const row = pEl("div", "p-alt");
-      row.append(pEl("span", null, `Work on ${m.fix.name}`), badge(m.label), focusButton(m, club, f ? "Switch focus to this" : "Make this my focus"));
-      kids.push(row);
-    }
-  }
-  const trades = h.moves.filter(m => m.tradeOff);
-  if (trades.length) {
-    kids.push(pEl("div", "muted", "Keep steady: " + trades.map(m => SwingCoach.MOVES[m.move].what).join("; ")
-      + " (it helps one result and hurts another)."));
+        ? "No move stands out from chance yet. Keep hitting balls: it takes 5 to 10 sessions of 20+ swings to say much."
+        : "Not enough swings with body numbers yet."));
   }
   box.replaceChildren(...kids);
 }
 
 /** The focus: the move, drill and thought, how it's going since it started, and what to do next. */
-function focusBlock(f, club, h) {
-  const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim];
-  const fname = clubName(f.club).toLowerCase();
+function focusBlock(f, h) {
+  const plain = SwingShotStory.plain;
+  const mv = SwingCoach.MOVES[f.move], fix0 = mv && mv[f.aim];
+  const fix = fix0 && { ...fix0, name: plain(fix0.name), how: plain(fix0.how), drill: plain(fix0.drill), thought: plain(fix0.thought) };
+  const fname = f.club ? clubName(f.club).toLowerCase() : "all clubs";
   const kids = [pEl("div", "p-focus-kicker", `Your focus · ${fname} · since ${new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}`)];
   const nameEl = pEl("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`);
-  const m = h.moves.find(x => x.move === f.move && !x.tradeOff && x.aim === f.aim);
-  nameEl.append(m ? badge(m.label) : badge("none", "Not in the latest numbers"));
+  const m = f.club ? null : SwingSessionScore.priorities(h.a.links).find(x => x.move === f.move && x.aim === f.aim);
+  if (!f.club) nameEl.append(m ? badge(m.label) : badge("none", "Not in the latest numbers"));
   kids.push(nameEl);
   if (fix) kids.push(...drillAndThought(fix));
 
   // How it's going, in a sentence; the numbers behind it folded.
-  const cmp = SwingFocus.compare(progressSessions(f.club), f);
+  const cmp = SwingFocus.compare(progressSessions(f.club || "*"), f);
   const so = pEl("div", "p-focus-so");
   if (!cmp.after) {
-    so.textContent = `No sessions with the ${fname} since it started yet: hit some balls with the drill, then look here.`;
+    so.textContent = `No sessions ${f.club ? `with the ${fname} ` : ""}since it started yet: hit some balls with the drill, then look here.`;
     kids.push(so);
   } else {
     so.append(pEl("b", null, `So far (${cmp.after} session${cmp.after === 1 ? "" : "s"}): `));
@@ -1856,7 +1937,7 @@ function focusBlock(f, club, h) {
     nums.append(wrap);
     kids.push(nums);
   }
-  const note = goodShotsNote(f.club, f.move, f.aim);
+  const note = f.club ? goodShotsNote(f.club, f.move, f.aim) : null;
   if (note) kids.push(note);
 
   const buttons = pEl("div", "t-filters");
@@ -1875,7 +1956,7 @@ function focusBlock(f, club, h) {
   kids.push(buttons);
   const past = (journal.focuses || []).slice(-3).reverse();
   if (past.length) {
-    kids.push(pEl("div", "muted", "Before: " + past.map(p => `${(SwingCoach.MOVES[p.move] || {})[p.aim]?.name || p.move} (${p.since} to ${p.until})`).join("; ")));
+    kids.push(pEl("div", "muted", "Before: " + past.map(p => `${plain((SwingCoach.MOVES[p.move] || {})[p.aim]?.name || p.move)} (${p.since} to ${p.until})`).join("; ")));
   }
   return kids;
 }

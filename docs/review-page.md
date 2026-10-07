@@ -74,6 +74,29 @@ What the server works out for each swing and what each part of the review page s
   picture, in `swings.json` (`/api/swings`); plus, for the noise table only, every number at P1, P4,
   P6 and P7 and each camera's noise floor at address (not sent to the page). The records carry a fingerprint of that JavaScript: after an update that
   changes it, every swing is worked out again (~0.2 s each). Right-handed only, for now.
+- **Progress, steps 1-3: every club at once** (`static/sessionscore.js`, 2026-10-07). No club to pick
+  up top; the period and Leave out shaky stay.
+  **1. Did <latest> go better than <last>?** One sentence on good shots (your good-shot rules, per
+  club), then four tiles, each against the last session and the usual (median of up to 6 earlier):
+  **Good shots**, **On line** (within the club's offline allowance), **Solid strikes** (smash at or
+  above your median with that club), **Distance** (median carry as % of each club's usual). Every
+  shot is taken against its own club's usual, so a wedge session and a long-iron one compare. "Last
+  time" is the latest earlier session with 15+ judged shots (a 9-swing warm-up isn't it). "Better" /
+  "worse" (coloured) only when a two-proportion test says it's unlikely to be luck (z 1.64); a gap of
+  5+ points otherwise reads "a little better / worse". Then the session's most common fault with its
+  swing thought.
+  **2. What should I work on?** One thing: the focus if there is one; else the #1 move from what
+  helps / what hurts worked out over every club (each session split by club, so each swing is against
+  its own session-and-club usual), ranked by what matters to an everyday golfer (distance offline 1,
+  smash 0.9, carry 0.8, path 0.8, curve 0.7, ball speed and face 0.6, strike 0.4-0.5, times |r|, half
+  for "worth trying"; attack angle and loft left out, their target depends on the club). A second
+  move only when it scores 70% of the first; with a focus, one line when the numbers now point
+  elsewhere. A focus made here has no club (all clubs); older one-club focuses still work.
+  **3. Is it working?** The chart pools every club (only numbers that mean the same with any club:
+  body numbers, path, face, face to path); a one-club focus charts its own club.
+  Body numbers are named in plain words everywhere in Trends and Progress (`SwingShotStory.LABELS`).
+  **One club at a time** (the club picker): that club's last session tiles, shot pattern, sessions
+  table and good shots, as before.
 - **Progress** (button at the top): all sessions with one club over time. Tiles compare the latest
   session with the ones before it (median, or spread for consistency numbers), saying "better" /
   "worse" only when the change is bigger than the usual session-to-session difference; a chart of
