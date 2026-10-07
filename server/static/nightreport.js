@@ -297,10 +297,47 @@
     return parts.join(" · ");
   }
 
+  /**
+   * Formats the club model progress line:
+   * "New club frames since the last training: 5 of 40" or
+   * "Enough for a new club model: the night worker trains it tonight." (at 40 or more).
+   */
+  function progressLine(progress) {
+    if (!progress) return "";
+    const newFrames = progress.newFrames != null ? progress.newFrames : 0;
+    const need = progress.need != null ? progress.need : 40;
+    if (newFrames >= need) {
+      return "Enough for a new club model: the night worker trains it tonight.";
+    }
+    return `New club frames since the last training: ${newFrames} of ${need}`;
+  }
+
+  /**
+   * When the latest candidate was trained on fewer than 40 more frames than the try
+   * before it, returns the note:
+   * "Trained on almost the same frames as the try before (+3): add Club check frames first."
+   */
+  function almostSameNote(candidates) {
+    if (!candidates || candidates.length < 2) return null;
+    const c0 = candidates[0];
+    const c1 = candidates[1];
+    const f0 = c0?.train?.frames;
+    const f1 = c1?.train?.frames;
+    if (f0 == null || f1 == null) return null;
+    const diff = f0 - f1;
+    if (diff < 40) {
+      const sign = diff >= 0 ? "+" : "";
+      return `Trained on almost the same frames as the try before (${sign}${diff}): add Club check frames first.`;
+    }
+    return null;
+  }
+
   const api = {
     compareRows,
     headline,
     nightLine,
+    progressLine,
+    almostSameNote,
     formatNightDate,
     formatTime
   };

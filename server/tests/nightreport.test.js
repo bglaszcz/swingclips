@@ -221,3 +221,75 @@ test("trends.js includes nightreport in showView and leaveTrendViews", () => {
   assert.ok(trends.includes('document.getElementById("nightreport-btn")'), "showView references nightreport button");
   assert.ok(trends.includes('which === "nightreport"'), "showView checks for nightreport");
 });
+
+test("progressLine: formats count of need, and says enough at or above 40", () => {
+  assert.equal(
+    NightReport.progressLine({ newFrames: 5, need: 40 }),
+    "New club frames since the last training: 5 of 40"
+  );
+  assert.equal(
+    NightReport.progressLine({ newFrames: 0, need: 40 }),
+    "New club frames since the last training: 0 of 40"
+  );
+  assert.equal(
+    NightReport.progressLine({ newFrames: null, need: 40 }),
+    "New club frames since the last training: 0 of 40"
+  );
+  assert.equal(
+    NightReport.progressLine({ newFrames: 40, need: 40 }),
+    "Enough for a new club model: the night worker trains it tonight."
+  );
+  assert.equal(
+    NightReport.progressLine({ newFrames: 45, need: 40 }),
+    "Enough for a new club model: the night worker trains it tonight."
+  );
+  assert.equal(NightReport.progressLine(null), "");
+});
+
+test("almostSameNote: warns when latest candidate was trained on fewer than 40 more frames than try before it", () => {
+  const candidatesSmallDiff = [
+    { train: { frames: 1107 } },
+    { train: { frames: 1104 } },
+  ];
+  assert.equal(
+    NightReport.almostSameNote(candidatesSmallDiff),
+    "Trained on almost the same frames as the try before (+3): add Club check frames first."
+  );
+
+  const candidatesZeroDiff = [
+    { train: { frames: 1104 } },
+    { train: { frames: 1104 } },
+  ];
+  assert.equal(
+    NightReport.almostSameNote(candidatesZeroDiff),
+    "Trained on almost the same frames as the try before (+0): add Club check frames first."
+  );
+
+  const candidatesNegativeDiff = [
+    { train: { frames: 1100 } },
+    { train: { frames: 1104 } },
+  ];
+  assert.equal(
+    NightReport.almostSameNote(candidatesNegativeDiff),
+    "Trained on almost the same frames as the try before (-4): add Club check frames first."
+  );
+
+  const candidatesEnoughDiff = [
+    { train: { frames: 1150 } },
+    { train: { frames: 1104 } },
+  ];
+  assert.equal(NightReport.almostSameNote(candidatesEnoughDiff), null);
+
+  assert.equal(NightReport.almostSameNote([{ train: { frames: 1104 } }]), null);
+  assert.equal(NightReport.almostSameNote([]), null);
+  assert.equal(NightReport.almostSameNote(null), null);
+});
+
+test("nightreport-view.js includes progressLine and almostSameNote", () => {
+  const nrView = fs.readFileSync(path.join(__dirname, "../static/nightreport-view.js"), "utf8");
+  assert.ok(nrView.includes("SwingNightReport.progressLine"), "uses SwingNightReport.progressLine");
+  assert.ok(nrView.includes("SwingNightReport.almostSameNote"), "uses SwingNightReport.almostSameNote");
+  assert.ok(nrView.includes("nr-progress-line"), "renders nr-progress-line");
+  assert.ok(nrView.includes("nr-almost-same"), "renders nr-almost-same");
+});
+

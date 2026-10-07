@@ -1,6 +1,7 @@
 {
   "inUse": {"club": "club-deep@0173e707", "since": "2026-09-27T18:40:00"},
   "deepLeft": 0,
+  "progress": {"newFrames": 12, "need": 40},
   "candidates": [
     {
       "id": "club-2026-10-07-0215",
