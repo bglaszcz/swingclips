@@ -58,19 +58,19 @@ test("fixture runs: 4 runs of lowpoint, newest first with medians and state", ()
   const attackTrend = t.checks.find(c => c.key === "attack");
   assert.equal(attackTrend.firstMedian, -1.4);
   assert.equal(attackTrend.lastMedian, -2.8);
-  assert.equal(attackTrend.movement, "moved toward the gate");
+  assert.equal(attackTrend.movement, "now inside the gate");
 
   const strikeTrend = t.checks.find(c => c.key === "strikeV");
   assert.equal(strikeTrend.firstMedian, 4.0);
   assert.equal(strikeTrend.lastMedian, 1.0);
-  assert.equal(strikeTrend.movement, "moved toward the gate");
+  assert.equal(strikeTrend.movement, "now inside the gate");
 
   // Plain-words lines output matching prompt requirement
   const summaryLines = History.lines(t);
   assert.equal(summaryLines.length, 1);
   assert.equal(
     summaryLines[0],
-    "Flush line, 4 runs: passed 3/10 → 7/10 (gate 7). Attack -1.4 → -2.8° (toward -2° or steeper). Strike +4 → +1 mm (toward -8 to 3 mm)."
+    "Flush line, 4 runs: passed 3/10 → 7/10 (gate 7). Attack -1.4 → -2.8° (now inside the gate). Strike +4 → +1 mm (now inside the gate)."
   );
 });
 
@@ -184,9 +184,9 @@ test("min-and-max check: face to path evaluates toward, away, and about the same
   const check = { key: "faceToPath", min: -2, max: 2 };
 
   // Moved toward gate: outside (+3.2) moving inside (+0.5)
-  assert.equal(History.evaluateMovement(check, 3.2, 0.5), "moved toward the gate");
+  assert.equal(History.evaluateMovement(check, 3.2, 0.5), "now inside the gate");
   // Moved toward gate from negative side: outside (-3.0) moving inside (-0.5)
-  assert.equal(History.evaluateMovement(check, -3.0, -0.5), "moved toward the gate");
+  assert.equal(History.evaluateMovement(check, -3.0, -0.5), "now inside the gate");
   // Moved away from gate: inside (+0.5) moving outside (+3.0)
   assert.equal(History.evaluateMovement(check, 0.5, 3.0), "moved away");
   // About the same: change <= 0.2 threshold
@@ -221,7 +221,7 @@ test("min-and-max check: face to path evaluates toward, away, and about the same
   const lToward = History.lines(tToward);
   assert.equal(
     lToward[0],
-    "Transfer, 2 runs: best streak 2 → 5 (gate 5 in a row). Face to path +3.2 → +0.5° (toward ±2°)."
+    "Transfer, 2 runs: best streak 2 → 5 (gate 5 in a row). Face to path +3.2 → +0.5° (now inside the gate)."
   );
 
   const runsAway = [
@@ -247,7 +247,7 @@ test("min-and-max check: face to path evaluates toward, away, and about the same
   );
 });
 
-test("braceturn runs: pelvis open goes 6 -> 12 (toward 10 or more) and pelvis ahead 4.1 -> 3.9 (about the same)", () => {
+test("braceturn runs: pelvis open goes 6 -> 12 (now inside the gate) and pelvis ahead 4.1 -> 3.9 (about the same)", () => {
   const braceturnProg = {
     id: "braceturn",
     name: "Brace and turn",
@@ -303,7 +303,7 @@ test("braceturn runs: pelvis open goes 6 -> 12 (toward 10 or more) and pelvis ah
   const pelvisOpenCheck = t.checks.find(c => c.key === "pelvisOpen");
   assert.equal(pelvisOpenCheck.firstMedian, 6);
   assert.equal(pelvisOpenCheck.lastMedian, 12);
-  assert.equal(pelvisOpenCheck.movement, "moved toward the gate");
+  assert.equal(pelvisOpenCheck.movement, "now inside the gate");
 
   const pelvisBallCheck = t.checks.find(c => c.key === "pelvisBall");
   assert.equal(pelvisBallCheck.firstMedian, 4.1);
@@ -314,7 +314,7 @@ test("braceturn runs: pelvis open goes 6 -> 12 (toward 10 or more) and pelvis ah
   assert.equal(summary.length, 1);
   assert.equal(
     summary[0],
-    "Tier 2: 3/4 speed 7 iron, 2 runs: passed 6/15 → 9/15 (gate 8). Attack -3.8 → -3.5° (inside the gate). Face to path +0.5 → +0.2° (inside the gate). Pelvis open 6 → 12° (toward 10° or more). Pelvis ahead 4.1 → 3.9 in (about the same)."
+    "Tier 2: 3/4 speed 7 iron, 2 runs: passed 6/15 → 9/15 (gate 8). Attack -3.8 → -3.5° (inside the gate). Face to path +0.5 → +0.2° (inside the gate). Pelvis open 6 → 12° (now inside the gate). Pelvis ahead 4.1 → 3.9 in (about the same)."
   );
 });
 
@@ -388,5 +388,12 @@ test("missing 3D swings on run: says (3D on n of m swings) when fewer than all h
   assert.ok(t);
   const lines = History.lines(t);
   assert.equal(lines.length, 1);
-  assert.ok(lines[0].includes("Pelvis open 7 → 11° (toward 10° or more) (3D on 7 of 10 swings)."));
+  assert.ok(lines[0].includes("Pelvis open 7 → 11° (now inside the gate) (3D on 7 of 10 swings)."));
+});
+
+test("a one-sided check: toward it, then crossed in", () => {
+  const c = { key: "pelvisOpen", min: 10 };
+  assert.equal(History.evaluateMovement(c, 6, 8), "moved toward the gate");
+  assert.equal(History.evaluateMovement(c, 6, 12), "now inside the gate");
+  assert.equal(History.evaluateMovement(c, 12, 6), "moved away");
 });

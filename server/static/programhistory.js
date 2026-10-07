@@ -117,6 +117,7 @@
     if (check.min != null && check.max != null && d1 === 0 && d2 === 0) return "inside the gate";
     if (diff <= threshold || d1 === d2) return "about the same";
     if (d1 === 0 && d2 === 0) return "inside the gate";
+    if (d2 === 0) return "now inside the gate";   // crossed in (pelvis open 6 -> 12 against 10 or more)
     return d2 < d1 ? "moved toward the gate" : "moved away";
   }
 
@@ -133,7 +134,7 @@
    * Describes the target / direction of a gate check in plain words.
    */
   function targetPhrase(check, movement) {
-    if (movement === "about the same" || movement === "inside the gate") return movement;
+    if (movement === "about the same" || movement === "inside the gate" || movement === "now inside the gate") return movement;
     const info = NUMBERS[check.key] || { unit: "" };
     const lim = v => formatLimit(v, Boolean(info.signed && check.key !== "attack"));
     let gate;
