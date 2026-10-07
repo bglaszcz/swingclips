@@ -907,6 +907,8 @@
   #coachcard .cc-row > div { font-size: 15px; line-height: 1.45; }
   #coachcard .cc-thought { font-weight: 650; }
   #coachcard .cc-drill { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  #coachcard .cc-habit { background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); border-radius: 6px; padding: 6px 10px; font-size: 13px; line-height: 1.4; color: var(--text); }
+  #coachcard .cc-habit .cc-try { font-weight: 600; cursor: help; }
   @media (max-width: 560px) { #coachcard .cc-row { grid-template-columns: 1fr; gap: 2px; } }
 
   /* ---- Key positions ---- */
@@ -1732,6 +1734,7 @@
 <script src="/static/faultlinks.js"></script>
 <script src="/static/scorecard.js"></script>
 <script src="/static/shotstory.js"></script>
+<script src="/static/habits.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script src="/static/programhistory.js"></script>
@@ -3224,28 +3227,56 @@ function renderCoachCard() {
   const settings = goodSettings && goodSettings.settings;
   const judged = cd && cd.baseline && shot ? SwingGoodShots.judgeShot(shot, cd.baseline, group, settings) : null;
   const card = SwingShotStory.card({ shot, judged, baseline: cd ? cd.baseline : null, group, settings, ...(coachBody || {}) });
-  box.hidden = !card;
-  if (!card) { box.replaceChildren(); return; }
-  const kids = [];
-  if (card.verdict) {
-    const v = scEl("span", `cc-verdict ${card.verdict.level}`, card.verdict.text);
-    v.title = card.verdict.level === "good" ? `Passes your good-shot rules with the ${clubName(club).toLowerCase()} (set in Progress)`
-      : card.verdict.fails.length ? "Not a good shot by your rules: " + card.verdict.fails.join("; ") : "";
-    kids.push(v);
+  let habit = null;
+  if (club && loaded && typeof SwingHabits !== "undefined" && typeof sessionsOf === "function" && typeof swingRow === "function") {
+    const allSessions = sessionsOf(shownClips());
+    const sess = allSessions.find(s => s.clips.some(clip => clip.name === current));
+    if (sess) {
+      const oldestFirst = [...sess.clips].reverse();
+      const openIdx = oldestFirst.findIndex(clip => clip.name === current);
+      if (openIdx >= 0) {
+        const rows = oldestFirst.slice(0, openIdx + 1)
+          .filter(clip => !clip.excluded && !isSecondary(clip) && clip.shot && clip.shot.club === club)
+          .map(clip => swingRow(clip));
+        const res = SwingHabits.watch(rows, { clubName: clubName(club).toLowerCase() });
+        if (res && res.length) habit = res[0];
+      }
+    }
   }
-  const row = (title, ...content) => {
-    const r = scEl("div", "cc-row");
-    const body = scEl("div");
-    body.append(...content);
-    r.append(scEl("b", null, title), body);
-    kids.push(r);
-  };
-  if (card.what) row("What happened", card.what);
-  if (card.why) row(card.verdict && card.verdict.level === "good" ? "Why it worked" : "Why", card.why);
-  if (card.tip) {
-    const parts = [scEl("div", "cc-thought", card.tip.thought ? `“${card.tip.thought.replace(/\.$/, "")}”` : "")];
-    if (card.tip.drill) parts.push(scEl("div", "cc-drill", "Drill: " + card.tip.drill));
-    row("Try this", ...parts);
+  box.hidden = !card && !habit;
+  if (!card && !habit) { box.replaceChildren(); return; }
+  const kids = [];
+  if (habit) {
+    const hEl = scEl("div", "cc-habit");
+    hEl.append(habit.text);
+    if (habit.thought) {
+      const trySpan = scEl("span", "cc-try", ` Try: “${habit.thought.replace(/\.$/, "")}”`);
+      if (habit.drill) trySpan.title = "Drill: " + habit.drill;
+      hEl.append(trySpan);
+    }
+    kids.push(hEl);
+  }
+  if (card) {
+    if (card.verdict) {
+      const v = scEl("span", `cc-verdict ${card.verdict.level}`, card.verdict.text);
+      v.title = card.verdict.level === "good" ? `Passes your good-shot rules with the ${clubName(club).toLowerCase()} (set in Progress)`
+        : card.verdict.fails.length ? "Not a good shot by your rules: " + card.verdict.fails.join("; ") : "";
+      kids.push(v);
+    }
+    const row = (title, ...content) => {
+      const r = scEl("div", "cc-row");
+      const body = scEl("div");
+      body.append(...content);
+      r.append(scEl("b", null, title), body);
+      kids.push(r);
+    };
+    if (card.what) row("What happened", card.what);
+    if (card.why) row(card.verdict && card.verdict.level === "good" ? "Why it worked" : "Why", card.why);
+    if (card.tip) {
+      const parts = [scEl("div", "cc-thought", card.tip.thought ? `“${card.tip.thought.replace(/\.$/, "")}”` : "")];
+      if (card.tip.drill) parts.push(scEl("div", "cc-drill", "Drill: " + card.tip.drill));
+      row("Try this", ...parts);
+    }
   }
   box.replaceChildren(...kids);
 }
