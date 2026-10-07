@@ -4137,6 +4137,79 @@ function clipRow(c) {
   return li;
 }
 
+let sessionScoreHeaderCache = {};
+
+function sessionHeaderSub(s) {
+  const byClub = new Map();
+  for (const c of s.clips) if (c.shot && c.shot.club) byClub.set(c.shot.club, (byClub.get(c.shot.club) || 0) + 1);
+  const top = [...byClub].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${clubShort(k)} ${n}`);
+  const clubCounts = [`${s.clips.length} swing${s.clips.length === 1 ? "" : "s"}`, ...top].join(" · ");
+
+  const loaded = typeof trendDataLoaded !== "undefined" && trendDataLoaded;
+  if (!loaded || typeof SwingSessionScore === "undefined" || typeof goodShotData !== "function") {
+    return { sub: clubCounts, title: clubCounts };
+  }
+
+  const cacheKey = s.key + "|" + dataSig + "|" + s.clips.length;
+  if (sessionScoreHeaderCache[cacheKey]) {
+    return { sub: sessionScoreHeaderCache[cacheKey], title: clubCounts };
+  }
+
+  const rows = s.clips.filter(c => !c.excluded).map(swingRow);
+  const data = goodShotData();
+  const ctx = {
+    clubs: data ? data.clubs : null,
+    name: r => r.c ? r.c.name : r.name,
+    settings: goodSettings && goodSettings.settings,
+  };
+  const sc = SwingSessionScore.score(rows, ctx);
+  if (!sc || !sc.judged) {
+    sessionScoreHeaderCache[cacheKey] = clubCounts;
+    return { sub: clubCounts, title: clubCounts };
+  }
+
+  // Count judged and good per club for clubs with 5+ judged shots
+  const clubStats = {};
+  const st = SwingGoodShots.withDefaults(ctx.settings);
+  for (const r of rows) {
+    const club = r.club || (r.c && r.c.shot && r.c.shot.club);
+    if (!club) continue;
+    const group = SwingGoodShots.groupOf(club);
+    if (!group) continue;
+    const c = ctx.clubs && ctx.clubs[club], base = c && c.baseline;
+    if (!base) continue;
+    const v = c.verdicts && c.verdicts[ctx.name(r)];
+    const judgedHere = v || (Number.isFinite(r.carry) && r.carry > 0 ? SwingGoodShots.judgeShot(r, base, group, st) : null);
+    if (judgedHere && Number.isFinite(r.carry) && r.carry > 0) {
+      let cs = clubStats[club];
+      if (!cs) { cs = { club, judged: 0, good: 0 }; clubStats[club] = cs; }
+      cs.judged++;
+      if (judgedHere.good) cs.good++;
+    }
+  }
+
+  let bestClub = null;
+  let bestRate = -1;
+  for (const club in clubStats) {
+    const cs = clubStats[club];
+    if (cs.judged >= 5) {
+      const rate = cs.good / cs.judged;
+      if (rate > bestRate || (rate === bestRate && bestClub && cs.judged > clubStats[bestClub].judged)) {
+        bestRate = rate;
+        bestClub = club;
+      }
+    }
+  }
+
+  const plainName = typeof SwingSessionStory !== "undefined" && SwingSessionStory.plainClub
+    ? SwingSessionStory.plainClub
+    : c => clubName(c).toLowerCase();
+  const bestStr = bestClub ? ` · best: ${plainName(bestClub)}` : "";
+  const sub = `${Math.round(sc.goodRate * 100)}% good shots${bestStr}`;
+  sessionScoreHeaderCache[cacheKey] = sub;
+  return { sub, title: clubCounts };
+}
+
 function renderList() {
   const n = shownClips().length;
   const nf = findQuery ? filteredClips().length : null;
@@ -4163,11 +4236,10 @@ function renderList() {
     head.className = "shead";
     head.innerHTML = `<span class="chev">▾</span><div class="stitle"><div class="sname"></div><div class="ssub"></div></div>`;
     head.querySelector(".sname").textContent = sessionTitle(s);
-    // "40 swings · 7i 22 · DR 12 · GW 6": the clubs hit most.
-    const byClub = new Map();
-    for (const c of s.clips) if (c.shot && c.shot.club) byClub.set(c.shot.club, (byClub.get(c.shot.club) || 0) + 1);
-    const top = [...byClub].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${clubShort(k)} ${n}`);
-    head.querySelector(".ssub").textContent = [`${s.clips.length} swing${s.clips.length === 1 ? "" : "s"}`, ...top].join(" · ");
+    const { sub, title } = sessionHeaderSub(s);
+    head.title = title;
+    head.querySelector(".stitle").title = title;
+    head.querySelector(".ssub").textContent = sub;
     if (selecting) {
       const all = document.createElement("input");
       all.type = "checkbox";
