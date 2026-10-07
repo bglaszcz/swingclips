@@ -453,7 +453,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   and 11 on, the club order, every shot in order with its verdict and bring-back metrics (pelvis peak ms,
   arm peak ms, pelvis open at impact, pelvis turn start vs top; pelvis and chest vs ball at impact from
   the face-on camera when the swing has them), and the impact frame
-  (`/api/still/{clip}`) of the first ball swing hit in a no-ball block (the toe-tap swing). Tested in
+  (`/api/still/{clip}`) of the first ball swing hit in a no-ball block (the toe-tap swing). Block medians also include club path, face to target, ball speed, and smash alongside 3D pelvis open, pelvis peak, and arm peak medians when recorded on the block's read shots. Tested in
   `tests/test_programs.py` and `tests/programhistory.test.js`.
 - **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page ("Today's plan")
   for quick setup in the barn. Lays out an ordered 45-minute practice session (60-80 balls) across 4 blocks:
