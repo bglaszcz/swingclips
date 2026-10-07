@@ -384,6 +384,7 @@ test("index.html contains Week for coach markup, Tools menu item, scripts, and h
   assert.ok(html.includes('id="week-prev-btn"'), "defines Prev week button");
   assert.ok(html.includes('id="week-next-btn"'), "defines Next week button");
   assert.ok(html.includes('id="week-copy-btn"'), "defines Copy for coach button");
+  assert.ok(html.includes('id="week-copy-runs-cb"'), "defines with the program runs checkbox");
   assert.ok(html.includes('id="week-title"'), "defines week title element");
   assert.ok(html.includes('id="week-cards"'), "defines week cards container");
   assert.ok(html.includes('<script src="/static/week.js"></script>'), "loads week.js script");
@@ -425,3 +426,46 @@ test("the focus move's 4 weeks before leave out last week", () => {
   const line = summary.sections.find(s => s.title === "The focus move").lines[0];
   assert.match(line, /this week 1\.0 in, last week 2\.0 in, the 4 weeks before 3\.0 in/);
 });
+
+test("joinWeekAndRuns: empty or no runs returns week text unchanged", () => {
+  const weekText = "Week of Oct 5 – Oct 11, 2026\n\nNo practice this week.";
+  assert.equal(Week.joinWeekAndRuns(weekText, []), weekText);
+  assert.equal(Week.joinWeekAndRuns(weekText, null), weekText);
+  assert.equal(Week.joinWeekAndRuns(weekText, [{ name: "Low point", date: "Oct 6", report: "" }]), weekText);
+});
+
+test("joinWeekAndRuns: single run joins week summary and report with separator", () => {
+  const weekText = "Week of Oct 5 – Oct 11, 2026\n\nSessions\n  Mon Oct 5: 30 swings";
+  const runs = [
+    {
+      name: "Low point forward",
+      date: "Oct 6",
+      report: "Low point forward: Oct 6 2026, 14:41\nSwings: 40 of the 40 cap.\nClub order: 7i x20"
+    }
+  ];
+  const expected = "Week of Oct 5 – Oct 11, 2026\n\nSessions\n  Mon Oct 5: 30 swings\n\n" +
+    "--- Low point forward, Oct 6 ---\n" +
+    "Low point forward: Oct 6 2026, 14:41\nSwings: 40 of the 40 cap.\nClub order: 7i x20";
+  assert.equal(Week.joinWeekAndRuns(weekText, runs), expected);
+});
+
+test("joinWeekAndRuns: multiple runs joined with timestamps and report texts", () => {
+  const weekText = "Week of Oct 5 – Oct 11, 2026\n\nSessions\n  Mon Oct 5: 30 swings";
+  const runs = [
+    {
+      name: "Low point forward",
+      started: new Date("2026-10-06T14:41:00").getTime() / 1000,
+      text: "Report 1 body line 1\nReport 1 body line 2"
+    },
+    {
+      name: "Brace and turn",
+      started: new Date("2026-10-07T10:00:00").getTime() / 1000,
+      report: "Report 2 body line 1\nReport 2 body line 2"
+    }
+  ];
+  const result = Week.joinWeekAndRuns(weekText, runs);
+  assert.ok(result.startsWith(weekText));
+  assert.ok(result.includes("\n\n--- Low point forward, Oct 6 ---\nReport 1 body line 1\nReport 1 body line 2\n\n"));
+  assert.ok(result.endsWith("--- Brace and turn, Oct 7 ---\nReport 2 body line 1\nReport 2 body line 2"));
+});
+

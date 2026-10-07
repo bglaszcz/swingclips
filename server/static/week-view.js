@@ -11,12 +11,29 @@
   const weekPrevBtn = document.getElementById("week-prev-btn");
   const weekNextBtn = document.getElementById("week-next-btn");
   const weekCopyBtn = document.getElementById("week-copy-btn");
+  const copyRunsWrap = document.getElementById("week-copy-runs-wrap");
+  const copyRunsCb = document.getElementById("week-copy-runs-cb");
   const weekCopied = document.getElementById("week-copied");
   const weekCards = document.getElementById("week-cards");
 
   let currentWeekStart = null;
   let currentSummary = null;
   let cachedData = null;
+  const runReports = {};
+
+  let copyRunsPref = true;
+  try {
+    const saved = localStorage.getItem("week-copy-runs");
+    if (saved !== null) copyRunsPref = saved === "1";
+  } catch {}
+
+  if (copyRunsCb) {
+    copyRunsCb.checked = copyRunsPref;
+    copyRunsCb.addEventListener("change", () => {
+      copyRunsPref = copyRunsCb.checked;
+      try { localStorage.setItem("week-copy-runs", copyRunsPref ? "1" : "0"); } catch {}
+    });
+  }
 
   async function loadData() {
     let swingsRaw = null;
@@ -73,6 +90,14 @@
     return cachedData;
   }
 
+  function getWeekRuns() {
+    if (!currentWeekStart) return [];
+    const from = currentWeekStart.getTime(), to = from + 7 * 86400000;
+    return ((cachedData && cachedData.programLog) || [])
+      .filter(r => r.started * 1000 >= from && r.started * 1000 < to)
+      .sort((a, b) => b.started - a.started);
+  }
+
   function renderView() {
     if (!window.SwingWeek) return;
     if (!currentWeekStart) {
@@ -83,6 +108,14 @@
 
     if (weekTitle) {
       weekTitle.textContent = currentSummary.title;
+    }
+
+    const runs = getWeekRuns();
+    if (copyRunsWrap) {
+      copyRunsWrap.hidden = runs.length === 0;
+    }
+    if (copyRunsCb) {
+      copyRunsCb.checked = copyRunsPref;
     }
 
     if (weekCards) {
@@ -121,10 +154,7 @@
   // The week's coach program runs, each with its full report (programs.py report) to read and copy:
   // the owner hits at the sim and reads at home, so the report lives here too, not only on the Start page.
   function renderRuns() {
-    const from = currentWeekStart.getTime(), to = from + 7 * 86400000;
-    const runs = ((cachedData && cachedData.programLog) || [])
-      .filter(r => r.started * 1000 >= from && r.started * 1000 < to)
-      .sort((a, b) => b.started - a.started);
+    const runs = getWeekRuns();
     if (!runs.length) return;
     const card = document.createElement("div");
     card.className = "t-card week-card";
@@ -145,13 +175,14 @@
       copy.className = "small";
       copy.type = "button";
       copy.textContent = "Copy this run for coach";
-      let text = null;
       const load = async () => {
-        if (text != null) return text;
+        if (runReports[run.started] != null) return runReports[run.started];
+        let text = "";
         try {
           const r = await fetch(`/api/program/report?started=${encodeURIComponent(run.started)}`);
           text = r.ok ? ((await r.json()) || {}).text || "" : "";
         } catch { text = ""; }
+        runReports[run.started] = text;
         pre.textContent = text || "No report for this run.";
         return text;
       };
@@ -177,9 +208,36 @@
     renderView();
   }
 
-  function copyForCoach() {
+  async function copyForCoach() {
     if (!currentSummary || !currentSummary.text) return;
-    copyText(currentSummary.text, weekCopyBtn);
+    const runs = getWeekRuns();
+    const shouldIncludeRuns = copyRunsCb && copyRunsWrap && !copyRunsWrap.hidden && copyRunsCb.checked && runs.length > 0;
+    let fullText = currentSummary.text;
+
+    if (shouldIncludeRuns) {
+      const orig = weekCopyBtn ? weekCopyBtn.textContent : "";
+      if (weekCopyBtn) weekCopyBtn.textContent = "Copying…";
+      try {
+        const runsWithReports = await Promise.all(runs.map(async (r) => {
+          let text = runReports[r.started];
+          if (text == null) {
+            try {
+              const res = await fetch(`/api/program/report?started=${encodeURIComponent(r.started)}`);
+              text = res.ok ? ((await res.json()) || {}).text || "" : "";
+            } catch { text = ""; }
+            runReports[r.started] = text;
+          }
+          return { name: r.name, started: r.started, day: r.day, date: r.date, text };
+        }));
+        if (window.SwingWeek && window.SwingWeek.joinWeekAndRuns) {
+          fullText = window.SwingWeek.joinWeekAndRuns(currentSummary.text, runsWithReports);
+        }
+      } finally {
+        if (weekCopyBtn) weekCopyBtn.textContent = orig;
+      }
+    }
+
+    copyText(fullText, weekCopyBtn);
   }
 
   function copyText(text, btn) {
