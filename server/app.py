@@ -2726,8 +2726,11 @@ def improve_report():
     (newest first) and what each night did."""
     path, stamp = club_in_use()
     since = datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds") if stamp else None
+    sig = improve.labels_sig(LABELS_DIR)
+    progress = improve_store.progress(improve.club_frames(LABELS_DIR), sig)
     return {"inUse": {"club": stamp, "since": since}, "deepLeft": deep_left(stamp),
-            "candidates": improve_store.listing(stamp), "nights": improve_store.nights()}
+            "candidates": improve_store.listing(stamp), "nights": improve_store.nights(),
+            "progress": progress}
 
 
 @app.get("/api/improve/next")
@@ -2738,7 +2741,8 @@ def improve_next():
     sig = improve.labels_sig(LABELS_DIR)
     labeled = list_labels()["1"]
     _, stamp = club_in_use()
-    new = improve_store.new_club_frames(improve.club_frames(LABELS_DIR), sig)
+    progress = improve_store.progress(improve.club_frames(LABELS_DIR), sig)
+    new = progress["newFrames"]
     due, why = True, (f"{new} new club-labeled frames since the last try." if new is not None
                       else "No club model trained here yet.")
     if not labeled:
@@ -2749,7 +2753,7 @@ def improve_next():
         due, why = False, (f"Nothing to train: {new} new club-labeled frame{'s' if new != 1 else ''} since the "
                            f"last try (needs {improve.MIN_NEW_FRAMES}; Tools > Club check adds them).")
     return {"due": due, "why": why, "labelsSig": sig, "labels": labeled, "bodyModel": models.backend(),
-            "clubStamp": stamp}
+            "clubStamp": stamp, "newFrames": new, "need": improve.MIN_NEW_FRAMES}
 
 
 @app.post("/api/improve/night")

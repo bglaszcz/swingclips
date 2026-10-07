@@ -207,6 +207,10 @@ class Store:
             return None
         return len(frames - set(json.loads(last.read_text(encoding="utf-8"))))
 
+    def progress(self, frames: set[str], sig: str) -> dict:
+        """How far toward the next club model: {newFrames, need}."""
+        return {"newFrames": self.new_club_frames(frames, sig), "need": MIN_NEW_FRAMES}
+
     def note_scored(self, sig: str | None) -> None:
         """A candidate trained on `sig`'s club frames was scored: those are the last try's now."""
         pending = self.folder / f"club-frames-{sig}.json"
