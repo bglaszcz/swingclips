@@ -359,10 +359,9 @@
   function aimOf(l, club) {
     const rs = RESULTS[l.result];
     if (!rs) return { aim: null, why: "" };
-    if (l.helps != null) {
-      const up = l.effect > 0;       // more of the move -> more of the result
-      return { aim: (up === l.helps) ? "more" : "less", why: "" };
-    }
+    // helps.js: `helps` = more of the move takes the result the better way (it already folds in
+    // which way the result goes), so it alone says the aim.
+    if (l.helps != null) return { aim: l.helps ? "more" : "less", why: "" };
     const target = targetOf(l.result, club);
     if (target == null || l.median == null) return { aim: null, why: "" };
     const need = target - l.median;

@@ -22,10 +22,29 @@ test("every body move and every result has its golf words, drill and thought", (
 const link = o => ({ move: "hipSway", result: "carry", effect: 1, helps: null, median: null, ...o });
 
 test("better-or-worse results: aim the way that helps", () => {
-  assert.equal(C.coach(link({ effect: 2, helps: true }), "I7").aim, "more");
-  assert.equal(C.coach(link({ effect: 2, helps: false }), "I7").aim, "less");
-  assert.equal(C.coach(link({ effect: -2, helps: true }), "I7").aim, "less");
-  assert.equal(C.coach(link({ effect: -2, helps: false }), "I7").fix.name, C.MOVES.hipSway.more.name);
+  // `helps` as helps.js sets it: more of the move takes the result the better way.
+  const better = { carry: "up", absOffline: "down", smash: "up" };
+  const hl = (result, effect) => link({ result, effect, helps: (better[result] === "up") === (effect > 0) });
+  // More sway, longer carry: more sway; more sway, shorter carry: less.
+  assert.equal(C.coach(hl("carry", 2), "I7").aim, "more");
+  assert.equal(C.coach(hl("carry", -2), "I7").aim, "less");
+  // More sway, further offline: less sway; more sway, closer to the line: more.
+  assert.equal(C.coach(hl("absOffline", 2), "I7").aim, "less");
+  assert.equal(C.coach(hl("absOffline", -2), "I7").aim, "more");
+  // More sway, lower smash: less sway, and the goal says better contact (not worse).
+  const c = C.coach(hl("smash", -2), "I7");
+  assert.equal(c.aim, "less");
+  assert.equal(c.fix.name, C.MOVES.hipSway.less.name);
+  assert.equal(c.goal, C.RESULTS.smash.more);
+});
+
+test("helps.js and coach.js agree on real links: the aim always takes the result the better way", () => {
+  // Synthetic swings: more sway, lower smash (within each session).
+  const sessions = [0, 1, 2, 3].map(k => ({ key: `s${k}`, start: k, rows: Array.from({ length: 12 }, (_, i) => ({
+    body: { hipSway: i }, smash: 1.4 - 0.01 * i + 0.002 * ((i * 7) % 3), carry: 150, shaky: {} })) }));
+  const l = H.analyze(sessions).links.find(x => x.move === "hipSway" && x.result === "smash");
+  assert.ok(l && l.effect < 0 && l.helps === false);
+  assert.equal(C.coach(l, "I7").aim, "less");
 });
 
 test("results with a target: toward it from your usual; near it, no aim", () => {
