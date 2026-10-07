@@ -21,6 +21,9 @@
     if (run.program && Array.isArray(run.program.blocks)) {
       for (const b of run.program.blocks) blockMap[b.id] = b.name;
     }
+    if (run.blocks && Array.isArray(run.blocks)) {
+      for (const b of run.blocks) blockMap[b.id] = b.name;
+    }
     if (program && Array.isArray(program.blocks)) {
       for (const b of program.blocks) blockMap[b.id] = b.name;
     }
@@ -167,11 +170,14 @@
     }
   }
 
+  let programCatalog = [];
+
   async function loadData() {
     try {
       const res = await fetch("/api/program");
       if (!res.ok) return;
       const data = await res.json();
+      programCatalog = (data && data.programs) || [];
       const logs = (data && data.log) || [];
       // Runs sorted newest first
       allRuns = [...logs].sort((a, b) => (b.started || 0) - (a.started || 0));
@@ -241,7 +247,8 @@
       return;
     }
 
-    currentShots = shotsFromRun(currentRun);
+    const progDef = Array.isArray(programCatalog) ? programCatalog.find(p => p.id === currentRun.id) : null;
+    currentShots = shotsFromRun(currentRun, progDef);
     updateCounts();
 
     if (!currentShots.length) {
