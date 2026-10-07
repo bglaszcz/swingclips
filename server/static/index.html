@@ -321,8 +321,11 @@
   .wrist-card-title { font-weight: 700; font-size: 15px; color: var(--text); }
   .wrist-card-block { font-size: 13px; color: var(--muted); font-weight: normal; margin-left: 6px; }
   .wrist-card-verdict { font-size: 12px; padding: 2px 8px; border-radius: 4px; background: var(--hover, #f3f4f6); color: var(--text); }
-  .wrist-img-wrap { width: 100%; max-width: 420px; aspect-ratio: 1 / 1; margin: 0 auto; background: #000; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-  .wrist-canvas { width: 100%; height: 100%; display: block; object-fit: contain; }
+  .wrist-img-wrap { width: 100%; margin: 0 auto; background: #000; border-radius: 6px; overflow-x: auto; }
+  .wrist-canvas { width: 100%; min-width: 520px; height: auto; display: block; }
+  .wrist-strip-labels { display: flex; min-width: 520px; font-size: 11px; color: var(--muted); }
+  .wrist-strip-labels span { flex: 1; text-align: center; padding: 2px 0; }
+  .wrist-angle button.on { border-color: var(--accent); color: var(--accent); }
   .wrist-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 4px; }
   .wrist-btn { padding: 8px 6px; font-size: 13px; border: 1px solid var(--line); background: var(--panel, #fff); border-radius: 6px; cursor: pointer; text-align: center; color: var(--text); transition: all 0.15s; }
   .wrist-btn:hover { background: var(--hover); }
@@ -1442,6 +1445,10 @@
         <strong>Lead wrist check</strong>
         <span id="wrist-counts" class="wrist-counts" style="font-size: 13px; color: var(--muted);">0 shots · 0 called</span>
         <select id="wrist-run-select" class="small" style="max-width: 320px;"></select>
+        <span class="wrist-angle" title="Which camera: the back of the lead hand is often clearer face-on">
+          <button type="button" class="small" id="wrist-angle-dtl">Down the line</button>
+          <button type="button" class="small" id="wrist-angle-face">Face-on</button>
+        </span>
       </div>
       <div style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
         <a href="#week" id="wrist-copy-link" class="small-link" style="color: var(--accent); font-size: 13px; text-decoration: none;">Copy for coach</a>

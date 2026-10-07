@@ -920,12 +920,13 @@ def report(p: dict, run: dict, body=None) -> dict:
             ]
             block_calls = [w for w in block_calls if w]
             if block_calls:
-                parts = []
-                for k, label in (("flat", "flat"), ("bowed", "slightly bowed"), ("cupped", "cupped"), ("can't tell", "can't tell")):
-                    cnt = block_calls.count(k)
-                    if cnt > 0:
-                        parts.append(f"{label} {cnt}")
-                lines.append(f"  Lead wrist at impact (by eye, down the line): {', '.join(parts)} ({len(block_calls)} of {len(shots)} shots)")
+                # "Can't tell" is an answer, not a call: counted apart (a blurred hand at 240 fps often is one).
+                called = [w for w in block_calls if w != "can't tell"]
+                parts = [f"{label} {called.count(k)}" for k, label in (("flat", "flat"), ("bowed", "slightly bowed"),
+                                                                      ("cupped", "cupped")) if called.count(k)]
+                unsure = len(block_calls) - len(called)
+                lines.append(f"  Lead wrist at impact (by eye): {', '.join(parts) or 'none called'} ({len(called)} of "
+                             f"{len(shots)} shots called" + (f"; can't tell on {unsure}" if unsure else "") + ")")
         for r in shots:
             if r["kind"] == "ball":
                 lines.append(f"  Ball swing ({club_word(r.get('club'))}): " + ", ".join(

@@ -14,7 +14,7 @@
    * @param {Object} [program] Program definition with block names
    * @returns {Array<Object>} List of shots to display
    */
-  function shotsFromRun(run, program) {
+  function shotsFromRun(run, program, angle = "dtl") {
     if (!run || !Array.isArray(run.reps)) return [];
     const reps = [...run.reps].sort((a, b) => (a.t || 0) - (b.t || 0));
     const blockMap = {};
@@ -32,7 +32,7 @@
     let shotIndex = 1;
     for (const r of reps) {
       if (r.kind !== "shot" && r.kind !== "ball") continue;
-      if (!r.partner) continue;
+      if (angle === "dtl" && !r.partner) continue;   // face-on: every shot has its own clip
 
       const wristCall = wristMap[r.clip] || (r.partner ? wristMap[r.partner] : null) || null;
       let verdict = "";
@@ -147,6 +147,11 @@
   let activeShotIndex = 1;
   const poseCache = {};
   const imageCache = {};
+  // Which camera's pictures (since Oct 7: the back of the lead hand is often clearer face-on), remembered.
+  let angle = "dtl";
+  try { if (localStorage.getItem("wrist-angle") === "face") angle = "face"; } catch (e) {}
+  // The strip: frames round impact (at 240 fps one frame is ~4 ms; a single frame is often a blur).
+  const STRIP = [-2, -1, 0, 1];
 
   function open() {
     isOpen = true;
@@ -248,11 +253,15 @@
     }
 
     const progDef = Array.isArray(programCatalog) ? programCatalog.find(p => p.id === currentRun.id) : null;
-    currentShots = shotsFromRun(currentRun, progDef);
+    currentShots = shotsFromRun(currentRun, progDef, angle);
+    for (const [id, a] of [["wrist-angle-dtl", "dtl"], ["wrist-angle-face", "face"]]) {
+      const b = document.getElementById(id);
+      if (b) b.classList.toggle("on", angle === a);
+    }
     updateCounts();
 
     if (!currentShots.length) {
-      container.innerHTML = '<div class="note" style="padding: 20px; text-align: center;">No ball shots with down-the-line clips in this run.</div>';
+      container.innerHTML = `<div class="note" style="padding: 20px; text-align: center;">No ball shots with ${angle === "dtl" ? "down-the-line" : "face-on"} clips in this run.</div>`;
       return;
     }
 
@@ -285,6 +294,10 @@
       canvas.className = "wrist-canvas";
       canvas.id = `wrist-canvas-${shot.index}`;
       imgWrap.appendChild(canvas);
+      const labels = document.createElement("div");
+      labels.className = "wrist-strip-labels";
+      labels.innerHTML = STRIP.map(k => `<span>${k === 0 ? "impact" : `${k > 0 ? "+" : ""}${Math.round(k * 1000 / 240)} ms`}</span>`).join("");
+      imgWrap.appendChild(labels);
       card.appendChild(imgWrap);
 
       const btnGroup = document.createElement("div");
@@ -337,47 +350,42 @@
 
   async function renderShotStill(shot) {
     const canvas = document.getElementById(`wrist-canvas-${shot.index}`);
-    if (!canvas || !shot.partner) return;
+    const clip = angle === "dtl" ? shot.partner : shot.clip;
+    if (!canvas || !clip) return;
 
-    // Load image
-    let img = imageCache[shot.partner];
-    if (!img) {
-      img = new Image();
-      img.src = `/api/still/${encodeURIComponent(shot.partner)}`;
-      imageCache[shot.partner] = img;
-    }
-
-    // Load pose
-    let pose = poseCache[shot.partner];
-    if (!pose && pose !== null) {
+    let pose = poseCache[clip];
+    if (pose === undefined) {
       try {
-        const r = await fetch(`/api/pose/${encodeURIComponent(shot.partner)}`);
-        if (r.ok) {
-          pose = await r.json();
-          poseCache[shot.partner] = pose;
-        } else {
-          poseCache[shot.partner] = null;
-        }
+        const r = await fetch(`/api/pose/${encodeURIComponent(clip)}`);
+        pose = r.ok ? await r.json() : null;
       } catch (e) {
-        poseCache[shot.partner] = null;
+        pose = null;
       }
+      poseCache[clip] = pose;
     }
-
-    const draw = () => {
-      if (!img.naturalWidth || !img.naturalHeight) return;
-      const wrist = getWristPoint(pose);
-      const crop = cropBoxFromWrist(wrist, img.naturalWidth, img.naturalHeight);
-      canvas.width = crop.width;
-      canvas.height = crop.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
-    };
-
-    if (img.complete && img.naturalWidth) {
-      draw();
-    } else {
-      img.onload = draw;
-    }
+    const impact = pose && (pose.impact ?? pose.strike);
+    // Frames round impact, the same crop round the lead wrist on each, side by side.
+    const times = impact != null ? STRIP.map(k => Math.max(0, impact + k / 240)) : [null];
+    const imgs = await Promise.all(times.map(t => new Promise(resolve => {
+      const key = `${clip}@${t == null ? "impact" : t.toFixed(4)}`;
+      let img = imageCache[key];
+      if (!img) {
+        img = new Image();
+        img.src = `/api/still/${encodeURIComponent(clip)}` + (t == null ? "" : `?t=${t.toFixed(6)}`);
+        imageCache[key] = img;
+      }
+      if (img.complete && img.naturalWidth) resolve(img);
+      else { img.onload = () => resolve(img); img.onerror = () => resolve(null); }
+    })));
+    const first = imgs.find(i => i && i.naturalWidth);
+    if (!first) return;
+    const crop = cropBoxFromWrist(getWristPoint(pose), first.naturalWidth, first.naturalHeight, { size: 0.28 });
+    canvas.width = crop.width * imgs.length;
+    canvas.height = crop.height;
+    const ctx = canvas.getContext("2d");
+    imgs.forEach((img, i) => {
+      if (img && img.naturalWidth) ctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, i * crop.width, 0, crop.width, crop.height);
+    });
   }
 
   function setActiveShot(index) {
@@ -480,6 +488,16 @@
 
     const closeBtn = document.getElementById("wrist-close");
     if (closeBtn) closeBtn.onclick = () => close();
+
+    for (const [id, a] of [["wrist-angle-dtl", "dtl"], ["wrist-angle-face", "face"]]) {
+      const btn = document.getElementById(id);
+      if (btn) btn.onclick = () => {
+        if (angle === a) return;
+        angle = a;
+        try { localStorage.setItem("wrist-angle", a); } catch (e) {}
+        renderShots();
+      };
+    }
 
     const copyLink = document.getElementById("wrist-copy-link");
     if (copyLink) {

@@ -461,7 +461,11 @@ class ProgramsTest(unittest.TestCase):
 
         rep_after = self.p.report()["text"]
         # Block summary line
-        self.assertIn("Lead wrist at impact (by eye, down the line): flat 5, slightly bowed 2, cupped 3 (10 of 12 shots)", rep_after)
+        self.assertIn("Lead wrist at impact (by eye): flat 5, slightly bowed 2, cupped 3 (10 of 12 shots called)", rep_after)
+        # "Can't tell" is counted apart, not as a call.
+        self.p.wrist(started, clips[10], "can't tell")
+        self.assertIn("(10 of 12 shots called; can't tell on 1)", self.p.report()["text"])
+        self.p.wrist(started, clips[10], None)
         # Shot order lines: ", wrist cupped", ", wrist slightly bowed", ", wrist flat"
         self.assertIn(", pass, wrist flat", rep_after)
         self.assertIn(", pass, wrist slightly bowed", rep_after)
