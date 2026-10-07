@@ -448,6 +448,9 @@
   let dragMoved = false;
   let downClientPos = { x: 0, y: 0 };
   let statusTimer = null;
+  // Where the pointer last was over the picture (picture shares): with the selected point not placed yet
+  // (no model guess), the zoom follows it, so the first click can be aimed (Oct 7: club in sight, no guess).
+  let hoverPt = null;
 
   function getTodayKey() {
     return "clubcheck_today_" + new Date().toLocaleDateString("en-CA");
@@ -691,7 +694,9 @@
     const zctx = zoomCanvas.getContext("2d");
     zctx.clearRect(0, 0, zw, zh);
 
-    const pt = currentPoints ? currentPoints[selectedPoint] : null;
+    let pt = currentPoints ? currentPoints[selectedPoint] : null;
+    const aiming = (!pt || pt.x == null) && !pt?.hidden && hoverPt != null;
+    if (aiming) pt = hoverPt;
 
     if (!pt || pt.hidden || pt.x == null || pt.y == null) {
       zctx.fillStyle = "#111827";
@@ -699,7 +704,7 @@
       zctx.fillStyle = "#9ca3af";
       zctx.font = "12px system-ui, sans-serif";
       zctx.textAlign = "center";
-      zctx.fillText(pt?.hidden ? "Point marked hidden" : "No point placed", zw / 2, zh / 2);
+      zctx.fillText(pt?.hidden ? "Point marked hidden" : "Point at it on the picture", zw / 2, zh / 2);
       if (zoomLabel) {
         const names = { grip: "Grip", hosel: "Hosel", head: "Clubhead" };
         zoomLabel.textContent = names[selectedPoint] || "";
@@ -754,7 +759,7 @@
 
     if (zoomLabel) {
       const names = { grip: "Grip", hosel: "Hosel", head: "Clubhead" };
-      zoomLabel.textContent = `${names[selectedPoint]} (3.5×)`;
+      zoomLabel.textContent = aiming ? `${names[selectedPoint]}: click it here or on the picture` : `${names[selectedPoint]} (3.5×)`;
       zoomLabel.style.color = ptColors[selectedPoint] || "#fff";
     }
   }
@@ -1133,7 +1138,8 @@
         ev.preventDefault();
         ev.stopPropagation();
         const img = document.getElementById("cc-img");
-        const pt = currentPoints ? currentPoints[selectedPoint] : null;
+        const placed = currentPoints ? currentPoints[selectedPoint] : null;
+        const pt = placed && placed.x != null ? placed : (!placed?.hidden ? hoverPt : null);
         if (!img || !img.naturalWidth || !pt || pt.hidden || pt.x == null) return;
         const rect = zoomCanvasEl.getBoundingClientRect();
         const dx = (ev.clientX - rect.left - rect.width / 2) / rect.width * (zoomCanvasEl.width / ZOOM_MAG);
@@ -1191,7 +1197,12 @@
       });
 
       overlayCanvas.addEventListener("pointermove", (ev) => {
-        if (!isDragging) return;
+        if (!isDragging) {
+          hoverPt = getPointerPoint(ev, overlayCanvas);
+          const cur = currentPoints ? currentPoints[selectedPoint] : null;
+          if (!cur || cur.x == null) drawZoom();
+          return;
+        }
         const dist = Math.hypot(ev.clientX - downClientPos.x, ev.clientY - downClientPos.y);
         if (dist > 5) dragMoved = true;
 
