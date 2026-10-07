@@ -451,6 +451,7 @@
   // Where the pointer last was over the picture (picture shares): with the selected point not placed yet
   // (no model guess), the zoom follows it, so the first click can be aimed (Oct 7: club in sight, no guess).
   let hoverPt = null;
+  const savedThisSession = new Set();
 
   function getTodayKey() {
     return "clubcheck_today_" + new Date().toLocaleDateString("en-CA");
@@ -489,10 +490,15 @@
   function renderProgress() {
     if (typeof document === "undefined") return;
     const el = document.getElementById("cc-progress");
-    if (!el) return;
-    const text = progressText(currentProgress);
-    el.textContent = text;
-    el.style.display = text ? "" : "none";
+    if (el) {
+      const text = progressText(currentProgress);
+      el.textContent = text;
+      el.style.display = text ? "" : "none";
+    }
+    const sessEl = document.getElementById("cc-session-saved");
+    if (sessEl) {
+      sessEl.textContent = `This session: ${savedThisSession.size} saved`;
+    }
   }
 
   async function refreshProgress() {
@@ -832,7 +838,102 @@
     drawZoom();
   }
 
-  function showFrame(idx) {
+  /** Builds the points for "Club leaves the picture" (pure):
+   * Grip is kept if placed (or null if not placed yet), hosel and head are marked hidden. */
+  function clubLeavesPicture(points) {
+    const grip = points?.grip;
+    const gripPlaced = grip && !grip.hidden && grip.x != null && grip.y != null;
+    let outGrip = null;
+    if (gripPlaced) {
+      outGrip = { x: grip.x, y: grip.y };
+      if (grip.blur) outGrip.blur = true;
+    }
+    return {
+      grip: outGrip,
+      hosel: { hidden: true },
+      head: { hidden: true },
+    };
+  }
+
+  function clubLeaves() {
+    currentPoints = clubLeavesPicture(currentPoints);
+    const gripPlaced = currentPoints.grip && !currentPoints.grip.hidden && currentPoints.grip.x != null && currentPoints.grip.y != null;
+    if (!gripPlaced) {
+      selectedPoint = "grip";
+    }
+    renderPointsUI();
+    drawOverlay();
+    drawZoom();
+  }
+
+  /** Extracts saved club points for frame time t from a label doc (pure).
+   * Returns { grip, hosel, head } or null if no club points are found. */
+  function savedPointsFor(doc, t) {
+    if (!doc || !doc.frames || typeof doc.frames !== "object" || t == null) return null;
+    const numT = Number(t);
+    const exactKey = numT.toFixed(6);
+    let raw = doc.frames[exactKey];
+    if (!raw) {
+      let bestDist = Infinity;
+      for (const [k, val] of Object.entries(doc.frames)) {
+        const dist = Math.abs(parseFloat(k) - numT);
+        if (dist < 0.0015 && dist < bestDist) {
+          bestDist = dist;
+          raw = val;
+        }
+      }
+    }
+    if (!raw || typeof raw !== "object") return null;
+
+    if (raw.allHidden) {
+      return {
+        grip: { hidden: true },
+        hosel: { hidden: true },
+        head: { hidden: true },
+      };
+    }
+
+    if (!raw.grip && !raw.hosel && !raw.head) {
+      return null;
+    }
+
+    const formatPt = (p) => {
+      if (!p) return null;
+      if (p.hidden) return { hidden: true };
+      if (p.x == null || p.y == null) return null;
+      const pt = { x: Number(p.x), y: Number(p.y) };
+      if (p.blur) pt.blur = true;
+      return pt;
+    };
+
+    return {
+      grip: formatPt(raw.grip),
+      hosel: formatPt(raw.hosel),
+      head: formatPt(raw.head),
+    };
+  }
+
+  async function back() {
+    if (!isOpen || currentIndex <= 0) return;
+    const targetIdx = currentIndex - 1;
+    const item = currentQueue[targetIdx];
+    if (!item) return;
+
+    setStatusMessage("Loading previous frame...", false);
+    let savedPts = null;
+    try {
+      const res = await fetch(`/api/labels/${encodeURIComponent(item.clip)}?pass=1`, { cache: "no-store" });
+      if (res.ok) {
+        const doc = await res.json();
+        savedPts = savedPointsFor(doc, item.t);
+      }
+    } catch (_) {}
+    currentIndex = targetIdx;
+    showFrame(currentIndex, savedPts);
+    setStatusMessage("", false);
+  }
+
+  function showFrame(idx, savedPts = null) {
     currentIndex = idx;
     updateCounter();
 
@@ -873,34 +974,55 @@
     const phaseName = phaseNameOf(item.t, pTimes);
     if (posEl) posEl.textContent = `· ${phaseName} · ${item.t.toFixed(3)} s`;
 
-    const g = guess(item.frame, item.pose, uprightAspect(item.clip, item.pose && item.pose.rotation));
-    const estimated = !!g.estimated;
-    delete g.estimated;
-    currentPoints = { ...g };
-    hoselManuallyMoved = false;
-
-    if (currentPoints.head) {
-      selectedPoint = "head";
+    if (savedPts) {
+      currentPoints = { ...savedPts };
+      hoselManuallyMoved = true;
+      if (currentPoints.head && !currentPoints.head.hidden) {
+        selectedPoint = "head";
+      } else if (currentPoints.grip && !currentPoints.grip.hidden) {
+        selectedPoint = "grip";
+      } else {
+        selectedPoint = "head";
+      }
       if (banner) {
-        banner.innerHTML = estimated
-          ? `The model didn't find the clubhead: it's <b>placed along the shaft</b> from the hands. Move it onto the clubhead (or <b>B</b> for a streak).`
-          : `Model guess drawn. <b>Hosel</b> starts at 93% along the shaft — adjust if needed.`;
+        banner.innerHTML = `Saved points loaded. Adjust if needed, then <b>Enter</b> to save.`;
       }
     } else {
-      selectedPoint = "grip";
-      if (banner) {
-        banner.innerHTML = `Clubhead wasn't detected by model. <b>Tap</b> picture to place <b>Grip</b> (or press <b>0</b> if no club).`;
+      const g = guess(item.frame, item.pose, uprightAspect(item.clip, item.pose && item.pose.rotation));
+      const estimated = !!g.estimated;
+      delete g.estimated;
+      currentPoints = { ...g };
+      hoselManuallyMoved = false;
+
+      if (currentPoints.head) {
+        selectedPoint = "head";
+        if (banner) {
+          banner.innerHTML = estimated
+            ? `The model didn't find the clubhead: it's <b>placed along the shaft</b> from the hands. Move it onto the clubhead (or <b>B</b> for a streak).`
+            : `Model guess drawn. <b>Hosel</b> starts at 93% along the shaft — adjust if needed.`;
+        }
+      } else {
+        selectedPoint = "grip";
+        if (banner) {
+          banner.innerHTML = `Clubhead wasn't detected by model. <b>Tap</b> picture to place <b>Grip</b> (or press <b>0</b> if no club).`;
+        }
       }
     }
 
     renderPointsUI();
 
     if (img) {
+      const newSrc = `/api/still/${encodeURIComponent(clipName)}?t=${item.t.toFixed(6)}`;
       img.onload = () => {
         drawOverlay();
         drawZoom();
       };
-      img.src = `/api/still/${encodeURIComponent(clipName)}?t=${item.t.toFixed(6)}`;
+      if (img.src.endsWith(newSrc) && img.complete) {
+        drawOverlay();
+        drawZoom();
+      } else {
+        img.src = newSrc;
+      }
     }
 
     if (idx + 1 < currentQueue.length) {
@@ -988,12 +1110,18 @@
         throw new Error(err.detail || postRes.statusText);
       }
 
-      incrementCheckedToday();
-      if (!currentProgress) {
-        currentProgress = { newFrames: 1, need: 40 };
-      } else {
-        currentProgress.newFrames = (currentProgress.newFrames != null ? currentProgress.newFrames : 0) + 1;
+      const frameKey = `${clipName}|${Number(t).toFixed(6)}`;
+      const isNewSave = !savedThisSession.has(frameKey);
+      if (isNewSave) {
+        savedThisSession.add(frameKey);
+        incrementCheckedToday();
+        if (!currentProgress) {
+          currentProgress = { newFrames: 1, need: 40 };
+        } else {
+          currentProgress.newFrames = (currentProgress.newFrames != null ? currentProgress.newFrames : 0) + 1;
+        }
       }
+
       renderProgress();
       refreshProgress();
       setStatusMessage("Saved", false);
@@ -1102,6 +1230,9 @@
     const closeBtn = document.getElementById("cc-close");
     if (closeBtn) closeBtn.onclick = () => close();
 
+    const backBtn = document.getElementById("cc-back-btn");
+    if (backBtn) backBtn.onclick = () => back();
+
     const saveBtn = document.getElementById("cc-save-btn");
     if (saveBtn) saveBtn.onclick = () => save();
 
@@ -1110,6 +1241,9 @@
 
     const hideBtn = document.getElementById("cc-hide-btn");
     if (hideBtn) hideBtn.onclick = () => toggleHidden();
+
+    const offBtn = document.getElementById("cc-off-btn");
+    if (offBtn) offBtn.onclick = () => clubLeaves();
 
     const hideAllBtn = document.getElementById("cc-hideall-btn");
     if (hideAllBtn) hideAllBtn.onclick = () => markAllHidden();
@@ -1277,6 +1411,11 @@
         toggleHidden();
         return;
       }
+      if (k === "o") {
+        e.preventDefault();
+        clubLeaves();
+        return;
+      }
       if (k === "0") {
         e.preventDefault();
         markAllHidden();
@@ -1285,6 +1424,11 @@
       if (k === "s") {
         e.preventDefault();
         skip();
+        return;
+      }
+      if (k === "backspace") {
+        e.preventDefault();
+        back();
         return;
       }
     });
@@ -1308,6 +1452,10 @@
     phaseName: phaseNameOf,
     queue,
     merge,
+    savedPointsFor,
+    clubLeavesPicture,
+    clubLeaves,
+    back,
     balanceSwings,
     progressText,
     renderProgress,
@@ -1323,6 +1471,7 @@
     cycleNextPoint,
     showFrame,
     loadQueue,
+    savedThisSession,
   };
 
   if (typeof window !== "undefined") {
