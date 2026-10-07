@@ -132,17 +132,19 @@ What the server works out for each swing and what each part of the review page s
   speed, club speed, smash, straightest, newest). A ✓ marks good shots (the rules in Progress);
   **Good shots only** keeps to them, and the period **Before my focus** (there while a focus is set)
   keeps to swings from before the day it started, to see what the focus has changed. The two then play side by side, one row per
-  camera angle both have. **Key positions** (default) lines them up by P1-P8, stretching the time
-  between each pair in a straight line, so the reference plays faster or slower between them;
+  camera angle both have. **Key positions** (default) lines them up by key positions (Setup, Early backswing,
+  Backswing, Top of swing, Early downswing, Downswing, Impact, Follow-through; P-tags only in hover tooltips),
+  stretching the time between each pair in a straight line, so the reference plays faster or slower between them;
   **Real time** lines them up at impact only, both at real speed, so tempo differences show.
-  Play, scrub, frame steps (← →) and P1-P8 (keys 1-8) move both. **Ghost** (G) draws the
+  Play, scrub, frame steps (← →) and positions (keys 1-8) move both. **Ghost** (G) draws the
   reference's skeleton, dashed, over this swing's video, lined up at address by the feet and hips
   and scaled by body height. **Key positions** under the videos: both swings' scorecard tiles, a
-  column per P1-P8 (this swing over the reference), each coloured against your good shots with this
+  column per position (this swing over the reference), each coloured against your good shots with this
   swing's club as on the swing page. Tapping a column (or keys 1-8) puts both swings there and
   shows that position's numbers for both, each on a bar against the middle 50% of your good shots
   (dark mark this swing, pink the reference) with the difference; then each swing's named faults.
-  Below: tempo, the body numbers at address / top / P6 / impact for both
+  Body number labels everywhere in Compare use plain English via `SwingShotStory.LABELS` (e.g. "hip slide", "spine tilt").
+  Below: tempo, the body numbers at address / top / downswing / impact for both
   swings and the difference, and Square's numbers side by side; numbers from a camera that couldn't
   see all of a swing (the camera check) are greyed out. The address bar holds
   `#compare=<clip>,<clip>`, so a comparison can be bookmarked or sent. Swap puts the reference
@@ -588,3 +590,6 @@ toward the ball". The phones face away from you, so voice is the channel.
   >= 5 false triggers) and confirmations folded behind "Show all" (both angles, Square paired, cameras in place).
   Displays overnight worker sentence (`improve.nights[0]`), candidate model waiting notifications (`Tools > Night report`),
   and club model retraining progress (`Tools > Club check`). The club model progress line states how many new frames toward the retraining target are collected (linking to Club check), or confirms that enough new frames were gathered to train tonight. Loads once on page open and manual refresh, never while recording.
+- **Start page bay feedback ("Last swing" and "End of session")** (`start.html`, `static/swingrow.js`, `static/shotstory.js`, `static/sessionstory.js`):
+  At the top of the swings area during normal recording (any mode except running a coach program), the bay screen shows a golfer-friendly "Last swing" card (`#bay-card`) built from the coach's findings: verdict chip (Good shot / Playable / Miss), What happened (flight in plain English), Why (why it worked on a good shot, or the top body fault), Try this (the coach's swing thought in large type and drill in smaller type), and Still there when another fault showed up. Font sizes are kept large for viewing across the bay (>= 22 px desktop, >= 18 px at 390 px) and a link opens the swing on the review page (`/#<name>`). Swings and good-shot data are rate-limited to at most every 20 seconds.
+  When the owner presses Stop and the session had 10+ swings with a shot, an end-of-session card appears at the top of the swings area with `SwingSessionStory.story`: headline comparing good shots against previous sessions, best and worst clubs, the session's top fault with its swing thought, and a "Watch my best swing" link (`/#<name>`). The card stays visible until the next Start. Plain words only, calm colors, never red.
