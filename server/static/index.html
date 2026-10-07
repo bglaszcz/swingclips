@@ -891,6 +891,24 @@
   .metric.club { grid-column: span 2; }
   .metric.club select { font-size: 20px; }
 
+  /* ---- The swing in plain words, and Advanced data ---- */
+  #viewer:not(.adv) .adv-only { display: none !important; }
+  #advbar { display: flex; }
+  #advbar[hidden] { display: none; }
+  #coachcard { display: flex; flex-direction: column; gap: 10px; }
+  #coachcard[hidden] { display: none; }
+  #coachcard .cc-verdict { align-self: flex-start; font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  #coachcard .cc-verdict.good { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  #coachcard .cc-verdict.ok { color: var(--text); border-color: var(--warn); background: var(--warn-soft); }
+  #coachcard .cc-verdict.miss { color: var(--bad); border-color: var(--bad); }
+  #coachcard .cc-row { display: grid; grid-template-columns: 7.5em 1fr; gap: 10px; align-items: baseline; }
+  #coachcard .cc-row > b { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); font-weight: 600; }
+  #coachcard .cc-row > div { font-size: 15px; line-height: 1.45; }
+  #coachcard .cc-thought { font-weight: 650; }
+  #coachcard .cc-drill { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  @media (max-width: 560px) { #coachcard .cc-row { grid-template-columns: 1fr; gap: 2px; } }
+
   /* ---- Key positions ---- */
   #positions { gap: 10px; }
   .pos-head { justify-content: flex-start; gap: 12px; align-items: baseline; }
@@ -1134,17 +1152,21 @@
     </div>
     </div>
     <div id="labelpanel" hidden></div>
+    <!-- The swing in plain words (shotstory.js): what the ball did, why, what to try. -->
+    <div id="coachcard" class="card" hidden></div>
     <div id="shotdata" hidden title="From the launch monitor, via the shot listener"></div>
+    <!-- Everything marked adv-only shows only with Advanced data on (remembered per browser). -->
+    <div id="advbar"><button id="adv-btn" class="small" aria-expanded="false" title="All of Square's numbers, the scorecard, key positions and the swing numbers">Advanced data ▸</button></div>
     <div id="drillcard" class="card" hidden></div>
-    <div id="scorecard" class="card" hidden></div>
-    <div id="positions" class="card" hidden>
+    <div id="scorecard" class="card adv-only" hidden></div>
+    <div id="positions" class="card adv-only" hidden>
       <div class="pos-head">
         <strong>Key positions</strong><span class="hint">Tap a position, or press 1–8</span>
       </div>
       <div id="pos-note"></div>
       <div id="pos-list"></div>
     </div>
-    <div id="numbers" class="card" hidden>
+    <div id="numbers" class="card adv-only" hidden>
       <strong>Swing numbers</strong>
       <div id="tempo"></div>
       <div id="good-tempo"></div>
@@ -1163,8 +1185,8 @@
         shaft to plane + = steeper than at address (-- where the shaft was a blur and couldn't be seen).</div>
       </details>
     </div>
-    <div id="panel3d" hidden></div>
-    <div id="title"></div>
+    <div id="panel3d" class="adv-only" hidden></div>
+    <div id="title" class="adv-only"></div>
   </section>
   <section id="compare" hidden></section>
   <section id="trends" hidden>
@@ -1709,6 +1731,7 @@
 <script src="/static/faults.js"></script>
 <script src="/static/faultlinks.js"></script>
 <script src="/static/scorecard.js"></script>
+<script src="/static/shotstory.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script src="/static/programhistory.js"></script>
@@ -2770,6 +2793,7 @@ const LIGHT_ADVICE = {
   grainy: q => `the picture is grainy (noise ${q.noise.toFixed(1)}): the ISO is high for this light. Add light, or use a longer shutter`,
 };
 let lastCameraCheck = null;   // [analysis, input] of the open swing, to redo the check when the quality arrives
+let coachBody = null;         // the open swing's body numbers for the coaching card: {body, trust, ranges, faults (worst first)}
 
 /** "shutter set to 1/1000, camera used 1/1000 s at ISO 1600" from a clip's camera.json, or null
  * (capture app before 0.4). */
@@ -3067,7 +3091,12 @@ function showNumbers() {
   const box = document.getElementById("numbers");
   const cols = ["p1", "p4", "p6", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
   box.hidden = !(metrics || dtlMetrics) || !cols.length;
-  if (box.hidden) { document.getElementById("scorecard").hidden = document.getElementById("drillcard").hidden = true; return; }
+  if (box.hidden) {
+    document.getElementById("scorecard").hidden = document.getElementById("drillcard").hidden = true;
+    coachBody = null;
+    renderCoachCard();
+    return;
+  }
   document.getElementById("face-note").hidden = !metrics;
   document.getElementById("dtl-note").hidden = !dtlMetrics;
   const facts = openFacts();
@@ -3099,6 +3128,10 @@ function showNumbers() {
       : [];
     renderScorecard(body, trust, faults, good.ranges);
     renderDrillCard(lastCameraCheck[0], body, good.ranges);
+    // Worst first, as the scorecard ranks them: the card names only the first.
+    const severity = f => typeof SwingScorecard === "undefined" ? 0
+      : SwingScorecard.faultSeverity(SwingFaults.FAULTS.find(d => d.key === f.key && d.name === f.name), f.value);
+    coachBody = { body, trust, ranges: good.ranges, faults: [...faults].sort((x, y) => severity(y) - severity(x)) };
     if (faults.length) {
       faultsEl.append("Faults on this swing: ");
       faults.forEach((f, i) => {
@@ -3168,6 +3201,68 @@ function showNumbers() {
   document.getElementById("trust-note").textContent = shaky || none
     ? "Greyed ~ = shaky: tracking noise or the conditions could account for it. -- = no reading: that camera couldn't see all of you, or it couldn't be measured. Hover for why."
     : "";
+  renderCoachCard();
+}
+
+// ---- The swing in plain words (shotstory.js): what the ball did, why, what to try ----
+
+function renderCoachCard() {
+  const box = document.getElementById("coachcard");
+  const c = current && clips.find(x => x.name === current);
+  if (!c || typeof SwingShotStory === "undefined") { box.hidden = true; return; }
+  const club = c.shot ? c.shot.club : null, group = SwingGoodShots.groupOf(club);
+  const shot = c.shot ? SwingSummary.shotNumbers(c.shot) : null;
+  // The club's usual carry and smash, once the trend data is in (openGoodRanges loads it).
+  const loaded = typeof trendDataLoaded !== "undefined" && trendDataLoaded;
+  if (club && !loaded && !goodLoading && typeof loadTrendData === "function") {
+    // A swing with no body numbers yet: showNumbers won't load the trend data, so load it here.
+    goodLoading = true;
+    const name = current;
+    loadTrendData().then(() => { if (current === name) renderCoachCard(); }).finally(() => { goodLoading = false; });
+  }
+  const cd = club && loaded ? goodShotData().clubs[club] : null;
+  const settings = goodSettings && goodSettings.settings;
+  const judged = cd && cd.baseline && shot ? SwingGoodShots.judgeShot(shot, cd.baseline, group, settings) : null;
+  const card = SwingShotStory.card({ shot, judged, baseline: cd ? cd.baseline : null, group, settings, ...(coachBody || {}) });
+  box.hidden = !card;
+  if (!card) { box.replaceChildren(); return; }
+  const kids = [];
+  if (card.verdict) {
+    const v = scEl("span", `cc-verdict ${card.verdict.level}`, card.verdict.text);
+    v.title = card.verdict.level === "good" ? `Passes your good-shot rules with the ${clubName(club).toLowerCase()} (set in Progress)`
+      : card.verdict.fails.length ? "Not a good shot by your rules: " + card.verdict.fails.join("; ") : "";
+    kids.push(v);
+  }
+  const row = (title, ...content) => {
+    const r = scEl("div", "cc-row");
+    const body = scEl("div");
+    body.append(...content);
+    r.append(scEl("b", null, title), body);
+    kids.push(r);
+  };
+  if (card.what) row("What happened", card.what);
+  if (card.why) row(card.verdict && card.verdict.level === "good" ? "Why it worked" : "Why", card.why);
+  if (card.tip) {
+    const parts = [scEl("div", "cc-thought", card.tip.thought ? `“${card.tip.thought.replace(/\.$/, "")}”` : "")];
+    if (card.tip.drill) parts.push(scEl("div", "cc-drill", "Drill: " + card.tip.drill));
+    row("Try this", ...parts);
+  }
+  box.replaceChildren(...kids);
+}
+
+// Advanced data: Square's other numbers, the scorecard, key positions, the swing numbers and 3D.
+function setAdvanced(on, save) {
+  viewer.classList.toggle("adv", on);
+  const b = document.getElementById("adv-btn");
+  b.textContent = on ? "Advanced data ▾" : "Advanced data ▸";
+  b.setAttribute("aria-expanded", on ? "true" : "false");
+  if (save) try { localStorage.setItem("advancedData", on ? "1" : "0"); } catch {}
+}
+{
+  let on = false;
+  try { on = localStorage.getItem("advancedData") === "1"; } catch {}
+  setAdvanced(on, false);
+  document.getElementById("adv-btn").onclick = () => setAdvanced(!viewer.classList.contains("adv"), true);
 }
 
 // ---- Scorecard: a tile per key position, coloured against the golfer's own good-shot ranges ----
@@ -3638,6 +3733,7 @@ function open(name) {
   positionsBox.hidden = true;
   document.getElementById("camcheck").hidden = true;
   lastCameraCheck = null;
+  coachBody = null;
   document.getElementById("numbers").hidden = true;
   document.getElementById("scorecard").hidden = true;
   posList.replaceChildren();
@@ -3698,6 +3794,7 @@ async function setClub(names, club, squareClub) {
 function showShot(c) {
   const box = document.getElementById("shotdata");
   const s = c && c.shot;
+  renderCoachCard();
   if (!s) { box.hidden = true; box.replaceChildren(); box.dataset.sig = ""; return; }
   // Rebuilt only when something changed, so the club picker isn't swapped out while it's open.
   const sig = c.name + JSON.stringify(s);
@@ -3726,9 +3823,11 @@ function showShot(c) {
   add(has(k.faceToTarget), `${signed(k.faceToTarget)}°`, "Face");
   add(k.loft > 0, `${num(k.loft)}°`, "Dyn. loft");
   const HERO = { "Carry yd": "hero lead", "Total yd": "hero", "Ball mph": "hero", "Club mph": "hero", "Smash": "hero" };
+  // Without Advanced data: the club, how far, how far off line, how fast and how well struck.
+  const SIMPLE = new Set(["Carry yd", "Offline", "Club mph", "Smash"]);
   box.replaceChildren(...items.map(([cls, value, label, calculated]) => {
     const el = document.createElement("div");
-    el.className = "metric " + cls + (HERO[label] ? " " + HERO[label] : "");
+    el.className = "metric " + cls + (HERO[label] ? " " + HERO[label] : "") + (cls === "club" || SIMPLE.has(label) ? "" : " adv-only");
     el.innerHTML = "<b></b><span></span>";
     el.querySelector("b").textContent = value;
     el.querySelector("span").textContent = label + (calculated ? " (calc.)" : "");

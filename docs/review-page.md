@@ -217,6 +217,23 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   reading (settable) there is no range, only "not enough good shots yet (5 of 8)". When most of the
   numbers behind a range are **shaky** (trust rules: head rise and the plane numbers always are),
   it's marked **range not reliable**, with why.
+- **Swing page, the coaching card** (`static/shotstory.js`), right under the videos: a verdict
+  (**Good shot** = passes your good-shot rules with that club; **Playable** = within twice the
+  offline allowance and no more than 15% short of your usual carry; **Miss**) and three lines in
+  plain words, no P-numbers. **What happened**: the shot shape from Square's numbers (start line
+  from the ball's direction, or the face; curve from the ball's spin axis, which matched the way
+  the owner's 501 shots curved every time, or face to path; a pull that curves back near the
+  target is a pull-fade, a slice only when it finishes past 5% of carry right), plus how far off
+  line, short or off the centre of the face. **Why**: the swing's worst fault (scorecard severity,
+  never from a shaky number); else on a good shot what matched your good shots (hands leading at
+  impact first); else contact (off-centre, still on line) or the club's path and face ("out-to-in,
+  the face pointed left of the target but open to the path"). **Try this**: the fault's swing
+  thought and drill (coach.js); with no fault and an off-line out-to-in miss, the hands-drop-under-
+  the-plane fix; never a move toward a fault, so no drill for an in-to-out miss.
+- **Advanced data** (button under Square's numbers, remembered per browser): off by default.
+  Without it the swing page shows the coaching card and five tiles (club, carry, offline, club
+  speed, smash); with it, Square's other numbers, the scorecard, key positions, the swing numbers
+  table, 3D and the clip names (`adv-only` class in `index.html`).
 - **Swing page**: a column **vs my good shots (club)** in the numbers table, and a faint band on the
   number itself: green inside the middle 50%, amber outside ("outside: 4° more than usual", and
   "inside the 80% range" when it's between the two). The tempo line gets the same under it. Numbers
