@@ -627,7 +627,10 @@ function getBayGoodData() {
   const sig = `${clipsList.length}|${Object.keys(swingRecords || {}).length}|${JSON.stringify(goodSettings)}`;
   if (sig === bayGoodDataSig && bayGoodData) return bayGoodData;
   if (typeof SwingRow !== "undefined") {
-    bayGoodData = SwingRow.goodShotData(clipsList, swingRecords, goodSettings?.settings, noiseTable, clipsList);
+    // One clip per swing, as the review page builds it (shownClips): a down-the-line partner carries the
+    // same shot and would count it twice in each club's usual carry and smash.
+    const primary = clipsList.filter(c => !(c.partner && c.angle !== "face"));
+    bayGoodData = SwingRow.goodShotData(primary, swingRecords, goodSettings?.settings, noiseTable, clipsList);
     bayGoodDataSig = sig;
   }
   return bayGoodData;

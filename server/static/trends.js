@@ -95,27 +95,8 @@ function swingPending(c) {
  * each one's judgement; r.unseen the cameras that couldn't see the golfer.
  */
 function swingRow(c) {
-  if (typeof SwingRow !== "undefined") {
-    return SwingRow.row(c, swingRecords, clipOf, noiseTable, leaveOutShaky);
-  }
-  const rec = swingRecords[c.name];
-  const trust = rec && rec.body ? SwingTrust.forSwing(rec, lightOf(c.name), noiseTable) : null;
-  let body = null, shown = null;
-  if (trust) {
-    body = {};
-    shown = {};
-    for (const f of SwingSummary.BODY) {
-      const j = trust[f.key], v = rec.body[f.key];
-      shown[f.key] = j.level === "none" ? null : v;
-      body[f.key] = j.level === "none" || (leaveOutShaky && j.level === "shaky") ? null : v;
-    }
-  }
-  const bad = cam => ((rec && rec.quality && rec.quality.camera && rec.quality.camera[cam]) || [])
-    .some(code => SwingTrust.BAD_CAMERA.includes(code));
-  const unseen = ["face", "dtl"].filter(bad);
-  return { c, t: new Date(c.recorded).getTime(), club: c.shot ? c.shot.club : null, rec, body, shown, trust, unseen,
-           body3d: (rec && rec.body3d) || null,
-           ...SwingSummary.shotNumbers(c.shot), ...(body || {}) };
+  // swingrow.js, shared with the Start page.
+  return SwingRow.row(c, swingRecords, clipOf, noiseTable, leaveOutShaky);
 }
 
 /** Whether row r's number for field f is shaky (a body number, trust.js). */
