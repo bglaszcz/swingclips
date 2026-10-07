@@ -332,8 +332,197 @@
     return null;
   }
 
+  /**
+   * For a candidate with training runs, extracts rows for each key position present
+   * in `current` and all `runs`.
+   * Returns array of { angle, event, n, current, runs, average, label }
+   * Same row order as compareRows.
+   */
+  function runRows(scores) {
+    if (!scores || typeof scores !== "object") return [];
+    const cur = scores.current;
+    const runs = scores.runs;
+    if (!cur || !Array.isArray(runs) || runs.length === 0) return [];
+
+    const curPos = Array.isArray(cur.positions) ? cur.positions : [];
+    const curPosMap = new Map();
+    for (const p of curPos) {
+      if (p && p.angle && p.event) curPosMap.set(`${p.angle}:${p.event}`, p);
+    }
+
+    const runMaps = runs.map(run => {
+      const map = new Map();
+      const list = run && Array.isArray(run.positions) ? run.positions : [];
+      for (const p of list) {
+        if (p && p.angle && p.event) map.set(`${p.angle}:${p.event}`, p);
+      }
+      return map;
+    });
+
+    const candPosMap = new Map();
+    if (scores.candidate && Array.isArray(scores.candidate.positions)) {
+      for (const p of scores.candidate.positions) {
+        if (p && p.angle && p.event) candPosMap.set(`${p.angle}:${p.event}`, p);
+      }
+    }
+
+    // Only positions present in current and in ALL runs
+    const matchedKeys = [];
+    for (const key of curPosMap.keys()) {
+      if (runMaps.every(m => m.has(key))) {
+        matchedKeys.push(key);
+      }
+    }
+
+    matchedKeys.sort((a, b) => {
+      const [angleA, evA] = a.split(":");
+      const [angleB, evB] = b.split(":");
+      const aIdx = ANGLE_ORDER.indexOf(angleA);
+      const bIdx = ANGLE_ORDER.indexOf(angleB);
+      const angleComp = (aIdx >= 0 ? aIdx : 99) - (bIdx >= 0 ? bIdx : 99);
+      if (angleComp !== 0) return angleComp;
+
+      const eIdxA = POSITION_ORDER.indexOf(evA);
+      const eIdxB = POSITION_ORDER.indexOf(evB);
+      return (eIdxA >= 0 ? eIdxA : 99) - (eIdxB >= 0 ? eIdxB : 99);
+    });
+
+    const rows = [];
+    for (const key of matchedKeys) {
+      const c = curPosMap.get(key);
+      const rList = runMaps.map(m => m.get(key));
+      const candRow = candPosMap.get(key);
+
+      const n = candRow?.n != null ? candRow.n : (c.n != null ? c.n : 0);
+
+      const curData = {
+        within1: c.within1 != null ? c.within1 : null,
+        p90: c.p90 != null ? c.p90 : null
+      };
+
+      const runsData = rList.map(r => ({
+        within1: r && r.within1 != null ? r.within1 : null,
+        p90: r && r.p90 != null ? r.p90 : null
+      }));
+
+      let avg_w = candRow?.within1 != null ? candRow.within1 : null;
+      let avg_p = candRow?.p90 != null ? candRow.p90 : null;
+
+      if (avg_w == null && candRow == null) {
+        const wVals = runsData.map(r => r.within1);
+        if (wVals.length > 0 && wVals.every(v => v != null)) {
+          avg_w = round1(wVals.reduce((a, b) => a + b, 0) / wVals.length);
+        }
+      }
+
+      if (avg_p == null && candRow == null) {
+        const pVals = runsData.map(r => r.p90);
+        if (pVals.length > 0 && pVals.every(v => v != null)) {
+          avg_p = round1(pVals.reduce((a, b) => a + b, 0) / pVals.length);
+        }
+      }
+
+      rows.push({
+        angle: c.angle,
+        event: c.event,
+        label: formatRowLabel("positions", c.angle, c.event),
+        n,
+        current: curData,
+        runs: runsData,
+        average: { within1: avg_w, p90: avg_p }
+      });
+    }
+
+    return rows;
+  }
+
+  /**
+   * Line explaining multiple training runs and which model was kept:
+   * "Trained twice (seeds 0 and 1), judged on the average; run 2's model kept."
+   * Returns null when train.runs is missing or <= 1.
+   */
+  function runsLine(candidate) {
+    if (!candidate || !candidate.train) return null;
+    const runs = candidate.train.runs;
+    if (runs == null || runs <= 1) return null;
+    const kept = candidate.train.kept != null ? candidate.train.kept : 0;
+    const keptRun = kept + 1;
+    if (runs === 2) {
+      return `Trained twice (seeds 0 and 1), judged on the average; run ${keptRun}'s model kept.`;
+    }
+    return `Trained ${runs} times, judged on the average; run ${keptRun}'s model kept.`;
+  }
+
+  function formatPosName(ev, angle) {
+    let evName = ev || "";
+    if (evName === "takeaway") evName = "takeaway";
+    else if (evName === "impact" || evName === "p7") evName = "impact";
+    else if (evName === "p1") evName = "address";
+    else if (/^p\d$/i.test(evName)) evName = evName.toUpperCase();
+    const angleName = angle === "face" ? "face-on" : angle === "dtl" ? "down the line" : angle;
+    return `${evName} ${angleName}`;
+  }
+
+  /**
+   * Identifies positions where the two training runs' within-one-frame differ by 25 points or more:
+   * e.g. ["P2 face-on: 25% and 75%"]
+   */
+  function runsDisagree(scores) {
+    if (!scores || !Array.isArray(scores.runs) || scores.runs.length < 2) return [];
+    const r0 = scores.runs[0]?.positions;
+    const r1 = scores.runs[1]?.positions;
+    if (!Array.isArray(r0) || !Array.isArray(r1)) return [];
+
+    const m0 = new Map();
+    for (const p of r0) {
+      if (p && p.angle && p.event) m0.set(`${p.angle}:${p.event}`, p);
+    }
+    const m1 = new Map();
+    for (const p of r1) {
+      if (p && p.angle && p.event) m1.set(`${p.angle}:${p.event}`, p);
+    }
+
+    const matchedKeys = [];
+    for (const key of m0.keys()) {
+      if (m1.has(key)) matchedKeys.push(key);
+    }
+
+    matchedKeys.sort((a, b) => {
+      const [angleA, evA] = a.split(":");
+      const [angleB, evB] = b.split(":");
+      const aIdx = ANGLE_ORDER.indexOf(angleA);
+      const bIdx = ANGLE_ORDER.indexOf(angleB);
+      const angleComp = (aIdx >= 0 ? aIdx : 99) - (bIdx >= 0 ? bIdx : 99);
+      if (angleComp !== 0) return angleComp;
+
+      const eIdxA = POSITION_ORDER.indexOf(evA);
+      const eIdxB = POSITION_ORDER.indexOf(evB);
+      return (eIdxA >= 0 ? eIdxA : 99) - (eIdxB >= 0 ? eIdxB : 99);
+    });
+
+    const out = [];
+    for (const key of matchedKeys) {
+      const p0 = m0.get(key);
+      const p1 = m1.get(key);
+      const w0 = p0?.within1;
+      const w1 = p1?.within1;
+      if (w0 != null && w1 != null) {
+        if (Math.abs(w0 - w1) >= 25) {
+          const name = formatPosName(p0.event, p0.angle);
+          const pct0 = Math.round(w0);
+          const pct1 = Math.round(w1);
+          out.push(`${name}: ${pct0}% and ${pct1}%`);
+        }
+      }
+    }
+    return out;
+  }
+
   const api = {
     compareRows,
+    runRows,
+    runsLine,
+    runsDisagree,
     headline,
     nightLine,
     progressLine,

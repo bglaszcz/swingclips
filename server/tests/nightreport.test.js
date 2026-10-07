@@ -293,3 +293,182 @@ test("nightreport-view.js includes progressLine and almostSameNote", () => {
   assert.ok(nrView.includes("nr-almost-same"), "renders nr-almost-same");
 });
 
+test("runsLine: formats two-run candidate with 0-based kept run, null for 1-run or missing", () => {
+  assert.equal(
+    NightReport.runsLine({ train: { runs: 2, kept: 1 } }),
+    "Trained twice (seeds 0 and 1), judged on the average; run 2's model kept."
+  );
+  assert.equal(
+    NightReport.runsLine({ train: { runs: 2, kept: 0 } }),
+    "Trained twice (seeds 0 and 1), judged on the average; run 1's model kept."
+  );
+  assert.equal(NightReport.runsLine({ train: { runs: 1, kept: 0 } }), null);
+  assert.equal(NightReport.runsLine({ train: { swings: 48 } }), null);
+  assert.equal(NightReport.runsLine({}), null);
+  assert.equal(NightReport.runsLine(null), null);
+});
+
+test("runsDisagree: lists positions where two runs differ by >= 25 within-one-frame points", () => {
+  const twoRunScores = {
+    runs: [
+      {
+        positions: [
+          { angle: "face", event: "p2", within1: 25.0, p90: 20.4 },
+          { angle: "face", event: "p4", within1: 50.0, p90: 30.0 },
+          { angle: "dtl", event: "p8", within1: 70.0, p90: 10.0 },
+        ],
+      },
+      {
+        positions: [
+          { angle: "face", event: "p2", within1: 75.0, p90: 14.6 }, // diff 50 >= 25
+          { angle: "face", event: "p4", within1: 60.0, p90: 28.0 }, // diff 10 < 25
+          { angle: "dtl", event: "p8", within1: 40.0, p90: 12.0 },  // diff 30 >= 25
+        ],
+      },
+    ],
+  };
+
+  const disagree = NightReport.runsDisagree(twoRunScores);
+  assert.deepEqual(disagree, [
+    "P2 face-on: 25% and 75%",
+    "P8 down the line: 70% and 40%",
+  ]);
+
+  // Old candidate with no runs or 1 run
+  assert.deepEqual(NightReport.runsDisagree({ runs: [{ positions: [] }] }), []);
+  assert.deepEqual(NightReport.runsDisagree({}), []);
+  assert.deepEqual(NightReport.runsDisagree(null), []);
+
+  // Row missing from one run or null within1 is not in disagree
+  const partialRuns = {
+    runs: [
+      { positions: [{ angle: "face", event: "p2", within1: 25.0 }, { angle: "face", event: "p8", within1: 80.0 }] },
+      { positions: [{ angle: "face", event: "p2", within1: null }] }, // p8 missing from run 1, p2 within1 is null
+    ],
+  };
+  assert.deepEqual(NightReport.runsDisagree(partialRuns), []);
+});
+
+test("runRows: returns positions present in current and all runs, in compareRows order", () => {
+  const twoRunScores = {
+    current: {
+      positions: [
+        { angle: "face", event: "takeaway", n: 9, within1: 33.3, p90: 38.0 },
+        { angle: "face", event: "p2", n: 9, within1: 55.6, p90: 20.8 },
+        { angle: "face", event: "p8", n: 9, within1: 77.8, p90: 8.3 },
+        { angle: "dtl", event: "p2", n: 8, within1: 37.5, p90: 25.0 },
+      ],
+    },
+    candidate: {
+      positions: [
+        { angle: "face", event: "takeaway", n: 9, within1: 33.3, p90: 36.0 },
+        { angle: "face", event: "p2", n: 9, within1: 50.0, p90: 17.5 },
+        { angle: "face", event: "p8", n: 9, within1: 62.5, p90: 11.0 },
+        { angle: "dtl", event: "p2", n: 8, within1: 50.0, p90: 20.8 },
+      ],
+    },
+    runs: [
+      {
+        positions: [
+          { angle: "face", event: "takeaway", n: 9, within1: 33.3, p90: 36.0 },
+          { angle: "face", event: "p2", n: 9, within1: 25.0, p90: 20.4 },
+          { angle: "face", event: "p8", n: 9, within1: 75.0, p90: 10.0 },
+          { angle: "dtl", event: "p2", n: 8, within1: 45.0, p90: 22.0 },
+        ],
+      },
+      {
+        positions: [
+          { angle: "face", event: "takeaway", n: 9, within1: 33.3, p90: 36.0 },
+          { angle: "face", event: "p2", n: 9, within1: 75.0, p90: 14.6 },
+          { angle: "face", event: "p8", n: 9, within1: 50.0, p90: 12.0 },
+          { angle: "dtl", event: "p2", n: 8, within1: 55.0, p90: 19.6 },
+        ],
+      },
+    ],
+  };
+
+  const rows = NightReport.runRows(twoRunScores);
+  assert.equal(rows.length, 4);
+
+  // Swing order: face takeaway, face p2, face p8, dtl p2
+  assert.equal(rows[0].event, "takeaway");
+  assert.equal(rows[0].angle, "face");
+  assert.equal(rows[0].n, 9);
+  assert.equal(rows[0].current.within1, 33.3);
+  assert.equal(rows[0].runs[0].within1, 33.3);
+  assert.equal(rows[0].runs[1].within1, 33.3);
+  assert.equal(rows[0].average.within1, 33.3);
+
+  assert.equal(rows[1].event, "p2");
+  assert.equal(rows[1].angle, "face");
+  assert.equal(rows[1].current.within1, 55.6);
+  assert.equal(rows[1].runs[0].within1, 25.0);
+  assert.equal(rows[1].runs[1].within1, 75.0);
+  assert.equal(rows[1].average.within1, 50.0);
+  assert.equal(rows[1].average.p90, 17.5);
+
+  assert.equal(rows[2].event, "p8");
+  assert.equal(rows[2].angle, "face");
+
+  assert.equal(rows[3].event, "p2");
+  assert.equal(rows[3].angle, "dtl");
+
+  // Old one-run candidate: returns empty array
+  assert.deepEqual(NightReport.runRows({ current: twoRunScores.current, candidate: twoRunScores.candidate }), []);
+  assert.deepEqual(NightReport.runRows(null), []);
+});
+
+test("runRows: omits row missing from one run", () => {
+  const scores = {
+    current: {
+      positions: [
+        { angle: "face", event: "takeaway", n: 9, within1: 33.3, p90: 38.0 },
+        { angle: "face", event: "p2", n: 9, within1: 55.6, p90: 20.8 },
+      ],
+    },
+    candidate: { positions: [] },
+    runs: [
+      {
+        positions: [
+          { angle: "face", event: "takeaway", n: 9, within1: 33.3, p90: 36.0 },
+          { angle: "face", event: "p2", n: 9, within1: 25.0, p90: 20.4 },
+        ],
+      },
+      {
+        positions: [
+          // p2 missing from run 1
+          { angle: "face", event: "takeaway", n: 9, within1: 33.3, p90: 36.0 },
+        ],
+      },
+    ],
+  };
+
+  const rows = NightReport.runRows(scores);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].event, "takeaway");
+});
+
+test("runRows: preserves null where within1 or p90 is missing from a run", () => {
+  const scores = {
+    current: {
+      positions: [{ angle: "face", event: "p2", n: 9, within1: 55.6, p90: 20.8 }],
+    },
+    runs: [
+      {
+        positions: [{ angle: "face", event: "p2", n: 9, within1: 25.0, p90: 20.4 }],
+      },
+      {
+        positions: [{ angle: "face", event: "p2", n: 9, within1: null, p90: null }],
+      },
+    ],
+  };
+
+  const rows = NightReport.runRows(scores);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].runs[0].within1, 25.0);
+  assert.equal(rows[0].runs[1].within1, null);
+  assert.equal(rows[0].average.within1, null);
+  assert.equal(rows[0].average.p90, null);
+});
+
+
