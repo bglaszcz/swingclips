@@ -737,6 +737,39 @@
     };
   }
 
+  /**
+   * Joins the week summary text with full coach program run reports.
+   * Separated by a blank line and a line `--- <run name>, <date> ---`.
+   * @param {string} weekText
+   * @param {Array<{name?: string, id?: string, date?: string|number|Date, started?: number, day?: string, text?: string, report?: string}>} runs
+   * @returns {string}
+   */
+  function joinWeekAndRuns(weekText, runs) {
+    if (!runs || !runs.length) return weekText || "";
+    let out = (weekText || "").trim();
+    for (const r of runs) {
+      if (!r) continue;
+      const report = (r.text || r.report || "").trim();
+      if (!report) continue;
+      const name = r.name || r.id || "Coach program run";
+      let dateStr = "";
+      if (r.date != null) {
+        if (typeof r.date === "string" && !/^\d{4}-\d{2}-\d{2}/.test(r.date)) {
+          dateStr = r.date;
+        } else {
+          dateStr = formatDate(r.date);
+        }
+      } else if (r.started) {
+        dateStr = formatDate(r.started);
+      } else if (r.day) {
+        dateStr = formatDate(r.day);
+      }
+      const header = dateStr ? `--- ${name}, ${dateStr} ---` : `--- ${name} ---`;
+      out += (out ? "\n\n" : "") + `${header}\n${report}`;
+    }
+    return out;
+  }
+
   const api = {
     weekSummary,
     weekStartOf,
@@ -747,6 +780,7 @@
     formatDate,
     extractRows,
     extractSessions,
+    joinWeekAndRuns,
   };
 
   return api;

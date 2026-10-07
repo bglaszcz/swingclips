@@ -1410,12 +1410,21 @@ function renderSinceLast(data) {
 
   const renderLine = l => {
     const dotCls = l.kind === "warn" ? "warn" : l.kind === "ok" ? "ok" : "info";
-    const linkHtml = l.link ? ` <a href="${esc(l.link)}" class="since-last-link">Open it</a>` : "";
+    let textHtml = esc(l.text);
+    let linkHtml = "";
+    if (l.link) {
+      if (l.linkText && l.text && l.text.endsWith(l.linkText)) {
+        const base = l.text.slice(0, -l.linkText.length);
+        textHtml = esc(base) + `<a href="${esc(l.link)}" class="since-last-link">${esc(l.linkText)}</a>`;
+      } else {
+        linkHtml = ` <a href="${esc(l.link)}" class="since-last-link">${esc(l.linkText || "Open it")}</a>`;
+      }
+    }
     const todoHtml = l.todo ? `<span class="since-last-todo">${esc(l.todo)}</span>` : "";
     return `<div class="since-last-item">
       <span class="since-last-dot ${dotCls}"></span>
       <div class="since-last-body">
-        <span class="since-last-text">${esc(l.text)}</span>${linkHtml}
+        <span class="since-last-text">${textHtml}</span>${linkHtml}
         ${todoHtml}
       </div>
     </div>`;

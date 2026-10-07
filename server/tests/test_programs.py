@@ -294,6 +294,45 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(self.p.state()["log"][-1]["blocks"][2]["state"]["passed"],
                          run["blocks"][2]["state"]["passed"])
 
+    def test_block_medians_include_square_and_3d(self):
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        good = dict(body3d=body3d(pelvis_peak=-10, arm_peak=-50, pelvis_open=14), body={"pelvisBall": 4.5})
+        s1 = shot(attack=-4.0, face=0.5, path=0.0)
+        s1["ball"]["speed"] = 112.0
+        s1["clubData"]["smash"] = 1.40
+        self.hit(s1, **good)
+        s2 = shot(attack=-5.5, face=3.5, path=1.0)
+        s2["ball"]["speed"] = 114.0
+        s2["clubData"]["smash"] = 1.42
+        self.hit(s2, **good)
+        rep = self.p.report(body=lambda clip: {"pelvisBall": 4.5})["text"]
+        self.assertIn("pelvis vs ball at impact +4.5 in (camera, 2 swings)", rep)
+        self.assertIn("club path +0.5° (+0.0 to +1.0)", rep)
+        self.assertIn("face to target +2.0° (+0.5 to +3.5)", rep)
+        self.assertIn("ball speed 113.0 mph (112.0 to 114.0)", rep)
+        self.assertIn("smash 1.41 (1.40 to 1.42)", rep)
+        self.assertIn("pelvis open at impact +14° (3D, 2 swings)", rep)
+        self.assertIn("pelvis peak -10 ms (3D, 2 swings)", rep)
+        self.assertIn("arm peak -50 ms (3D, 2 swings)", rep)
+
+    def test_block_medians_old_run_unchanged(self):
+        self.p.start("lowpoint")
+        self.p.next_block()
+        self.p.next_block()
+        for _ in range(2):
+            self.hit(shot())
+        # Strip newer keys from reps to simulate an old run before they existed
+        for r in self.p.run["reps"]:
+            r["numbers"] = {k: r["numbers"][k] for k in ("attack", "loft", "faceToPath", "strikeV", "strikeH", "clubSpeed", "carry")}
+        rep = self.p.report()["text"]
+        block_line = next(line for line in rep.splitlines() if "Shots 1-10:" in line)
+        self.assertEqual(
+            block_line,
+            "  Shots 1-10: attack angle -4.0° (-4.0 to -4.0); dynamic loft 24.0° (24.0 to 24.0); "
+            "face to path +0.5° (+0.5 to +0.5); strike height -12 mm (-12 to -12); carry 150 yd, SD 0 yd"
+        )
+
     def test_retention_median_gate(self):
         self.p.start("retention")
         self.assertIsNone(self.drills[-1])  # cold swings are normal swings: they count in the trends

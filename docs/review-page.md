@@ -160,7 +160,7 @@ What the server works out for each swing and what each part of the review page s
   `Start server.cmd` needs a restart by hand (cmd reads a running batch file from disk).
   `POST /api/restart` restarts without updating. By hand: `git -C D:\SwingClips\app pull`, then
 - Week for coach: **Tools > Week for coach** (`static/week-view.js`, `static/week.js`):
-  provides a concise weekly summary designed for the owner to share with their coach in under two minutes. Covers sessions practiced (days, duration, swings by club, drills, and coach program runs), ball flight changes for clubs hit 15+ times where change exceeds weekly noise, progress on the journal focus move vs past weeks alongside coach thoughts, top 3 named faults vs the prior week, findings that held up in subsequent sessions (`holdup.js`), game scores vs all-time bests, and journal notes. Features a week picker (`‹`/`›`) starting on this week, phone-friendly calm card styling without red highlights, and a one-tap **Copy for coach** button that formats the report as plain text ready to paste directly into a coaching chat. Below the summary, the week's coach program runs, each folded with its full report (`/api/program/report`) and its own **Copy this run for coach**, so a run hit at the sim can be read and sent from the house. Openable via `/#week`.
+  provides a concise weekly summary designed for the owner to share with their coach in under two minutes. Covers sessions practiced (days, duration, swings by club, drills, and coach program runs), ball flight changes for clubs hit 15+ times where change exceeds weekly noise, progress on the journal focus move vs past weeks alongside coach thoughts, top 3 named faults vs the prior week, findings that held up in subsequent sessions (`holdup.js`), game scores vs all-time bests, and journal notes. Features a week picker (`‹`/`›`) starting on this week, phone-friendly calm card styling without red highlights, and a one-tap **Copy for coach** button that formats the report as plain text ready to paste directly into a coaching chat. Below the summary, the week's coach program runs, each folded with its full report (`/api/program/report`) and its own **Copy this run for coach**, so a run hit at the sim can be read and sent from the house. Openable via `/#week`. A "with the program runs" checkbox next to Copy for coach includes the week's full program run reports directly in the copied text, separated by run headers, and remembers its setting across visits.
 
 ## Trust per number: ok, shaky, no reading
 Every body number on the page (the swing numbers table and tempo line, the numbers over the video,
@@ -453,7 +453,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   and 11 on, the club order, every shot in order with its verdict and bring-back metrics (pelvis peak ms,
   arm peak ms, pelvis open at impact, pelvis turn start vs top; pelvis and chest vs ball at impact from
   the face-on camera when the swing has them), and the impact frame
-  (`/api/still/{clip}`) of the first ball swing hit in a no-ball block (the toe-tap swing). Tested in
+  (`/api/still/{clip}`) of the first ball swing hit in a no-ball block (the toe-tap swing). Block medians also include club path, face to target, ball speed, and smash alongside 3D pelvis open, pelvis peak, and arm peak medians when recorded on the block's read shots. Tested in
   `tests/test_programs.py` and `tests/programhistory.test.js`.
 - **Today's practice plan** (`static/plan.js`, `SwingPlan.buildPlan`): built on the Start page ("Today's plan")
   for quick setup in the barn. Lays out an ordered 45-minute practice session (60-80 balls) across 4 blocks:
@@ -489,4 +489,4 @@ toward the ball". The phones face away from you, so voice is the channel.
   (e.g. face-on or DTL misses >= 3% with phone setup todo, Square pairings < 90% with watcher todo, camera moved with calibrate link,
   >= 5 false triggers) and confirmations folded behind "Show all" (both angles, Square paired, cameras in place).
   Displays overnight worker sentence (`improve.nights[0]`), candidate model waiting notifications (`Tools > Night report`),
-  and club model retraining progress (`Tools > Club check`). Loads once on page open and manual refresh, never while recording.
+  and club model retraining progress (`Tools > Club check`). The club model progress line states how many new frames toward the retraining target are collected (linking to Club check), or confirms that enough new frames were gathered to train tonight. Loads once on page open and manual refresh, never while recording.

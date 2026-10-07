@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { summary, sessionsOf, formatDate } = require("../static/sincelast.js");
+const { summary, sessionsOf, formatDate, clubProgressText } = require("../static/sincelast.js");
 
 function makeSwing(id, recorded, opts = {}) {
   const angle = opts.angle || "face";
@@ -271,4 +271,66 @@ test("start.html contains Since last markup, script tag, and styles", () => {
   assert.ok(html.includes('id="since-last"'), "has #since-last element");
   assert.ok(html.includes('.since-last'), "has .since-last css styles");
 });
+
+test("clubProgressText pure text helper", () => {
+  assert.equal(clubProgressText({ newFrames: 12, need: 40 }), "Club model: 12 of 40 new club frames for the next training. Club check");
+  assert.equal(clubProgressText({ newFrames: 40, need: 40 }), "Club model: enough new frames: it trains tonight.");
+  assert.equal(clubProgressText({ newFrames: 55, need: 40 }), "Club model: enough new frames: it trains tonight.");
+  assert.equal(clubProgressText({ newFrames: null, need: 40 }), null);
+  assert.equal(clubProgressText(null), null);
+  assert.equal(clubProgressText({}), null);
+});
+
+test("summary includes club model progress line with Club check link", () => {
+  const clips = [
+    makeSwing(1, "2026-10-04T10:00:00", { angle: "face" }),
+    makeSwing(1, "2026-10-04T10:00:00", { angle: "dtl" })
+  ];
+  const improve = {
+    progress: { newFrames: 12, need: 40 }
+  };
+  const now = "2026-10-04T12:00:00";
+  const res = summary({ clips, improve }, now);
+
+  const line = res.lines.find(l => l.text.startsWith("Club model:"));
+  assert.ok(line, "found Club model line");
+  assert.equal(line.kind, "info");
+  assert.equal(line.text, "Club model: 12 of 40 new club frames for the next training. Club check");
+  assert.equal(line.link, "/#clubcheck");
+  assert.equal(line.linkText, "Club check");
+});
+
+test("summary includes enough new frames without link when at or above need", () => {
+  const clips = [
+    makeSwing(1, "2026-10-04T10:00:00", { angle: "face" }),
+    makeSwing(1, "2026-10-04T10:00:00", { angle: "dtl" })
+  ];
+  const improve = {
+    progress: { newFrames: 40, need: 40 }
+  };
+  const now = "2026-10-04T12:00:00";
+  const res = summary({ clips, improve }, now);
+
+  const line = res.lines.find(l => l.text.startsWith("Club model:"));
+  assert.ok(line, "found Club model line");
+  assert.equal(line.kind, "info");
+  assert.equal(line.text, "Club model: enough new frames: it trains tonight.");
+  assert.equal(line.link, undefined);
+});
+
+test("summary leaves out club model line when newFrames is null", () => {
+  const clips = [
+    makeSwing(1, "2026-10-04T10:00:00", { angle: "face" }),
+    makeSwing(1, "2026-10-04T10:00:00", { angle: "dtl" })
+  ];
+  const improve = {
+    progress: { newFrames: null, need: 40 }
+  };
+  const now = "2026-10-04T12:00:00";
+  const res = summary({ clips, improve }, now);
+
+  const line = res.lines.find(l => l.text.startsWith("Club model:"));
+  assert.equal(line, undefined, "no Club model line when newFrames is null");
+});
+
 

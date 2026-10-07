@@ -806,6 +806,14 @@ def carry_spread(values: list) -> str:
 BODY_REPORT = {"handsAhead": ("hands ahead of ball at impact", "in"), "pelvisBall": ("pelvis vs ball at impact", "in"),
                "chestBall": ("chest vs ball at impact", "in")}
 
+# Square and 3D numbers reported per block when present on the block's read shots (the coach's ask).
+SQUARE_MORE = ("path", "face", "ballSpeed", "smash")
+BODY3D_REPORT = (
+    ("pelvisOpen", "pelvis open at impact", "°"),
+    ("pelvisPeakMs", "pelvis peak", " ms"),
+    ("armPeakMs", "arm peak", " ms"),
+)
+
 
 def report(p: dict, run: dict, body=None) -> dict:
     """The text to paste back to the coach: per block the gate, the medians (and range) of attack
@@ -858,8 +866,16 @@ def report(p: dict, run: dict, body=None) -> dict:
                         v = [x for x in ((body(r["clip"]) or {}).get(k) if body else None for r in g) if x is not None]
                         if v:
                             cams.append(f"{label} {statistics.median(v):+.1f} {unit} (camera, {len(v)} swings)")
+                    square_more = [spread(k, [r["numbers"][k] for r in read])
+                                   for k in SQUARE_MORE if any(r.get("numbers", {}).get(k) is not None for r in read)]
+                    d3_cams = []
+                    for k, label, unit in BODY3D_REPORT:
+                        v = [r["numbers"][k] for r in read if r.get("numbers", {}).get(k) is not None]
+                        if v:
+                            d3_cams.append(f"{label} {fmt(k, statistics.median(v))}{unit} (3D, {len(v)} swings)")
                     lines.append(f"  {name}: " + "; ".join([spread(k, [r["numbers"][k] for r in read]) for k in REPORT_KEYS]
-                                                           + [carry_spread([r["numbers"]["carry"] for r in read])] + cams))
+                                                           + [carry_spread([r["numbers"]["carry"] for r in read])]
+                                                           + cams + square_more + d3_cams))
         for r in shots:
             if r["kind"] == "ball":
                 lines.append(f"  Ball swing ({club_word(r.get('club'))}): " + ", ".join(
