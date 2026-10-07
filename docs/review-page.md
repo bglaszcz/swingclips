@@ -230,10 +230,26 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   the face pointed left of the target but open to the path"). **Try this**: the fault's swing
   thought and drill (coach.js); with no fault and an off-line out-to-in miss, the hands-drop-under-
   the-plane fix; never a move toward a fault, so no drill for an in-to-out miss.
+- **Habit watch** (`static/habits.js`): a calm amber banner (`.cc-habit`, never red) at the top of the
+  coaching card when a bad habit is forming during a session across your last 5 swings with that club.
+  It watches body numbers that have a fault in `faults.js`: flagged when at least 4 of the last 5 swings
+  have a readable number (neither missing nor shaky), its Theil-Sen slope over those swings points toward
+  the fault side, at least 3 readable ones violate the fault's threshold, and the latest swing is past it.
+  Ranked by how far the latest swing is past the threshold in units of the threshold's scale. Warns in plain
+  English (e.g. "Watch out: your last 5 swings with the 7 iron are trending toward early extension (hips toward
+  the ball at impact): 2.1 in -> 4.0 in.") with a swing thought and drill from `coach.js`.
+- **Verdict dots on the swing list**: a small dot before the time on each swing row that has a launch monitor
+  shot: green = good shot (passes your club rules in Progress), amber = playable (within twice the offline allowance
+  and not more than 15% short of your usual carry), grey = miss (never red), from `SwingShotStory.verdict` with
+  `goodShotData()`. Hovering shows "Good shot", "Playable" or "Miss".
 - **Advanced data** (button under Square's numbers, remembered per browser): off by default.
   Without it the swing page shows the coaching card and five tiles (club, carry, offline, club
   speed, smash); with it, Square's other numbers, the scorecard, key positions, the swing numbers
-  table, 3D and the clip names (`adv-only` class in `index.html`).
+  table, 3D and the clip names (`adv-only` class in `index.html`). Advanced data uses plain golfer's words
+  everywhere instead of P-system jargon: scorecard phase tiles and table columns read "Setup", "Top of
+  swing", "Downswing", "Impact", with P-tags kept only as small secondary hints or tooltips. Metric labels,
+  the scorecard summary sentence, row labels and fault locations ("in the downswing", "at impact")
+  use plain English from `SwingShotStory`.
 - **Swing page**: a column **vs my good shots (club)** in the numbers table, and a faint band on the
   number itself: green inside the middle 50%, amber outside ("outside: 4° more than usual", and
   "inside the 80% range" when it's between the two). The tempo line gets the same under it. Numbers

@@ -824,6 +824,10 @@
   .session li .pose { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); font-size: 11px; }
   .spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .v-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; vertical-align: middle; margin-right: 5px; flex-shrink: 0; }
+  .v-dot.good { background: var(--accent); }
+  .v-dot.ok { background: var(--warn); }
+  .v-dot.miss { background: var(--muted); }
   .session li .trash { border: 0; background: none; color: var(--muted); }
   .session li .trash:hover { color: var(--warn); background: var(--warn-soft); }
   /* With a mouse, delete buttons show on hover only: fewer targets to scan and fewer slips. */
@@ -4022,15 +4026,45 @@ function clipRow(c) {
   const time = new Date(c.recorded).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
   const result = !c.shot ? "" : c.shot.ball?.carry > 0 ? `${num(c.shot.ball.carry, 0)} yd`
     : c.shot.ball?.speed > 0 ? `${num(c.shot.ball.speed)} mph` : "";
-  li.querySelector(".big").textContent = result || time;
+  let dotEl = null;
+  if (c.shot && typeof trendDataLoaded !== "undefined" && trendDataLoaded && typeof SwingShotStory !== "undefined" && typeof SwingGoodShots !== "undefined") {
+    const club = c.shot.club;
+    const gsData = typeof goodShotData === "function" ? goodShotData() : null;
+    const cd = club && gsData ? gsData.clubs[club] : null;
+    if (cd && cd.baseline) {
+      const s = SwingSummary.shotNumbers(c.shot);
+      const group = SwingGoodShots.groupOf(club);
+      const settings = goodSettings && goodSettings.settings;
+      const judged = cd.verdicts && cd.verdicts[c.name] ? cd.verdicts[c.name] : SwingGoodShots.judgeShot(s, cd.baseline, group, settings);
+      const v = SwingShotStory.verdict(s, judged, cd.baseline, group, settings);
+      if (v) {
+        dotEl = document.createElement("span");
+        dotEl.className = `v-dot ${v.level}`;
+        dotEl.title = v.text;
+      }
+    }
+  }
   // The badge already says a wedge's name (GW); the full name only where it adds something (7i -> 7 iron).
   const full = c.shot ? clubName(c.shot.club) : "No shot";
   li.querySelector(".club").textContent = c.shot && full === clubShort(c.shot.club) ? "" : full;
   const other = c.partner && clips.find(x => x.name === c.partner);
   const angles = other ? "2 angles" : c.angle === "dtl" ? "down the line only" : "face-on only";
   const size = c.size + (other ? other.size : 0);
-  li.querySelector(".meta").textContent = [result ? time : "", angles, leftOutText(c)]
-    .filter(Boolean).join(" · ");
+  const meta = li.querySelector(".meta");
+  if (result) {
+    li.querySelector(".big").textContent = result;
+    meta.replaceChildren();
+    if (dotEl) meta.append(dotEl);
+    meta.append(document.createTextNode(time));
+    const rest = [angles, leftOutText(c)].filter(Boolean);
+    if (rest.length) meta.append(document.createTextNode(" · " + rest.join(" · ")));
+  } else {
+    const big = li.querySelector(".big");
+    big.replaceChildren();
+    if (dotEl) big.append(dotEl);
+    big.append(document.createTextNode(time));
+    meta.textContent = [angles, leftOutText(c)].filter(Boolean).join(" · ");
+  }
   li.title = [modeOf(c.name), fmtSize(size)].filter(Boolean).join(" · ");
   // The swing's analysis is as far along as its slower angle.
   const state = [c, other].filter(Boolean).map(x => x.pose).find(s => s !== "done") ?? "done";
@@ -4324,6 +4358,7 @@ async function refresh() {
   renderList();
   // New swings, finished analyses and shots show up in the trends as they arrive.
   trendsTick();
+  if (typeof trendDataLoaded !== "undefined" && !trendDataLoaded && !goodLoading && typeof loadTrendData === "function") loadTrendData();
   if (window.shutterTick) shutterTick();
   if (window.labelViewTick) labelViewTick();
   if (JSON.stringify(clips) !== was) updateExcludeButton();
