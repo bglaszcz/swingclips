@@ -436,7 +436,7 @@
       if (!sFaults && Faults && typeof Faults.sessionFaults === "function" && clips.length > 0) {
         // Only the 3D fault picks the focus by itself: the 2D ones need the page's trust levels (trends.js)
         // to be shown, and the plan doesn't have them.
-        sFaults = Faults.sessionFaults(latestRows3d(clips, inputs.swings)).filter(f => f.key === "armsLed");
+        sFaults = Faults.sessionFaults(latestRows3d(clips, inputs.swings), undefined, { standing: true }).filter(f => f.key === "armsLed");
       }
       if (inputs.topFault) {
         autoFault = inputs.topFault;

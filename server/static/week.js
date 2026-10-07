@@ -566,8 +566,9 @@
     // ==========================================
     // the top 3 named faults this week (share of swings) vs last week, coach.js wording.
     if (Faults && rowsThisWeek.length > 0) {
-      const faultsThis = Faults.sessionFaults(rowsThisWeek);
-      const faultsLast = rowsLastWeek.length > 0 ? Faults.sessionFaults(rowsLastWeek) : [];
+      // For the coach the standing 3D pattern (arms-led downswing) counts too.
+      const faultsThis = Faults.sessionFaults(rowsThisWeek, undefined, { standing: true });
+      const faultsLast = rowsLastWeek.length > 0 ? Faults.sessionFaults(rowsLastWeek, undefined, { standing: true }) : [];
       const active = faultsThis.filter(f => f.count > 0);
       if (active.length > 0) {
         const top3 = active.slice(0, 3);

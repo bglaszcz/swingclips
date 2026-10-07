@@ -295,6 +295,13 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   above the numbers with each fault's swing thought as its tooltip, only when present; the scorecard's
   fault list also shows a short "often comes with X" when that link is strong and the other fault is also
   on the swing.
+  **Arms-led downswing** (3D) is a *standing pattern*, not a per-swing fault (2026-10-07, `standing` in
+  `faults.js`): it named 76 of the owner's 79 judged 3D swings; the 3D under-reads hip turn (32° at the top
+  against 42° face-on; X-factor 71°), hips read -9° to +9° open at impact, and good shots were as common at
+  either end. The swing view, scorecard, Compare, Progress and the session story leave it out;
+  `faultsOf` / `sessionFaults(rows, shaky, {standing: true})` ask for it, as Today's plan (its Practice
+  sequence block) and Week for coach do. Progress's most common fault also says how it compares with
+  last session ("Up from 66% of swings on Oct 4"; both sessions need 10+ readable swings).
   Casting comes from two face-on numbers (`metrics.js`): **Wrist hinge at P5**, the angle between the
   lead arm and the shaft (90 = an L) with the lead arm parallel coming down, and **Release point**,
   the lead arm's angle to horizontal when that hinge first drops under 70 degrees coming down (higher

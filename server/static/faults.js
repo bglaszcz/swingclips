@@ -30,9 +30,14 @@
     { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more", threshold: -22, test: v => v > -22 },
     // Head lift: head height rises at impact vs address (in) > 1.0
     { key: "headRise", name: "head lift", move: "headRise", dir: "more", threshold: 1.0, test: v => v > 1.0 },
-    // Arms-led downswing: from 3D (pelvis reaches peak speed after impact, hips under 20 deg open at impact)
+    // Arms-led downswing: from 3D (pelvis reaches peak speed after impact, hips under 20 deg open at impact).
+    // A standing pattern, not a per-swing fault (`standing`): on the owner's 79 judged 3D swings (Oct 2-7)
+    // it named 76; the 3D under-reads hip turn (top 32 deg against 42 face-on, X-factor 71), his hips read
+    // -9 to +9 open at impact, and good shots were as common at either end (7/26 vs 7/27). So the swing
+    // view, session lists and Progress leave it out; Today's plan and Week for coach ask for it.
     {
       key: "armsLed",
+      standing: true,
       name: "arms-led downswing",
       move: "armsLed",
       dir: "more",
@@ -97,10 +102,10 @@
    * @param row swing row (or object with body numbers)
    * @param shaky optional callback (row, key) => boolean
    */
-  function faultsOf(row, shaky) {
+  function faultsOf(row, shaky, opts) {
     if (!row) return [];
     const out = [];
-    for (const f of FAULTS) {
+    for (const f of listed(opts)) {
       if (!isReadable(row, f.key, shaky)) continue;
       const v = valueOf(row, f.key);
       if (f.test(v, row)) {
@@ -125,9 +130,12 @@
    * @param shaky optional callback (row, key) => boolean
    * @returns array of {key, name, count, total, readable, share, top, drill, thought} sorted by share
    */
-  function sessionFaults(rows, shaky) {
+  /** The faults to look at: without standing patterns unless opts.standing. */
+  const listed = opts => FAULTS.filter(f => !f.standing || (opts && opts.standing));
+
+  function sessionFaults(rows, shaky, opts) {
     const list = rows || [];
-    const results = FAULTS.map(f => {
+    const results = listed(opts).map(f => {
       let count = 0, total = 0;
       for (const r of list) {
         if (!isReadable(r, f.key, shaky)) continue;

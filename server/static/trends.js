@@ -975,7 +975,17 @@ function renderOverall(all) {
   // The session's most common fault, in a line, with its swing thought.
   const faults = SwingFaults.sessionFaults(cmp.latest.rows, isShaky).filter(x => x.top);
   const tf = faults[0];
-  faultEl.textContent = tf ? `Most common fault on ${when}: ${tf.name} (${tf.count} of ${tf.readable ?? tf.total} swings). `
+  // Against last time: a habit growing (or going) across sessions, when both had 10+ readable swings.
+  let trend = "";
+  if (tf && cmp.last) {
+    const was = SwingFaults.sessionFaults(cmp.last.rows, isShaky).find(x => x.key === tf.key && x.name === tf.name);
+    if (was && was.readable >= 10 && tf.readable >= 10) {
+      const now = Math.round(tf.share * 100), then = Math.round(was.share * 100);
+      trend = Math.abs(now - then) < 10 ? ` About the same as ${lastWhen} (${then}%).`
+        : ` ${now > then ? "Up" : "Down"} from ${then}% of swings on ${lastWhen}.`;
+    }
+  }
+  faultEl.textContent = tf ? `Most common fault on ${when}: ${tf.name} (${tf.count} of ${tf.readable ?? tf.total} swings).${trend} `
     + (tf.thought ? `Swing thought: “${SwingShotStory.plain(tf.thought)}”` : "") : "";
 
   note.textContent = `Every club in one: each shot against that club's own usual, so wedges and long irons compare. `
