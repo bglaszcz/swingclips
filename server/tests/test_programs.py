@@ -409,6 +409,69 @@ class ProgramsTest(unittest.TestCase):
         self.assertIn("Square app updated", self.p.report()["text"])
         self.assertEqual(self.p.state()["log"][-1]["notes"], "Omni moved 2 in back; Square app updated")
 
+    def test_lead_wrist_calls_saved_cleared_and_refused(self):
+        self.flush()
+        self.hit(shot())
+        reps = self.p.run["reps"]
+        clip1 = reps[0]["clip"]
+        # Save while in play
+        self.p.wrist(clip=clip1, verdict="flat")
+        self.assertEqual(self.p.run["wrist"][clip1], "flat")
+        self.p.stop()
+        # Finished run
+        finished = self.p.state()["log"][-1]
+        started = finished["started"]
+        self.assertEqual(finished["wrist"][clip1], "flat")
+        # Refuses bad verdict
+        with self.assertRaises(ValueError):
+            self.p.wrist(started, clip1, "curled")
+        # Refuses non-existent run
+        with self.assertRaises(ValueError):
+            self.p.wrist(999999.0, clip1, "flat")
+        # Update verdict
+        self.p.wrist(started, clip1, "bowed")
+        self.assertEqual(self.p.state()["log"][-1]["wrist"][clip1], "bowed")
+        # Clear verdict with None
+        self.p.wrist(started, clip1, None)
+        self.assertNotIn(clip1, self.p.state()["log"][-1]["wrist"])
+
+    def test_lead_wrist_report_lines_and_old_run_unchanged(self):
+        self.p.start("braceturn")
+        self.p.next_block()  # Skip no-ball tier1 to ball tier2 (reps: 15)
+        # Hit 12 shots in tier2 block
+        for _ in range(12):
+            self.hit(shot(attack=-3.5, face=0.0, path=0.0), body3d=body3d(pelvis_open=15), body={"pelvisBall": 4.0})
+        reps = list(self.p.run["reps"])
+        clips = [r["clip"] for r in reps]
+        self.p.stop()
+        started = self.p.state()["log"][-1]["started"]
+
+        # Before any calls: report has no wrist summary and no wrist in shot order (old run unchanged)
+        rep_before = self.p.report()["text"]
+        self.assertNotIn("Lead wrist at impact", rep_before)
+        self.assertNotIn("wrist", rep_before)
+
+        # Call 10 of 12 shots: 5 flat, 2 bowed, 3 cupped
+        for c in clips[:5]:
+            self.p.wrist(started, c, "flat")
+        for c in clips[5:7]:
+            self.p.wrist(started, c, "bowed")
+        for c in clips[7:10]:
+            self.p.wrist(started, c, "cupped")
+
+        rep_after = self.p.report()["text"]
+        # Block summary line
+        self.assertIn("Lead wrist at impact (by eye, down the line): flat 5, slightly bowed 2, cupped 3 (10 of 12 shots)", rep_after)
+        # Shot order lines: ", wrist cupped", ", wrist slightly bowed", ", wrist flat"
+        self.assertIn(", pass, wrist flat", rep_after)
+        self.assertIn(", pass, wrist slightly bowed", rep_after)
+        self.assertIn(", pass, wrist cupped", rep_after)
+
+        # Uncalled shots in the same run have no wrist suffix
+        lines = [ln for ln in rep_after.splitlines() if ln.strip().startswith("11.") or ln.strip().startswith("12.")]
+        for ln in lines:
+            self.assertNotIn("wrist", ln)
+
     def test_undo_takes_back_the_last_tap(self):
         self.p.start("lowpoint")
         self.taps(True, False)

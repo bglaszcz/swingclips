@@ -1884,6 +1884,23 @@ def program_note(body: ProgramNote):
         raise HTTPException(404, str(e))
 
 
+class ProgramWrist(BaseModel):
+    started: float | None = None
+    clip: str
+    verdict: str | None = None
+
+
+@app.post("/api/program/wrist")
+def program_wrist(body: ProgramWrist):
+    """Saves the golfer's lead wrist call at impact on one shot of a finished run or the run in play."""
+    try:
+        return programs_state.wrist(body.started, body.clip, body.verdict)
+    except ValueError as e:
+        msg = str(e)
+        code = 404 if "No such run" in msg else 400
+        raise HTTPException(code, msg)
+
+
 @app.post("/api/program/undo")
 def program_undo():
     try:

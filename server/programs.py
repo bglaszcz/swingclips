@@ -480,6 +480,41 @@ class Programs:
             tmp.replace(self.log_file)
             return {"started": logged[i]["started"], "notes": text}
 
+    def wrist(self, started: float | None = None, clip: str = "", verdict: str | None = None) -> dict:
+        """Saves the golfer's lead wrist call at impact ('flat', 'bowed', 'cupped', 'can't tell',
+        or None to clear) on one shot of a finished run, or the run in play."""
+        if isinstance(started, str) and not isinstance(clip, (int, float)):
+            clip, verdict, started = started, clip, None
+        if not clip:
+            raise ValueError("No clip specified")
+        if verdict is not None and verdict not in VALID_WRIST:
+            raise ValueError(f"Invalid wrist verdict: {verdict!r}")
+        with self.lock:
+            if self.run and (started is None or self.run["started"] == started
+                             or (isinstance(started, (int, float)) and abs(self.run["started"] - started) < 0.001)):
+                wrist = self.run.setdefault("wrist", {})
+                if verdict is None:
+                    wrist.pop(clip, None)
+                else:
+                    wrist[clip] = verdict
+                self._save()
+                return {"started": self.run["started"], "wrist": wrist}
+            logged = self._log()
+            i = next((i for i in range(len(logged) - 1, -1, -1)
+                      if started is None or logged[i]["started"] == started
+                      or (isinstance(started, (int, float)) and abs(logged[i]["started"] - started) < 0.001)), None)
+            if i is None:
+                raise ValueError("No such run")
+            wrist = logged[i].setdefault("wrist", {})
+            if verdict is None:
+                wrist.pop(clip, None)
+            else:
+                wrist[clip] = verdict
+            tmp = self.log_file.with_suffix(".tmp")
+            tmp.write_text("".join(json.dumps(x, separators=(",", ":")) + "\n" for x in logged), encoding="utf-8")
+            tmp.replace(self.log_file)
+            return {"started": logged[i]["started"], "wrist": wrist}
+
     def next_block(self) -> dict:
         """Ends the block in play as it stands and moves on."""
         with self.lock:
@@ -715,7 +750,7 @@ class Programs:
         return {"id": p["id"], "name": p["name"], "started": self.run["started"], "cap": p["cap"],
                 "notes": self.run.get("notes", ""), "calibration": calibration(p, self.run),
                 "used": self._swings_used(), "block": self.run["block"], "blocks": blocks,
-                "waiting3d": waiting_count,
+                "waiting3d": waiting_count, "wrist": self.run.get("wrist", {}),
                 "progress": progress_text(block, block_state(block, self.run["reps"], self.run["marks"]))}
 
     def _say(self, text: str) -> None:
@@ -813,6 +848,8 @@ BODY3D_REPORT = (
     ("pelvisPeakMs", "pelvis peak", " ms"),
     ("armPeakMs", "arm peak", " ms"),
 )
+VALID_WRIST = {"flat", "bowed", "cupped", "can't tell"}
+WRIST_WORDS = {"flat": "flat", "bowed": "slightly bowed", "cupped": "cupped", "can't tell": "can't tell"}
 
 
 def report(p: dict, run: dict, body=None) -> dict:
@@ -876,6 +913,19 @@ def report(p: dict, run: dict, body=None) -> dict:
                     lines.append(f"  {name}: " + "; ".join([spread(k, [r["numbers"][k] for r in read]) for k in REPORT_KEYS]
                                                            + [carry_spread([r["numbers"]["carry"] for r in read])]
                                                            + cams + square_more + d3_cams))
+            wrist_map = run.get("wrist") or {}
+            block_calls = [
+                wrist_map.get(r.get("clip")) or (wrist_map.get(r.get("partner")) if r.get("partner") else None)
+                for r in shots
+            ]
+            block_calls = [w for w in block_calls if w]
+            if block_calls:
+                parts = []
+                for k, label in (("flat", "flat"), ("bowed", "slightly bowed"), ("cupped", "cupped"), ("can't tell", "can't tell")):
+                    cnt = block_calls.count(k)
+                    if cnt > 0:
+                        parts.append(f"{label} {cnt}")
+                lines.append(f"  Lead wrist at impact (by eye, down the line): {', '.join(parts)} ({len(block_calls)} of {len(shots)} shots)")
         for r in shots:
             if r["kind"] == "ball":
                 lines.append(f"  Ball swing ({club_word(r.get('club'))}): " + ", ".join(
@@ -895,6 +945,7 @@ def report(p: dict, run: dict, body=None) -> dict:
         lines.append("  (in brackets: club path, face to target and start direction, + = right; ball speed, smash, carry)")
     by_block = {b["id"]: {r["t"]: r for r in judged(b, run["reps"], run["marks"])} for b in p["blocks"]}
     names = {b["id"]: b["name"] for b in p["blocks"]}
+    wrist_map = run.get("wrist") or {}
     for i, r0 in enumerate(reps, 1):
         r = by_block.get(r0["block"], {}).get(r0["t"], r0)
         if r0["kind"] == "tap":
@@ -930,6 +981,9 @@ def report(p: dict, run: dict, body=None) -> dict:
                    "pass" if r.get("gate") else "miss" if r.get("gate") is False else "")
         if r.get("mark") is not None:
             verdict += (", " if verdict else "") + ("mark ahead" if r["mark"] else "mark behind")
+        w_call = wrist_map.get(r0.get("clip")) or (wrist_map.get(r0.get("partner")) if r0.get("partner") else None)
+        if w_call in WRIST_WORDS:
+            verdict += (", " if verdict else "") + f"wrist {WRIST_WORDS[w_call]}"
         lines.append(f"  {i}. {names.get(r0['block'], r0['block'])}, {club_word(r0.get('club'))}: {nums}" + (f", {verdict}" if verdict else ""))
     if not any(r["kind"] != "tap" for r in reps):
         lines.append("  (no ball shots yet)")
