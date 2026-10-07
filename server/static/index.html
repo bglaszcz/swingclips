@@ -582,6 +582,12 @@
            background: var(--panel); color: var(--text); max-width: 100%; }
   .t-card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px;
             position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  #t-story { display: flex; flex-direction: column; gap: 8px; }
+  .t-story-head { font-size: 15px; font-weight: 600; line-height: 1.4; }
+  .t-story-clubs { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .t-story-fault { font-size: 13px; }
+  .t-story-thought { font-weight: 500; cursor: help; border-bottom: 1px dotted var(--muted); }
+  .t-story-best { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; font-size: 13px; }
   #t-chart svg { display: block; width: 100%; height: 320px; overflow: visible; }
   .t-axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
   .t-title { fill: var(--text); font-size: 12px; }
@@ -1211,37 +1217,49 @@
       <strong id="t-title">Session trends</strong><span id="t-status"></span>
       <button id="t-close" class="small">Close</button>
     </div>
-    <div class="t-filters">
-      <label>Result <select id="t-y"></select></label>
-      <label>against <select id="t-x"></select></label>
-      <label id="t-club-wrap">Club <select id="t-club"></select></label>
-      <label title="Shaky numbers: tracking noise or the conditions could account for them (hollow dots). Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
-      <span class="t-fix" id="t-fix"></span>
+    <div class="t-card" id="t-story">
+      <div id="t-story-headline" class="t-story-head"></div>
+      <div id="t-story-clubs" class="t-story-clubs"></div>
+      <div id="t-story-fault" class="t-story-fault"></div>
+      <div id="t-story-best" class="t-story-best">
+        <button id="t-story-best-btn" class="small">Watch my best swing</button>
+        <span id="t-story-best-why" class="hint"></span>
+      </div>
     </div>
-    <div class="t-card" id="t-good-bad" hidden>
-      <strong>Good vs bad this session</strong>
-      <div id="t-good-bad-body"></div>
-    </div>
-    <div class="t-card" id="t-chart">
-      <svg role="img"></svg>
-      <div id="t-tip" hidden></div>
-      <div id="t-r"></div>
-      <div class="note">One dot per swing; tap one to open it; hollow = a shaky number on either axis (tracking
-        noise or the conditions could account for it; hover for why). The line is the straight-line fit. Launch
-        monitor: left is -, right is + (path + = in-to-out, face + = open, for a right-hander).</div>
-    </div>
-    <div class="t-card">
-      <strong id="t-rank-title"></strong>
-      <div id="t-rank"></div>
-      <div class="note">r runs from -1 to +1: how closely the two go up and down together (0 = no link;
-        - = one goes up as the other goes down). The tick marks how big it must be to stand out from
-        chance with this many swings; below that it could easily be luck. Even one that stands out is a
-        lead to test, not proof that one causes the other.</div>
-    </div>
-    <div class="t-card">
-      <strong>All swings</strong>
-      <div style="overflow-x: auto"><table id="t-table"></table></div>
-    </div>
+    <details class="t-card p-fold" data-fold="trends-advanced">
+      <summary><strong>Advanced data</strong></summary>
+      <div class="t-filters">
+        <label>Result <select id="t-y"></select></label>
+        <label>against <select id="t-x"></select></label>
+        <label id="t-club-wrap">Club <select id="t-club"></select></label>
+        <label title="Shaky numbers: tracking noise or the conditions could account for them (hollow dots). Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
+        <span class="t-fix" id="t-fix"></span>
+      </div>
+      <div class="t-card" id="t-good-bad" hidden>
+        <strong>Good vs bad this session</strong>
+        <div id="t-good-bad-body"></div>
+      </div>
+      <div class="t-card" id="t-chart">
+        <svg role="img"></svg>
+        <div id="t-tip" hidden></div>
+        <div id="t-r"></div>
+        <div class="note">One dot per swing; tap one to open it; hollow = a shaky number on either axis (tracking
+          noise or the conditions could account for it; hover for why). The line is the straight-line fit. Launch
+          monitor: left is -, right is + (path + = in-to-out, face + = open, for a right-hander).</div>
+      </div>
+      <div class="t-card">
+        <strong id="t-rank-title"></strong>
+        <div id="t-rank"></div>
+        <div class="note">r runs from -1 to +1: how closely the two go up and down together (0 = no link;
+          - = one goes up as the other goes down). The tick marks how big it must be to stand out from
+          chance with this many swings; below that it could easily be luck. Even one that stands out is a
+          lead to test, not proof that one causes the other.</div>
+      </div>
+      <div class="t-card">
+        <strong>All swings</strong>
+        <div style="overflow-x: auto"><table id="t-table"></table></div>
+      </div>
+    </details>
   </section>
   <section id="setup" hidden>
     <div class="t-head">
@@ -1762,6 +1780,7 @@
 <script src="/static/shotstory.js"></script>
 <script src="/static/scorecard.js"></script>
 <script src="/static/sessionscore.js"></script>
+<script src="/static/sessionstory.js"></script>
 <script src="/static/habits.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>

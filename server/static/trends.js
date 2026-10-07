@@ -293,6 +293,15 @@ document.getElementById("t-close").onclick = closeTrendView;
 document.getElementById("p-close").onclick = closeTrendView;
 document.getElementById("progress-btn").onclick = () => progressOpen ? closeTrendView() : openProgress();
 
+// The folded cards in Trends: open or shut as last left, per browser.
+for (const d of trendsBox.querySelectorAll("details[data-fold]")) {
+  try { d.open = localStorage.getItem("fold-" + d.dataset.fold) === "open"; } catch {}
+  d.addEventListener("toggle", () => {
+    try { localStorage.setItem("fold-" + d.dataset.fold, d.open ? "open" : "shut"); } catch {}
+    if (d.open && trendsKey) renderTrends();
+  });
+}
+
 /** "5 swings' down-the-line numbers left out (camera)" for rows whose camera couldn't see the golfer. */
 function unseenNote(rows) {
   const n = cam => rows.filter(r => r.unseen && r.unseen.includes(cam)).length;
@@ -385,6 +394,84 @@ function clubOptions(sel, rows, pick, allLabel) {
   return clubs;
 }
 
+/** The plain story card at the top of the session's Trends view (sessionstory.js). */
+function renderSessionStoryCard(session, all) {
+  const card = document.getElementById("t-story");
+  if (!card) return;
+  if (typeof SwingSessionStory === "undefined") {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const allSessions = sessionsOf(shownClips());
+  const earlier = allSessions
+    .filter(s => s.start < session.start)
+    .reverse()
+    .map(s => ({
+      start: s.start,
+      rows: [...s.clips].reverse().filter(c => !c.excluded).map(swingRow),
+    }));
+  const data = goodShotData();
+  const ctx = {
+    clubs: data ? data.clubs : null,
+    name: r => r.c?.name || r.name,
+    settings: goodSettings && goodSettings.settings,
+    shaky: (r, k) => isShaky(r, k),
+  };
+  const st = SwingSessionStory.story({ start: session.start, rows: all }, earlier, ctx);
+
+  const headEl = document.getElementById("t-story-headline");
+  if (headEl) {
+    headEl.textContent = st.headline || "";
+    headEl.hidden = !st.headline;
+  }
+
+  const clubsEl = document.getElementById("t-story-clubs");
+  if (clubsEl) {
+    clubsEl.replaceChildren();
+    const notes = (st.clubs || []).map(c => c.note).filter(Boolean);
+    for (const note of notes) {
+      const line = document.createElement("div");
+      line.className = "t-story-club";
+      line.textContent = note;
+      clubsEl.append(line);
+    }
+    clubsEl.hidden = notes.length === 0;
+  }
+
+  const faultEl = document.getElementById("t-story-fault");
+  if (faultEl) {
+    faultEl.replaceChildren();
+    if (st.fault) {
+      faultEl.hidden = false;
+      const countText = document.createTextNode(
+        `Top fault: ${st.fault.name} (${st.fault.count} of ${st.fault.readable} swings). `
+      );
+      const thoughtPrefix = document.createTextNode("Swing thought: ");
+      const thoughtSpan = document.createElement("span");
+      thoughtSpan.className = "t-story-thought";
+      thoughtSpan.textContent = `“${st.fault.thought}”`;
+      if (st.fault.drill) thoughtSpan.title = `Drill: ${st.fault.drill}`;
+      faultEl.append(countText, thoughtPrefix, thoughtSpan);
+    } else {
+      faultEl.hidden = true;
+    }
+  }
+
+  const bestBox = document.getElementById("t-story-best");
+  const bestBtn = document.getElementById("t-story-best-btn");
+  const bestWhy = document.getElementById("t-story-best-why");
+  if (bestBox && bestBtn) {
+    if (st.best && st.best.name) {
+      bestBox.hidden = false;
+      bestBtn.onclick = () => open(st.best.name);
+      if (bestWhy) bestWhy.textContent = st.best.why ? `— ${st.best.why}` : "";
+    } else {
+      bestBox.hidden = true;
+    }
+  }
+}
+
 function renderTrends() {
   const session = sessionsOf(shownClips()).find(s => s.key === trendsKey);
   if (!session) { closeTrendView(); return; }
@@ -400,6 +487,8 @@ function renderTrends() {
     leaveOutShaky ? "shaky numbers left out" : "",
     pending ? `${pending} still being worked out on the server` : "",
   ].filter(Boolean).join(" · ");
+
+  renderSessionStoryCard(session, all);
 
   // Mixing clubs would mostly show the difference between clubs: one club at a time by default.
   const clubs = clubOptions(document.getElementById("t-club"), all, trendPick, "All clubs");
