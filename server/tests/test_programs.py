@@ -275,6 +275,25 @@ class ProgramsTest(unittest.TestCase):
         self.assertIn("-4.0 / 24.0 / +0.5 / -12 (path +0.0°, face +0.5°, carry 150 yd)", rep)
         self.assertIn("(in brackets: club path", rep)
 
+    def test_finished_runs_keep_their_gates_and_calibration(self):
+        # Oct 7: widening the strike band re-judged the Oct 6 report (8 of 10 passed became 1 of 10).
+        self.p.start("lowpoint")
+        self.p.next_block()
+        self.p.next_block()
+        for _ in range(10):
+            self.hit(shot(v=-30.0, attack=-4.0))      # strike median -30: shifted at -14 +-8, strike not gated
+        self.p.stop()
+        run = self.p.state()["log"][-1]
+        self.assertTrue(run["calibration"]["shifted"])
+        before = self.p.report(run["started"])["text"]
+        self.assertIn("SHIFTED", before)
+        cal = self.p.programs["lowpoint"]["calibration"]
+        cal["within"] = 40                            # programs.json edited later
+        self.p.programs["lowpoint"]["blocks"][2]["gate"]["need"] = 9
+        self.assertEqual(self.p.report(run["started"])["text"], before)
+        self.assertEqual(self.p.state()["log"][-1]["blocks"][2]["state"]["passed"],
+                         run["blocks"][2]["state"]["passed"])
+
     def test_retention_median_gate(self):
         self.p.start("retention")
         self.assertIsNone(self.drills[-1])  # cold swings are normal swings: they count in the trends

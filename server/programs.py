@@ -338,6 +338,10 @@ def calibration(p: dict, run: dict) -> dict | None:
     c = p.get("calibration")
     if not c:
         return None
+    # Decided once enough shots were in (_calibration_check stores it): kept as decided, so widening the
+    # band later (Oct 6: -13 +-4 -> -14 +-8) doesn't re-judge finished runs.
+    if (run.get("calibration") or {}).get("shifted") is not None:
+        return run["calibration"]
     vals = [r["numbers"][c["key"]] for r in sorted(run["reps"], key=lambda r: r["t"])
             if r["kind"] in ("shot", "ball") and r.get("club") == c["club"] and not r.get("noRead")
             and r["numbers"].get(c["key"]) is not None][:c["shots"]]
@@ -598,7 +602,7 @@ class Programs:
         """The program in play, the programs, and finished runs (newest last), each with its blocks
         judged as the gates judged them ("blocks": id, name, result, state, judged reps)."""
         with self.lock:
-            log = [dict(x, blocks=judged_blocks(self.programs[x["id"]], x)) if x.get("id") in self.programs else x
+            log = [dict(x, blocks=judged_blocks(self._program_of(x), x)) if self._program_of(x) else x
                    for x in self._log()[-log_limit:]]
             return {"program": self._state(), "programs": self.catalog(), "log": log}
 
@@ -610,11 +614,16 @@ class Programs:
             if run is None:
                 logged = self._log()
                 run = next((x for x in reversed(logged) if started is None or x["started"] == started), None)
-            if run is None or run["id"] not in self.programs:
+            if run is None or not self._program_of(run):
                 return None
-            return report(effective(self.programs[run["id"]], run), run, body)
+            return report(effective(self._program_of(run), run), run, body)
 
     # ---- Inside (lock held) ----
+
+    def _program_of(self, run: dict) -> dict | None:
+        """The program a run was judged by: a finished run keeps a copy (since Oct 7: editing programs.json,
+        a coach's new gates, must not rewrite old reports); the run in play and older runs use the file's."""
+        return run.get("program") or self.programs.get(run.get("id"))
 
     def _current(self) -> tuple[dict, dict]:
         p = effective(self.programs[self.run["id"]], self.run)
@@ -720,7 +729,8 @@ class Programs:
         spoken = (f"{self._swings_used()} swings, gates passed: {', '.join(passed)}." if passed
                   else f"{self._swings_used()} swings, no gate passed yet.") + " The report for your coach is in Week for coach."
         done = {**self.run, "ended": self.clock(), "how": how, "spoken": spoken,
-                "day": datetime.fromtimestamp(self.run["started"]).isoformat(timespec="seconds")}
+                "day": datetime.fromtimestamp(self.run["started"]).isoformat(timespec="seconds"),
+                "program": json.loads(json.dumps(p))}
         if self.run["reps"]:
             self.log_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self.log_file, "a", encoding="utf-8") as f:
