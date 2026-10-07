@@ -21,15 +21,35 @@
   // Sensor noise / launch monitor reading steps below which a metric change between runs
   // is considered "about the same".
   const SAME_THRESHOLDS = {
-    attack: 0.2,     // 0.2° is within launch monitor attack angle reading noise
-    loft: 0.2,       // 0.2° is within launch monitor dynamic loft reading noise
-    faceToPath: 0.2, // 0.2° is within launch monitor face/path calculation noise
-    strikeV: 1.0,    // 1 mm is Square's reporting resolution for face impact height
-    strikeH: 1.0,    // 1 mm is Square's reporting resolution for face impact horizontal
-    clubSpeed: 1.0,  // 1 mph is Square's reporting increment for club speed
-    carry: 1.0,      // 1 yd is Square's reporting increment for carry distance
+    attack: 0.2,          // 0.2° is within launch monitor attack angle reading noise
+    loft: 0.2,            // 0.2° is within launch monitor dynamic loft reading noise
+    faceToPath: 0.2,      // 0.2° is within launch monitor face/path calculation noise
+    strikeV: 1.0,         // 1 mm is Square's reporting resolution for face impact height
+    strikeH: 1.0,         // 1 mm is Square's reporting resolution for face impact horizontal
+    clubSpeed: 1.0,       // 1 mph is Square's reporting increment for club speed
+    carry: 1.0,           // 1 yd is Square's reporting increment for carry distance
+    // 3D angles: 1° is within 3D angle noise floor
+    pelvisOpen: 1.0,      // 1° is within 3D pelvis angle noise floor
+    // 3D timings: 10 ms is within 3D peak timing / video frame noise (~4-10 ms)
+    pelvisPeakMs: 10,     // 10 ms is within 3D pelvis peak timing noise
+    armPeakMs: 10,        // 10 ms is within 3D arm peak timing noise
+    pelvisStartMs: 10,    // 10 ms is within 3D pelvis turn start timing noise
+    armAfterPelvis: 0.5,  // boolean / sequence step threshold
+    // Camera distances: 0.3 in is within face-on camera body distance tracking noise
+    pelvisBall: 0.3,      // 0.3 in is within face-on camera pelvis-to-ball tracking noise
+    chestBall: 0.3,       // 0.3 in is within face-on camera chest-to-ball tracking noise
+    handsAhead: 0.3,      // 0.3 in is within face-on camera hands-to-ball tracking noise
+    // Launch monitor ball flight numbers
+    path: 0.5,            // 0.5° is within launch monitor club path reading noise
+    face: 0.5,            // 0.5° is within launch monitor face angle reading noise
+    startDir: 0.5,        // 0.5° is within launch monitor start direction reading noise
+    ballSpeed: 1.0,       // 1 mph is Square's reporting increment for ball speed
+    smash: 0.01,          // 0.01 is smash factor calculation resolution
   };
   const DEFAULT_SAME_THRESHOLD = 0.5; // fallback for unlisted launch monitor metrics
+
+  // 3D kinematic sequence keys from server/programs.py BODY3D_KEYS
+  const BODY3D_KEYS = ["pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs", "armAfterPelvis"];
 
   // Metadata for gate check numbers: display label, unit, decimal places
   const NUMBERS = {
@@ -40,6 +60,22 @@
     strikeH: { label: "Strike toe/heel", unit: " mm", decimals: 0, signed: true },
     clubSpeed: { label: "Club speed", unit: " mph", decimals: 0, signed: false },
     carry: { label: "Carry", unit: " yd", decimals: 0, signed: false },
+    // 3D angles and timings (server/programs.py BODY3D_KEYS)
+    pelvisOpen: { label: "Pelvis open", unit: "°", decimals: 0, signed: false },
+    pelvisPeakMs: { label: "Pelvis peak", unit: " ms", decimals: 0, signed: false },
+    armPeakMs: { label: "Arm peak", unit: " ms", decimals: 0, signed: false },
+    pelvisStartMs: { label: "Pelvis turn start", unit: " ms", decimals: 0, signed: false },
+    armAfterPelvis: { label: "Arm after pelvis", unit: "", decimals: 0, signed: false },
+    // Camera distances (server/programs.py BODY_REPORT)
+    pelvisBall: { label: "Pelvis ahead", unit: " in", decimals: 1, signed: false },
+    chestBall: { label: "Chest ahead", unit: " in", decimals: 1, signed: false },
+    handsAhead: { label: "Hands ahead", unit: " in", decimals: 1, signed: false },
+    // Launch monitor ball flight numbers (Square)
+    path: { label: "Club path", unit: "°", decimals: 1, signed: true },
+    face: { label: "Face to target", unit: "°", decimals: 1, signed: true },
+    startDir: { label: "Start direction", unit: "°", decimals: 1, signed: true },
+    ballSpeed: { label: "Ball speed", unit: " mph", decimals: 1, signed: false },
+    smash: { label: "Smash", unit: "", decimals: 2, signed: false },
   };
 
   const finite = v => typeof v === "number" && Number.isFinite(v);
@@ -68,7 +104,7 @@
    * @param {object} check - gate check definition ({ key, min, max })
    * @param {number|null} firstMed - median on earliest run
    * @param {number|null} lastMed - median on latest run
-   * @returns {"moved toward the gate"|"moved away"|"about the same"|null}
+   * @returns {"moved toward the gate"|"moved away"|"about the same"|"inside the gate"|null}
    */
   function evaluateMovement(check, firstMed, lastMed) {
     if (firstMed == null || lastMed == null) return null;
@@ -77,8 +113,10 @@
     // (face to path within 2) and a limit with a floor (strike <= +3, not below -8).
     const outside = v => Math.max(check.min != null ? check.min - v : 0, check.max != null ? v - check.max : 0, 0);
     const d1 = outside(firstMed), d2 = outside(lastMed);
+    const diff = Math.abs(lastMed - firstMed);
+    if (check.min != null && check.max != null && d1 === 0 && d2 === 0) return "inside the gate";
+    if (diff <= threshold || d1 === d2) return "about the same";
     if (d1 === 0 && d2 === 0) return "inside the gate";
-    if (Math.abs(lastMed - firstMed) <= threshold || d1 === d2) return "about the same";
     return d2 < d1 ? "moved toward the gate" : "moved away";
   }
 
@@ -97,12 +135,12 @@
   function targetPhrase(check, movement) {
     if (movement === "about the same" || movement === "inside the gate") return movement;
     const info = NUMBERS[check.key] || { unit: "" };
-    const lim = v => formatLimit(v, check.key !== "attack");
+    const lim = v => formatLimit(v, Boolean(info.signed && check.key !== "attack"));
     let gate;
     if (check.min != null && check.max != null && check.min === -check.max) gate = `±${check.max}${info.unit}`;
     else if (check.min != null && check.max != null) gate = `${check.min} to ${check.max}${info.unit}`;
     else if (check.max != null) gate = `${lim(check.max)}${info.unit} or ${check.key === "attack" ? "steeper" : "lower"}`;
-    else gate = `${lim(check.min)}${info.unit} or higher`;
+    else gate = `${lim(check.min)}${info.unit} or more`;
     return `${movement === "moved toward the gate" ? "toward" : "away from"} ${gate}`;
   }
 
@@ -138,11 +176,15 @@
         const judged = b.judged || (r.reps ? r.reps.filter(x => x.block === b.id) : []);
 
         let medians = null;
+        let counts = null;
+        let d3Notes = null;
         let leftOut = 0;
         let readCount = 0;
 
         if (isBall) {
           medians = {};
+          counts = {};
+          d3Notes = {};
           const readShots = judged.filter(x => x.kind === "shot" && !x.noRead);
           leftOut = judged.filter(x => x.kind === "noshot" || !!x.noRead).length;
           readCount = readShots.length;
@@ -150,6 +192,10 @@
           for (const c of checks) {
             const vals = readShots.map(x => x.numbers?.[c.key]).filter(finite);
             medians[c.key] = vals.length ? median(vals) : null;
+            counts[c.key] = vals.length;
+            if (BODY3D_KEYS.includes(c.key) && vals.length < readCount && readCount > 0) {
+              d3Notes[c.key] = `(3D on ${vals.length} of ${readCount} swings)`;
+            }
           }
         }
 
@@ -161,6 +207,8 @@
           state: b.state || null,
           result,
           medians,
+          counts,
+          d3Notes,
           leftOut,
           readCount,
         };
@@ -214,16 +262,20 @@
     matched.sort((a, b) => (a.run.started || 0) - (b.run.started || 0));
 
     const firstBlock = matched[0].block;
-    const checks = [...(firstBlock.gate?.checks || [])].sort(
-      (a, b) => CHECK_ORDER.indexOf(a.key) - CHECK_ORDER.indexOf(b.key)
-    );
+    const rawChecks = firstBlock.gate?.checks || [];
+    const allInLegacy = rawChecks.length > 0 && rawChecks.every(c => CHECK_ORDER.includes(c.key));
+    const checks = allInLegacy
+      ? [...rawChecks].sort((a, b) => CHECK_ORDER.indexOf(a.key) - CHECK_ORDER.indexOf(b.key))
+      : [...rawChecks];
     const checkTrends = [];
 
+    const lastBlock = matched[matched.length - 1].block;
     for (const c of checks) {
       const firstMed = matched[0].block.medians?.[c.key];
-      const lastMed = matched[matched.length - 1].block.medians?.[c.key];
+      const lastMed = lastBlock.medians?.[c.key];
       const movement = evaluateMovement(c, firstMed, lastMed);
       const info = NUMBERS[c.key] || { label: c.key, unit: "", decimals: 1, signed: false };
+      const d3Note = lastBlock.d3Notes?.[c.key] || null;
 
       checkTrends.push({
         key: c.key,
@@ -235,6 +287,7 @@
         firstMedian: firstMed,
         lastMedian: lastMed,
         movement,
+        d3Note,
         allMedians: matched.map(m => m.block.medians?.[c.key] ?? null),
       });
     }
@@ -251,6 +304,8 @@
         state: m.block.state,
         result: m.block.result,
         medians: m.block.medians,
+        counts: m.block.counts,
+        d3Notes: m.block.d3Notes,
         leftOut: m.block.leftOut,
         readCount: m.block.readCount,
       })),
@@ -296,7 +351,8 @@
       const v1Str = formatNum(c.firstMedian, c.decimals, c.signed);
       const v2Str = formatNum(c.lastMedian, c.decimals, c.signed);
       const target = targetPhrase(c.check, c.movement);
-      checkParts.push(`${c.name} ${v1Str} → ${v2Str}${c.unit} (${target}).`);
+      const d3Part = c.d3Note ? ` ${c.d3Note}` : "";
+      checkParts.push(`${c.name} ${v1Str} → ${v2Str}${c.unit} (${target})${d3Part}.`);
     }
 
     const prefix = `${t.blockName}, ${t.runs.length} runs:`;

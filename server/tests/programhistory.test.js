@@ -246,3 +246,147 @@ test("min-and-max check: face to path evaluates toward, away, and about the same
     "Transfer, 2 runs: best streak 3 → 4 (gate 5 in a row). Face to path +0.5 → +0.6° (inside the gate)."
   );
 });
+
+test("braceturn runs: pelvis open goes 6 -> 12 (toward 10 or more) and pelvis ahead 4.1 -> 3.9 (about the same)", () => {
+  const braceturnProg = {
+    id: "braceturn",
+    name: "Brace and turn",
+    blocks: [
+      {
+        id: "tier2",
+        name: "Tier 2: 3/4 speed 7 iron",
+        ball: true,
+        gate: {
+          kind: "count",
+          need: 8,
+          checks: [
+            { key: "attack", min: -4.5, max: -3 },
+            { key: "faceToPath", min: -2, max: 2 },
+            { key: "pelvisOpen", min: 10 },
+            { key: "pelvisBall", min: 3 },
+          ],
+        },
+      },
+    ],
+  };
+
+  const makeBraceRun = (started, date, medians, passes = 6) => ({
+    id: "braceturn",
+    programId: "braceturn",
+    started,
+    date,
+    blocks: [
+      {
+        id: "tier2",
+        name: "Tier 2: 3/4 speed 7 iron",
+        ball: true,
+        gate: braceturnProg.blocks[0].gate,
+        state: { reps: 15, passes, streak: passes, best: passes, passed: passes >= 8 },
+        readCount: 15,
+        medians,
+      },
+    ],
+  });
+
+  const runs = [
+    makeBraceRun(1790100000, "2026-10-06", { attack: -3.8, faceToPath: 0.5, pelvisOpen: 6, pelvisBall: 4.1 }, 6),
+    makeBraceRun(1790200000, "2026-10-07", { attack: -3.5, faceToPath: 0.2, pelvisOpen: 12, pelvisBall: 3.9 }, 9),
+  ];
+
+  const t = History.trend(runs, "braceturn", "tier2");
+  assert.ok(t);
+  assert.equal(t.checks.length, 4);
+
+  // Verifies gate order: attack, faceToPath, pelvisOpen, pelvisBall
+  assert.deepEqual(t.checks.map(c => c.key), ["attack", "faceToPath", "pelvisOpen", "pelvisBall"]);
+
+  const pelvisOpenCheck = t.checks.find(c => c.key === "pelvisOpen");
+  assert.equal(pelvisOpenCheck.firstMedian, 6);
+  assert.equal(pelvisOpenCheck.lastMedian, 12);
+  assert.equal(pelvisOpenCheck.movement, "moved toward the gate");
+
+  const pelvisBallCheck = t.checks.find(c => c.key === "pelvisBall");
+  assert.equal(pelvisBallCheck.firstMedian, 4.1);
+  assert.equal(pelvisBallCheck.lastMedian, 3.9);
+  assert.equal(pelvisBallCheck.movement, "about the same");
+
+  const summary = History.lines(t);
+  assert.equal(summary.length, 1);
+  assert.equal(
+    summary[0],
+    "Tier 2: 3/4 speed 7 iron, 2 runs: passed 6/15 → 9/15 (gate 8). Attack -3.8 → -3.5° (inside the gate). Face to path +0.5 → +0.2° (inside the gate). Pelvis open 6 → 12° (toward 10° or more). Pelvis ahead 4.1 → 3.9 in (about the same)."
+  );
+});
+
+test("missing 3D swings on run: says (3D on n of m swings) when fewer than all had it", () => {
+  const braceturnProg = {
+    id: "braceturn",
+    name: "Brace and turn",
+    blocks: [
+      {
+        id: "tier2",
+        name: "Tier 2: 3/4 speed 7 iron",
+        ball: true,
+        gate: {
+          kind: "count",
+          need: 8,
+          checks: [
+            { key: "pelvisOpen", min: 10 },
+          ],
+        },
+      },
+    ],
+  };
+
+  const reps1 = Array.from({ length: 10 }, () => ({
+    block: "tier2",
+    kind: "shot",
+    numbers: { pelvisOpen: 7.0 },
+    noRead: null,
+  }));
+  const run1 = {
+    id: "braceturn",
+    started: 1790100000,
+    reps: reps1,
+    blocks: [
+      {
+        id: "tier2",
+        ball: true,
+        gate: braceturnProg.blocks[0].gate,
+        state: { reps: 10, passes: 5 },
+        judged: reps1,
+      },
+    ],
+  };
+
+  const reps2 = Array.from({ length: 10 }, (_, i) => ({
+    block: "tier2",
+    kind: "shot",
+    numbers: { pelvisOpen: i < 7 ? 11.0 : null },
+    noRead: null,
+  }));
+  const run2 = {
+    id: "braceturn",
+    started: 1790200000,
+    reps: reps2,
+    blocks: [
+      {
+        id: "tier2",
+        ball: true,
+        gate: braceturnProg.blocks[0].gate,
+        state: { reps: 10, passes: 7 },
+        judged: reps2,
+      },
+    ],
+  };
+
+  const runList = History.runs([run1, run2], [braceturnProg]);
+  assert.equal(runList[0].blocks[0].d3Notes.pelvisOpen, "(3D on 7 of 10 swings)");
+  assert.equal(runList[1].blocks[0].d3Notes.pelvisOpen, undefined);
+
+  const t = History.trend(runList, "braceturn", "tier2");
+  assert.ok(t);
+  const lines = History.lines(t);
+  assert.equal(lines.length, 1);
+  assert.ok(lines[0].includes("Pelvis open 7 → 11° (toward 10° or more) (3D on 7 of 10 swings)."));
+});
