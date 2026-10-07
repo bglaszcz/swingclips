@@ -3344,6 +3344,12 @@ function renderCoachCard() {
       if (card.tip.drill) parts.push(scEl("div", "cc-drill", "Drill: " + card.tip.drill));
       row("Try this", ...parts);
     }
+    if (card.still) {
+      const s = scEl("div", "cc-drill", `${card.still.name[0].toUpperCase() + card.still.name.slice(1)} still showed up`
+        + (card.still.thought ? `: “${card.still.thought.replace(/\.$/, "")}”` : "."));
+      if (card.still.drill) s.title = "Drill: " + card.still.drill;
+      row("Still there", s);
+    }
   }
   box.replaceChildren(...kids);
 }

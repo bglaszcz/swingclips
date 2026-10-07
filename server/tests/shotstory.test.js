@@ -123,3 +123,14 @@ test("a short, off-centre shot that stayed on line blames the contact, not the p
   assert.match(c.why, /^Contact: you caught it off the centre of the face/);
   assert.equal(c.tip, null);
 });
+
+test("a good shot with a fault: the why is what worked; the fault is only 'still there'", () => {
+  const ranges = { handsAhead: { enough: true, n: 20, q10: 1, q25: 2, q50: 3, q75: 4, q90: 5 } };
+  const fault = { key: "releaseArm", name: "casting", value: -10, ...pick(Coach.MOVES.releaseArm.more) };
+  const c = Story.card({ shot: { carry: 151, offline: 1, direction: 0.5, spinAxis: 1 }, judged: { good: true, fails: [] },
+    baseline, group: "irons", faults: [fault], body: { handsAhead: 3 }, trust: {}, ranges });
+  assert.match(c.why, /hands were leading the clubhead/);
+  assert.doesNotMatch(c.why, /asting/);
+  assert.equal(c.still.name, "casting");
+  assert.equal(c.tip.thought, "Same feel on the next one.");
+});

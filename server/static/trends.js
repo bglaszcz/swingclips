@@ -404,8 +404,10 @@ function renderSessionStoryCard(session, all) {
   }
   card.hidden = false;
   const allSessions = sessionsOf(shownClips());
+  // The comparison needs the last session and the usual (up to 6 before it): the latest 8 are plenty.
   const earlier = allSessions
     .filter(s => s.start < session.start)
+    .slice(0, 8)
     .reverse()
     .map(s => ({
       start: s.start,

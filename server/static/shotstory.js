@@ -188,7 +188,8 @@
   }
 
   /**
-   * The card: {verdict, what, why, tip: {thought, drill} | null}; null when there's nothing to say.
+   * The card: {verdict, what, why, tip: {thought, drill} | null, still: a fault on a good shot ({name,
+   * thought, drill}) | null}; null when there's nothing to say.
    * @param input {shot: shotNumbers | null, judged (judgeShot) | null, baseline | null, group, settings,
    *   faults: scorecard faults (worst first; never from a shaky number), body: {key: number | null},
    *   trust: {key: trust.js judgement}, ranges: {key: goodshots range}}
@@ -210,14 +211,16 @@
     const b = input.baseline;
     const offCentre = !!s && !!b && finite(b.smash) && finite(s.smash) && s.smash < b.smash - 0.05;
 
-    let why = "", tip = null;
-    if (fault) {
+    let why = "", tip = null, still = null;
+    if (v && v.level === "good") {
+      // A good shot: why it worked first; a fault that showed up anyway is a footnote, never the "why".
+      const w = worked(input);
+      why = w ? cap(w) + "." : (fl && fl.cause) || "";
+      if (fault) still = { name: fault.name, thought: plain(fault.thought), drill: plain(fault.drill) };
+    } else if (fault) {
       const f = fault.key === "headRise" ? HEAD_WHY[fault.name] : FAULT_WHY[fault.key];
       why = `${cap(fault.name)}: ${f || "the main thing on this swing"}.`;
       if (fault.thought || fault.drill) tip = { thought: plain(fault.thought), drill: plain(fault.drill) };
-    } else if (v && v.level === "good") {
-      const w = worked(input);
-      why = w ? cap(w) + "." : (fl && fl.cause) || "";
     } else if (v && !offLine && offCentre) {
       why = "Contact: you caught it off the centre of the face, so it lost ball speed and distance.";
     } else if (fl && fl.cause) {
@@ -231,7 +234,7 @@
     }
     if (v && v.level === "good" && !tip) tip = { thought: "Same feel on the next one.", drill: "" };
     if (!what && !why && !tip && !v) return null;
-    return { verdict: v, what, why, tip, shape: fl ? fl.shape : null };
+    return { verdict: v, what, why, tip, still, shape: fl ? fl.shape : null };
   }
 
   /** The best thing that matched your good shots on this swing, as a sentence, or "". */
