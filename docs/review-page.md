@@ -489,4 +489,4 @@ toward the ball". The phones face away from you, so voice is the channel.
   (e.g. face-on or DTL misses >= 3% with phone setup todo, Square pairings < 90% with watcher todo, camera moved with calibrate link,
   >= 5 false triggers) and confirmations folded behind "Show all" (both angles, Square paired, cameras in place).
   Displays overnight worker sentence (`improve.nights[0]`), candidate model waiting notifications (`Tools > Night report`),
-  and club model retraining progress (`Tools > Club check`). Loads once on page open and manual refresh, never while recording.
+  and club model retraining progress (`Tools > Club check`). The club model progress line states how many new frames toward the retraining target are collected (linking to Club check), or confirms that enough new frames were gathered to train tonight. Loads once on page open and manual refresh, never while recording.

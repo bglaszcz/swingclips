@@ -278,7 +278,26 @@
       }
     }
 
-    if (next && !next.due && next.why) {
+    const progress = inputs.progress !== undefined ? inputs.progress : (improve && improve.progress);
+    if (progress) {
+      const progText = clubProgressText(progress);
+      if (progText) {
+        const need = progress.need != null ? progress.need : 40;
+        if (progress.newFrames >= need) {
+          lines.push({
+            kind: "info",
+            text: progText
+          });
+        } else {
+          lines.push({
+            kind: "info",
+            text: progText,
+            link: "/#clubcheck",
+            linkText: "Club check"
+          });
+        }
+      }
+    } else if (next && !next.due && next.why) {
       const m = next.why.match(/(\d+)\s+new club-labeled frames?.*?needs\s+(\d+)/i);
       if (m) {
         lines.push({
@@ -306,10 +325,26 @@
     return { headline, lines };
   }
 
+  /**
+   * Pure text helper for club model retraining progress:
+   * - null when progress or newFrames is null/undefined
+   * - "Club model: enough new frames: it trains tonight." when newFrames >= need
+   * - "Club model: {newFrames} of {need} new club frames for the next training. Club check" when newFrames < need
+   */
+  function clubProgressText(progress) {
+    if (!progress || progress.newFrames == null) return null;
+    const need = progress.need != null ? progress.need : 40;
+    if (progress.newFrames >= need) {
+      return "Club model: enough new frames: it trains tonight.";
+    }
+    return `Club model: ${progress.newFrames} of ${need} new club frames for the next training. Club check`;
+  }
+
   const SwingSinceLast = {
     summary,
     sessionsOf,
     formatDate,
+    clubProgressText,
     SESSION_GAP_MS,
     SESSION_END_MIN_GAP_MS
   };
