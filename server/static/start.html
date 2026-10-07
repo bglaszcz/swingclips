@@ -178,9 +178,28 @@
   .since-last-details summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 12px; user-select: none; }
   .since-last-details[open] summary { margin-bottom: 6px; }
   .since-last-ok-list { display: grid; gap: 6px; margin-top: 4px; }
+  .bay-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .bay-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .bay-verdict { display: inline-flex; align-items: center; padding: 4px 14px; border-radius: 999px; font-weight: 700; font-size: 24px; line-height: 1.2; }
+  .bay-verdict.good { background: var(--accent-soft); color: var(--accent); }
+  .bay-verdict.ok { background: var(--warn-soft); color: var(--warn); }
+  .bay-verdict.miss { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+  .bay-open-link { color: var(--accent); font-weight: 600; text-decoration: underline; font-size: 14px; margin-left: auto; }
+  .bay-row { display: flex; flex-direction: column; gap: 3px; font-size: 15px; line-height: 1.45; }
+  .bay-row b { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .bay-thought { font-size: 24px; font-weight: 700; line-height: 1.25; color: var(--text); }
+  .bay-drill { font-size: 14px; color: var(--muted); margin-top: 2px; }
+  .bay-story-head { font-size: 17px; font-weight: 600; line-height: 1.4; color: var(--text); }
+  .bay-story-club { font-size: 15px; color: var(--text); line-height: 1.45; }
+  .bay-story-fault { font-size: 15px; color: var(--text); line-height: 1.45; }
+  .bay-story-thought { font-weight: 600; color: var(--text); }
+  .bay-story-best { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+  .bay-story-btn { font: inherit; font-size: 15px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; text-decoration: none; border: 1px solid var(--line); background: var(--accent); color: var(--accent-text); display: inline-block; }
   @media (max-width: 600px) {
     main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; }
     .prog-shot-verdict { font-size: 32px; } .prog-shot-row { font-size: 22px; gap: 8px; } .prog-shot-want { font-size: 13px; } .prog-shot-extra { font-size: 13px; }
+    .bay-verdict { font-size: 18px; padding: 3px 10px; }
+    .bay-thought { font-size: 18px; }
   }
 </style>
 <script src="/static/games.js"></script>
@@ -197,6 +216,13 @@
 <script src="/static/programhistory.js"></script>
 <script src="/static/progshot.js"></script>
 <script src="/static/sincelast.js"></script>
+<script src="/static/goodshots.js"></script>
+<script src="/static/faults.js"></script>
+<script src="/static/shotstory.js"></script>
+<script src="/static/scorecard.js"></script>
+<script src="/static/sessionscore.js"></script>
+<script src="/static/sessionstory.js"></script>
+<script src="/static/swingrow.js"></script>
 </head>
 <body>
 <header>
@@ -317,6 +343,7 @@
   </section>
   <section id="sec-swings" hidden>
     <h2>Swings and Square shots</h2>
+    <div id="bay-card" class="bay-card" hidden></div>
     <p class="hint">Hit in Square's driving range as usual. Each swing gets its Square numbers 6-16 s after the strike.</p>
     <div class="sum" id="sum"></div>
     <table><thead><tr><th>Time</th><th class="hide-sm">Cameras</th><th>Square</th><th>Club</th><th class="num">Ball mph</th><th class="num">Carry yd</th></tr></thead>
@@ -544,6 +571,167 @@ function renderSwings(clips) {
   $("swings").innerHTML = rows.join("") || `<tr><td colspan="6" style="color: var(--muted)">No swings yet in the last 3 hours.</td></tr>`;
   $("sum").textContent = swings.length ? `${swings.length} swing${swings.length === 1 ? "" : "s"}: ${paired} with Square numbers` +
     (missed ? `, ${missed} without (a practice swing, a miss Square didn't read, or Square's app not recording)` : "") : "";
+}
+
+// ---- 4b. Bay last swing card ----
+// ?demo=last points the bay card at the latest swing with a shot (for checking without recording)
+const isDemoLast = new URLSearchParams(location.search).get("demo") === "last";
+let goodSettings = null, noiseTable = null, bayGoodData = null, bayGoodDataSig = "";
+let lastBayFetchTime = 0;
+let lastEndedSessionStory = null;
+
+function isBayRecording() {
+  if (isDemoLast) return true;
+  const p = (status && status.phones) || {};
+  return Boolean(p.face?.recording || p.dtl?.recording);
+}
+
+async function maybeFetchBayData() {
+  if (document.hidden || !isBayRecording()) return;
+  const now = Date.now();
+  if (now - lastBayFetchTime < 20000 && lastBayFetchTime !== 0) return;
+  lastBayFetchTime = now;
+  try {
+    const [sw, gs, cl] = await Promise.all([
+      getJson("/api/swings"),
+      getJson("/api/goodshots"),
+      (allClips && allClips.length) ? Promise.resolve(null) : getJson("/api/clips")
+    ]);
+    if (sw) {
+      if (sw.swings) swingRecords = sw.swings;
+      if (sw.noise) noiseTable = sw.noise;
+    }
+    if (gs) goodSettings = gs;
+    if (cl) allClips = cl;
+  } catch (e) {
+    console.warn("Could not fetch bay data:", e);
+  }
+}
+
+function getBayGoodData() {
+  const clipsList = (allClips && allClips.length) ? allClips : (recentClips || []);
+  const sig = `${clipsList.length}|${Object.keys(swingRecords || {}).length}|${JSON.stringify(goodSettings)}`;
+  if (sig === bayGoodDataSig && bayGoodData) return bayGoodData;
+  if (typeof SwingRow !== "undefined") {
+    bayGoodData = SwingRow.goodShotData(clipsList, swingRecords, goodSettings?.settings, noiseTable, clipsList);
+    bayGoodDataSig = sig;
+  }
+  return bayGoodData;
+}
+
+function renderLastSwingCard(latestClip) {
+  const cardBox = $("bay-card");
+  if (!cardBox) return;
+
+  const isProgramRunning = Boolean(programState && programState.program);
+  if (isProgramRunning || !isBayRecording()) {
+    if (!lastEndedSessionStory) cardBox.hidden = true;
+    return;
+  }
+
+  if (!latestClip || !latestClip.shot || typeof SwingShotStory === "undefined") {
+    if (!lastEndedSessionStory) cardBox.hidden = true;
+    return;
+  }
+
+  const club = latestClip.shot.club;
+  const group = typeof SwingGoodShots !== "undefined" ? SwingGoodShots.groupOf(club) : null;
+  const shot = typeof SwingSummary !== "undefined" ? SwingSummary.shotNumbers(latestClip.shot) : null;
+  const goodData = getBayGoodData();
+  const cd = club && goodData ? goodData.clubs[club] : null;
+  const baseline = cd ? cd.baseline : null;
+  const settings = goodSettings && goodSettings.settings;
+  const judged = baseline && shot && typeof SwingGoodShots !== "undefined"
+    ? SwingGoodShots.judgeShot(shot, baseline, group, settings)
+    : null;
+
+  const rec = swingRecords && swingRecords[latestClip.name];
+  let coachBody = null;
+  if (rec && rec.body && typeof SwingRow !== "undefined") {
+    const row = SwingRow.row(latestClip, swingRecords, allClips || recentClips, noiseTable);
+    coachBody = SwingRow.coachBody(row, cd ? cd.ranges : null);
+  }
+
+  const card = SwingShotStory.card({
+    shot,
+    judged,
+    baseline,
+    group,
+    settings,
+    ...(coachBody || {})
+  });
+
+  if (!card) {
+    if (!lastEndedSessionStory) cardBox.hidden = true;
+    return;
+  }
+
+  cardBox.hidden = false;
+  cardBox.replaceChildren();
+
+  const top = document.createElement("div");
+  top.className = "bay-card-top";
+
+  if (card.verdict) {
+    const v = document.createElement("span");
+    v.className = `bay-verdict ${card.verdict.level}`;
+    v.textContent = card.verdict.text;
+    top.append(v);
+  }
+
+  const openLink = document.createElement("a");
+  openLink.className = "bay-open-link";
+  openLink.href = `/#${encodeURIComponent(latestClip.name)}`;
+  openLink.textContent = "Open this swing";
+  top.append(openLink);
+
+  cardBox.append(top);
+
+  const addRow = (title, ...nodes) => {
+    const r = document.createElement("div");
+    r.className = "bay-row";
+    const b = document.createElement("b");
+    b.textContent = title;
+    r.append(b);
+    for (const n of nodes) {
+      if (typeof n === "string") {
+        const span = document.createElement("span");
+        span.textContent = n;
+        r.append(span);
+      } else if (n) {
+        r.append(n);
+      }
+    }
+    cardBox.append(r);
+  };
+
+  if (card.what) addRow("What happened", card.what);
+
+  if (card.why) {
+    const whyTitle = card.verdict && card.verdict.level === "good" ? "Why it worked" : "Why";
+    addRow(whyTitle, card.why);
+  }
+
+  if (card.tip) {
+    const thoughtDiv = document.createElement("div");
+    thoughtDiv.className = "bay-thought";
+    thoughtDiv.textContent = card.tip.thought ? `“${card.tip.thought.replace(/^["“]|["”]$/g, "")}”` : "";
+    const drillDiv = card.tip.drill ? document.createElement("div") : null;
+    if (drillDiv) {
+      drillDiv.className = "bay-drill";
+      drillDiv.textContent = "Drill: " + card.tip.drill;
+    }
+    addRow("Try this", thoughtDiv, drillDiv);
+  }
+
+  if (card.still) {
+    const stillDiv = document.createElement("div");
+    stillDiv.className = "bay-drill";
+    stillDiv.textContent = `${card.still.name[0].toUpperCase() + card.still.name.slice(1)} still showed up`
+      + (card.still.thought ? `: “${card.still.thought.replace(/^["“]|["”]$/g, "")}”` : ".");
+    if (card.still.drill) stillDiv.title = "Drill: " + card.still.drill;
+    addRow("Still there", stillDiv);
+  }
 }
 
 // ---- 5. Today's plan ----
@@ -1303,6 +1491,7 @@ function todayKey() {
 function loadChoice() {
   const asked = new URLSearchParams(location.search).get("do");
   if (CHOICES.some(c => c.id === asked)) { choose(asked, false); return; }
+  if (new URLSearchParams(location.search).get("demo")) { choose("hit", false); return; }
   try {
     const d = JSON.parse(localStorage.getItem(CHOICE_KEY) || "null");
     if (d && d.date === todayKey() && CHOICES.some(c => c.id === d.id)) choice = d.id;
@@ -1564,6 +1753,13 @@ async function pollSwings() {
     }
   }
   renderPelvisCard(recentClips);
+  await maybeFetchBayData();
+  const swings = recentClips.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+  const demoSwings = isDemoLast && allClips ? allClips.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face")) : [];
+  const latestWithShot = swings.find(c => c.shot && c.shot.club) || demoSwings.find(c => c.shot && c.shot.club);
+  if (!lastEndedSessionStory) {
+    renderLastSwingCard(latestWithShot);
+  }
   swingTimer = setTimeout(pollSwings, document.hidden ? 20000 : 4000);
 }
 async function pollGame() {

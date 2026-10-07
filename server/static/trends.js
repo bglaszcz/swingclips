@@ -95,6 +95,9 @@ function swingPending(c) {
  * each one's judgement; r.unseen the cameras that couldn't see the golfer.
  */
 function swingRow(c) {
+  if (typeof SwingRow !== "undefined") {
+    return SwingRow.row(c, swingRecords, clipOf, noiseTable, leaveOutShaky);
+  }
   const rec = swingRecords[c.name];
   const trust = rec && rec.body ? SwingTrust.forSwing(rec, lightOf(c.name), noiseTable) : null;
   let body = null, shown = null;
