@@ -93,3 +93,12 @@ test("arms-led downswing coaching: fault name, drill, thought and ball effect", 
   assert.ok(m.more.how.includes("steep"));
   assert.ok(m.more.how.includes("low point moves back"));
 });
+
+test("coaching text speaks golf: no P-numbers in any move's words", () => {
+  for (const [k, m] of Object.entries(C.MOVES)) {
+    assert.doesNotMatch(m.what || "", /\bP[1-8]\b/, `${k}.what`);
+    for (const side of ["more", "less"]) {
+      for (const field of ["name", "how", "drill", "thought"]) assert.doesNotMatch(m[side][field] || "", /\bP[1-8]\b/, `${k}.${side}.${field}`);
+    }
+  }
+});

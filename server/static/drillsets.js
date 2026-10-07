@@ -419,7 +419,7 @@
 
   /**
    * Formats a set into a single concise line.
-   * e.g. "Pump drill, Sep 30 (10 swings, 7 iron): pumps -0.9 in, drill swings' P6 4.7 in, your swings after 4.3 in (before 4.4 in): no carry-over yet."
+   * e.g. "Pump drill, Sep 30 (10 swings, 7 iron): pumps -0.9 in, drill swings' hands in the downswing 4.7 in, your swings after 4.3 in (before 4.4 in): no carry-over yet."
    */
   function formatSet(set, verd) {
     if (!set) return "";
@@ -435,7 +435,7 @@
       parts.push(`pumps ${fmt(set.pumps.handsPlane)}`);
     }
     if (set.drillP6 != null) {
-      parts.push(`drill swings' P6 ${fmt(set.drillP6)}`);
+      parts.push(`drill swings' hands in the downswing ${fmt(set.drillP6)}`);
     }
     if (set.after && set.after.count > 0) {
       let afterPart = `your swings after ${fmt(set.after.median)}`;

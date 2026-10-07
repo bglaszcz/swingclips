@@ -1683,7 +1683,7 @@ function renderGoodRanges(c, name) {
   for (const t of ["Number", "Middle 50%", "Middle 80%", "Shots", ""]) head.append(Object.assign(document.createElement("th"), { textContent: t }));
   const rows = SwingSummary.BODY.map(b => {
     const r = c ? c.ranges[b.key] : null, tr = document.createElement("tr");
-    tr.append(Object.assign(document.createElement("td"), { textContent: b.label }));
+    tr.append(Object.assign(document.createElement("td"), { textContent: field(b.key).label }));
     if (!r || !r.enough) {
       tr.append(Object.assign(document.createElement("td"), { colSpan: 2, className: "muted", textContent: "not enough good shots yet" }),
                 Object.assign(document.createElement("td"), { textContent: `${r ? r.n : 0} of ${r ? r.need : 8}` }), document.createElement("td"));
@@ -1816,14 +1816,15 @@ function renderHelpsEvidence(club, sessions, h) {
     if (rItem && verdictTags[rItem.verdict]) {
       head.append(pEl("span", "tag muted", verdictTags[rItem.verdict]));
     }
-    head.append(pEl("span", null, `${c.when[0].toUpperCase() + c.when.slice(1)} → ${c.then}`));
+    const when = SwingShotStory.plain(c.when);
+    head.append(pEl("span", null, `${when[0].toUpperCase() + when.slice(1)} → ${c.then}`));
     if (l.shaky) { head.classList.add("shaky"); head.title = "Shaky: most of the move's numbers are (trust.js)"; }
     card.append(head);
-    const sub = pEl("div", "sub", `${SwingHelps.sentence(l)} · ${SwingHelps.support(l)}`);
+    const sub = pEl("div", "sub", `${SwingShotStory.plain(SwingHelps.sentence(l))} · ${SwingHelps.support(l)}`);
     sub.title = `r ${fmtR(l.r)}, q ${l.q < 0.001 ? "<0.001" : l.q.toFixed(3)}`
       + (l.between ? ` · between sessions r ${fmtR(l.between.r)} over ${l.between.n}` : "");
     card.append(sub);
-    if (!c.fix && c.why) card.append(pEl("div", "muted", c.why[0].toUpperCase() + c.why.slice(1) + "."));
+    if (!c.fix && c.why) { const why = SwingShotStory.plain(c.why); card.append(pEl("div", "muted", why[0].toUpperCase() + why.slice(1) + ".")); }
     const see = pEl("button", "small", "See it in Trends");
     see.onclick = () => {
       const latest = sessions[sessions.length - 1];

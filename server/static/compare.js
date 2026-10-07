@@ -632,7 +632,7 @@
         syncAll();
       })),
       el("span", { className: "sep" }),
-      chip("Key positions", mode === "keys", () => setMode("keys"), "P1-P8 line up; the time between them is stretched (T)"),
+      chip("Key positions", mode === "keys", () => setMode("keys"), "The key positions (setup, top, impact and the rest) line up; the time between them is stretched (T)"),
       chip("Real time", mode === "impact", () => setMode("impact"), "Both at real speed, lined up at impact: tempo differences show (T)"),
       el("span", { className: "sep" }),
       chip("Skeleton", skel, () => { skel = !skel; renderControls(); redrawAll(); }, "Both swings' skeletons (S)"),

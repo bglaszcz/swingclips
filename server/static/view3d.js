@@ -7,13 +7,14 @@
                  [23, 25], [25, 27], [24, 26], [26, 28], [27, 31], [28, 32], [27, 29], [28, 30], [7, 8]];
   const LEAD = new Set(["11,13", "13,15", "15,19", "23,25", "25,27", "27,31", "27,29"]);
   const COLORS = { pelvis: "#3b82f6", thorax: "#f59e0b", arm: "#ec4899", club: "#10b981" };
-  // Rows: label, 3D key, 2D key (metrics.js, face-on) or null, unit.
+  // Rows: label (golfer's words: hips = pelvis, chest / shoulders = thorax), 3D key, 2D key (metrics.js,
+  // face-on) or null, unit.
   const ROWS = [
-    ["Pelvis turn", "pelvisTurn", "pelvisTurn", "°"], ["Thorax turn", "thoraxTurn", "shoulderTurn", "°"],
-    ["X-factor", "separation", "separation", "°"], ["Thorax forward bend", "thoraxBend", null, "°"],
-    ["Thorax side bend", "thoraxSideBend", "shoulderTilt", "°"], ["Pelvis side bend", "pelvisSideBend", "pelvisTilt", "°"],
-    ["Pelvis sway", "pelvisSway", "hipSway", "in"], ["Pelvis thrust (to ball)", "pelvisThrust", null, "in"],
-    ["Pelvis lift", "pelvisLift", null, "in"], ["Thorax sway", "thoraxSway", null, "in"],
+    ["Hip turn", "pelvisTurn", "pelvisTurn", "°"], ["Shoulder turn", "thoraxTurn", "shoulderTurn", "°"],
+    ["Shoulders turned past the hips", "separation", "separation", "°"], ["Chest bend toward the ball", "thoraxBend", null, "°"],
+    ["Shoulder tilt", "thoraxSideBend", "shoulderTilt", "°"], ["Hip tilt", "pelvisSideBend", "pelvisTilt", "°"],
+    ["Hip slide", "pelvisSway", "hipSway", "in"], ["Hips toward the ball", "pelvisThrust", null, "in"],
+    ["Hip lift", "pelvisLift", null, "in"], ["Chest slide", "thoraxSway", null, "in"],
   ];
 
   let state = null;       // {box, doc, result, canvas, yaw, pitch}
@@ -107,7 +108,10 @@
     const t = el("table");
     const head = el("tr");
     head.append(el("th"));
-    for (const p of cols) head.append(el("th", {}, `${p.tag} ${p.label}`));
+    for (const p of cols) {
+      const name = SwingShotStory.PHASES[p.key] || p.label;
+      head.append(el("th", { title: p.tag }, name[0].toUpperCase() + name.slice(1)));
+    }
     t.append(head);
     for (const [label, key, key2, unit] of ROWS) {
       const tr = el("tr");

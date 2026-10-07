@@ -47,7 +47,8 @@
   // Standard steel / graphite lengths, inches, by Square's club code.
   const CLUB_LENGTH = { DR: 45.5, W3: 43, W5: 42, W7: 41, H3: 40.5, H4: 40, H5: 39.5, I3: 39, I4: 38.5, I5: 38,
                         I6: 37.5, I7: 37, I8: 36.5, I9: 36, PW: 35.75, GW: 35.5, SW: 35.25, LW: 35 };
-  const SEGMENTS = [["pelvis", "Pelvis"], ["thorax", "Thorax"], ["arm", "Lead arm"], ["club", "Club"]];
+  // Labels in golfer's words (the keys stay pelvis / thorax).
+  const SEGMENTS = [["pelvis", "Hips"], ["thorax", "Chest"], ["arm", "Lead arm"], ["club", "Club"]];
 
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
   const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];

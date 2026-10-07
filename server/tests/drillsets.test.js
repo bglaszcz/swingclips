@@ -302,7 +302,7 @@ test("real Sep 30 data: 10 pump drill swings, 14 normal after (1 null left out)"
   assert.ok(line.includes("(your usual 4.4 in)"));
   assert.ok(line.includes("Pump drill, Sep 30 (10 swings, 7 iron)"));
   assert.ok(line.includes("pumps -0.9 in"));
-  assert.ok(line.includes("drill swings' P6 4.7 in"));
+  assert.ok(line.includes("drill swings' hands in the downswing 4.7 in"));
   assert.ok(line.includes("your swings after 4.3 in"));
   assert.ok(line.includes("no carry-over yet"));
   assert.ok(line.includes("(1 left out)"));
