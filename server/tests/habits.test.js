@@ -117,3 +117,8 @@ test("worst fault is picked when multiple faults trend", () => {
   assert.strictEqual(res.length, 1);
   assert.strictEqual(res[0].key, "headToBall");
 });
+
+test("a fault there from the first swing is not 'creeping in', even when it gets worse", () => {
+  const rows = [3.2, 3.4, 3.6, 3.9, 4.3].map(v => ({ earlyExt: v, trust: { earlyExt: { level: "ok" } } }));
+  assert.strictEqual(Habits.watch(rows, { clubName: "7 iron" }).length, 0);
+});

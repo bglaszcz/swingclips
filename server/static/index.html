@@ -1146,7 +1146,7 @@
         <button class="menu-btn" id="show-btn" title="What to draw over the videos">Show ▾</button>
         <span class="menu-pop stay" id="show-pop" hidden>
           <button id="skeleton" title="Show the pose skeleton (S)">Skeleton <kbd>S</kbd></button>
-          <button id="angles" title="Show the angles for the frame on screen (A)">Angles <kbd>A</kbd></button>
+          <button id="angles" class="adv-only" title="Show the angles for the frame on screen (A; with Advanced data)">Angles <kbd>A</kbd></button>
           <button id="handpath" title="Show the path of the hands through the swing (H)">Hand path <kbd>H</kbd></button>
           <button id="headbox" title="Show where the head was at address">Head</button>
           <button id="impact" title="Show pelvis vs ball at impact (face-on)">Impact</button>
@@ -1816,6 +1816,8 @@ let showSkeleton = true;
 try { showSkeleton = localStorage.getItem("skeleton") !== "off"; } catch {}
 // Extra overlays, each remembered like the skeleton.
 const overlays = { angles: true, handpath: false, headbox: false, impact: false, plane: true, night: false };
+// The numbers drawn on the videos are Advanced data: only with it on (and Angles on).
+const anglesOn = () => overlays.angles && viewer.classList.contains("adv");
 for (const k in overlays) {
   try { const v = localStorage.getItem("overlay-" + k); if (v) overlays[k] = v === "on"; } catch {}
 }
@@ -2436,13 +2438,13 @@ function draw(t) {
   if (pose.angle === "dtl" && positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, pose);
   // A down-the-line clip on its own has its own numbers.
   const dtlHere = pose.angle === "dtl" && dtlMetrics;
-  if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !((metrics || dtlHere) && overlays.angles));
+  if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !((metrics || dtlHere) && anglesOn()));
   if (overlays.night && nightPose && frame) {
     const nf = frameAtTime(frame.t, nightPose);
     if (nf && nf.lm) drawPose(ctx, nf, r, false, nightPose);
   }
-  if (metrics && overlays.angles) drawAngles(ctx, metrics.values[i], r);
-  if (dtlHere && overlays.angles) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
+  if (metrics && anglesOn()) drawAngles(ctx, metrics.values[i], r);
+  if (dtlHere && anglesOn()) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
   if (metrics && overlays.headbox && frame.lm) drawHead(ctx, frame.lm, r, lineWidth);
   if (pose.angle !== "dtl" && metrics && overlays.impact) drawImpact(ctx, frame, i, r, lineWidth);
   if (window.Labels) Labels.drawOn(ctx, r, "main", i);
@@ -2456,7 +2458,7 @@ function draw2(t) {
   if (!p || !p.frames.length || !video2.videoWidth) return;
   const i = frameIndexAt(t, p), frame = p.frames[i], r = fitRect(W, H, video2);
   const lineWidth = Math.max(1.5, 3 * r.w / 400);
-  const numbers = dtlMetrics && overlays.angles;
+  const numbers = dtlMetrics && anglesOn();
   if (positions.length && overlays.handpath) drawHandPath(ctx, r, lineWidth, p);
   if (positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, p);
   if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !numbers, p);
@@ -3323,7 +3325,10 @@ function setAdvanced(on, save) {
   const b = document.getElementById("adv-btn");
   b.textContent = on ? "Advanced data ▾" : "Advanced data ▸";
   b.setAttribute("aria-expanded", on ? "true" : "false");
-  if (save) try { localStorage.setItem("advancedData", on ? "1" : "0"); } catch {}
+  if (save) {
+    try { localStorage.setItem("advancedData", on ? "1" : "0"); } catch {}
+    redraw();
+  }
 }
 {
   let on = false;
@@ -3563,6 +3568,8 @@ seek.addEventListener("input", () => {
 });
 
 /** The key positions as ticks over the scrubber; labels are left off where they'd crowd each other. */
+// The moments named on the scrubber; the other positions are plain ticks.
+const MARK_NAMES = { p1: "Setup", p4: "Top", p7: "Impact", p8: "Finish" };
 function renderMarks() {
   const d = video.duration;
   if (!positions.length || !d) { marksBox.replaceChildren(); renderScrubTrace(); return; }
@@ -3574,9 +3581,10 @@ function renderMarks() {
     b.className = "mark";
     b.style.left = (x * 100) + "%";
     b.innerHTML = "<span></span>";
-    b.firstChild.textContent = p.tag;
-    b.title = `${p.tag} ${p.label}${p.estimated ? " (estimated)" : ""}`;
-    if (x * width - lastX < 22) b.classList.add("nolabel"); else lastX = x * width;
+    const name = SwingShotStory.PHASES[p.key] || p.label;
+    b.firstChild.textContent = MARK_NAMES[p.key] || "";
+    b.title = `${name[0].toUpperCase() + name.slice(1)} (${p.tag})${p.estimated ? ", estimated" : ""}`;
+    if (!MARK_NAMES[p.key] || x * width - lastX < 40) b.classList.add("nolabel"); else lastX = x * width;
     b.onclick = () => jumpTo(p.index);
     return b;
   }));

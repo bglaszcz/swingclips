@@ -83,6 +83,10 @@
       const pastThreshold = readable.filter(item => f.test(item.value, item.row));
       if (pastThreshold.length < 3) continue;
 
+      // Creeping in: the first readable swing was still clean. A fault there all along is the
+      // session's top fault (the session summary says it), not a habit forming.
+      if (f.test(readable[0].value, readable[0].row)) continue;
+
       // Condition 2: Theil-Sen slope points toward fault side
       const slopes = [];
       for (let i = 0; i < readable.length; i++) {
