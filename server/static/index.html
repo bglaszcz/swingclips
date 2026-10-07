@@ -789,6 +789,8 @@
   .menu-pop button:hover { background: var(--panel-2); }
   .menu-pop button.on { background: var(--accent-soft); color: var(--accent); }
   .menu-pop kbd { border: 0; background: none; padding: 0; }
+  .menu-divider { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
+  .menu-heading { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding: 6px 10px 2px; }
   .tabs .menu-pop { min-width: 210px; }
 
   /* Cards: the sections of a page. */
@@ -1101,16 +1103,18 @@
       <span class="menu-pop right" hidden>
         <button class="small" data-page="/start" title="The session start page: checks, both cameras, Start / Stop recording, coach program, plan and games">Start a session</button>
         <button class="small" data-page="/tripods" title="Find the tripod spots: live pictures, framing meters, level and alignment-stick tools, saved spots">Tripod setup</button>
+        <button id="week-btn" class="small" title="Week for coach: one page a week for the coach with practice, ball flight, focus move, faults, and games">Week for coach</button>
+        <button id="update-btn" class="small" title="Get the latest version from GitHub; the server restarts itself when the change needs it">Update the server</button>
+        <button id="help-menu-btn" class="small" title="Keyboard shortcuts and what the page shows">Shortcuts &amp; help <kbd>?</kbd></button>
+        <hr class="menu-divider">
+        <div class="menu-heading">Tracking and setup checks</div>
         <button class="small" data-page="/calibrate" title="3D from both phones: the lens board per phone, then place the cameras from your swings">3D calibration</button>
         <button id="labels-btn" class="small" title="Hand labels for the scorecard: what's done, what to check, what to label next">Labels</button>
         <button id="clubcheck-btn" class="small" title="Quick club points (grip, hosel, clubhead) that feed the nightly club model">Club check</button>
         <button id="p4check-btn" class="small" title="P4 check: quick hand labels for the top of the backswing">P4 check</button>
-        <button id="nightreport-btn" class="small" title="The gaming PC's nightly improve run: model candidate scores, worker progress, and nights">Night report</button>
-        <button id="week-btn" class="small" title="Week for coach: one page a week for the coach with practice, ball flight, focus move, faults, and games">Week for coach</button>
         <button id="wristcheck-btn" class="small" title="Wrist check: judge lead wrist at impact (flat, slightly bowed, cupped) on coach program shots">Wrist check</button>
+        <button id="nightreport-btn" class="small" title="The gaming PC's nightly improve run: model candidate scores, worker progress, and nights">Night report</button>
         <button id="shutter-btn" class="small" title="Auto against a fixed shutter: light, grain, flicker and sharpness per session">Shutter test</button>
-        <button id="update-btn" class="small" title="Get the latest version from GitHub; the server restarts itself when the change needs it">Update the server</button>
-        <button id="help-menu-btn" class="small" title="Keyboard shortcuts and what the page shows">Shortcuts &amp; help <kbd>?</kbd></button>
       </span>
     </span>
   </nav>

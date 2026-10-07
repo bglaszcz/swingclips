@@ -186,6 +186,7 @@ What the server works out for each swing and what each part of the review page s
   provides a concise weekly summary designed for the owner to share with their coach in under two minutes. Covers sessions practiced (days, duration, swings by club, drills, and coach program runs), ball flight changes for clubs hit 15+ times where change exceeds weekly noise, progress on the journal focus move vs past weeks alongside coach thoughts, top 3 named faults vs the prior week, findings that held up in subsequent sessions (`holdup.js`), game scores vs all-time bests, and journal notes. Features a week picker (`‹`/`›`) starting on this week, phone-friendly calm card styling without red highlights, and a one-tap **Copy for coach** button that formats the report as plain text ready to paste directly into a coaching chat. Below the summary, the week's coach program runs, each folded with its full report (`/api/program/report`) and its own **Copy this run for coach**, so a run hit at the sim can be read and sent from the house. Openable via `/#week`. A "with the program runs" checkbox next to Copy for coach includes the week's full program run reports directly in the copied text, separated by run headers, and remembers its setting across visits.
 - Lead wrist check: **Tools > Wrist check** (`static/wristcheck.js`):
   provides a fast pass over a session's coach program shots to judge the golfer's lead wrist at impact by eye (flat, slightly bowed, cupped, or can't tell), on the down-the-line or the face-on camera (a switch, remembered; the back of the lead hand is often clearer face-on). Each card shows a strip of 4 frames (-8, -4 ms, impact, +4 ms: one 240 fps frame is often a blur), each cropped and enlarged round the hands. "Can't tell" is an answer, not a call: the coach report counts it apart ("10 of 12 shots called; can't tell on 2"). There is no computed wrist number: on 165 7 irons (Oct 7) neither the camera's hands-ahead (r -0.01) nor the club model's shaft angle at impact (r +0.06) predicted Square's dynamic loft. The app crops (using pose landmark 15 lead wrist from `/api/pose/<clip>` when available, or the middle 60% of the frame). One card per ball shot in order with shot number, block, and verdict, four judgment buttons with keyboard shortcuts (keys 1-4) that highlight and auto-advance to the next shot, run picker defaulting to the newest finished run, and a header count ("12 shots · 7 called") with a link to Week for coach. Calls are saved via `POST /api/program/wrist` and included in the coach report (`/api/program/report`). Openable via `/#wristcheck`.
+- **Tools menu grouping**: organizes the 12 tools into two clean groups. Daily practice essentials appear first: **Start a session**, **Tripod setup**, **Week for coach**, **Update the server**, and **Shortcuts & help**. A divider and small uppercase heading **Tracking and setup checks** separates diagnostic utilities: 3D calibration, Labels, Club check, P4 check, Wrist check, Night report, and Shutter test.
 
 ## Trust per number: ok, shaky, no reading
 Every body number on the page (the swing numbers table and tempo line, the numbers over the video,
@@ -265,6 +266,20 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   shot: green = good shot (passes your club rules in Progress), amber = playable (within twice the offline allowance
   and not more than 15% short of your usual carry), grey = miss (never red), from `SwingShotStory.verdict` with
   `goodShotData()`. Hovering shows "Good shot", "Playable" or "Miss".
+- **Session story card and folded Advanced data in Trends** (`static/sessionstory.js`): opening a session's Trends
+  view presents a plain story card (`#t-story`) at the top before any charts or tables: a headline sentence comparing
+  the session against prior ones (`SwingSessionScore.compare`), best and worst club notes in plain words ("your best
+  club today: 27% good with the 7 iron", "the 4 hybrid struggled: 1 good of 11"), the session's top fault with its
+  swing thought and drill from `coach.js`, and a "Watch my best swing" button that opens the session's good shot with the
+  most body numbers inside your personal good-shot ranges. The filters, scatter chart, correlation ranking, and full
+  swings table are cleanly folded inside a single `<details class="t-card p-fold">` "Advanced data" section, closed
+  by default and remembered per browser (`data-fold="trends-advanced"`). The chart automatically re-renders to fill the
+  full width when the fold is toggled open.
+- **Session header on the swing list**: each session group in the list displays a short second line once trend data is
+  loaded (e.g. "27% good shots · best: 7 iron"), computed cheaply from `SwingSessionScore.score` and cached per session
+  clip count. It shows overall good-shot rate over judged shots and highlights the best-performing club among those with
+  5+ judged shots. Detailed club breakdown counts ("75 swings · 5i 22 · 4h 14 …") are preserved in the session header's
+  tooltip title on hover.
 - **Advanced data** (button under Square's numbers, remembered per browser): off by default.
   Without it the swing page shows the coaching card and five tiles (club, carry, offline, club
   speed, smash); with it, Square's other numbers, the scorecard, key positions, the swing numbers
