@@ -72,8 +72,10 @@ async function loadTrendData() {
     if (j.ok) journal = await j.json();
     if (g.ok) goodSettings = await g.json();
   } catch { return false; }
+  const wasLoaded = trendDataLoaded;
   trendDataLoaded = true;
   trendDataAt = Date.now();
+  if (!wasLoaded && typeof renderList === "function") renderList();
   const sig = JSON.stringify([swingRecords, journal, clips, noiseTable, leaveOutShaky, goodSettings]);
   if (sig === dataSig) return false;
   dataSig = sig;

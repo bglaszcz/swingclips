@@ -48,7 +48,7 @@ test("buildScorecard maps metrics and sets colors based on ranges", () => {
   assert.strictEqual(res1.phases[0].color, "green");
   assert.strictEqual(res1.nInside, 1);
   assert.strictEqual(res1.nTotal, 1);
-  assert.match(res1.summarySentence, /shoulder turn at top is in your good range/i);
+  assert.match(res1.summarySentence, /shoulder turn at the top of swing is in your good range/i);
 
   // Amber (wide)
   const body2 = { shoulderTop: 98 };
@@ -98,13 +98,13 @@ test("summary: names the best number with its capitals, and only says solid when
   let res = Scorecard.buildScorecard(positions, { shoulderTop: 90, lagP5: 10 }, { shoulderTop: ok, lagP5: ok },
     { shoulderTop: range(85, 95), lagP5: range(60, 70) }, []);
   assert.strictEqual(res.nInside, 1);
-  assert.strictEqual(res.summarySentence, "Best: shoulder turn at top is in your good range.");
-  // Both inside: solid, and P5 keeps its capital.
+  assert.strictEqual(res.summarySentence, "Best: shoulder turn at the top of swing is in your good range.");
+  // Both inside: solid, and downswing keeps its wording.
   res = Scorecard.buildScorecard(positions, { shoulderTop: 90, lagP5: 65 }, { shoulderTop: ok, lagP5: ok },
     { shoulderTop: range(85, 95), lagP5: range(60, 70) }, []);
-  assert.strictEqual(res.summarySentence, "Best: shoulder turn at top is in your good range. A very solid swing.");
+  assert.strictEqual(res.summarySentence, "Best: shoulder turn at the top of swing is in your good range. A very solid swing.");
   res = Scorecard.buildScorecard([{ key: "p5", index: 12, t: 0.6 }], { lagP5: 65 }, { lagP5: ok }, { lagP5: range(60, 70) }, []);
-  assert.match(res.summarySentence, /wrist hinge at P5/);
+  assert.match(res.summarySentence, /wrist hinge early in the downswing/);
 });
 
 test("shaky and unreadable numbers are grey and never count as inside or outside", () => {

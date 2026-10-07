@@ -200,8 +200,8 @@
   .pos.two { width: 192px; }
   .pos.two canvas { width: 192px; }
   .pos span { display: block; padding: 4px 6px; font-size: 11px; line-height: 1.25; }
-  .pos b { color: var(--accent); }
-  .pos i { color: var(--warn); font-style: normal; }
+  .pos b { color: var(--muted); font-size: 10px; font-weight: 600; }
+  .pos i { color: var(--warn); font-style: normal; font-size: 10px; }
   #numbers { display: flex; flex-direction: column; gap: 8px; }
   #tempo { font-variant-numeric: tabular-nums; }
   #num-faults:empty { display: none; }
@@ -835,6 +835,10 @@
   .session li .pose { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); font-size: 11px; }
   .spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+  .v-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; vertical-align: middle; margin-right: 5px; flex-shrink: 0; }
+  .v-dot.good { background: var(--accent); }
+  .v-dot.ok { background: var(--warn); }
+  .v-dot.miss { background: var(--muted); }
   .session li .trash { border: 0; background: none; color: var(--muted); }
   .session li .trash:hover { color: var(--warn); background: var(--warn-soft); }
   /* With a mouse, delete buttons show on hover only: fewer targets to scan and fewer slips. */
@@ -918,6 +922,8 @@
   #coachcard .cc-row > div { font-size: 15px; line-height: 1.45; }
   #coachcard .cc-thought { font-weight: 650; }
   #coachcard .cc-drill { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  #coachcard .cc-habit { background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); border-radius: 6px; padding: 6px 10px; font-size: 13px; line-height: 1.4; color: var(--text); }
+  #coachcard .cc-habit .cc-try { font-weight: 600; cursor: help; }
   @media (max-width: 560px) { #coachcard .cc-row { grid-template-columns: 1fr; gap: 2px; } }
 
   /* ---- Key positions ---- */
@@ -1753,9 +1759,10 @@
 <script src="/static/wedges.js"></script>
 <script src="/static/faults.js"></script>
 <script src="/static/faultlinks.js"></script>
-<script src="/static/scorecard.js"></script>
 <script src="/static/shotstory.js"></script>
+<script src="/static/scorecard.js"></script>
 <script src="/static/sessionscore.js"></script>
+<script src="/static/habits.js"></script>
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script src="/static/programhistory.js"></script>
@@ -2994,13 +3001,17 @@ async function buildPositions(name) {
   // With both angles analyzed, each card shows the position from both.
   const other = partner && partner.pose;
   const cards = positions.map(p => {
+    const plainName = (typeof SwingScorecard !== "undefined" && SwingScorecard.PHASE_NAMES && SwingScorecard.PHASE_NAMES[p.key])
+      || (typeof SwingShotStory !== "undefined" && SwingShotStory.PHASES && SwingShotStory.PHASES[p.key])
+      || p.label;
+    const capName = plainName ? plainName[0].toUpperCase() + plainName.slice(1) : p.label;
     const b = document.createElement("button");
     b.className = other ? "pos two" : "pos";
-    b.title = `${p.tag} ${p.label} - ${p.t.toFixed(3)} s`;
+    b.title = `${p.tag ? p.tag + " " : ""}${capName} - ${p.t.toFixed(3)} s`;
     b.innerHTML = `<canvas width="${other ? 384 : 192}" height="256"></canvas><span><b></b> <i></i><br></span>`;
     b.querySelector("b").textContent = p.tag;
     b.querySelector("i").textContent = p.estimated ? "~" : "";
-    b.querySelector("span").append(p.label);
+    b.querySelector("span").append(capName);
     b.onclick = () => jumpTo(p.index);
     return b;
   });
@@ -3162,7 +3173,7 @@ function showNumbers() {
         if (i > 0) faultsEl.append(", ");
         const span = document.createElement("span");
         span.textContent = f.name;
-        if (f.thought) span.title = f.thought;
+        if (f.thought) span.title = typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(f.thought) : f.thought;
         faultsEl.append(span);
       });
     }
@@ -3172,7 +3183,9 @@ function showNumbers() {
   head.innerHTML = "<th></th>";
   for (const p of cols) {
     const th = document.createElement("th");
-    th.textContent = `${p.tag} ${p.label}${p.estimated ? " ~" : ""}`;
+    const plainName = (typeof SwingScorecard !== "undefined" && SwingScorecard.PHASE_NAMES && SwingScorecard.PHASE_NAMES[p.key]) || p.label;
+    th.textContent = `${plainName}${p.estimated ? " ~" : ""}`;
+    th.title = `${p.tag}${p.estimated ? " ~" : ""}`;
     head.append(th);
   }
   if (good.any) head.append(Object.assign(document.createElement("th"), { className: "gs-text", textContent: `vs my good shots (${clubName(good.club)})` }));
@@ -3196,7 +3209,7 @@ function showNumbers() {
     for (const [label, key, unit] of readout) {
       const tr = document.createElement("tr");
       const name = document.createElement("td");
-      name.textContent = label;
+      name.textContent = typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(label) : label;
       tr.append(name);
       const said = [];
       idx.forEach((i, c) => {
@@ -3213,7 +3226,8 @@ function showNumbers() {
             td.classList.add(at.status === "in" ? "gs-in" : "gs-out");
             td.title = (td.title ? td.title + "\n" : "") + `My good shots: ${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)} (middle 50% of ${r.n})`;
           }
-          said.push(`${cols[c].tag}: ${at.text}` + (r && r.enough ? ` (${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)})` : ""));
+          const colName = (typeof SwingScorecard !== "undefined" && SwingScorecard.PHASE_NAMES && SwingScorecard.PHASE_NAMES[cols[c].key]) || cols[c].tag;
+          said.push(`${colName}: ${at.text}` + (r && r.enough ? ` (${SwingGoodShots.rangeText(r.q25, r.q75, b.unit)})` : ""));
         }
         tr.append(td);
       });
@@ -3248,28 +3262,57 @@ function renderCoachCard() {
   const settings = goodSettings && goodSettings.settings;
   const judged = cd && cd.baseline && shot ? SwingGoodShots.judgeShot(shot, cd.baseline, group, settings) : null;
   const card = SwingShotStory.card({ shot, judged, baseline: cd ? cd.baseline : null, group, settings, ...(coachBody || {}) });
-  box.hidden = !card;
-  if (!card) { box.replaceChildren(); return; }
-  const kids = [];
-  if (card.verdict) {
-    const v = scEl("span", `cc-verdict ${card.verdict.level}`, card.verdict.text);
-    v.title = card.verdict.level === "good" ? `Passes your good-shot rules with the ${clubName(club).toLowerCase()} (set in Progress)`
-      : card.verdict.fails.length ? "Not a good shot by your rules: " + card.verdict.fails.join("; ") : "";
-    kids.push(v);
+  let habit = null;
+  if (club && loaded && typeof SwingHabits !== "undefined" && typeof sessionsOf === "function" && typeof swingRow === "function") {
+    const allSessions = sessionsOf(shownClips());
+    const sess = allSessions.find(s => s.clips.some(clip => clip.name === current));
+    if (sess) {
+      const oldestFirst = [...sess.clips].reverse();
+      const openIdx = oldestFirst.findIndex(clip => clip.name === current);
+      if (openIdx >= 0) {
+        const rows = oldestFirst.slice(0, openIdx + 1)
+          .filter(clip => !clip.excluded && !isSecondary(clip) && clip.shot && clip.shot.club === club)
+          .map(clip => swingRow(clip));
+        const res = SwingHabits.watch(rows, { clubName: clubName(club).toLowerCase() });
+        if (res && res.length) habit = res[0];
+      }
+    }
   }
-  const row = (title, ...content) => {
-    const r = scEl("div", "cc-row");
-    const body = scEl("div");
-    body.append(...content);
-    r.append(scEl("b", null, title), body);
-    kids.push(r);
-  };
-  if (card.what) row("What happened", card.what);
-  if (card.why) row(card.verdict && card.verdict.level === "good" ? "Why it worked" : "Why", card.why);
-  if (card.tip) {
-    const parts = [scEl("div", "cc-thought", card.tip.thought ? `“${card.tip.thought.replace(/\.$/, "")}”` : "")];
-    if (card.tip.drill) parts.push(scEl("div", "cc-drill", "Drill: " + card.tip.drill));
-    row("Try this", ...parts);
+  box.hidden = !card && !habit;
+  if (!card && !habit) { box.replaceChildren(); return; }
+  const kids = [];
+  if (habit) {
+    const hEl = scEl("div", "cc-habit");
+    hEl.append(habit.text);
+    if (habit.detail) hEl.title = habit.detail;
+    if (habit.thought) {
+      const trySpan = scEl("span", "cc-try", ` Try: “${habit.thought.replace(/\.$/, "")}”`);
+      if (habit.drill) trySpan.title = "Drill: " + habit.drill;
+      hEl.append(trySpan);
+    }
+    kids.push(hEl);
+  }
+  if (card) {
+    if (card.verdict) {
+      const v = scEl("span", `cc-verdict ${card.verdict.level}`, card.verdict.text);
+      v.title = card.verdict.level === "good" ? `Passes your good-shot rules with the ${clubName(club).toLowerCase()} (set in Progress)`
+        : card.verdict.fails.length ? "Not a good shot by your rules: " + card.verdict.fails.join("; ") : "";
+      kids.push(v);
+    }
+    const row = (title, ...content) => {
+      const r = scEl("div", "cc-row");
+      const body = scEl("div");
+      body.append(...content);
+      r.append(scEl("b", null, title), body);
+      kids.push(r);
+    };
+    if (card.what) row("What happened", card.what);
+    if (card.why) row(card.verdict && card.verdict.level === "good" ? "Why it worked" : "Why", card.why);
+    if (card.tip) {
+      const parts = [scEl("div", "cc-thought", card.tip.thought ? `“${card.tip.thought.replace(/\.$/, "")}”` : "")];
+      if (card.tip.drill) parts.push(scEl("div", "cc-drill", "Drill: " + card.tip.drill));
+      row("Try this", ...parts);
+    }
   }
   box.replaceChildren(...kids);
 }
@@ -3388,7 +3431,7 @@ function renderScorecard(body, trust, faults, ranges) {
     const pos = positions.find(q => q.key === p.key);
     const t = scEl("button", `sc-tile ${p.color}`);
     t.dataset.phase = p.key;
-    t.append(scEl("b", null, pos ? pos.tag : ""), scEl("span", null, (pos ? pos.label : p.name) + (pos && pos.estimated ? " ~" : "")));
+    t.append(scEl("b", null, pos ? pos.tag : ""), scEl("span", null, p.name + (pos && pos.estimated ? " ~" : "")));
     t.title = p.metrics.length ? "Show this phase's numbers and jump the video to it" : "Jump the video to this position";
     t.onclick = () => selectPhase(p.key, true);
     tiles.append(t);
@@ -3403,7 +3446,12 @@ function renderScorecard(body, trust, faults, ranges) {
     const d = scEl("details", "sc-fault");
     const sum = scEl("summary");
     sum.append(scEl("span", `sc-sev s${f.severity}`, sev[f.severity] || ""), f.name[0].toUpperCase() + f.name.slice(1));
-    const link = scEl("button", "sc-phase-link", `at ${f.phaseName.toLowerCase()}`);
+    const atPhase = typeof SwingShotStory !== "undefined"
+      ? (SwingShotStory.plain(`at ${f.phase.toUpperCase()}`) !== `at ${f.phase.toUpperCase()}`
+          ? SwingShotStory.plain(`at ${f.phase.toUpperCase()}`)
+          : `at ${f.phaseName.toLowerCase()}`)
+      : `at ${f.phaseName.toLowerCase()}`;
+    const link = scEl("button", "sc-phase-link", atPhase);
     link.onclick = e => { e.preventDefault(); selectPhase(f.phase, true); };
     sum.append(link);
     if (f.linkNote) sum.append(scEl("div", "sc-link-sub", f.linkNote.toLowerCase()));
@@ -4003,15 +4051,45 @@ function clipRow(c) {
   const time = new Date(c.recorded).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
   const result = !c.shot ? "" : c.shot.ball?.carry > 0 ? `${num(c.shot.ball.carry, 0)} yd`
     : c.shot.ball?.speed > 0 ? `${num(c.shot.ball.speed)} mph` : "";
-  li.querySelector(".big").textContent = result || time;
+  let dotEl = null;
+  if (c.shot && typeof trendDataLoaded !== "undefined" && trendDataLoaded && typeof SwingShotStory !== "undefined" && typeof SwingGoodShots !== "undefined") {
+    const club = c.shot.club;
+    const gsData = typeof goodShotData === "function" ? goodShotData() : null;
+    const cd = club && gsData ? gsData.clubs[club] : null;
+    if (cd && cd.baseline) {
+      const s = SwingSummary.shotNumbers(c.shot);
+      const group = SwingGoodShots.groupOf(club);
+      const settings = goodSettings && goodSettings.settings;
+      const judged = cd.verdicts && cd.verdicts[c.name] ? cd.verdicts[c.name] : SwingGoodShots.judgeShot(s, cd.baseline, group, settings);
+      const v = SwingShotStory.verdict(s, judged, cd.baseline, group, settings);
+      if (v) {
+        dotEl = document.createElement("span");
+        dotEl.className = `v-dot ${v.level}`;
+        dotEl.title = v.text;
+      }
+    }
+  }
   // The badge already says a wedge's name (GW); the full name only where it adds something (7i -> 7 iron).
   const full = c.shot ? clubName(c.shot.club) : "No shot";
   li.querySelector(".club").textContent = c.shot && full === clubShort(c.shot.club) ? "" : full;
   const other = c.partner && clips.find(x => x.name === c.partner);
   const angles = other ? "2 angles" : c.angle === "dtl" ? "down the line only" : "face-on only";
   const size = c.size + (other ? other.size : 0);
-  li.querySelector(".meta").textContent = [result ? time : "", angles, leftOutText(c)]
-    .filter(Boolean).join(" · ");
+  const meta = li.querySelector(".meta");
+  if (result) {
+    li.querySelector(".big").textContent = result;
+    meta.replaceChildren();
+    if (dotEl) meta.append(dotEl);
+    meta.append(document.createTextNode(time));
+    const rest = [angles, leftOutText(c)].filter(Boolean);
+    if (rest.length) meta.append(document.createTextNode(" · " + rest.join(" · ")));
+  } else {
+    const big = li.querySelector(".big");
+    big.replaceChildren();
+    if (dotEl) big.append(dotEl);
+    big.append(document.createTextNode(time));
+    meta.textContent = [angles, leftOutText(c)].filter(Boolean).join(" · ");
+  }
   li.title = [modeOf(c.name), fmtSize(size)].filter(Boolean).join(" · ");
   // The swing's analysis is as far along as its slower angle.
   const state = [c, other].filter(Boolean).map(x => x.pose).find(s => s !== "done") ?? "done";
@@ -4305,6 +4383,10 @@ async function refresh() {
   renderList();
   // New swings, finished analyses and shots show up in the trends as they arrive.
   trendsTick();
+  if (typeof trendDataLoaded !== "undefined" && !trendDataLoaded && !goodLoading && typeof loadTrendData === "function") {
+    goodLoading = true;
+    loadTrendData().finally(() => { goodLoading = false; });
+  }
   if (window.shutterTick) shutterTick();
   if (window.labelViewTick) labelViewTick();
   if (JSON.stringify(clips) !== was) updateExcludeButton();
