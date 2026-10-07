@@ -471,4 +471,48 @@ test("runRows: preserves null where within1 or p90 is missing from a run", () =>
   assert.equal(rows[0].average.p90, null);
 });
 
+test("renderRunsSummary: renders runsLine and disagreement line for candidate with two runs and gap >= 25", () => {
+  const NightReportView = require("../static/nightreport-view.js");
+  const cand = sample.candidates[1];
+  const html = NightReportView.renderRunsSummary(cand);
+
+  assert.ok(html.includes("Trained twice (seeds 0 and 1), judged on the average; run 2&#039;s model kept."));
+  assert.ok(html.includes("The two trainings disagreed on: P2 face-on (25% and 75%)"));
+  assert.ok(html.includes("nr-runs-line"));
+  assert.ok(html.includes("nr-runs-disagree"));
+});
+
+test("renderRunsSummary: returns empty string when candidate has no runs", () => {
+  const NightReportView = require("../static/nightreport-view.js");
+  const cand = sample.candidates[0];
+  const html = NightReportView.renderRunsSummary(cand);
+  assert.equal(html, "");
+});
+
+test("renderScoresTable: renders In use, Run 1, Run 2, Average (judged) when candidate has runs", () => {
+  const NightReportView = require("../static/nightreport-view.js");
+  const cand = sample.candidates[1];
+  const html = NightReportView.renderScoresTable(cand.scores);
+
+  assert.ok(html.includes("<th>In use</th>"), "includes In use header");
+  assert.ok(html.includes("<th>Run 1</th>"), "includes Run 1 header");
+  assert.ok(html.includes("<th>Run 2</th>"), "includes Run 2 header");
+  assert.ok(html.includes("<th>Average (judged)</th>"), "includes Average header");
+  assert.ok(html.includes("within 1 frame"), "includes within 1 frame row");
+  assert.ok(html.includes("90th pct"), "includes 90th pct row");
+  assert.ok(html.includes("overflow-x: auto"), "table is wrapped in scrollable container");
+});
+
+test("renderScoresTable: renders Before, After, Change when candidate has no runs", () => {
+  const NightReportView = require("../static/nightreport-view.js");
+  const cand = sample.candidates[0];
+  const html = NightReportView.renderScoresTable(cand.scores);
+
+  assert.ok(html.includes("<th>Before</th>"), "includes Before header");
+  assert.ok(html.includes("<th>After</th>"), "includes After header");
+  assert.ok(html.includes("<th>Change</th>"), "includes Change header");
+  assert.ok(!html.includes("<th>Run 1</th>"), "does not include Run 1 header");
+});
+
+
 

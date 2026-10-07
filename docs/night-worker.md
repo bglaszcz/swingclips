@@ -104,6 +104,7 @@ side `server/improve.py`, `/api/improve`):
    reason for the "no position clearly worse" rule: better on its training metric, worse at P2 and P8.
 5. **Report**: the better of the two runs (`improve.best_run`) and the scorecards (the model in use,
    the average, and each run) go to the server as a candidate (`improve/candidates/<id>`).
+   The Night report shows each run alongside the judged average, highlighting any key positions where the two trainings disagreed by 25 points or more.
    **Nothing changes until the owner taps Use it** on the Night report. Use it copies the model over
    the deep pass's `club-deep.onnx` (the old one goes to `trash\models` and stays as a "used before"
    candidate: going back is the same tap), and every clip gets the deep pass again when the server is

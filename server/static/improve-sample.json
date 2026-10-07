@@ -55,10 +55,57 @@
       "made": "2026-10-06T02:58:40",
       "status": "not better",
       "model": "club-deep@51d0e7b2",
-      "summary": "Trained on 48 labeled swings (1,020 frames). On 9 swings it never saw, P8 face-on within one frame went from 78% to 44%.",
+      "summary": "Trained on 48 labeled swings (1,020 frames), 2 times, judged on their average. On 9 swings it never saw, P8 face-on within one frame went from 78% to 44% on average. Kept the one in use.",
       "verdict": {"better": false, "why": "P8 face-on within one frame 33 points worse."},
-      "train": {"swings": 48, "frames": 1020, "valSwings": 9, "epochs": 150, "minutes": 20.1, "labelsSig": "9f8e7d"},
-      "scores": {"current": {"positions": [], "club": [], "clubhead": []}, "candidate": {"positions": [], "club": [], "clubhead": []}}
+      "train": {"swings": 48, "frames": 1020, "valSwings": 9, "epochs": 150, "minutes": 20.1, "labelsSig": "9f8e7d", "runs": 2, "kept": 1},
+      "scores": {
+        "current": {
+          "positions": [
+            {"angle": "face", "event": "takeaway", "n": 9, "median": 12.5, "p90": 38.0, "within1": 33.3},
+            {"angle": "face", "event": "p2", "n": 9, "median": 8.3, "p90": 20.8, "within1": 55.6},
+            {"angle": "face", "event": "p4", "n": 9, "median": 8.3, "p90": 37.5, "within1": 33.3},
+            {"angle": "face", "event": "p8", "n": 9, "median": 4.2, "p90": 8.3, "within1": 77.8},
+            {"angle": "dtl", "event": "p2", "n": 8, "median": 8.3, "p90": 25.0, "within1": 37.5},
+            {"angle": "dtl", "event": "p8", "n": 8, "median": 4.2, "p90": 12.5, "within1": 62.5}
+          ],
+          "club": [],
+          "clubhead": []
+        },
+        "candidate": {
+          "positions": [
+            {"angle": "face", "event": "takeaway", "n": 9, "median": 12.5, "p90": 36.0, "within1": 33.3},
+            {"angle": "face", "event": "p2", "n": 9, "median": 6.3, "p90": 17.5, "within1": 50.0},
+            {"angle": "face", "event": "p4", "n": 9, "median": 8.3, "p90": 37.5, "within1": 33.3},
+            {"angle": "face", "event": "p8", "n": 9, "median": 4.2, "p90": 12.5, "within1": 44.4},
+            {"angle": "dtl", "event": "p2", "n": 8, "median": 8.3, "p90": 20.8, "within1": 50.0},
+            {"angle": "dtl", "event": "p8", "n": 8, "median": 4.2, "p90": 12.5, "within1": 62.5}
+          ],
+          "club": [],
+          "clubhead": []
+        },
+        "runs": [
+          {
+            "positions": [
+              {"angle": "face", "event": "takeaway", "n": 9, "median": 12.5, "p90": 36.0, "within1": 33.3},
+              {"angle": "face", "event": "p2", "n": 9, "median": 8.3, "p90": 20.4, "within1": 25.0},
+              {"angle": "face", "event": "p4", "n": 9, "median": 8.3, "p90": 37.5, "within1": 33.3},
+              {"angle": "face", "event": "p8", "n": 9, "median": 4.2, "p90": 12.0, "within1": 44.4},
+              {"angle": "dtl", "event": "p2", "n": 8, "median": 8.3, "p90": 22.0, "within1": 45.0},
+              {"angle": "dtl", "event": "p8", "n": 8, "median": 4.2, "p90": 12.5, "within1": 62.5}
+            ]
+          },
+          {
+            "positions": [
+              {"angle": "face", "event": "takeaway", "n": 9, "median": 12.5, "p90": 36.0, "within1": 33.3},
+              {"angle": "face", "event": "p2", "n": 9, "median": 4.2, "p90": 14.6, "within1": 75.0},
+              {"angle": "face", "event": "p4", "n": 9, "median": 8.3, "p90": 37.5, "within1": 33.3},
+              {"angle": "face", "event": "p8", "n": 9, "median": 4.2, "p90": 13.0, "within1": 44.4},
+              {"angle": "dtl", "event": "p2", "n": 8, "median": 8.3, "p90": 19.6, "within1": 55.0},
+              {"angle": "dtl", "event": "p8", "n": 8, "median": 4.2, "p90": 12.5, "within1": 62.5}
+            ]
+          }
+        ]
+      }
     },
     {
       "id": "previous-2026-09-27",

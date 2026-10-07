@@ -2,12 +2,13 @@
 // Shows model candidate scores, worker progress, and past nights.
 // Uses SwingNightReport (static/nightreport.js), showView, closeTrendView, renderList.
 
-(function () {
-  const nrBox = document.getElementById("nightreport");
-  const nrClose = document.getElementById("nr-close");
-  const nrBtn = document.getElementById("nightreport-btn");
-  const nrStatus = document.getElementById("nr-status");
-  const nrContent = document.getElementById("nr-content");
+(function (root) {
+  const doc = typeof document !== "undefined" ? document : null;
+  const nrBox = doc ? doc.getElementById("nightreport") : null;
+  const nrClose = doc ? doc.getElementById("nr-close") : null;
+  const nrBtn = doc ? doc.getElementById("nightreport-btn") : null;
+  const nrStatus = doc ? doc.getElementById("nr-status") : null;
+  const nrContent = doc ? doc.getElementById("nr-content") : null;
 
   let reportData = null;
   let nightProgressData = null;
@@ -23,6 +24,13 @@
       .replace(/'/g, "&#039;");
   }
 
+  function getReportApi() {
+    return (typeof window !== "undefined" && window.SwingNightReport)
+      || (typeof require !== "undefined" ? require("./nightreport.js") : null)
+      || (typeof globalThis !== "undefined" && globalThis.SwingNightReport)
+      || null;
+  }
+
   /** "6:58 am" from an ISO time or the server's seconds since 1970 (/api/night seen.at). */
   function formatAskTime(iso) {
     if (!iso) return "";
@@ -36,14 +44,100 @@
     return `${h}:${m} ${ampm}`;
   }
 
+  function renderRunsSummary(candidate) {
+    const reportApi = getReportApi();
+    if (!reportApi || !candidate) return "";
+    let html = "";
+    const line = reportApi.runsLine(candidate);
+    if (line) {
+      html += `<div class="note nr-runs-line">${escapeHtml(line)}</div>`;
+    }
+    const disagree = reportApi.runsDisagree(candidate.scores);
+    if (disagree && disagree.length > 0) {
+      const disagreeText = disagree.map(s => (s.includes(": ") ? s.replace(/: /, " (") + ")" : s)).join(", ");
+      html += `<div class="note nr-runs-disagree" style="margin-top: 4px;">The two trainings disagreed on: ${escapeHtml(disagreeText)}</div>`;
+    }
+    if (!html) return "";
+    return `<div class="nr-runs-summary" style="margin-bottom: 10px;">${html}</div>`;
+  }
+
   function renderScoresTable(scores) {
-    const rows = window.SwingNightReport ? SwingNightReport.compareRows(scores) : [];
+    if (!scores) {
+      return '<div class="note">No comparison scores recorded for this candidate.</div>';
+    }
+
+    const reportApi = getReportApi();
+    const hasRuns = Array.isArray(scores.runs) && scores.runs.length >= 2;
+    const runRows = hasRuns && reportApi ? reportApi.runRows(scores) : [];
+
+    if (hasRuns && runRows.length > 0) {
+      const runCount = scores.runs.length;
+      let thRuns = "";
+      for (let i = 0; i < runCount; i++) {
+        thRuns += `<th>Run ${i + 1}</th>`;
+      }
+
+      let html = `
+        <div style="overflow-x: auto; max-width: 100%;">
+          <table class="nr-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>In use</th>
+                ${thRuns}
+                <th>Average (judged)</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      for (const r of runRows) {
+        const curW = r.current.within1 != null ? `${r.current.within1.toFixed(1)}%` : "-";
+        const avgW = r.average.within1 != null ? `${r.average.within1.toFixed(1)}%` : "-";
+        const curP = r.current.p90 != null ? `${r.current.p90.toFixed(1)} ms` : "-";
+        const avgP = r.average.p90 != null ? `${r.average.p90.toFixed(1)} ms` : "-";
+
+        let runsW = "";
+        let runsP = "";
+        for (const run of r.runs) {
+          const wStr = run.within1 != null ? `${run.within1.toFixed(1)}%` : "-";
+          const pStr = run.p90 != null ? `${run.p90.toFixed(1)} ms` : "-";
+          runsW += `<td>${wStr}</td>`;
+          runsP += `<td>${pStr}</td>`;
+        }
+
+        html += `
+          <tr class="nr-group"><td colspan="${runCount + 3}" class="nr-item-label">${escapeHtml(r.label)}</td></tr>
+          <tr>
+            <td class="nr-metric-name">within 1 frame</td>
+            <td>${curW}</td>
+            ${runsW}
+            <td>${avgW}</td>
+          </tr>
+          <tr>
+            <td class="nr-metric-name">90th pct</td>
+            <td>${curP}</td>
+            ${runsP}
+            <td>${avgP}</td>
+          </tr>
+        `;
+      }
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+      return html;
+    }
+
+    const rows = reportApi ? reportApi.compareRows(scores) : [];
     if (!rows || rows.length === 0) {
       return '<div class="note">No comparison scores recorded for this candidate.</div>';
     }
 
     let html = `
-      <div style="overflow-x: auto;">
+      <div style="overflow-x: auto; max-width: 100%;">
         <table class="nr-table">
           <thead>
             <tr>
@@ -192,6 +286,7 @@
       const verdictHtml = newest.verdict && newest.verdict.why
         ? `<div class="note nr-verdict">${escapeHtml(newest.verdict.why)}</div>`
         : "";
+      const runsHtml = renderRunsSummary(newest);
       const tableHtml = renderScoresTable(newest.scores);
       const trainHtml = renderTrainDetails(newest.train);
 
@@ -220,6 +315,7 @@
           </div>
           <p class="nr-summary">${escapeHtml(newest.summary || "")}</p>
           ${verdictHtml}
+          ${runsHtml}
           ${tableHtml}
           ${trainHtml}
           ${actionBtnHtml}
@@ -245,6 +341,7 @@
         const cStatusClass = `nr-tag-${(c.status || "").replace(/\s+/g, "-")}`;
         const cDate = window.SwingNightReport ? SwingNightReport.formatNightDate(c.made, false) : (c.made || "");
         const cVerdict = c.verdict && c.verdict.why ? `<div class="note nr-verdict">${escapeHtml(c.verdict.why)}</div>` : "";
+        const cRunsHtml = renderRunsSummary(c);
         const cTable = renderScoresTable(c.scores);
         const cTrain = renderTrainDetails(c.train);
         const cAction = c.status === "used before"
@@ -260,6 +357,7 @@
             </summary>
             <div class="nr-earlier-body">
               ${cVerdict}
+              ${cRunsHtml}
               ${cTable}
               ${cTrain}
               ${cAction}
@@ -464,6 +562,25 @@
     };
   }
 
-  window.openNightReport = openNightReport;
-  window.loadNightReport = loadNightReport;
-})();
+  const viewApi = {
+    renderRunsSummary,
+    renderScoresTable,
+    openNightReport,
+    loadNightReport
+  };
+
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = viewApi;
+  } else if (root) {
+    root.SwingNightReportView = viewApi;
+    root.openNightReport = openNightReport;
+    root.loadNightReport = loadNightReport;
+  }
+
+  const urlParams = typeof window !== "undefined" && window.location ? new URLSearchParams(window.location.search) : null;
+  if (urlParams && urlParams.get("improve") === "sample") {
+    setTimeout(() => {
+      if (nrBox && nrBox.hidden) openNightReport();
+    }, 50);
+  }
+})(typeof window !== "undefined" ? window : globalThis);
