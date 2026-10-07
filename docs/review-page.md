@@ -395,6 +395,17 @@ On **Progress**, first card (`static/focus.js`, drawn by `renderFocus` in `trend
 Pick one thing to work on and a range; after each swing the phone says the number and whether it
 was in range: "Tempo 3.2, in range", "Club path minus 4, too far left", "Early extension 2, too far
 toward the ball". The phones face away from you, so voice is the channel.
+- **Practice my #1 priority** (first card, 2026-10-07): the focus, else Progress's first move over every
+  club (`topPriority()` in `trends.js`), with its swing thought and drill and one button, **Start practicing
+  this**: the number, the range ("better than my usual" from the median of the latest 30 swings, as the
+  focus's Practice this), every club (or the focus's club) and the swing thought as the cue after a swing
+  out of range. A move the phone can't speak swing by swing says so. Games come next; the number picker is
+  folded under **Pick a number yourself**. Spoken and shown names are plain: "Hands coming down 2.4, too
+  far over" (was "Hands at P6").
+- **The videos** draw the skeleton, shaft and plane line; the angle readouts are Advanced data (the
+  Angles button shows with it). The scrubber names Setup, Top, Impact and Finish; the other positions are
+  ticks named on hover. The **habit banner** only fires when the first readable swing of the five was
+  clean (a fault creeping in); Oct 7: 7 banners in 63 swings (was 15).
 
 - **Setting it up** (review page, **Practice** at the top): pick the number, the club, and the
   range. **Use middle half** sets the range to the middle 50% of your last 30 swings with that club

@@ -502,6 +502,8 @@
   #p-ov-fault { margin-top: 10px; font-size: 14px; }
   #p-ov-fault:empty { display: none; }
   .p-club-pick { margin-left: 10px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text); }
+  #pr-quick { display: flex; flex-direction: column; gap: 6px; }
+  #pr-quick .p-focus-name { font-size: 17px; }
   .p-second { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
   .p-tile { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line);
             border-radius: 6px; cursor: pointer; min-width: 0; }
@@ -1501,6 +1503,10 @@
       <strong>Practice</strong><span id="pr-status"></span>
       <button id="pr-close" class="small">Close</button>
     </div>
+    <div class="t-card" id="pr-quick">
+      <div id="pr-state"></div>
+      <div id="pr-quick-body"></div>
+    </div>
     <div class="t-card">
       <strong>Games</strong>
       <div class="t-filters">
@@ -1522,8 +1528,8 @@
       </div>
       <div id="gm-history"></div>
     </div>
-    <div class="t-card">
-      <div id="pr-state"></div>
+    <details class="t-card p-fold" id="pr-manual">
+      <summary><strong>Pick a number yourself</strong></summary>
       <div class="t-filters">
         <label>Number <select id="pr-metric"></select></label>
         <label>Club <select id="pr-club"></select></label>
@@ -1549,9 +1555,9 @@
         and whether it was in range, e.g. "Tempo 3.2, in range" or "Club path minus 4, too far left". Body numbers come
         once the swing is analyzed (usually well under a minute); Square's about 15 s after the strike, or "no shot" if
         none came within 25 s. A body number with no reading (a camera that couldn't see all of you, the same rule
-        as the swing numbers and the trends) or read at an estimated P6 is "no reading", not a wrong number. Numbers marked "noisy" move a lot from one swing to the next even when the swing
+        as the swing numbers and the trends) or read at an estimated downswing position is "no reading", not a wrong number. Numbers marked "noisy" move a lot from one swing to the next even when the swing
         doesn't: practice them over several swings, not one.</div>
-    </div>
+    </details>
     <div class="t-card">
       <strong>Log</strong>
       <div id="pr-log"></div>

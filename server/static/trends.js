@@ -1796,6 +1796,21 @@ const focusLabel = key => (SwingSummary.BODY.some(f => f.key === key) ? field(ke
   : SwingHelps.RESULTS.find(r => r.key === key) || { label: key }).label;
 
 /** The range that means "better than my usual" for the move: from the median of the latest swings toward the aim. */
+/**
+ * The one thing to practise: the focus, else Progress's first move over every club (step 2).
+ * {move, aim, fix, club (null = every club), focus} or null.
+ */
+function topPriority() {
+  const f = journal.focus;
+  if (f && f.move) {
+    const mv = SwingCoach.MOVES[f.move];
+    return { move: f.move, aim: f.aim, fix: mv && mv[f.aim], club: f.club || null, focus: true };
+  }
+  const days = Number(progressPick.period), since = days ? Date.now() - days * 86400000 : -Infinity;
+  const top = SwingSessionScore.priorities(pooledHelps(progressSessions("*").filter(s => s.start >= since)).a.links)[0];
+  return top ? { move: top.move, aim: top.aim, fix: top.fix, club: null, focus: false } : null;
+}
+
 function focusPracticeRange(f) {
   const vals = progressSessions(f.club || "*").flatMap(s => s.rows).reverse().map(r => r[f.move]).filter(v => v != null).slice(0, PR_SUGGEST_N);
   if (vals.length < 5) return null;

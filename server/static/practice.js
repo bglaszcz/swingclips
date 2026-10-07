@@ -91,7 +91,7 @@ function renderPracticeForm() {
       const g = Object.assign(document.createElement("optgroup"), { label: name });
       for (const m of prState.metrics.filter(m => (m.kind === "shot" ? "shot" : m.view) === view)) {
         g.append(Object.assign(document.createElement("option"), {
-          value: m.key, textContent: m.label + (m.noisy ? "  (noisy)" : ""), title: m.noisy || "" }));
+          value: m.key, textContent: SwingShotStory.plain(m.label) + (m.noisy ? "  (noisy)" : ""), title: SwingShotStory.plain(m.noisy || "") }));
       }
       return g;
     }));
@@ -140,13 +140,14 @@ function renderPracticeForm() {
   const cm = prMetric(c.metric);
   state.classList.toggle("on", c.on);
   state.textContent = c.on
-    ? `On: ${cm.label} ${prFmt(cm, c.min)} to ${prFmt(cm, c.max)}${cm.unit && cm.unit !== ":1" ? " " + cm.unit : ""}`
+    ? `On: ${SwingShotStory.plain(cm.label)} ${prFmt(cm, c.min)} to ${prFmt(cm, c.max)}${cm.unit && cm.unit !== ":1" ? " " + cm.unit : ""}`
       + (c.cue ? ` · after a miss: “${c.cue}”` : "")
     : "Off: nothing is spoken.";
   const toggle = prEl("pr-toggle");
   toggle.textContent = c.on ? "Stop practice" : "Start practice";
   toggle.classList.toggle("on", c.on);
   prEl("pr-save").hidden = !(c.on && changed);
+  renderPracticeQuick();
 
   // Which phones are listening.
   const listening = Object.entries(prState.listeners || {}).filter(([, age]) => age <= PR_LISTENING_S).map(([a]) => a);
@@ -154,6 +155,49 @@ function renderPracticeForm() {
   prEl("pr-status").textContent = listening.length
     ? `Speaking: the ${listening.map(a => names[a] || a).join(" and ")} phone`
     : "No phone is listening: open SwingClips on the face-on phone (Practice voice on).";
+}
+
+// ---- The card on top: practise the #1 priority in one tap ----
+
+let prQuickSig = null, prQuick = null;   // worked out once per data change: {move, aim, fix, club, focus, range}
+
+function renderPracticeQuick() {
+  const box = prEl("pr-quick-body");
+  if (!trendDataLoaded || !prState) { box.textContent = "Working out your #1 priority…"; return; }
+  const sig = `${dataSig}|${clips.length}|${JSON.stringify(journal.focus || null)}`;
+  if (sig !== prQuickSig) {
+    prQuickSig = sig;
+    const t = topPriority();
+    prQuick = t && t.fix ? { ...t, range: focusPracticeRange(t) } : null;
+  }
+  const q = prQuick, plain = SwingShotStory.plain, el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
+  if (!q) {
+    box.replaceChildren(el("div", "muted", "Nothing stands out to work on yet: hit a few sessions, then Progress picks your #1 priority. Pick a number yourself below."));
+    return;
+  }
+  const c = prState.config, on = c.on && c.metric === q.move;
+  const kids = [el("div", "p-focus-kicker", q.focus ? `Practice my focus${q.club ? " · " + clubName(q.club).toLowerCase() : ""}` : "Practice my #1 priority"),
+    el("div", "p-focus-name", `Work on ${plain(q.fix.name)}`),
+    el("div", null, `Swing thought: “${plain(q.fix.thought).replace(/\.$/, "")}”`)];
+  const drill = el("div", "muted", "Drill: " + plain(q.fix.drill));
+  kids.push(drill);
+  const row = el("div", "t-filters");
+  if (!prMetric(q.move)) {
+    kids.push(el("div", "muted", "The phone can't speak this one swing by swing: work on it with the drill and the swing thought, and follow it in Progress."));
+  } else if (on) {
+    const stop = el("button", "small", "Stop");
+    stop.onclick = () => savePractice(false);
+    row.append(el("span", "better", "On: the phone says it after each swing."), stop);
+  } else {
+    const go = el("button", "primary", "Start practicing this");
+    go.disabled = !q.range;
+    go.title = q.range ? `In range: ${q.range.min} to ${q.range.max}, ${q.aim === "more" ? "more" : "less"} than your usual; after a swing out of range the phone says the swing thought`
+      : "Not enough recent swings with this number to set a range";
+    go.onclick = () => practiceFromFocus({ metric: q.move, club: q.club, min: q.range.min, max: q.range.max, cue: plain(q.fix.thought) });
+    row.append(go);
+  }
+  kids.push(row);
+  box.replaceChildren(...kids);
 }
 
 function readRange() {

@@ -83,9 +83,9 @@ class SentenceTest(unittest.TestCase):
         """My focus's swing thought: said after a swing out of range, not after one in range."""
         m = BY_KEY["handsPlaneP6"]
         cue = "Hands drop to the trail pocket."
-        self.assertEqual(practice.sentence(m, 2.44, "high", cue=cue), f"Hands at P6 2.4, too far over. {cue}")
-        self.assertEqual(practice.sentence(m, 0.3, "in", cue=cue), "Hands at P6 0.3, in range")
-        self.assertEqual(practice.sentence(m, None, "none", cue=cue), "Hands at P6, no reading")
+        self.assertEqual(practice.sentence(m, 2.44, "high", cue=cue), f"Hands coming down 2.4, too far over. {cue}")
+        self.assertEqual(practice.sentence(m, 0.3, "in", cue=cue), "Hands coming down 0.3, in range")
+        self.assertEqual(practice.sentence(m, None, "none", cue=cue), "Hands coming down, no reading")
 
     def test_streak_and_no_reading(self):
         m = BY_KEY["tempo"]
