@@ -14,6 +14,7 @@ const {
   getP1P4P8,
   phaseName,
   progressText,
+  clubLeavesPicture,
 } = require("../static/clubcheck.js");
 
 test("HOSEL_SHARE is 0.93", () => {
@@ -265,6 +266,7 @@ test("ClubCheck exports UI controller methods and balanceSwings", () => {
   assert.equal(typeof ClubCheck.toggleHidden, "function");
   assert.equal(typeof ClubCheck.markAllHidden, "function");
   assert.equal(typeof ClubCheck.cycleNextPoint, "function");
+  assert.equal(typeof ClubCheck.clubLeavesPicture, "function");
   assert.equal(typeof ClubCheck.showFrame, "function");
   assert.equal(typeof ClubCheck.loadQueue, "function");
 });
@@ -288,6 +290,7 @@ test("index.html contains Club check markup, Tools menu item, and scripts", () =
   assert.ok(html.includes('id="cc-save-btn"'), "defines Looks right / save button");
   assert.ok(html.includes('id="cc-blur-btn"'), "defines Blurred button");
   assert.ok(html.includes('id="cc-hide-btn"'), "defines Can't see button");
+  assert.ok(html.includes('id="cc-off-btn"'), "defines Club leaves button");
   assert.ok(html.includes('id="cc-hideall-btn"'), "defines No club button");
   assert.ok(html.includes('id="cc-skip-btn"'), "defines Skip button");
   assert.ok(html.includes('id="cc-nightreport-link"'), "defines link to Night report");
@@ -295,6 +298,52 @@ test("index.html contains Club check markup, Tools menu item, and scripts", () =
   assert.ok(html.includes("#clubcheck {"), "defines #clubcheck CSS");
   assert.ok(html.includes(".cc-viewport"), "defines .cc-viewport CSS");
   assert.ok(html.includes(".cc-zoom-wrap"), "defines .cc-zoom-wrap CSS");
+});
+
+test("clubLeavesPicture: keeps grip when placed and marks hosel and head hidden", () => {
+  const points = {
+    grip: { x: 0.45, y: 0.55 },
+    hosel: { x: 0.50, y: 0.70 },
+    head: { x: 0.55, y: 0.85 },
+  };
+  assert.deepEqual(clubLeavesPicture(points), {
+    grip: { x: 0.45, y: 0.55 },
+    hosel: { hidden: true },
+    head: { hidden: true },
+  });
+});
+
+test("clubLeavesPicture: preserves blur on grip", () => {
+  const points = {
+    grip: { x: 0.45, y: 0.55, blur: true },
+    hosel: { x: 0.50, y: 0.70 },
+    head: { x: 0.55, y: 0.85 },
+  };
+  assert.deepEqual(clubLeavesPicture(points), {
+    grip: { x: 0.45, y: 0.55, blur: true },
+    hosel: { hidden: true },
+    head: { hidden: true },
+  });
+});
+
+test("clubLeavesPicture: returns grip null when grip was not placed or was hidden", () => {
+  assert.deepEqual(clubLeavesPicture(null), {
+    grip: null,
+    hosel: { hidden: true },
+    head: { hidden: true },
+  });
+
+  assert.deepEqual(clubLeavesPicture({ grip: null, hosel: null, head: null }), {
+    grip: null,
+    hosel: { hidden: true },
+    head: { hidden: true },
+  });
+
+  assert.deepEqual(clubLeavesPicture({ grip: { hidden: true }, hosel: { x: 0.5, y: 0.6 } }), {
+    grip: null,
+    hosel: { hidden: true },
+    head: { hidden: true },
+  });
 });
 
 test("trends.js includes clubcheck in showView and leaveTrendViews", () => {

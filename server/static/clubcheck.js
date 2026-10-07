@@ -832,6 +832,34 @@
     drawZoom();
   }
 
+  /** Builds the points for "Club leaves the picture" (pure):
+   * Grip is kept if placed (or null if not placed yet), hosel and head are marked hidden. */
+  function clubLeavesPicture(points) {
+    const grip = points?.grip;
+    const gripPlaced = grip && !grip.hidden && grip.x != null && grip.y != null;
+    let outGrip = null;
+    if (gripPlaced) {
+      outGrip = { x: grip.x, y: grip.y };
+      if (grip.blur) outGrip.blur = true;
+    }
+    return {
+      grip: outGrip,
+      hosel: { hidden: true },
+      head: { hidden: true },
+    };
+  }
+
+  function clubLeaves() {
+    currentPoints = clubLeavesPicture(currentPoints);
+    const gripPlaced = currentPoints.grip && !currentPoints.grip.hidden && currentPoints.grip.x != null && currentPoints.grip.y != null;
+    if (!gripPlaced) {
+      selectedPoint = "grip";
+    }
+    renderPointsUI();
+    drawOverlay();
+    drawZoom();
+  }
+
   function showFrame(idx) {
     currentIndex = idx;
     updateCounter();
@@ -1111,6 +1139,9 @@
     const hideBtn = document.getElementById("cc-hide-btn");
     if (hideBtn) hideBtn.onclick = () => toggleHidden();
 
+    const offBtn = document.getElementById("cc-off-btn");
+    if (offBtn) offBtn.onclick = () => clubLeaves();
+
     const hideAllBtn = document.getElementById("cc-hideall-btn");
     if (hideAllBtn) hideAllBtn.onclick = () => markAllHidden();
 
@@ -1277,6 +1308,11 @@
         toggleHidden();
         return;
       }
+      if (k === "o") {
+        e.preventDefault();
+        clubLeaves();
+        return;
+      }
       if (k === "0") {
         e.preventDefault();
         markAllHidden();
@@ -1308,6 +1344,8 @@
     phaseName: phaseNameOf,
     queue,
     merge,
+    clubLeavesPicture,
+    clubLeaves,
     balanceSwings,
     progressText,
     renderProgress,

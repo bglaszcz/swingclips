@@ -72,6 +72,8 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    so nightly retraining receives enough backswing data to prevent P2 horizontal-shaft detection regressions.
    Confirmed frames save directly to `/api/labels/<clip>?pass=1`, providing the training
    points that the night worker's improve step consumes to retrain `club-deep.onnx` on the GPU.
+   When the club extends out of frame (such as at the top of the backswing), "Club leaves the picture"
+   (key O) preserves the grip point while marking the hosel and clubhead hidden.
 
 ## Getting better every night: the improve step
 
