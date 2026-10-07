@@ -37,6 +37,13 @@ SWAPPED = {"l_shoulder": {"x": 0.45, "y": 0.35}, "r_shoulder": {"x": 0.55, "y": 
 
 
 class CheckTest(unittest.TestCase):
+    def test_club_frames_listed(self):
+        # Club check gets only this summary: it needs the times, not just a count of frames.
+        club = {"grip": {"x": 0.5, "y": 0.5}, "head": {"x": 0.6, "y": 0.7}}
+        r = labelcheck.check(label({"1.850000": club, "1.900000": {"allHidden": True}, "2.000000": {"ball": {"x": 1}}}), None)
+        self.assertEqual(r["clubFrames"], [1.85, 1.9])
+        self.assertEqual(r["frames"], 3)
+
     def test_counts(self):
         pts = {k: {"x": 0.5, "y": 0.5} for k in labelcheck.POINTS[:9]}
         r = labelcheck.check(label({"1.000000": pts}, {"takeaway": 0.8, "p2": 1.1}), None)

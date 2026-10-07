@@ -171,6 +171,9 @@ def check(doc: dict, pose: dict | None) -> dict:
         "missing": [k for k in EVENTS if k not in have],
         "pointFrames": point_frames,
         "frames": len(frames),
+        # The frames with club points (Club check skips them; it gets only this summary, not the frames).
+        "clubFrames": sorted(round(float(k), 6) for k, pts in frames.items()
+                             if any((pts or {}).get(c) for c in ("grip", "hosel", "head", "allHidden"))),
         "ball": bool(doc.get("ball")),
         "issues": issues,
         "fixes": sorted(({**f, "key": fix_key(f["kind"], f["t"] if f["kind"] != "ball" else None, doc.get("ball"))} for f in fixes),

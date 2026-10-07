@@ -246,46 +246,34 @@
       }
     }
 
-    function swingHasClubPoints(clipName, partnerName) {
-      for (const name of [clipName, partnerName].filter(Boolean)) {
-        const doc = labelMap.get(name);
-        if (!doc) continue;
-        if (doc.frames) {
-          for (const pts of Object.values(doc.frames)) {
-            if (pts && (pts.grip || pts.hosel || pts.head)) return true;
-          }
-        }
-        if (doc.pointFrames > 0) return true;
+    // The times of a clip's frames with club points: from a full label doc's frames, or from
+    // /api/labels/summary's clubFrames (there "frames" is only a count: before Oct 6 that read as "no
+    // points anywhere", so the queue kept serving frames already done).
+    function clubTimes(clipName) {
+      const doc = labelMap.get(clipName);
+      if (!doc) return [];
+      if (doc.frames && typeof doc.frames === "object") {
+        return Object.entries(doc.frames)
+          .filter(([, pts]) => pts && (pts.grip || pts.hosel || pts.head || pts.allHidden))
+          .map(([key]) => parseFloat(key));
       }
-      return false;
+      return Array.isArray(doc.clubFrames) ? doc.clubFrames : [];
+    }
+
+    function swingHasClubPoints(clipName, partnerName) {
+      return [clipName, partnerName].filter(Boolean).some(name => clubTimes(name).length > 0);
     }
 
     function swingHasBackswingClubPoints(clipName, partnerName, pTimes) {
       if (!pTimes || pTimes.takeaway == null || pTimes.p3 == null) return false;
       const tStart = Math.min(pTimes.takeaway, pTimes.p3) - 0.01;
       const tEnd = Math.max(pTimes.takeaway, pTimes.p3) + 0.01;
-      for (const name of [clipName, partnerName].filter(Boolean)) {
-        const doc = labelMap.get(name);
-        if (!doc || !doc.frames) continue;
-        for (const [key, pts] of Object.entries(doc.frames)) {
-          if (pts && (pts.grip || pts.hosel || pts.head || pts.allHidden)) {
-            const t = parseFloat(key);
-            if (t >= tStart && t <= tEnd) return true;
-          }
-        }
-      }
-      return false;
+      // pTimes are this clip's: its own frames only (the partner's clock is offset by the sync).
+      return clubTimes(clipName).some(t => t >= tStart && t <= tEnd);
     }
 
     function frameHasClubPoints(clipName, t) {
-      const doc = labelMap.get(clipName);
-      if (!doc || !doc.frames) return false;
-      for (const [key, pts] of Object.entries(doc.frames)) {
-        if (Math.abs(parseFloat(key) - t) < 0.002) {
-          if (pts && (pts.grip || pts.hosel || pts.head)) return true;
-        }
-      }
-      return false;
+      return clubTimes(clipName).some(x => Math.abs(x - t) < 0.002);
     }
 
     function getPose(clipName) {
@@ -975,15 +963,12 @@
       ]);
 
       const allClips = Array.isArray(clipsRes) ? clipsRes : [];
-      const summaryList = summaryRes?.clips || [];
+      // Pass-1 files only (Club check saves there); clubFrames = the frames with club points.
+      const summaryList = (summaryRes?.clips || []).filter(c => (c.pass ?? 1) === 1);
       const labelMap = new Map(summaryList.map(c => [c.clip, c]));
 
       function hasClubPoints(c) {
-        for (const name of [c.name, c.partner].filter(Boolean)) {
-          const doc = labelMap.get(name);
-          if (doc && doc.pointFrames > 0) return true;
-        }
-        return false;
+        return [c.name, c.partner].filter(Boolean).some(name => (labelMap.get(name)?.clubFrames || []).length > 0);
       }
 
       const valid = allClips.filter(c => !c.excluded && c.pose === "done");

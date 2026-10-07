@@ -547,3 +547,21 @@ test("phaseName: reports Backswing (near P2), Backswing, Downswing, Address (P1)
 });
 
 
+
+test("queue: reads /api/labels/summary's clubFrames (there frames is only a count)", () => {
+  // Before Oct 6 the summary's "frames": 4 read as no points anywhere, so frames already done came back.
+  const clips = [
+    { name: "done.mp4", recorded: "2026-10-01T10:00:00", club: "7I" },
+    { name: "fresh.mp4", recorded: "2026-10-01T11:00:00", club: "7I" },
+  ];
+  const frames = [1.0, 1.8, 1.85, 1.9, 1.95, 2.1].map(t => ({ t, lm: [], clubhead: null }));
+  const pos = { positions: { p1: 1.0, p4: 1.8, p8: 2.1 }, frames };
+  const summary = [
+    { clip: "done.mp4", pass: 1, frames: 4, pointFrames: 0, clubFrames: [1.85, 1.9] },
+    { clip: "fresh.mp4", pass: 1, frames: 0, pointFrames: 0, clubFrames: [] },
+  ];
+  const q = queue(clips, { "done.mp4": pos, "fresh.mp4": pos }, summary, { perSwing: 4, max: 20 });
+  assert.equal(q[0].clip, "fresh.mp4");   // the swing without club points first
+  const fromDone = q.filter(i => i.clip === "done.mp4").map(i => i.t);
+  assert.ok(!fromDone.some(t => Math.abs(t - 1.85) < 0.002 || Math.abs(t - 1.9) < 0.002), `served done frames: ${fromDone}`);
+});
