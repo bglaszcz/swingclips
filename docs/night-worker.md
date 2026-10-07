@@ -94,8 +94,11 @@ side `server/improve.py`, `/api/improve`):
    trainings on almost the same frames scored face-on P2 within one frame 25% and 75%, so one run's
    verdict was as much luck as model. The worker's own processes are stopped first: they hold ~15 GB of
    the card. A try now takes ~50-60 min (`night_improve.MINUTES` 75).
-3. **Score**: `eval.py --rerun --deep --only-val` with the model in use (the server's,
-   downloaded) and with each new one, the server's body model: the key positions, shaft and clubhead
+3. **Score**: `eval.py --rerun --deep --not-trained` with the model in use (the server's,
+   downloaded) and with each new one, on the validation swings plus the labeled swings no club model
+   trained on that have P2, P6 or P8 labeled (Oct 7: P2 on 18 face-on / 16 down-the-line swings, was 8 / 7;
+   the model in use scored P2 61% / 44% within one frame there against 75% / 71% on the 8 / 7: the small
+   set had flattered it), ~13 min each, the server's body model: the key positions, shaft and clubhead
    on the validation swings neither model trained on.
 4. **Judge** (`improve.judge`, on the two runs' average: `improve.average_scores`): better when no key position is clearly worse (within one frame 10
    points lower, or 90th percentile 2 frames higher), the shaft and clubhead aren't found clearly less

@@ -188,7 +188,9 @@ def summary(train: dict, current: dict, candidate: dict, verdict: dict) -> str:
     out = f"Trained on {train['swings']} labeled swings ({train['frames']:,} frames)" + (
         f", {train['runs']} times, judged on their average." if train.get("runs", 1) > 1 else ".")
     if a is not None and b is not None:
-        out += (f" On {train['valSwings']} swings it never saw, key positions within one frame "
+        seen = (f"{train['scoredClips']} labeled clips it never trained on" if train.get("scoredClips")
+                else f"{train['valSwings']} swings it never saw")
+        out += (f" On {seen}, key positions within one frame "
                 f"went from {a:.0f}% to {b:.0f}% on average.")
     return out + (" Ready to use." if verdict.get("better") else " Kept the one in use.")
 

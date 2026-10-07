@@ -695,6 +695,12 @@ def val_clips(manifest: dict) -> set[str]:
     return val | {i["clip"] for i in manifest["images"] if i["swing"] in val}
 
 
+def trained_clips(manifest: dict) -> set[str]:
+    """The clips of a club dataset's training swings (a swing is named after one of its clips)."""
+    train = set(manifest["swings"]["train"])
+    return train | {i["clip"] for i in manifest["images"] if i["swing"] in train}
+
+
 def latest_mediapipe(folder: Path, only_val: str | None = None) -> Path | None:
     """The newest baseline result in the folder: landmarks from MediaPipe and the club from the ray
     casting (results from before other backends existed have no bodyModel or clubModel and count),
@@ -727,6 +733,9 @@ def main(argv=None) -> int:
                          "MediaPipe and the ray-cast club)")
     ap.add_argument("--only-val", type=Path, metavar="DATASET_JSON",
                     help="score only the validation swings of a club dataset (club_dataset.py's dataset.json)")
+    ap.add_argument("--not-trained", type=Path, metavar="DATASET_JSON",
+                    help="score the labeled swings a club dataset didn't train on: its validation swings and the "
+                         "swings without club points that have P2, P6 or P8 labeled (~2x the key positions of --only-val)")
     ap.add_argument("--out", type=Path, default=EVAL_DIR, help=f"where results go (default {EVAL_DIR})")
     ap.add_argument("--provider", choices=["auto", *models.PROVIDERS],
                     help="where --rerun runs the body and club models (default: SWINGCLIPS_ORT_PROVIDER, else cpu)")
@@ -751,6 +760,19 @@ def main(argv=None) -> int:
         first = {k: v for k, v in first.items() if k in keep}
         second = {k: v for k, v in second.items() if k in keep}
         print(f"Only the club dataset's validation swings: {len(first)} labeled clip(s)")
+    elif args.not_trained:
+        out = trained_clips(json.loads(args.not_trained.read_text(encoding="utf-8")))
+        # Both angles of a swing: the partner of a trained clip was trained on too.
+        gone = lambda k, v: k in out or ((v.get("partner") or {}).get("name") in out)
+        # The validation swings, and of the rest those with a club-defined position labeled (P2, P6, P8: what
+        # a club model moves); the P4-check files (a P4 only) would triple the time for little.
+        val = val_clips(json.loads(args.not_trained.read_text(encoding="utf-8")))
+        keep = {k for k, v in first.items() if not gone(k, v)
+                and (k in val or any(e in (v.get("events") or {}) for e in ("p2", "p6", "p8")))}
+        subset = "nt-" + hashlib.sha1("\n".join(sorted(keep)).encode()).hexdigest()[:10]
+        first = {k: v for k, v in first.items() if k in keep}
+        second = {k: v for k, v in second.items() if k in keep}
+        print(f"Only the swings the club dataset didn't train on: {len(first)} labeled clip(s)")
     if not first:
         print(f"No labels in {app.LABELS_DIR} yet: label some clips in the review page first (press L).")
         return 1

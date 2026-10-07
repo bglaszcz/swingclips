@@ -8,8 +8,9 @@ Use it on the Night report.
      the same swings stay out of training every time (the model in use left them out too).
   3. train/club_train.py in train\\.venv (PyTorch on the GPU, ~20 min), improve.RUNS times (seeds 0, 1):
      one training's verdict was as much luck as model (Oct 6).
-  4. eval.py --rerun --deep --only-val with the model in use and with each new one, the server's body
-     model, on the validation swings (~5 min each).
+  4. eval.py --rerun --deep --not-trained with the model in use and with each new one, the server's body
+     model, on every labeled swing neither trained on: the validation swings and the labeled swings without
+     club points (P2 on 18 face-on / 16 down-the-line swings instead of 8 / 7, Oct 7; ~10 min each).
   5. improve.judge on the runs' average (improve.average_scores); the best run (improve.best_run) is the
      candidate sent to the server, with the scores and report.
 
@@ -37,7 +38,7 @@ TRAIN_PY = HERE.parent / "train" / ".venv" / "Scripts" / "python.exe"
 TRAIN_SCRIPT = HERE.parent / "train" / "club_train.py"
 CACHE = Path(os.environ.get("SWINGCLIPS_NIGHT_CACHE") or Path.home() / "SwingClips-night")
 # About how long a try takes; night_worker.py doesn't start one with less time left.
-MINUTES = 75
+MINUTES = 90
 # Longest each step may take (s).
 DATASET_S, TRAIN_S, EVAL_S = 30 * 60, 120 * 60, 60 * 60
 # For trying the step out quickly (tests, a PC without a free GPU): fewer epochs, train on the CPU,
@@ -92,16 +93,18 @@ def run(cmd: list, env: dict, log: Path, timeout: float, cwd: Path) -> None:
 
 
 def scorecard(env: dict, club_model: Path, out: Path, dataset_json: Path, log: Path) -> dict:
-    """eval.py's deep pass on the validation swings with `club_model`: its tables."""
+    """eval.py's deep pass on the swings the dataset didn't train on with `club_model`: its tables, with
+    "clips": how many labeled clips were scored."""
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
     run([sys.executable, HERE / "eval.py", "--rerun", "--deep", "--no-noise", "--no-quality",
-         "--only-val", dataset_json, "--out", out],
+         "--not-trained", dataset_json, "--out", out],
         {**env, "SWINGCLIPS_DEEP_CLUB_MODEL": str(club_model)}, log, EVAL_S, HERE)
     saved = sorted(glob.glob(str(out / "*.json")), key=os.path.getmtime)
     if not saved:
         raise RuntimeError("eval.py saved no scorecard")
-    return json.loads(Path(saved[-1]).read_text(encoding="utf-8"))["tables"]
+    doc = json.loads(Path(saved[-1]).read_text(encoding="utf-8"))
+    return {**doc["tables"], "clips": doc.get("labeledClips")}
 
 
 def try_once(server: str, current_of, force: bool = False, cache: Path = CACHE, say=print) -> str:
@@ -141,15 +144,16 @@ def try_once(server: str, current_of, force: bool = False, cache: Path = CACHE, 
         minutes = round((time.time() - clock) / 60, 1)
         say(f"Improve: trained {len(models_made)} in {minutes} min; scoring them and the model in use on the swings "
             "they didn't train on")
-        current = improve.scores_from(scorecard(env, current_model, work / "eval-current", dataset / "dataset.json",
-                                                work / "eval-current.log"))
+        tables = scorecard(env, current_model, work / "eval-current", dataset / "dataset.json", work / "eval-current.log")
+        current = improve.scores_from(tables)
         runs = [improve.scores_from(scorecard(env, m, work / f"eval-candidate-{i}", dataset / "dataset.json",
                                               work / f"eval-candidate-{i}.log")) for i, m in enumerate(models_made)]
         candidate = improve.average_scores(runs)
         best = improve.best_run(runs)
         stamp = post(server, f"/api/improve/{cid}/model", models_made[best].read_bytes(), "application/octet-stream")["stamp"]
         verdict = improve.judge(current, candidate)
-        train = {**report["train"], **counts(info), "epochs": EPOCHS, "minutes": minutes, "runs": len(runs), "kept": best}
+        train = {**report["train"], **counts(info), "epochs": EPOCHS, "minutes": minutes, "runs": len(runs), "kept": best,
+                 "scoredClips": tables.get("clips")}
         report.update(model=stamp, train=train, scores={"current": current, "candidate": candidate, "runs": runs},
                       verdict=verdict,
                       status="better" if verdict["better"] else "not better",
