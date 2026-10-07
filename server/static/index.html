@@ -504,6 +504,10 @@
   .p-club-pick { margin-left: 10px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text); }
   #pr-quick { display: flex; flex-direction: column; gap: 6px; }
   #pr-quick .p-focus-name { font-size: 17px; }
+  #p-working { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  #p-working .p-work-head { font-size: 16px; font-weight: 600; line-height: 1.4; }
+  #p-working .p-work-head.better { color: var(--accent); }
+  #p-working .p-work-head.worse { color: var(--warn); }
   .p-second { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
   .p-tile { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line);
             border-radius: 6px; cursor: pointer; min-width: 0; }
@@ -1643,9 +1647,13 @@
 
     <div class="p-step"><span class="p-step-n">3</span>Is it working?</div>
     <div class="t-card" id="p-chart">
+      <!-- The verdict on the focus in a sentence, what to do about it, the numbers behind it folded. -->
+      <div id="p-working"></div>
       <div id="p-combine-line" class="note" style="margin-bottom: 8px;" hidden></div>
       <div id="p-program-trends" class="note p-program-trends" style="margin-bottom: 8px;" hidden></div>
       <div id="p-drill-sets" class="note p-drill-sets" style="margin-bottom: 8px;" hidden></div>
+      <details class="p-more" data-fold="working-chart">
+      <summary>See it on a chart</summary>
       <div class="p-chips" id="p-chips"></div>
       <svg role="img"></svg>
       <div id="p-tip" class="tip" hidden></div>
@@ -1656,6 +1664,7 @@
           session's median, the bar its middle half. Spread numbers are the standard deviation of the session's shots:
           lower is more consistent. "Camera moved" marks where a phone was moved, so body numbers either side don't
           compare; "focus" marks the day your focus started. Tap a session to open its trends.</div>
+      </details>
       </details>
     </div>
 

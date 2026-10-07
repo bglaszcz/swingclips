@@ -92,8 +92,15 @@ What the server works out for each swing and what each part of the review page s
   for "worth trying"; attack angle and loft left out, their target depends on the club). A second
   move only when it scores 70% of the first; with a focus, one line when the numbers now point
   elsewhere. A focus made here has no club (all clubs); older one-club focuses still work.
-  **3. Is it working?** The chart pools every club (only numbers that mean the same with any club:
-  body numbers, path, face, face to path); a one-club focus charts its own club.
+  **3. Is it working?** One heading and what to do about it, from the focus's move and results since it
+  started (`SwingFocus.working`, focus.js): "It's working" (move and a result the right way), "You're
+  making the move; the results haven't followed yet", "The results are moving the right way" (the move
+  not clearly), "Not working yet after N sessions" (4+ sessions, nothing moved: slower drill, or the
+  coach), "Going the wrong way so far" (half speed), "Too early to tell". Then the "So far" line, a
+  camera-moved warning and the before / since numbers (moved here from step 2). Without a focus, a
+  pointer to step 2. The chart is folded under **See it on a chart** (opens itself when a tile or chip
+  picks a number); it pools every club (only numbers that mean the same with any club: body numbers,
+  path, face, face to path); a one-club focus charts its own club.
   Body numbers are named in plain words everywhere in Trends and Progress (`SwingShotStory.LABELS`).
   **One club at a time** (the club picker): that club's last session tiles, shot pattern, sessions
   table and good shots, as before.

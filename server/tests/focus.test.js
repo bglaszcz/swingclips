@@ -68,3 +68,17 @@ test("only the latest sessions before count", () => {
   const c = F.compare(sessions({ n: 14 }), { ...focus, since: "2026-09-12" });
   assert.equal(c.before, F.BEFORE_SESSIONS);
 });
+
+test("is it working: one heading and what to do, for each way it can go", () => {
+  const X = (level, good, key = "path") => ({ key, level, good });
+  const w = (move, results, after = 5) => F.working({ after, before: 6, move, results }, k => k === "path" ? "club path" : k);
+  assert.equal(w(X("clear", true, "m"), [X("clear", true)]).head, "It's working");
+  assert.equal(w(X("clear", true, "m"), [X("clear", true)]).cls, "better");
+  assert.match(w(X("none", null, "m"), [X("maybe", true)]).next, /^Club path improved over 5 sessions/);
+  assert.equal(w(X("clear", true, "m"), [X("none", null)]).head, "You're making the move; the results haven't followed yet");
+  assert.equal(w(X("none", null, "m"), [X("none", null)]).head, "Not working yet after 5 sessions");
+  assert.equal(w(X("none", null, "m"), [X("none", null)], 2).head, "Too early to tell");
+  assert.equal(w(X("maybe", false, "m"), [X("clear", true)]).cls, "worse");
+  assert.equal(w(X("few", null, "m"), []).head, "Not enough swings yet");
+  assert.equal(w(X("none", null, "m"), [], 0).head, "Not started yet");
+});

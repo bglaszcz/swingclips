@@ -895,8 +895,9 @@ function renderProgress() {
   renderPriority(helps, top);
   renderHelpsEvidence(null, helps.subs, helps);
   renderChips(focus, top[0]);
+  renderWorking(focus);
   const chartSessions = focus && focus.club ? progressSessions(focus.club).filter(s => s.start >= since) : all;
-  drawOverTime(chartSessions, field(progressPick.metric), focus);
+  if (foldOpen("working-chart")) drawOverTime(chartSessions, field(progressPick.metric), focus);
 
   // One club at a time.
   renderTiles(sessions, club);
@@ -1165,6 +1166,9 @@ async function renderProgressCombine() {
 // Set once a number is picked for the chart (the tiles, the chips or the list): then it stays.
 let progressMetricPicked = false;
 function pickMetric(key) {
+  // Picking a number opens the chart that shows it.
+  const chart = progressBox.querySelector('details[data-fold="working-chart"]');
+  if (chart) chart.open = true;
   progressPick.metric = key;
   progressMetricPicked = true;
   savePicks();
@@ -2006,21 +2010,10 @@ function renderPriority(h, top) {
   box.replaceChildren(...kids);
 }
 
-/** The focus: the move, drill and thought, how it's going since it started, and what to do next. */
-function focusBlock(f, h) {
-  const plain = SwingShotStory.plain;
-  const mv = SwingCoach.MOVES[f.move], fix0 = mv && mv[f.aim];
-  const fix = fix0 && { ...fix0, name: plain(fix0.name), how: plain(fix0.how), drill: plain(fix0.drill), thought: plain(fix0.thought) };
+/** How the focus is going since it started (focus.js): the "So far" line, a camera warning, the numbers folded. */
+function focusProgress(f, cmp) {
   const fname = f.club ? clubName(f.club).toLowerCase() : "all clubs";
-  const kids = [pEl("div", "p-focus-kicker", `Your focus · ${fname} · since ${new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}`)];
-  const nameEl = pEl("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`);
-  const m = f.club ? null : SwingSessionScore.priorities(h.a.links).find(x => x.move === f.move && x.aim === f.aim);
-  if (!f.club) nameEl.append(m ? badge(m.label) : badge("none", "Not in the latest numbers"));
-  kids.push(nameEl);
-  if (fix) kids.push(...drillAndThought(fix));
-
-  // How it's going, in a sentence; the numbers behind it folded.
-  const cmp = SwingFocus.compare(progressSessions(f.club || "*"), f);
+  const kids = [];
   const so = pEl("div", "p-focus-so");
   if (!cmp.after) {
     so.textContent = `No sessions ${f.club ? `with the ${fname} ` : ""}since it started yet: hit some balls with the drill, then look here.`;
@@ -2055,6 +2048,38 @@ function focusBlock(f, h) {
     nums.append(wrap);
     kids.push(nums);
   }
+  return kids;
+}
+
+/**
+ * Step 3: is the focus working? One sentence with what to do about it (the move and its results since the
+ * focus started, focus.js), then the "So far" line and the numbers. Without a focus, a pointer to step 2.
+ */
+function renderWorking(f) {
+  const box = document.getElementById("p-working");
+  if (!f || !f.move) {
+    box.replaceChildren(pEl("div", "p-work-head", "No focus yet"),
+      pEl("div", "muted", "Make your #1 priority your focus in step 2, and this says whether it's working: the move itself, and the results it's for."));
+    return;
+  }
+  const cmp = SwingFocus.compare(progressSessions(f.club || "*"), f);
+  const v = SwingFocus.working(cmp, key => lowerFirst(focusLabel(key)));
+  box.replaceChildren(pEl("div", `p-work-head ${v.cls}`, v.head), pEl("div", null, v.next), ...focusProgress(f, cmp));
+}
+
+/** The focus: the move, its drill and thought, and what to do next (how it's going: step 3). */
+function focusBlock(f, h) {
+  const plain = SwingShotStory.plain;
+  const mv = SwingCoach.MOVES[f.move], fix0 = mv && mv[f.aim];
+  const fix = fix0 && { ...fix0, name: plain(fix0.name), how: plain(fix0.how), drill: plain(fix0.drill), thought: plain(fix0.thought) };
+  const fname = f.club ? clubName(f.club).toLowerCase() : "all clubs";
+  const kids = [pEl("div", "p-focus-kicker", `Your focus · ${fname} · since ${new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}`)];
+  const nameEl = pEl("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`);
+  const m = f.club ? null : SwingSessionScore.priorities(h.a.links).find(x => x.move === f.move && x.aim === f.aim);
+  if (!f.club) nameEl.append(m ? badge(m.label) : badge("none", "Not in the latest numbers"));
+  kids.push(nameEl);
+  if (fix) kids.push(...drillAndThought(fix));
+
   const note = f.club ? goodShotsNote(f.club, f.move, f.aim) : null;
   if (note) kids.push(note);
 

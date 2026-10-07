@@ -103,7 +103,35 @@
     return `${x.level === "clear" ? "clearly" : "maybe"} ${way}`;
   }
 
-  const api = { BEFORE_SESSIONS, compare, compareOne, verdict, valueOf };
+  /**
+   * Is it working? The verdict on a compare() result in one heading and what to do about it:
+   * {head, next, cls: "better" | "worse" | ""}. label(key) names a number in words.
+   */
+  function working(cmp, label) {
+    const n = cmp.after, sess = `${n} session${n === 1 ? "" : "s"}`;
+    const cap = t => t.replace(/^./, c => c.toUpperCase());
+    const shows = x => x.level === "clear" || x.level === "maybe";
+    const good = x => shows(x) && x.good === true, bad = x => shows(x) && x.good === false;
+    const names = xs => {
+      const w = xs.map(x => label(x.key));
+      return w.length < 2 ? w.join("") : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`;
+    };
+    const up = cmp.results.filter(good), down = cmp.results.filter(bad);
+    if (!n) return { cls: "", head: "Not started yet", next: "No sessions since your focus began: hit some balls with the drill." };
+    if (cmp.move.level === "few") return { cls: "", head: "Not enough swings yet", next: `Too few swings with the move since it started (${sess}): keep going.` };
+    if (bad(cmp.move) || (down.length && !up.length)) {
+      return { cls: "worse", head: "Going the wrong way so far",
+               next: `${bad(cmp.move) ? "The move itself" : cap(names(down))} moved the wrong way over ${sess}. Slow the drill down (half speed, 10 balls) before going back to full swings.` };
+    }
+    if (good(cmp.move) && up.length) return { cls: "better", head: "It's working", next: `You're making the move and ${names(up)} followed over ${sess}. Keep the drill going.` };
+    if (good(cmp.move)) return { cls: "", head: "You're making the move; the results haven't followed yet", next: `That's over ${sess}: give it another session or two.` };
+    if (up.length) return { cls: "better", head: "The results are moving the right way", next: `${cap(names(up))} improved over ${sess}, though the move itself hasn't changed clearly yet: keep going.` };
+    if (n >= 4) return { cls: "worse", head: `Not working yet after ${sess}`,
+                         next: "Neither the move nor its results have changed. Try the drill slower, or show your coach (Tools > Week for coach)." };
+    return { cls: "", head: "Too early to tell", next: `Only ${sess} since it started: keep going.` };
+  }
+
+  const api = { BEFORE_SESSIONS, compare, compareOne, verdict, valueOf, working };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingFocus = api;
 })(typeof window !== "undefined" ? window : globalThis);
