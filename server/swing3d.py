@@ -101,3 +101,74 @@ def save(path: Path, doc: dict) -> None:
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(doc, separators=(",", ":")), encoding="utf-8")
     tmp.replace(path)
+
+
+def calib_health(all_sessions: list[dict], records: dict, doc_loader=None) -> list[dict]:
+    """Health summary for the latest calibration session (and the one before it), over their
+    swings with 3D: how many, how many lost a joint at setup, most lost joints, and median/p90
+    reprojection error at address (stored in body3d.addressError if missing)."""
+    if not all_sessions:
+        return []
+    target = all_sessions[-2:]
+    out = []
+    for s in reversed(target):
+        sess_id = s.get("id")
+        swings = []
+        for name, rec in records.items():
+            b3d = rec.get("body3d")
+            if not b3d:
+                continue
+            key3d = rec.get("key3d") or ""
+            if (key3d.split("|")[0] == sess_id or rec.get("session") == sess_id
+                    or b3d.get("session") == sess_id):
+                swings.append((name, rec))
+            elif not key3d and doc_loader:
+                doc = doc_loader(name)
+                if doc and doc.get("session") == sess_id:
+                    swings.append((name, rec))
+
+        total = len(swings)
+        lost_count = 0
+        lost_counts = {}
+        meds = []
+        p90s = []
+        for name, rec in swings:
+            b3d = rec["body3d"]
+            missing = b3d.get("setupMissing") or []
+            if missing:
+                lost_count += 1
+                for j in missing:
+                    lost_counts[j] = lost_counts.get(j, 0) + 1
+
+            addr = b3d.get("addressError") or (b3d.get("reprojection") or {}).get("address")
+            if not addr and doc_loader:
+                doc = doc_loader(name)
+                if doc:
+                    addr = (doc.get("reprojection") or {}).get("address")
+            if addr:
+                b3d["addressError"] = addr
+                if addr.get("median") is not None:
+                    meds.append(addr["median"])
+                if addr.get("p90") is not None:
+                    p90s.append(addr["p90"])
+
+        most_lost = max(lost_counts, key=lost_counts.get) if lost_counts else None
+        typ = round(float(np.median(meds)), 1) if meds else None
+        worst = round(float(np.median(p90s)), 1) if p90s else None
+        recal = (lost_count / total > 0.2) if total > 0 else False
+        out.append({
+            "id": sess_id,
+            "session": sess_id,
+            "created": s.get("created"),
+            "method": s.get("method", "board"),
+            "swings": total,
+            "lostAtSetup": lost_count,
+            "mostLost": most_lost,
+            "lostJoints": dict(lost_counts),
+            "typical": typ,
+            "worstTenth": worst,
+            "median": typ,
+            "p90": worst,
+            "recalibrate": recal,
+        })
+    return out

@@ -63,6 +63,9 @@
   .note { padding: 10px 12px; border-radius: 10px; background: var(--warn-soft); border: 1px solid var(--warn); font-size: 14px; }
   @media (max-width: 600px) { main { padding: 12px; } section { padding: 12px; } }
   .moved { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+  #calib-health { font-size: 14px; line-height: 1.5; color: var(--muted); }
+  .calib-health-line { margin: 2px 0; }
+  #calib-health a { color: var(--accent); font-weight: 600; text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -74,6 +77,11 @@
   <a href="/" style="margin-left: 16px">Review page →</a>
 </header>
 <main>
+  <div id="calib-health" hidden>
+    <div id="calib-health-lines"></div>
+    <div id="calib-health-warn" class="note" style="margin-top: 8px" hidden></div>
+  </div>
+
   <section>
     <h2><span class="n" id="n0">0</span>Phones recording</h2>
     <div class="hint">Both phones need to be recording: they save a clip when they hear a clap. The clips taken
@@ -245,6 +253,60 @@ function renderJob(key, job) {
 
 function render() {
   if (!state) return;
+  const healthBox = $("calib-health");
+  if (healthBox) {
+    const hl = state.health || [];
+    if (!hl.length) {
+      healthBox.hidden = true;
+    } else {
+      healthBox.hidden = false;
+      const lines = hl.map((h, idx) => {
+        const d = new Date(h.created * 1000);
+        const mDay = d.toLocaleDateString([], { month: "short", day: "numeric" });
+        const tStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        const sameDay = hl.filter(o => {
+          const od = new Date(o.created * 1000);
+          return od.toLocaleDateString([], { month: "short", day: "numeric" }) === mDay;
+        }).length > 1;
+        const dateStr = (idx === 0 || sameDay) ? `${mDay}, ${tStr}` : mDay;
+        const method = h.method === "body" ? "from swings" : "mat board";
+        const worst = h.worstTenth != null ? Math.round(h.worstTenth) : null;
+        if (!h.swings) {
+          return `${dateStr} (${method}): 0 swings.`;
+        }
+        if (h.lostAtSetup > 0) {
+          const joint = h.mostLost ? `the ${h.mostLost}` : "a joint";
+          const typ = h.typical != null ? `${h.typical} px` : "–";
+          const wst = worst != null ? `${worst} px` : "–";
+          return `${dateStr} (${method}): ${h.lostAtSetup} of ${h.swings} swings lost ${joint} at setup; setup error ${typ} typical, ${wst} worst tenth.`;
+        }
+        const typ = h.typical != null ? h.typical : "–";
+        const wst = worst != null ? `${worst} px` : "–";
+        return `${dateStr} (${method}): 0 of ${h.swings}; ${typ} / ${wst}.`;
+      });
+      $("calib-health-lines").innerHTML = lines.map(l => `<div class="calib-health-line">${esc(l)}</div>`).join("");
+
+      const shouldRecal = hl[0] && hl[0].recalibrate;
+      const warnBox = $("calib-health-warn");
+      if (warnBox) {
+        warnBox.hidden = !shouldRecal;
+        if (shouldRecal) {
+          warnBox.innerHTML = `3D is missing numbers on many swings: <a href="#n-mat" id="recal-link">recalibrate with the mat board (step 3)</a>`;
+          const lnk = $("recal-link");
+          if (lnk) {
+            lnk.onclick = (e) => {
+              e.preventDefault();
+              const dt = $("n-mat") ? $("n-mat").closest("details") : null;
+              if (dt) dt.open = true;
+              const target = $("n-mat") || dt;
+              if (target) target.scrollIntoView({ behavior: "smooth" });
+            };
+          }
+        }
+      }
+    }
+  }
+
   const phones = status ? ["face", "dtl"].map(a => status.phones[a] || {}) : [];
   const rec = phones.filter(p => p.recording).length, up = phones.filter(p => p.connected).length;
   $("rec-start").disabled = !status || rec === 2 || up === 0;
