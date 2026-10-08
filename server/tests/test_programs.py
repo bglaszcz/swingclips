@@ -268,7 +268,7 @@ class ProgramsTest(unittest.TestCase):
         self.hit(shot(attack=-5.5, face=3.5, path=0.0), **good)
         self.assertEqual("Miss: attack too steep, face open to path.", self.said()[-1])
         self.hit(shot(attack=-4.0), body3d=body3d(pelvis_open=4), body={"pelvisBall": 1.0})
-        self.assertEqual("Miss: pelvis not open enough, pelvis not ahead enough.", self.said()[-1])
+        self.assertEqual("Miss: hips not open enough, hips not ahead enough.", self.said()[-1])
         n = self.p.state()["program"]["blocks"][1]["judged"][0]["numbers"]
         self.assertEqual((n["pelvisBall"], n["path"], n["face"]), (4.5, 0.0, 0.5))
         rep = self.p.report()["text"]
@@ -307,13 +307,13 @@ class ProgramsTest(unittest.TestCase):
         s2["clubData"]["smash"] = 1.42
         self.hit(s2, **good)
         rep = self.p.report(body=lambda clip: {"pelvisBall": 4.5})["text"]
-        self.assertIn("pelvis vs ball at impact +4.5 in (camera, 2 swings)", rep)
+        self.assertIn("hips vs ball at impact +4.5 in (camera, 2 swings)", rep)
         self.assertIn("club path +0.5° (+0.0 to +1.0)", rep)
         self.assertIn("face to target +2.0° (+0.5 to +3.5)", rep)
         self.assertIn("ball speed 113.0 mph (112.0 to 114.0)", rep)
         self.assertIn("smash 1.41 (1.40 to 1.42)", rep)
-        self.assertIn("pelvis open at impact +14° (3D, 2 swings)", rep)
-        self.assertIn("pelvis peak -10 ms (3D, 2 swings)", rep)
+        self.assertIn("hips open at impact +14° (3D, 2 swings)", rep)
+        self.assertIn("hips peak -10 ms (3D, 2 swings)", rep)
         self.assertIn("arm peak -50 ms (3D, 2 swings)", rep)
 
     def test_block_medians_old_run_unchanged(self):
@@ -395,9 +395,9 @@ class ProgramsTest(unittest.TestCase):
         self.hit(shot())
         bodies = {self.swings[0]["name"]: {"pelvisBall": -2.04, "chestBall": 0.5}, self.swings[1]["name"]: {"pelvisBall": 3.0}}
         text = self.p.report(body=bodies.get)["text"]
-        self.assertIn("| vs ball: pelvis -2.0 in, chest +0.5 in", text)
-        self.assertIn("| vs ball: pelvis +3.0 in", text)
-        self.assertNotIn("vs ball: pelvis", self.p.report()["text"])
+        self.assertIn("| vs ball: hips -2.0 in, chest +0.5 in", text)
+        self.assertIn("| vs ball: hips +3.0 in", text)
+        self.assertNotIn("vs ball: hips", self.p.report()["text"])
 
     def test_setup_notes_go_into_the_report(self):
         self.flush()
@@ -510,10 +510,10 @@ class ProgramsTest(unittest.TestCase):
         self.assertTrue(self.said()[-1].startswith("Pass."))
         # Miss: pelvis peak after impact
         self.hit(shot(), body3d=body3d(pelvis_peak=20, pelvis_open=18))
-        self.assertEqual("Miss: pelvis peaks late.", self.said()[-1])
-        # Miss: pelvis not open enough
+        self.assertEqual("Miss: hips peak late.", self.said()[-1])
+        # Miss: hips not open enough
         self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=10))
-        self.assertEqual("Miss: pelvis not open enough.", self.said()[-1])
+        self.assertEqual("Miss: hips not open enough.", self.said()[-1])
         # Hit 6 more passes to reach 7 passes out of 10
         for _ in range(6):
             self.hit(shot(), body3d=body3d(pelvis_peak=-15, pelvis_open=18))
@@ -579,10 +579,10 @@ class ProgramsTest(unittest.TestCase):
         # Tier 3 checks: pelvisPeakMs <= -30, armAfterPelvis: true, attack [-6, -3], faceToPath [-2, 2], median loft <= 26.5
         # Miss 1: pelvis peak not early enough (-20 > -30)
         self.hit(shot(attack=-4.0, loft=24.0, face=0.0, path=0.0), body3d=body3d(pelvis_peak=-20, arm_peak=-10, pelvis_open=20))
-        self.assertEqual("Miss: pelvis peaks late.", self.said()[-1])
+        self.assertEqual("Miss: hips peak late.", self.said()[-1])
         # Miss 2: arm before pelvis
         self.hit(shot(attack=-4.0, loft=24.0, face=0.0, path=0.0), body3d=body3d(pelvis_peak=-40, arm_peak=-50, pelvis_open=20))
-        self.assertEqual("Miss: arms before pelvis.", self.said()[-1])
+        self.assertEqual("Miss: arms before hips.", self.said()[-1])
         # 5 passes in a row
         for _ in range(5):
             self.hit(shot(attack=-4.0, loft=24.0, face=0.0, path=0.0), body3d=body3d(pelvis_peak=-40, arm_peak=-20, pelvis_open=20, pelvis_start=-110))
@@ -590,8 +590,8 @@ class ProgramsTest(unittest.TestCase):
         done = self.p.state()["log"][-1]
         self.assertEqual(done["results"]["tier3"], "passed")
         rep = self.p.report()
-        self.assertIn("Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height | 3D: pelvis peak / arm peak / pelvis open / pelvis start, verdict):", rep["text"])
-        self.assertIn("pelvis peak -40 ms, arm peak -20 ms, pelvis open +20°, pelvis start -110 ms, pass", rep["text"])
+        self.assertIn("Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height | 3D: hips peak / arm peak / hips open / hips start, verdict):", rep["text"])
+        self.assertIn("hips peak -40 ms, arm peak -20 ms, hips open +20°, hips start -110 ms, pass", rep["text"])
 
     def test_sequence_cap_40(self):
         self.p.start("sequence")

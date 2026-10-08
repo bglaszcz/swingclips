@@ -6,7 +6,7 @@
       "from": "Golf coach chat, Oct 6 2026: the low point moved forward (pelvis ~5 in ahead, attack -3.6 at 3/4, -5 full) but steeper than about -4.5 the face stays open (7 iron, all sessions: face to path +3.4 median, 29% within 2, on 31 shots; -4.5 to -3: 50%). Likely a slide without a turn: stop adding slide, add spin. Strike height not gated (it scatters ~8 mm shot to shot). Lead foot only and step through are warm-ups now, not gates.",
       "cap": 40,
       "clubs": "7 iron only, no driver",
-      "bringBack": "Per swing: pelvis open at impact, pelvis and arm peak times, path, face, start direction, ball speed and smash, attack, loft, face to path, strike; block medians with the shot order. Lead wrist at impact by eye on the down-the-line video (flat or slightly bowed is the target): the app doesn't measure it.",
+      "bringBack": "Per swing: hips open at impact, hips and arm peak times, path, face, start direction, ball speed and smash, attack, loft, face to path, strike; block medians with the shot order. Lead wrist at impact by eye on the down-the-line video (flat or slightly bowed is the target): the app doesn't measure it.",
       "blocks": [
         {
           "id": "tier1",
@@ -28,7 +28,7 @@
           "ball": true,
           "club": "I7",
           "reps": 15,
-          "how": "3/4 speed, 7 iron, same brace-and-turn feel. Attack -3 to -4.5, face to path within 2, pelvis open 10 or more at impact and still 3 in or more ahead of the ball. Gate 8 of 15 (the coach's 5 of 10, over the 15 shots). Strike height is reported, not gated.",
+          "how": "3/4 speed, 7 iron, same brace-and-turn feel. Attack -3 to -4.5, face to path within 2, hips open 10 or more at impact and still 3 in or more ahead of the ball. Gate 8 of 15 (the coach's 5 of 10, over the 15 shots). Strike height is reported, not gated.",
           "gate": {
             "kind": "count",
             "need": 8,
@@ -284,7 +284,7 @@
       "from": "Golf coach chat, Oct 2 2026: 3D kinematics found lead arm fastest ~50 ms before impact, pelvis ~33 ms after impact, hips square at impact. 3-tier sequence ladder to lead downswing with pelvis uncoiling first.",
       "cap": 40,
       "clubs": "7 iron, no driver",
-      "bringBack": "Pelvis peak time and arm peak time vs impact (ms), pelvis open at impact vs address, pelvis rotation start vs top of swing, and attack, loft, face to path, strike height, with shot order.",
+      "bringBack": "Hips peak time and arm peak time vs impact (ms), hips open at impact vs address, when the hips start turning against the top of swing, and attack, loft, face to path, strike height, with shot order.",
       "blocks": [
         {
           "id": "tier1",

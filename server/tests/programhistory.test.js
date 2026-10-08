@@ -314,7 +314,7 @@ test("braceturn runs: pelvis open goes 6 -> 12 (now inside the gate) and pelvis 
   assert.equal(summary.length, 1);
   assert.equal(
     summary[0],
-    "Tier 2: 3/4 speed 7 iron, 2 runs: passed 6/15 → 9/15 (gate 8). Attack -3.8 → -3.5° (inside the gate). Face to path +0.5 → +0.2° (inside the gate). Pelvis open 6 → 12° (now inside the gate). Pelvis ahead 4.1 → 3.9 in (about the same)."
+    "Tier 2: 3/4 speed 7 iron, 2 runs: passed 6/15 → 9/15 (gate 8). Attack -3.8 → -3.5° (inside the gate). Face to path +0.5 → +0.2° (inside the gate). Hips open 6 → 12° (now inside the gate). Hips ahead 4.1 → 3.9 in (about the same)."
   );
 });
 
@@ -388,7 +388,7 @@ test("missing 3D swings on run: says (3D on n of m swings) when fewer than all h
   assert.ok(t);
   const lines = History.lines(t);
   assert.equal(lines.length, 1);
-  assert.ok(lines[0].includes("Pelvis open 7 → 11° (now inside the gate) (3D on 7 of 10 swings)."));
+  assert.ok(lines[0].includes("Hips open 7 → 11° (now inside the gate) (3D on 7 of 10 swings)."));
 });
 
 test("a one-sided check: toward it, then crossed in", () => {

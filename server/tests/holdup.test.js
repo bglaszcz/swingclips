@@ -71,7 +71,7 @@ test("a real link planted in every session -> found, then held", () => {
   assert.deepEqual(t, { found: 1, held: 1, faded: 0, reversed: 0, early: 0 });
 
   const s = HoldUp.sentence(r0);
-  assert.match(s, /^Found Sep 22; held up in the 3 sessions since \(r -0\.\d+, 60 swings\)\.$/);
+  assert.match(s, /^Found Sep 22; held up in the 3 sessions since \(a (strong|clear|weak) link, 60 swings\)\.$/);
 });
 
 test("a link planted only in early sessions -> found, then faded", () => {
@@ -95,7 +95,7 @@ test("a link planted only in early sessions -> found, then faded", () => {
   assert.deepEqual(t, { found: 1, held: 0, faded: 1, reversed: 0, early: 0 });
 
   const s = HoldUp.sentence(r0);
-  assert.match(s, /^Found Sep 22; not clear in the 3 sessions since \(r -?\d\.\d\d, \d+ swings\)\.$/);
+  assert.match(s, /^Found Sep 22; not clear in the 3 sessions since \(\d+ swings\)\.$/);
 });
 
 test("a link planted opposite in later sessions -> found, then reversed", () => {
@@ -119,7 +119,7 @@ test("a link planted opposite in later sessions -> found, then reversed", () => 
   assert.deepEqual(t, { found: 1, held: 0, faded: 0, reversed: 1, early: 0 });
 
   const s = HoldUp.sentence(r0);
-  assert.match(s, /^Found Sep 22; reversed in the 3 sessions since \(r 0\.\d+, 60 swings\)\.$/);
+  assert.match(s, /^Found Sep 22; reversed in the 3 sessions since: it now goes the other way \(60 swings\)\.$/);
 });
 
 test("found in the last session -> too early", () => {

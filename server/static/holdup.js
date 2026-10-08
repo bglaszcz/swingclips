@@ -155,9 +155,16 @@
     return r.toFixed(2);
   }
 
+  /** How strong a link is, in words (|r|): the correlation itself is for the Advanced data. */
+  function strengthOf(r) {
+    if (r == null || !finite(r)) return "";
+    const a = Math.abs(r);
+    return a >= 0.4 ? "a strong link" : a >= 0.2 ? "a clear link" : "a weak link";
+  }
+
   /**
    * Formats a replayed finding into a plain-words sentence.
-   * e.g. "Found Sep 28; held up in the 6 sessions since (r 0.31, 84 swings)."
+   * e.g. "Found Sep 28; held up in the 6 sessions since (a clear link, 84 swings)."
    * @param x replayed item
    * @returns string
    */
@@ -169,19 +176,17 @@
 
     if (x.verdict === "held") {
       const n = (x.later && x.later.n != null) ? x.later.n : 0;
-      const r = fmtR(x.later && x.later.r);
-      return `Found ${date}; held up in the ${sessionWord} since (r ${r}, ${n} swing${n === 1 ? "" : "s"}).`;
+      const w = strengthOf(x.later && x.later.r);
+      return `Found ${date}; held up in the ${sessionWord} since (${w ? w + ", " : ""}${n} swing${n === 1 ? "" : "s"}).`;
     }
     if (x.verdict === "reversed") {
       const n = (x.later && x.later.n != null) ? x.later.n : 0;
-      const r = fmtR(x.later && x.later.r);
-      return `Found ${date}; reversed in the ${sessionWord} since (r ${r}, ${n} swing${n === 1 ? "" : "s"}).`;
+      return `Found ${date}; reversed in the ${sessionWord} since: it now goes the other way (${n} swing${n === 1 ? "" : "s"}).`;
     }
     if (x.verdict === "faded") {
       // Not seen clearly again: with a few sessions since, that's often too little to say, not gone.
       const n = (x.later && x.later.n != null) ? x.later.n : 0;
-      const r = fmtR(x.later && x.later.r);
-      return `Found ${date}; not clear in the ${sessionWord} since (r ${r}, ${n} swing${n === 1 ? "" : "s"}).`;
+      return `Found ${date}; not clear in the ${sessionWord} since (${n} swing${n === 1 ? "" : "s"}).`;
     }
     // "too early"
     return `Found ${date}; too early to tell (${sessionWord} since).`;

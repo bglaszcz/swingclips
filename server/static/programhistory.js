@@ -61,13 +61,13 @@
     clubSpeed: { label: "Club speed", unit: " mph", decimals: 0, signed: false },
     carry: { label: "Carry", unit: " yd", decimals: 0, signed: false },
     // 3D angles and timings (server/programs.py BODY3D_KEYS)
-    pelvisOpen: { label: "Pelvis open", unit: "°", decimals: 0, signed: false },
-    pelvisPeakMs: { label: "Pelvis peak", unit: " ms", decimals: 0, signed: false },
+    pelvisOpen: { label: "Hips open", unit: "°", decimals: 0, signed: false },
+    pelvisPeakMs: { label: "Hips peak", unit: " ms", decimals: 0, signed: false },
     armPeakMs: { label: "Arm peak", unit: " ms", decimals: 0, signed: false },
-    pelvisStartMs: { label: "Pelvis turn start", unit: " ms", decimals: 0, signed: false },
+    pelvisStartMs: { label: "Hips turn start", unit: " ms", decimals: 0, signed: false },
     armAfterPelvis: { label: "Arm after pelvis", unit: "", decimals: 0, signed: false },
     // Camera distances (server/programs.py BODY_REPORT)
-    pelvisBall: { label: "Pelvis ahead", unit: " in", decimals: 1, signed: false },
+    pelvisBall: { label: "Hips ahead", unit: " in", decimals: 1, signed: false },
     chestBall: { label: "Chest ahead", unit: " in", decimals: 1, signed: false },
     handsAhead: { label: "Hands ahead", unit: " in", decimals: 1, signed: false },
     // Launch monitor ball flight numbers (Square)

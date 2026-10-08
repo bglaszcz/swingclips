@@ -625,7 +625,8 @@
           else {
             const mv = Summary ? Summary.BODY.find(b => b.key === x.move) : null;
             const rs = Helps ? Helps.RESULTS.find(r => r.key === x.result) : null;
-            const mName = mv ? mv.label : x.move;
+            const Story = globalThis.SwingShotStory || (typeof require !== "undefined" && require("./shotstory.js"));
+            const mName = (Story && Story.LABELS[x.move]) || (mv ? mv.label : x.move);
             const rName = rs ? rs.label : x.result;
             desc = `${mName} → ${rName}`;
           }

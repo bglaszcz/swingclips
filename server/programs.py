@@ -75,12 +75,12 @@ NUMBERS = {
     "strikeH": ("Strike toe/heel", " mm", 0),
     "clubSpeed": ("Club speed", " mph", 0),
     "carry": ("Carry", " yd", 0),
-    "pelvisPeakMs": ("Pelvis peak vs impact", " ms", 0),
+    "pelvisPeakMs": ("Hips peak vs impact", " ms", 0),
     "armPeakMs": ("Arm peak vs impact", " ms", 0),
-    "pelvisOpen": ("Pelvis open at impact", "°", 0),
-    "pelvisStartMs": ("Pelvis turn start vs top", " ms", 0),
-    "armAfterPelvis": ("Arm peak after pelvis", "", 0),
-    "pelvisBall": ("Pelvis vs ball at impact", " in", 1),
+    "pelvisOpen": ("Hips open at impact", "°", 0),
+    "pelvisStartMs": ("Hips turn start vs top", " ms", 0),
+    "armAfterPelvis": ("Arm peak after hips", "", 0),
+    "pelvisBall": ("Hips vs ball at impact", " in", 1),
     "chestBall": ("Chest vs ball at impact", " in", 1),
     "handsAhead": ("Hands ahead of ball at impact", " in", 1),
     # Reported, for where the ball went (the coach's ask, Oct 6).
@@ -188,18 +188,18 @@ def say_number(key: str, v) -> str:
     # Square's strike height is said as the number it gives: its 0 isn't the owner's sweet spot
     # (7 iron median about -13, best carry -20..-8), so "high" and "low" would mislead.
     if isinstance(v, bool):
-        return "arm after pelvis" if v else "arm before pelvis"
+        return "arm after hips" if v else "arm before hips"
     dec = NUMBERS[key][2]
     s = f"{abs(v):.{dec}f}".rstrip("0").rstrip(".") if dec else f"{abs(round(v))}"
     sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath", "strikeV") and s != "0" else ""
     if key == "pelvisPeakMs":
-        name = "pelvis peak"
+        name = "hips peak"
     elif key == "armPeakMs":
         name = "arm peak"
     elif key == "pelvisOpen":
-        name = "pelvis open"
+        name = "hips open"
     elif key == "pelvisStartMs":
-        name = "pelvis turn start"
+        name = "hips turn start"
     elif key == "strikeV":
         name = "strike"
     else:
@@ -220,7 +220,7 @@ def say_limit(c: dict, v) -> str:
     """What a failed check (value v) wanted, in words for the phone."""
     key, lo, hi = c["key"], c.get("min"), c.get("max")
     if key == "armAfterPelvis":
-        return "arm peak after pelvis"
+        return "arm peak after hips"
     if lo is not None and hi is not None and lo == -hi:
         return f"{NUMBERS[key][0].lower()} within {hi:g}"
     down, up = LIMIT_WORDS.get(key, ("or less", "or more"))
@@ -237,10 +237,10 @@ CUES = {
     "loft": ("too much loft", "too little loft"),
     "clubSpeed": ("too fast", "too slow"),
     "carry": ("long", "short"),
-    "pelvisPeakMs": ("pelvis peaks late", "pelvis peaks early"),
-    "pelvisOpen": ("pelvis too open", "pelvis not open enough"),
-    "pelvisStartMs": ("pelvis starts late", "pelvis starts early"),
-    "pelvisBall": ("pelvis too far ahead", "pelvis not ahead enough"),
+    "pelvisPeakMs": ("hips peak late", "hips peak early"),
+    "pelvisOpen": ("hips too open", "hips not open enough"),
+    "pelvisStartMs": ("hips start late", "hips start early"),
+    "pelvisBall": ("hips too far ahead", "hips not ahead enough"),
 }
 
 
@@ -248,7 +248,7 @@ def cue(c: dict, v) -> str:
     """A failed check (value v) as a short cue: which way it missed, no numbers."""
     key, hi = c["key"], c.get("max")
     if key == "armAfterPelvis":
-        return "arms before pelvis"
+        return "arms before hips"
     up, down = CUES.get(key, (f"{NUMBERS[key][0].lower()} too high", f"{NUMBERS[key][0].lower()} too low"))
     return up if hi is not None and (v is None or v > hi) else down
 
@@ -838,14 +838,14 @@ def carry_spread(values: list) -> str:
 
 
 # Camera numbers reported per block when the swings have them (summary.js BODY key: label, unit).
-BODY_REPORT = {"handsAhead": ("hands ahead of ball at impact", "in"), "pelvisBall": ("pelvis vs ball at impact", "in"),
+BODY_REPORT = {"handsAhead": ("hands ahead of ball at impact", "in"), "pelvisBall": ("hips vs ball at impact", "in"),
                "chestBall": ("chest vs ball at impact", "in")}
 
 # Square and 3D numbers reported per block when present on the block's read shots (the coach's ask).
 SQUARE_MORE = ("path", "face", "ballSpeed", "smash")
 BODY3D_REPORT = (
-    ("pelvisOpen", "pelvis open at impact", "°"),
-    ("pelvisPeakMs", "pelvis peak", " ms"),
+    ("pelvisOpen", "hips open at impact", "°"),
+    ("pelvisPeakMs", "hips peak", " ms"),
     ("armPeakMs", "arm peak", " ms"),
 )
 VALID_WRIST = {"flat", "bowed", "cupped", "can't tell"}
@@ -939,7 +939,7 @@ def report(p: dict, run: dict, body=None) -> dict:
     has_shift = bool(body) and any((body(r["clip"]) or {}).get("pelvisBall") is not None for r in reps if r.get("clip"))
     shift_head = " | vs ball at impact, + = ahead" if has_shift else ""
     if has_any_3d:
-        lines.append(f"Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height | 3D: pelvis peak / arm peak / pelvis open / pelvis start{shift_head}, verdict):")
+        lines.append(f"Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height | 3D: hips peak / arm peak / hips open / hips start{shift_head}, verdict):")
     else:
         lines.append(f"Shot order (# overall, block, club: attack / dynamic loft / face to path / strike height{shift_head}, verdict):")
     if any((r.get("numbers") or {}).get("path") is not None for r in reps):
@@ -963,16 +963,16 @@ def report(p: dict, run: dict, body=None) -> dict:
         if n.get("path") is not None and flight:
             nums = f"{nums} ({', '.join(flight)})"
         if any(n.get(k) is not None for k in ("pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs")):
-            d3 = (f"pelvis peak {fmt('pelvisPeakMs', n.get('pelvisPeakMs'))} ms, "
+            d3 = (f"hips peak {fmt('pelvisPeakMs', n.get('pelvisPeakMs'))} ms, "
                   f"arm peak {fmt('armPeakMs', n.get('armPeakMs'))} ms, "
-                  f"pelvis open {fmt('pelvisOpen', n.get('pelvisOpen'))}°, "
-                  f"pelvis start {fmt('pelvisStartMs', n.get('pelvisStartMs'))} ms")
+                  f"hips open {fmt('pelvisOpen', n.get('pelvisOpen'))}°, "
+                  f"hips start {fmt('pelvisStartMs', n.get('pelvisStartMs'))} ms")
             nums = f"{nums} | 3D: {d3}"
         # Pelvis and chest against the ball at impact (the coach's shift check), from the face-on
         # camera: the 3D's distances aren't used for it (on the Oct 2 swings its stance came out ~1.35x
         # too wide and the ball at the lead ankle; the camera's put it mid-stance).
         cam = (body(r0["clip"]) or {}) if body and r0.get("clip") else {}
-        shift = [f"{word} {fmt(k, cam[k])} in" for k, word in (("pelvisBall", "pelvis"), ("chestBall", "chest"))
+        shift = [f"{word} {fmt(k, cam[k])} in" for k, word in (("pelvisBall", "hips"), ("chestBall", "chest"))
                  if cam.get(k) is not None]
         if shift:
             nums = f"{nums} | vs ball: " + ", ".join(shift)

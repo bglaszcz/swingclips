@@ -98,14 +98,14 @@ test("lastShot: a pass shot", () => {
   assert.equal(res.checks[1].ok, true);
 
   assert.equal(res.checks[2].key, "pelvisOpen");
-  assert.equal(res.checks[2].label, "Pelvis open");
+  assert.equal(res.checks[2].label, "Hips open");
   assert.equal(res.checks[2].value, 14);
   assert.equal(res.checks[2].text, "14°");
   assert.equal(res.checks[2].want, "10 or more");
   assert.equal(res.checks[2].ok, true);
 
   assert.equal(res.checks[3].key, "pelvisBall");
-  assert.equal(res.checks[3].label, "Pelvis ahead of ball");
+  assert.equal(res.checks[3].label, "Hips ahead of ball");
   assert.equal(res.checks[3].value, 4.2);
   assert.equal(res.checks[3].text, "+4.2 in");
   assert.equal(res.checks[3].want, "3 or more");
