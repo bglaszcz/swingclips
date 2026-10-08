@@ -41,10 +41,49 @@
     return lo > 0 && Math.abs(f[lo - 1].t - t) < Math.abs(f[lo].t - t) ? lo - 1 : lo;
   }
 
+  function firstBodyTime(doc) {
+    if (!doc || !doc.frames) return null;
+    for (const f of doc.frames) {
+      if (f.p && BONES.some(([i, j]) => f.p[i] && f.p[j])) return f.t;
+    }
+    return null;
+  }
+
+  function setupExplanation(missing) {
+    if (!missing || !missing.length) return null;
+    if (missing.length >= 12) {
+      return "No 3D at setup on this swing: the body wasn't seen by both cameras before the swing (the cameras' calibration is off by more than 15 px there). The swing order below is from the downswing and still holds.";
+    }
+    const hasShoulder = missing.some(j => j.includes("shoulder"));
+    const hasHip = missing.some(j => j.includes("hip"));
+
+    let jointDesc;
+    if (missing.length === 1) {
+      jointDesc = `The ${missing[0]} wasn't`;
+    } else if (missing.length === 2) {
+      jointDesc = `The ${missing[0]} and ${missing[1]} weren't`;
+    } else {
+      jointDesc = `The ${missing.slice(0, 2).join(", ")} and others weren't`;
+    }
+
+    let affects;
+    if (hasShoulder && hasHip) {
+      affects = "shoulder and hip turns, tilts and the chest";
+    } else if (hasShoulder) {
+      affects = "shoulder turn, tilt and the chest";
+    } else if (hasHip) {
+      affects = "hip turn, tilt and slides";
+    } else {
+      affects = "some body angles";
+    }
+
+    return `${jointDesc} seen by both cameras at setup, so ${affects} can't be measured on this swing (the cameras' calibration is off by more than 15 px there). The swing order below is from the downswing and still holds.`;
+  }
+
   /** Draws the figure at face-on clip time t. */
   function draw(t) {
     if (!state) return;
-    const { canvas, doc } = state;
+    const { canvas, doc, figNote, firstBodyT } = state;
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth * dpr, h = canvas.clientHeight * dpr;
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
@@ -79,8 +118,13 @@
     ctx.font = `${11 * dpr}px system-ui, sans-serif`;
     ctx.fillText("target", ...project([1.25, 0, 0]));
 
-    const f = doc.frames[nearestFrame(doc, t)];
-    if (!f || Math.abs(f.t - t) > 0.02) return;
+    const showFirst = firstBodyT != null && t < firstBodyT - 0.02;
+    if (figNote) {
+      figNote.textContent = showFirst ? `3D from ${firstBodyT.toFixed(2)} s` : "";
+    }
+    const drawT = showFirst ? firstBodyT : t;
+    const f = doc.frames[nearestFrame(doc, drawT)];
+    if (!f || Math.abs(f.t - drawT) > 0.02) return;
     ctx.lineWidth = 3 * dpr;
     ctx.lineCap = "round";
     for (const [i, j] of BONES) {
@@ -102,7 +146,7 @@
     }
   }
 
-  function table(result, doc, positions, metrics2d) {
+  function table(result, doc, positions, metrics2d, blankedKeys) {
     const cols = ["p1", "p4", "p6", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
     const at = SwingMetrics3D.atPositions(result, doc, positions);
     const t = el("table");
@@ -116,10 +160,16 @@
     for (const [label, key, key2, unit] of ROWS) {
       const tr = el("tr");
       tr.append(el("td", {}, label));
+      const isBlanked = blankedKeys && blankedKeys.has(key);
       for (const p of cols) {
         const v3 = at[p.key] && at[p.key][key];
         const v2 = key2 && metrics2d && metrics2d.values[p.index] ? metrics2d.values[p.index][key2] : null;
-        const td = el("td", {}, fmt(v3, unit));
+        const td = el("td");
+        if (isBlanked && v3 == null) {
+          td.append(el("span", { class: "muted" }, "not at setup"));
+        } else {
+          td.append(document.createTextNode(fmt(v3, unit)));
+        }
         if (key2) td.append(el("span", { class: "v2" }, ` (2D ${fmt(v2, unit)})`));
         tr.append(td);
       }
@@ -217,10 +267,26 @@
         + (impact.thoraxTurn != null ? `, shoulders ${Math.abs(impact.thoraxTurn).toFixed(0)}° ${impact.thoraxTurn <= 0 ? "open" : "closed"}` : "")
         + " (good players' hips are about 30-45° open)." : "");
     const canvas = el("canvas", { class: "fig3d", "aria-label": "3D stick figure; drag to turn" });
+    const figNote = el("div", { class: "note fig-note" });
+    const left = el("div");
+    left.append(canvas, figNote);
     const grid = el("div", { class: "grid3d" });
-    grid.append(canvas);
+    grid.append(left);
+
+    const missing = (opts && opts.body3d && opts.body3d.setupMissing) ||
+                    (result && result.setup && result.setup.missing) || [];
+    const blankedList = SwingMetrics3D ? SwingMetrics3D.blankedRows(missing) : [];
+    const blankedKeys = new Set(blankedList);
+    if (missing.length >= (SwingMetrics3D && SwingMetrics3D.CORE_JOINTS ? SwingMetrics3D.CORE_JOINTS.length : 12)) {
+      for (const [, k] of ROWS) blankedKeys.add(k);
+    }
+    const explanation = setupExplanation(missing);
+
     const right = el("div");
-    right.append(table(result, doc, opts.positions, opts.metrics2d));
+    if (explanation) {
+      right.append(el("div", { class: "note", style: "margin-bottom: 6px;" }, explanation));
+    }
+    right.append(table(result, doc, opts.positions, opts.metrics2d, blankedKeys));
     grid.append(right);
     const notes = el("div", { class: "note" },
       "Turn + = closed (going back), - = open; side bend + = lead side higher; forward bend toward the ball; "
@@ -235,7 +301,8 @@
         : `Club check: hands to clubhead ${cc.measured.toFixed(1)}" (no club known to compare with).`));
     }
     box.replaceChildren(...children);
-    state = { box, doc, result, canvas, yaw: 0.5, pitch: 0.25 };
+    const firstBodyT = firstBodyTime(doc);
+    state = { box, doc, result, canvas, figNote, firstBodyT, yaw: 0.5, pitch: 0.25 };
     let drag = null;
     canvas.addEventListener("pointerdown", e => { drag = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
     canvas.addEventListener("pointermove", e => {
@@ -254,5 +321,5 @@
     draw(t);
   }
 
-  root.View3D = { show, draw: drawAt };
-})(window);
+  root.View3D = { show, draw: drawAt, setupExplanation, firstBodyTime };
+})(typeof window !== "undefined" ? window : globalThis);

@@ -151,3 +151,47 @@ test("summarize3d passes through setupMissing and addressError", () => {
   assert.deepEqual(s.addressError, { median: 2.1, p90: 5.4 });
 });
 
+test("View3D.setupExplanation gives plain words without P-numbers", () => {
+  global.SwingMetrics3D = M;
+  require("../static/view3d.js");
+  const V = global.View3D;
+  assert.ok(V);
+
+  // Single missing joint: lead shoulder
+  const shoulderExp = V.setupExplanation(["lead shoulder"]);
+  assert.equal(
+    shoulderExp,
+    "The lead shoulder wasn't seen by both cameras at setup, so shoulder turn, tilt and the chest can't be measured on this swing (the cameras' calibration is off by more than 15 px there). The swing order below is from the downswing and still holds."
+  );
+  assert.equal(/P[1-8]/i.test(shoulderExp), false, "no P-numbers in shoulder explanation");
+
+  // Single missing joint: lead hip
+  const hipExp = V.setupExplanation(["lead hip"]);
+  assert.equal(
+    hipExp,
+    "The lead hip wasn't seen by both cameras at setup, so hip turn, tilt and slides can't be measured on this swing (the cameras' calibration is off by more than 15 px there). The swing order below is from the downswing and still holds."
+  );
+  assert.equal(/P[1-8]/i.test(hipExp), false, "no P-numbers in hip explanation");
+
+  // All core joints missing (nothing at all seen before swing)
+  const allCore = M.CORE_JOINTS.map(([, name]) => name);
+  const noneExp = V.setupExplanation(allCore);
+  assert.ok(noneExp.startsWith("No 3D at setup on this swing:"));
+  assert.equal(/P[1-8]/i.test(noneExp), false, "no P-numbers in none explanation");
+
+  // Empty missing returns null
+  assert.equal(V.setupExplanation([]), null);
+});
+
+test("View3D.firstBodyTime finds first frame with triangulated bones", () => {
+  global.SwingMetrics3D = M;
+  require("../static/view3d.js");
+  const V = global.View3D;
+
+  const doc = makeDoc({ noPointsBeforeTakeaway: true });
+  const t0 = V.firstBodyTime(doc);
+  assert.ok(t0 > 1.2, `first body frame is after takeaway (got ${t0})`);
+  assert.equal(typeof t0, "number");
+});
+
+
