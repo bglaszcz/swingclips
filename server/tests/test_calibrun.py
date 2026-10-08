@@ -243,14 +243,14 @@ class CalibHealthTest(unittest.TestCase):
                 "key3d": "2026-10-06_145832|tri2|check3",
                 "body3d": {
                     "setupMissing": ["lead shoulder"],
-                    "reprojection": {"address": {"median": 3.4, "p90": 13.0}},
+                    "addressError": {"median": 3.4, "p90": 13.0},
                 },
             },
             "s2": {
                 "key3d": "2026-10-06_145832|tri2|check3",
                 "body3d": {
                     "setupMissing": ["lead shoulder"],
-                    "reprojection": {"address": {"median": 3.6, "p90": 14.0}},
+                    "addressError": {"median": 3.6, "p90": 14.0},
                 },
             },
             "s3": {
@@ -279,7 +279,7 @@ class CalibHealthTest(unittest.TestCase):
                 "key3d": "2026-10-06_135224|tri2|check3",
                 "body3d": {
                     "setupMissing": [],
-                    "reprojection": {"address": {"median": 2.7, "p90": 6.8}},
+                    "addressError": {"median": 2.7, "p90": 6.8},
                 },
             },
             "s7": {
@@ -306,8 +306,7 @@ class CalibHealthTest(unittest.TestCase):
         self.assertEqual(latest["typical"], 3.4)  # median of [3.4, 3.6, 3.2, 3.0, 3.5] = 3.4
         self.assertEqual(latest["worstTenth"], 12.0)  # median of [13, 14, 11, 10, 12] = 12.0
         self.assertTrue(latest["recalibrate"])  # 2/5 = 40% > 20%
-        # Check that addressError was stored in record
-        self.assertEqual(records["s1"]["body3d"]["addressError"], {"median": 3.4, "p90": 13.0})
+        self.assertEqual(latest["pending"], 0)
 
         # Previous session (135224)
         self.assertEqual(prev["id"], "2026-10-06_135224")
@@ -320,6 +319,12 @@ class CalibHealthTest(unittest.TestCase):
 
         # Empty sessions
         self.assertEqual(swing3d.calib_health([], records), [])
+
+        # Swings not yet worked out with the setup check are pending, not healthy.
+        records["s8"] = {"key3d": "2026-10-06_145832|tri2|check2", "body3d": {"numbers": {}}}
+        latest = swing3d.calib_health(sessions, records)[0]
+        self.assertEqual(latest["swings"], 5)
+        self.assertEqual(latest["pending"], 1)
 
     def test_api_calib_returns_health(self):
         from fastapi.testclient import TestClient

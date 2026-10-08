@@ -103,72 +103,46 @@ def save(path: Path, doc: dict) -> None:
     tmp.replace(path)
 
 
-def calib_health(all_sessions: list[dict], records: dict, doc_loader=None) -> list[dict]:
-    """Health summary for the latest calibration session (and the one before it), over their
-    swings with 3D: how many, how many lost a joint at setup, most lost joints, and median/p90
-    reprojection error at address (stored in body3d.addressError if missing)."""
-    if not all_sessions:
-        return []
-    target = all_sessions[-2:]
+def calib_health(all_sessions: list[dict], records: dict) -> list[dict]:
+    """Health of the latest calibration session and the one before it, over their swings with 3D, from
+    the swing records alone (the 3D pass stores body3d.setupMissing and addressError; /api/calib is
+    polled every 1.5 s, so no 3D files are read here and nothing is written): how many swings were
+    checked (worked out with CHECK_VERSION 3 or later; the rest are "pending" until the 3D pass redoes
+    them, and don't count as healthy), how many lost a joint at setup and which, and the setup
+    reprojection error (median of the swings' medians and of their 90th percentiles)."""
     out = []
-    for s in reversed(target):
+    for s in reversed(all_sessions[-2:]):
         sess_id = s.get("id")
-        swings = []
-        for name, rec in records.items():
+        checked, pending = [], 0
+        for rec in records.values():
             b3d = rec.get("body3d")
-            if not b3d:
+            if not b3d or (rec.get("key3d") or "").split("|")[0] != sess_id:
                 continue
-            key3d = rec.get("key3d") or ""
-            if (key3d.split("|")[0] == sess_id or rec.get("session") == sess_id
-                    or b3d.get("session") == sess_id):
-                swings.append((name, rec))
-            elif not key3d and doc_loader:
-                doc = doc_loader(name)
-                if doc and doc.get("session") == sess_id:
-                    swings.append((name, rec))
-
-        total = len(swings)
-        lost_count = 0
-        lost_counts = {}
-        meds = []
-        p90s = []
-        for name, rec in swings:
-            b3d = rec["body3d"]
+            if "setupMissing" in b3d:
+                checked.append(b3d)
+            else:
+                pending += 1
+        lost_counts: dict[str, int] = {}
+        lost = 0
+        meds, p90s = [], []
+        for b3d in checked:
             missing = b3d.get("setupMissing") or []
             if missing:
-                lost_count += 1
+                lost += 1
                 for j in missing:
                     lost_counts[j] = lost_counts.get(j, 0) + 1
-
-            addr = b3d.get("addressError") or (b3d.get("reprojection") or {}).get("address")
-            if not addr and doc_loader:
-                doc = doc_loader(name)
-                if doc:
-                    addr = (doc.get("reprojection") or {}).get("address")
-            if addr:
-                b3d["addressError"] = addr
-                if addr.get("median") is not None:
-                    meds.append(addr["median"])
-                if addr.get("p90") is not None:
-                    p90s.append(addr["p90"])
-
-        most_lost = max(lost_counts, key=lost_counts.get) if lost_counts else None
-        typ = round(float(np.median(meds)), 1) if meds else None
+            addr = b3d.get("addressError") or {}
+            if addr.get("median") is not None:
+                meds.append(addr["median"])
+            if addr.get("p90") is not None:
+                p90s.append(addr["p90"])
+        typical = round(float(np.median(meds)), 1) if meds else None
         worst = round(float(np.median(p90s)), 1) if p90s else None
-        recal = (lost_count / total > 0.2) if total > 0 else False
         out.append({
-            "id": sess_id,
-            "session": sess_id,
-            "created": s.get("created"),
-            "method": s.get("method", "board"),
-            "swings": total,
-            "lostAtSetup": lost_count,
-            "mostLost": most_lost,
-            "lostJoints": dict(lost_counts),
-            "typical": typ,
-            "worstTenth": worst,
-            "median": typ,
-            "p90": worst,
-            "recalibrate": recal,
+            "id": sess_id, "session": sess_id, "created": s.get("created"), "method": s.get("method", "board"),
+            "swings": len(checked), "pending": pending, "lostAtSetup": lost,
+            "mostLost": max(lost_counts, key=lost_counts.get) if lost_counts else None,
+            "lostJoints": lost_counts, "typical": typical, "worstTenth": worst, "median": typical, "p90": worst,
+            "recalibrate": bool(checked) and lost / len(checked) > 0.2,
         })
     return out

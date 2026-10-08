@@ -271,18 +271,20 @@ function render() {
         const dateStr = (idx === 0 || sameDay) ? `${mDay}, ${tStr}` : mDay;
         const method = h.method === "body" ? "from swings" : "mat board";
         const worst = h.worstTenth != null ? Math.round(h.worstTenth) : null;
+        // Swings the 3D pass hasn't redone with the setup check yet: not counted either way.
+        const later = h.pending ? ` (${h.pending} more still being checked)` : "";
         if (!h.swings) {
-          return `${dateStr} (${method}): 0 swings.`;
+          return h.pending ? `${dateStr} (${method}): ${h.pending} swings still being checked.` : `${dateStr} (${method}): 0 swings.`;
         }
         if (h.lostAtSetup > 0) {
           const joint = h.mostLost ? `the ${h.mostLost}` : "a joint";
           const typ = h.typical != null ? `${h.typical} px` : "–";
           const wst = worst != null ? `${worst} px` : "–";
-          return `${dateStr} (${method}): ${h.lostAtSetup} of ${h.swings} swings lost ${joint} at setup; setup error ${typ} typical, ${wst} worst tenth.`;
+          return `${dateStr} (${method}): ${h.lostAtSetup} of ${h.swings} swings lost ${joint} at setup${later}; setup error ${typ} typical, ${wst} worst tenth.`;
         }
         const typ = h.typical != null ? h.typical : "–";
         const wst = worst != null ? `${worst} px` : "–";
-        return `${dateStr} (${method}): 0 of ${h.swings}; ${typ} / ${wst}.`;
+        return `${dateStr} (${method}): 0 of ${h.swings} lost a joint at setup${later}; setup error ${typ} px typical, ${wst} worst tenth.`;
       });
       $("calib-health-lines").innerHTML = lines.map(l => `<div class="calib-health-line">${esc(l)}</div>`).join("");
 
