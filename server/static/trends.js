@@ -1559,7 +1559,7 @@ function renderStrike(sessions, club, all) {
   if (n < 10) {
     const emptyNote = document.createElement("div");
     emptyNote.className = "note";
-    emptyNote.textContent = `Not enough strikes with the ${club} yet (Square reports it on most shots: ${n} so far)`;
+    emptyNote.textContent = `Not enough strikes with the ${clubWords(club)} yet (Square reports it on most shots: ${n} so far)`;
     box.append(emptyNote, toeFold);
     return;
   }
@@ -1574,7 +1574,7 @@ function renderStrike(sessions, club, all) {
   const faceSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   faceSvg.id = "p-strike-face";
   faceSvg.setAttribute("role", "img");
-  faceSvg.setAttribute("aria-label", `Strike heat map for ${club}`);
+  faceSvg.setAttribute("aria-label", `Strike heat map for the ${clubWords(club)}`);
   const padX = isWood ? 16 : 14;
   const padY = isWood ? 8 : 7;
   const vbMinX = -(W_mm / 2 + padX);
@@ -1717,10 +1717,18 @@ function renderStrike(sessions, club, all) {
     coachEl.style.cssText = "margin: 2px 0 8px; font-size: 12px; line-height: 1.4;";
 
     const h = all ? pooledHelps(all) : null;
-    const vLink = h?.irons?.a?.links?.find(l => l.result === "strikeV" && (l.label === "confirmed" || l.label === "emerging"));
-    const coached = vLink ? SwingCoach.coach(vLink, "I7") : null;
-    if (coached && coached.fix) {
-      coachEl.textContent = `Strikes sit low on the face: "${coached.fix.thought}" (${coached.fix.drill})`;
+    // The strongest strike-height link in the owner's irons that gives a real fix (not a fault's side).
+    let vLink = null, coached = null;
+    for (const l of (h?.irons?.a?.links || [])) {
+      if (l.result !== "strikeV" || (l.label !== "confirmed" && l.label !== "emerging")) continue;
+      const c = SwingCoach.coach(l, "I7");
+      if (c && c.fix && !c.fix.fault) { vLink = l; coached = c; break; }
+    }
+    if (coached) {
+      const plain = SwingShotStory.plain;
+      coachEl.textContent = `Strikes sit low on the face. What goes with a higher strike in your swings`
+        + `${vLink.label === "confirmed" ? "" : " (worth trying, not proven)"}: ${plain(coached.fix.name)}. `
+        + `Swing thought: "${plain(coached.fix.thought).replace(/\.$/, "")}". Drill: ${plain(coached.fix.drill)}`;
     } else {
       coachEl.textContent = "Strikes usually sit low on the face with your irons.";
     }
@@ -1735,7 +1743,7 @@ function renderStrike(sessions, club, all) {
     const trendSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     trendSvg.id = "p-strike-trend";
     trendSvg.setAttribute("role", "img");
-    trendSvg.setAttribute("aria-label", `Strike trend for ${club} over time`);
+    trendSvg.setAttribute("aria-label", `Strike trend for the ${clubWords(club)} over time`);
     const tW = 360, tH = 130;
     trendSvg.setAttribute("viewBox", `0 0 ${tW} ${tH}`);
     trendSvg.style.cssText = "display: block; width: 100%; height: auto; overflow: visible;";
