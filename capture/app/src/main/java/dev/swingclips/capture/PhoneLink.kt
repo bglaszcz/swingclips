@@ -25,6 +25,8 @@ class PhoneLink(
     private val quiet: (Double) -> Unit = {},
     /** Seconds of video to keep before the strike from now on (more while the server has a drill on). */
     private val pre: (Double) -> Unit = {},
+    /** The strike trigger's sensitivity, set on the Start page (0.12). */
+    private val sensitivity: (Int) -> Unit = {},
 ) {
     private val inbox = CommandInbox()
     @Volatile private var generation = 0
@@ -115,6 +117,7 @@ class PhoneLink(
                 failures = 0
                 if (reply.has("quiet")) quiet(reply.optDouble("quiet", 0.0))
                 if (reply.has("pre")) pre(reply.optDouble("pre", 2.0))
+                if (reply.has("sensitivity")) sensitivity(reply.optInt("sensitivity", Trigger.DEFAULT))
                 val says = reply.optJSONArray("say")
                 for (i in 0 until (says?.length() ?: 0)) {
                     val s = says!!.getJSONObject(i)

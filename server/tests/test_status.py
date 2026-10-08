@@ -593,6 +593,16 @@ class EndpointsTest(unittest.TestCase):
         self.assertEqual(snap["phones"]["face"]["command"]["state"], "done")
         self.assertTrue(snap["phones"]["face"]["recording"])
 
+    def test_sensitivity_from_the_start_page(self):
+        c = self.client
+        c.post("/api/phones/dtl/poll?wait=0", json=hb(recording=True, sensitivity=100, threshold=10, noise=1.0))
+        r = c.post("/api/phones/sensitivity", json={"value": 110, "angle": "dtl"}).json()
+        self.assertEqual(r["results"], [{"angle": "dtl", "error": None}])
+        got = c.post("/api/phones/dtl/poll?wait=5", json=hb(recording=True, sensitivity=100)).json()
+        self.assertEqual(got["sensitivity"], 110)
+        self.assertEqual(c.post("/api/phones/sensitivity", json={"value": 500}).status_code, 400)
+        self.assertEqual(c.get("/api/status").json()["phones"]["dtl"]["trigger"]["setting"], 110)
+
     def test_bad_requests(self):
         c = self.client
         self.assertEqual(c.post("/api/phones/side/poll", json=hb()).status_code, 404)
@@ -723,3 +733,81 @@ class AutoStartTest(unittest.TestCase):
         self.clock.t += status.AUTO_START_EVERY_S
         self.s.heartbeat("face", hb())
         self.assertEqual(len(self.starts("face")), 1)
+
+
+class TriggerTest(unittest.TestCase):
+    """The strike trigger (capture app 0.12): sounds reported, sensitivity set from the Start page,
+    and what the phones heard before Square shots they didn't record."""
+
+    def setUp(self):
+        self.clock = Clock()
+        self.s = Status(self.clock)
+
+    def trig(self, sens=100, sounds=(), **kw):
+        return hb(sensitivity=sens, threshold=status.threshold_for(sens), noise=1.5,
+                  sounds=[{"ms": int(t * 1000), "level": lv, "jump": 4.0, "result": r} for t, lv, r in sounds], **kw)
+
+    def test_scale_matches_the_app(self):
+        self.assertEqual([status.threshold_for(v) for v in (0, 100, 110, 120)], [150, 10, 6, 2])
+        self.assertEqual(status.sensitivity_for(6), 115)    # threshold 4 <= 4.8
+        self.assertEqual(status.sensitivity_for(100), 50)    # threshold 80
+        self.assertIsNone(status.sensitivity_for(1))
+
+    def test_sounds_kept_and_summed_up(self):
+        t = self.clock.t
+        self.s.heartbeat("face", self.trig(sounds=[(t - 50, 30.0, "strike"), (t - 20, 60.0, "strike"),
+                                                  (t - 10, 4.0, "quiet"), (t - 5, 3.0, "bogus")]))
+        # The next report repeats some: kept once.
+        self.s.heartbeat("face", self.trig(sounds=[(t - 10, 4.0, "quiet")]))
+        self.assertEqual([x["result"] for x in self.s.heard("face", t - 60, t)], ["strike", "strike", "quiet", "quiet"])
+        tr = self.s.trigger("face")
+        self.assertEqual((tr["sensitivity"], tr["strikes"], tr["softest"]), (100, 2, 30.0))
+        row = next(r for r in self.s.snapshot({}, {}, None)["rows"] if r["key"] == "face")
+        self.assertIn("sensitivity 100 (strikes from 30, trigger at 10)", row["text"])
+        # Older than SOUNDS_KEEP_S: gone.
+        self.clock.t += status.SOUNDS_KEEP_S
+        self.s.heartbeat("face", self.trig())
+        self.assertEqual(self.s.heard("face", 0, self.clock.t), [])
+
+    def test_older_app_has_no_trigger(self):
+        self.s.heartbeat("face", hb())
+        self.assertIsNone(self.s.trigger("face"))
+        [r] = self.s.set_sensitivity("face", 110)
+        self.assertIn("update", r["error"])
+
+    def test_set_from_the_start_page_while_recording(self):
+        self.s.heartbeat("face", self.trig(recording=True))
+        self.s.heartbeat("dtl", self.trig(recording=True))
+        out = self.s.set_sensitivity("both", 110)
+        self.assertEqual([r["error"] for r in out], [None, None])
+        self.assertTrue(self.s.has_mail("face"))
+        self.assertEqual(self.s.take("face")["sensitivity"], 110)
+        self.assertNotIn("sensitivity", self.s.take("face"))      # once
+        self.assertEqual(self.s.trigger("face")["setting"], 110)
+        self.s.heartbeat("face", self.trig(110, recording=True))   # it took it
+        self.assertIsNone(self.s.trigger("face")["setting"])
+        # One that never takes it is let go.
+        self.clock.t += status.SENSITIVITY_WAIT_S + 1
+        self.s.heartbeat("dtl", self.trig(recording=True))
+        self.assertIsNone(self.s.trigger("dtl")["setting"])
+        with self.assertRaises(ValueError):
+            self.s.set_sensitivity("face", 121)
+        self.assertEqual(self.s.set_sensitivity("dtl", 100), [{"angle": "dtl", "error": None}])   # already
+
+    def test_missed_shots_say_what_was_heard(self):
+        s = self.s
+        s.heartbeat("face", self.trig(practiceVoice=True, recording=True))
+        s.heartbeat("dtl", self.trig(recording=True))
+        t0 = self.clock.t + 60
+        # Two soft wedges: face-on heard them at 6 and 7 (under its trigger at 10), down the line nothing.
+        self.clock.t = t0 + 100
+        s.heartbeat("face", self.trig(practiceVoice=True, recording=True,
+                                      sounds=[(t0 - 10, 7.0, "quiet"), (t0 + 20, 6.0, "quiet")]))
+        s.heartbeat("dtl", self.trig(recording=True))
+        said = s.health_step([], [{"t": t0, "clipped": False}, {"t": t0 + 30, "clipped": False}])
+        self.assertEqual(len(said), 1)
+        self.assertIn("set face-on to 115", said[0])
+        row = next(r for r in s.snapshot({}, {}, None)["rows"] if r["key"] == "missed")
+        self.assertEqual(row["suggest"], {"face": 115})
+        self.assertIn("Face-on heard them at 6, its trigger is at 10: set it to 115", row["text"])
+        self.assertIn("Down the line heard nothing sudden then", row["text"])

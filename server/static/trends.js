@@ -1494,19 +1494,8 @@ function ellipse(xs, ys) {
 }
 
 function getStrikeToeSign() {
-  if (typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.getToeSign) return SwingStrikeMap.getToeSign();
-  try {
-    const v = localStorage.getItem("strike-toe-sign");
-    if (v === "-") return -1;
-  } catch {}
-  return 1;
-}
-
-function setStrikeToeSign(v) {
-  if (typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.setToeSign) return SwingStrikeMap.setToeSign(v);
-  try {
-    localStorage.setItem("strike-toe-sign", v === "-" || v === -1 ? "-" : "+");
-  } catch {}
+  // Square's + is the heel (strikemap.js).
+  return typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.getToeSign ? SwingStrikeMap.getToeSign() : -1;
 }
 
 /** "Where on the face": heat map and trend for the selected club. */
@@ -1526,41 +1515,12 @@ function renderStrike(sessions, club, all) {
   }
   const n = allStrikes.length;
 
-  // Toe setting fold (always accessible)
-  const toeFold = document.createElement("details");
-  toeFold.className = "p-more";
-  toeFold.dataset.fold = "strike-toe";
-  try { toeFold.open = localStorage.getItem("fold-strike-toe") === "open"; } catch {}
-  toeFold.addEventListener("toggle", () => {
-    try { localStorage.setItem("fold-strike-toe", toeFold.open ? "open" : "shut"); } catch {}
-  });
-  const toeSum = document.createElement("summary");
-  toeSum.textContent = "Which side is the toe?";
-  const toeBody = document.createElement("div");
-  toeBody.style.cssText = "margin-top: 6px; display: flex; flex-direction: column; gap: 6px;";
-
-  const toeLabel = document.createElement("label");
-  toeLabel.style.cssText = "display: inline-flex; align-items: center; gap: 8px;";
-  toeLabel.innerHTML = '<span>Toe side:</span> <select id="p-strike-toe-select"><option value="+">+ is toe (default)</option><option value="-">- is toe</option></select>';
-  const toeSel = toeLabel.querySelector("select");
-  toeSel.value = toeSign === -1 ? "-" : "+";
-  toeSel.addEventListener("change", () => {
-    setStrikeToeSign(toeSel.value);
-    renderStrike(sessions, club, all);
-  });
-
-  const toeNote = document.createElement("div");
-  toeNote.className = "note";
-  toeNote.textContent = "Hit one shot clearly off the toe and look at Square's own strike screen to confirm.";
-  toeBody.append(toeLabel, toeNote);
-  toeFold.append(toeSum, toeBody);
-
   // Fewer than 10 strikes with this club in the period
   if (n < 10) {
     const emptyNote = document.createElement("div");
     emptyNote.className = "note";
     emptyNote.textContent = `Not enough strikes with the ${clubWords(club)} yet (Square reports it on most shots: ${n} so far)`;
-    box.append(emptyNote, toeFold);
+    box.append(emptyNote);
     return;
   }
 
@@ -1815,7 +1775,7 @@ function renderStrike(sessions, club, all) {
 
   box.append(faceSvg, legend, cmpLine);
   if (coachEl) box.append(coachEl);
-  box.append(trendBox, toeFold);
+  box.append(trendBox);
 }
 
 /** The handicap index over time, from what's typed in here (it isn't read from GHIN). */

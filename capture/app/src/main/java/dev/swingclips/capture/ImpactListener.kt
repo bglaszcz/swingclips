@@ -26,8 +26,11 @@ class ImpactListener(
     /** Until when (System.nanoTime()) the OTHER phone is talking: its voice isn't a strike either. */
     private val quietUntil: () -> Long = { 0L },
 ) {
-    /** 0-100; higher = triggers on quieter sounds. */
-    @Volatile var sensitivity = 100
+    /** 0-120 ([Trigger.thresholdFor]); higher = triggers on quieter sounds. */
+    @Volatile var sensitivity = Trigger.DEFAULT
+
+    /** The loud, sudden sounds lately and what came of each, for the server (PhoneLink). */
+    val log = StrikeLog()
 
     @Volatile private var running = false
     @Volatile private var lastTrigger = 0L
@@ -103,12 +106,23 @@ class ImpactListener(
                     if (a > peak) { peak = a; peakAt = i }
                 }
                 onLevel(sum)
+                log.level(sum)
 
-                val threshold = 150f - sensitivity / 100f * 140f
+                val threshold = Trigger.thresholdFor(sensitivity)
                 val background = (history[0] + history[1]) / 2
                 val spike = background == 0f || sum > background * 2.5f
                 val now = System.nanoTime()
-                if (sum > threshold && spike && !muted && now - lastTrigger > COOLDOWN_NS && now >= quietUntil()) {
+                val jump = if (background > 0f) sum / background else 99f
+                val result = when {
+                    sum <= threshold -> Trigger.QUIET
+                    !spike -> Trigger.NOT_SUDDEN
+                    muted -> Trigger.OWN_VOICE
+                    now < quietUntil() -> Trigger.OTHER_TALKING
+                    now - lastTrigger <= COOLDOWN_NS -> Trigger.COOLDOWN
+                    else -> Trigger.STRIKE
+                }
+                if (sum >= Trigger.LOG_MIN && jump >= Trigger.LOG_JUMP) log.add(Sound(now, sum, minOf(jump, 99f), result))
+                if (result == Trigger.STRIKE) {
                     lastTrigger = now
                     // When the loudest sample was captured, from the recorder's own timestamp if
                     // it has one, else estimated from when the read returned.
@@ -136,6 +150,6 @@ class ImpactListener(
         /** Quiet time after speech ends (room echo), counted from its end. */
         private const val SPEECH_TAIL_NS = 1_500_000_000L
 
-        fun thresholdFor(sensitivity: Int) = 150f - sensitivity / 100f * 140f
+        fun thresholdFor(sensitivity: Int) = Trigger.thresholdFor(sensitivity)
     }
 }

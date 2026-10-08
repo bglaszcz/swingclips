@@ -90,12 +90,19 @@ plan", "Plan steps", "Drill mode").
   within 25 s of the swing (when the server is behind it's shown on the page instead), and never for
   drill swings. The phone that isn't talking stops listening for strikes while
   the other one talks (0.9), so a voice can't start a recording.
-- **Sensitivity** (the strike trigger's slider, 0-100): higher triggers on quieter sounds; 100 by
-  default. A clip needs a strike over the threshold and 2.5x louder than just before it, at most
-  one every 3 s. Soft shots (40-yard wedges, chips) are the quietest: keep it near 100 for them. When
-  Square reports 2 shots in a row that neither phone recorded, the speaking phone says so and the Ready
-  bar / Start page show **Missed shots** until a shot is recorded again (`status.Health.shots_step`; a
-  shot counts as missed 45 s after it came with no clip paired to it).
+- **Sensitivity** (the strike trigger, 0-120): higher triggers on quieter sounds; 100 by default
+  (110 and 120, from app 0.12, go below the old bottom for soft shots). A clip needs a strike over the
+  threshold and 2.5x louder than just before it, at most one every 3 s. Soft shots (40-yard wedges,
+  chips) are the quietest. **Set it on the Start page** (step 1, each phone's card, - and +) or with the
+  phone's own - and +; both work while recording (app 0.12; nothing else changes on the phone). Each
+  phone's card also shows how loud its strikes have been ("strikes from 31, trigger at 10": the softest
+  strike of the last half hour, and the level a sound must pass). When Square reports 2 shots in a row
+  that neither phone recorded, the speaking phone says so and the Ready bar / Start page show **Missed
+  shots** until a shot is recorded again (`status.Health.shots_step`; a shot counts as missed 45 s after
+  it came with no clip paired to it). The card says what each phone heard 3-20 s before those shots
+  (too quiet for its trigger, not sudden enough, nothing at all) and, when they were too quiet, offers
+  one button that sets the sensitivity that would have caught them; the spoken message says the same
+  numbers. Step 1 opens by itself when this happens during a session.
 - **Auto-start** (off by default): starts recording once its own camera check has held good for
   two stills, once per opening of the app.
 - **Install or update the app**: on the dev PC (README, "Dev PC"). `adb install -r` keeps the

@@ -3014,6 +3014,8 @@ function showCameraCheck(a, main) {
   box.hidden = !items.length && !infos.length;
   const warn = items.filter(i => !i.minor);
   box.classList.toggle("info", !warn.length);
+  // Quiet notes (shutter, near the edge, mild flicker) don't change the numbers: only with Advanced data.
+  box.classList.toggle("adv-only", !warn.length);
   // "Face-on: dark, flicker · Down the line: ball not seen"
   const byName = new Map();
   for (const i of (warn.length ? warn : items)) byName.set(i.name, [...(byName.get(i.name) || []), i.short]);
@@ -4088,7 +4090,7 @@ function makeStrikeTile(s, strike) {
   const club = s.club || "";
   const group = typeof SwingGoodShots !== "undefined" ? SwingGoodShots.groupOf(club) : "irons";
   const isWood = group === "woods";
-  const toeSign = typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.getToeSign ? SwingStrikeMap.getToeSign() : 1;
+  const toeSign = typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.getToeSign ? SwingStrikeMap.getToeSign() : -1;
 
   // Usual strike centre from goodShotData baseline
   const gsData = typeof goodShotData === "function" ? goodShotData() : null;

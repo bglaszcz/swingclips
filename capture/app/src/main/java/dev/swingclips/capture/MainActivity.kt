@@ -146,6 +146,7 @@ class MainActivity : Activity() {
             say = { s -> main.post { if (s.flush) cameraSetup.sayNow(s.text) else cameraSetup.say(s.text) } },
             quiet = { s -> otherTalksUntil = System.nanoTime() + (s * 1e9).toLong() },
             pre = { s -> preS = s.coerceIn(PRE_S, PRE_MAX_S) },   // the next poll reports it
+            sensitivity = { v -> main.post { setSensitivity(v) } },  // set on the Start page
         )
         practiceVoice = PracticeVoice(::serverUrl, ::angle, ::practiceVoiceOn, { cameraSetup.say(it) }) { text ->
             main.post { practiceView.text = text }
@@ -224,7 +225,7 @@ class MainActivity : Activity() {
             },
             quietUntil = { otherTalksUntil },
         ).also {
-            it.sensitivity = prefs.getInt("sensitivity", 100)
+            it.sensitivity = sensitivity()
             it.start()
             if (speaking) it.speaking(true)
         }
@@ -315,8 +316,9 @@ class MainActivity : Activity() {
     private fun showState() {
         val count = if (saved > 0) " · $saved saved" else ""
         // Settings are for setting up; while recording they're locked so a stray tap can't
-        // change them (or restart the camera mid-session). Stop to change them.
-        for (b in listOf(minusButton, plusButton, modeButton, serverButton, angleButton, shutterButton)) {
+        // change them (or restart the camera mid-session). Stop to change them. The sensitivity
+        // doesn't touch the camera: it changes while recording (soft shots missed mid-session).
+        for (b in listOf(modeButton, serverButton, angleButton, shutterButton)) {
             b.isEnabled = !armed
             b.alpha = if (armed) 0.4f else 1f
         }
@@ -399,6 +401,13 @@ class MainActivity : Activity() {
             "cameraError" to cameraError?.let { PhoneControl.cameraProblem(it) },
             "speaking" to speaking,
             "pre" to preS.toInt(),
+            // The strike trigger, for the Start page: the sensitivity, the level a strike must pass, the
+            // room's level, and the loud, sudden sounds of the last 2 minutes on the server's clock
+            // (what came of each: Trigger.STRIKE, QUIET, ...).
+            "sensitivity" to sensitivity(),
+            "threshold" to round1(Trigger.thresholdFor(sensitivity())),
+            "noise" to (listener?.log?.noise()?.let(::round1) ?: 0.0),
+            "sounds" to soundsLately(),
         )
     }
 
@@ -417,12 +426,27 @@ class MainActivity : Activity() {
 
     private fun serverUrl() = prefs.getString("server", DEFAULT_SERVER) ?: DEFAULT_SERVER
 
+    private fun sensitivity() = Trigger.clamp(prefs.getInt("sensitivity", Trigger.DEFAULT))
+
     private fun setSensitivity(v: Int) {
-        val s = v.coerceIn(0, 100)
+        val s = Trigger.clamp(v)
         prefs.edit().putInt("sensitivity", s).apply()
         listener?.sensitivity = s
         sensitivityView.text = "$s"
         meter.threshold = ImpactListener.thresholdFor(s)
+        if (::phoneLink.isInitialized) phoneLink.poke()   // the Start page shows it now
+    }
+
+    private fun round1(v: Float) = Math.round(v * 10) / 10.0
+
+    /** The trigger's loud, sudden sounds of the last 2 minutes, stamped on the server's clock. */
+    private fun soundsLately(): List<Map<String, Any>> {
+        val nowNs = System.nanoTime()
+        val nowMs = System.currentTimeMillis() + clockOffsetMs
+        return listener?.log?.since(nowNs - 120_000_000_000L).orEmpty().map {
+            mapOf("ms" to nowMs - (nowNs - it.at) / 1_000_000, "level" to round1(it.level),
+                  "jump" to round1(it.jump), "result" to it.result)
+        }
     }
 
     /** Modes to choose from: the manual-only ones only with a fixed shutter. */
@@ -855,8 +879,8 @@ class MainActivity : Activity() {
             addView(sensitivityView)
             addView(sensLabel)
         }
-        minusButton = button("−") { setSensitivity(prefs.getInt("sensitivity", 100) - 10) }.apply { textSize = 22f }
-        plusButton = button("+") { setSensitivity(prefs.getInt("sensitivity", 100) + 10) }.apply { textSize = 22f }
+        minusButton = button("−") { setSensitivity(sensitivity() - 10) }.apply { textSize = 22f }
+        plusButton = button("+") { setSensitivity(sensitivity() + 10) }.apply { textSize = 22f }
         val saveNow = button("Save now") { if (recorder != null) { listener?.holdOff(); onImpact(System.nanoTime()) } }
         panel.addView(row(minusButton, sensBox, plusButton, saveNow))
 
@@ -951,7 +975,7 @@ class MainActivity : Activity() {
         }
         frame.addView(settingsSheet, FrameLayout.LayoutParams(match, match))
 
-        setSensitivity(prefs.getInt("sensitivity", 100))
+        setSensitivity(sensitivity())
         updateAngleButton()
         updatePracticeButton()
         updateSetupVoiceButton()

@@ -2,7 +2,8 @@
 //
 // Strike location: Square Omni reports clubData.faceImpactH (toe/heel, mm) and
 // faceImpactV (high/low, mm, + = high).
-// Toe/heel sign: default + = toe (configurable per browser).
+// Toe/heel sign: Square's + is the HEEL (its "T" in the CSV export, which is really a heel strike:
+// the owner's square_parse.py, confirmed against feel 24 Aug; the database's + is the CSV's "T").
 //
 // Box:
 //   Irons and wedges: 70 mm wide x 40 mm tall around face centre (0, 0).
@@ -367,22 +368,11 @@
     };
   }
 
-  function getToeSign() {
-    try {
-      if (typeof localStorage !== "undefined") {
-        const v = localStorage.getItem("strike-toe-sign");
-        if (v === "-") return -1;
-      }
-    } catch {}
-    return 1;
-  }
+  // Square's faceImpactH: - is toward the toe (see the top).
+  const SQUARE_TOE_SIGN = -1;
 
-  function setToeSign(v) {
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem("strike-toe-sign", v === "-" || v === -1 ? "-" : "+");
-      }
-    } catch {}
+  function getToeSign() {
+    return SQUARE_TOE_SIGN;
   }
 
   const api = {
@@ -397,7 +387,6 @@
     compare,
     spotText,
     getToeSign,
-    setToeSign,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

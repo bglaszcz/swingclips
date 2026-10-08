@@ -45,6 +45,8 @@
   .check span { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
   .check.bad { border-color: var(--bad); background: var(--bad-soft); }
   .check.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .check .sens { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; font-size: 13px; }
+  .check .sens button { min-width: 34px; padding: 2px 8px; }
   .dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--muted); }
   .dot.ok { background: var(--accent); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
   .cams { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -363,7 +365,7 @@ const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 
                [23, 25], [25, 27], [24, 26], [26, 28], [0, 11], [0, 12]];
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-let status = null, note = "";
+let status = null, note = "", lastChecksHtml = "";
 
 // ---- 1. Checks ----
 function phoneCheck(a, s) {
@@ -372,12 +374,44 @@ function phoneCheck(a, s) {
   // Not recording yet is fine here: that's what step 3 is for.
   const problems = (row.problem || "").split(", ").filter(x => x && x !== "not recording");
   const level = row.level === "bad" && !problems.length ? "ok" : row.level;
-  return { level, title: NAMES[a] + (p.recording ? " · recording" : " · connected"), text: row.text };
+  // The sensitivity has its own line here (sensControls).
+  const text = p.trigger ? (row.text || "").replace(/ · sensitivity \d+( \([^)]*\))?/, "") : row.text;
+  return { level, title: NAMES[a] + (p.recording ? " · recording" : " · connected"), text,
+           extra: sensControls(a, p.trigger) };
 }
+
+// The strike trigger's sensitivity, set here for each phone, recording or not (capture app 0.12).
+const SENS_MAX = 120, SENS_STEP = 5;
+function sensControls(a, tr) {
+  if (!tr) return "";
+  const v = tr.setting != null ? tr.setting : tr.sensitivity;
+  const btn = (to, label, title) => `<button data-sens="${a}" data-to="${to}" title="${esc(title)}"${to < 0 || to > SENS_MAX ? " disabled" : ""}>${label}</button>`;
+  return `<div class="sens">Sensitivity <b>${v}</b>${tr.setting != null ? " (sending…)" : ""}
+    ${btn(v - SENS_STEP, "−", "Less sensitive: only louder sounds set it off")}
+    ${btn(v + SENS_STEP, "+", "More sensitive: softer strikes set it off")}
+    <span>${tr.strikes ? `strikes from ${tr.softest}, trigger at ${tr.threshold}` : `trigger at ${tr.threshold}`}</span></div>`;
+}
+
+async function setSensitivity(angle, value) {
+  try {
+    const res = await fetch("/api/phones/sensitivity", { method: "POST", headers: { "Content-Type": "application/json" },
+                                                       body: JSON.stringify({ angle, value }) });
+    const body = await res.json().catch(() => ({}));
+    const failed = (body.results || []).filter(r => r.error).map(r => `${NAMES[r.angle]}: ${r.error}`);
+    note = !res.ok ? (body.detail || `The server said ${res.status}`) : failed.length ? "Sensitivity: " + failed.join(" · ") : "";
+  } catch { note = "Can't reach the server"; }
+  pollStatus();
+}
+$("checks").addEventListener("click", e => {
+  const b = e.target.closest("button[data-sens]");
+  if (!b) return;
+  b.disabled = true;
+  for (const a of b.dataset.sens.split(",")) setSensitivity(a, Number(b.dataset.to));
+});
 
 function renderChecks(s) {
   if (!s) {
-    $("checks").innerHTML = `<div class="check bad"><span class="dot bad"></span><div><b>Server</b><span>Not answering. Is the home server on?</span></div></div>`;
+    $("checks").innerHTML = lastChecksHtml = `<div class="check bad"><span class="dot bad"></span><div><b>Server</b><span>Not answering. Is the home server on?</span></div></div>`;
     return false;
   }
   const square = s.rows.find(r => r.key === "square") || { level: "warn", label: "Square", text: "" };
@@ -389,7 +423,10 @@ function renderChecks(s) {
   const items = [phoneCheck("face", s), phoneCheck("dtl", s),
                  { level: square.level, title: square.label, text: square.text },
                  // Square shots the phones didn't record (soft strikes under the sound trigger).
-                 ...s.rows.filter(r => r.key === "missed").map(r => ({ level: r.level, title: r.label, text: r.text })),
+                 ...s.rows.filter(r => r.key === "missed").map(r => ({ level: r.level, title: r.label, text: r.text,
+                   // What each phone heard just before the missed shots: one tap sets what would have caught them.
+                   extra: Object.entries(r.suggest || {}).map(([a, v]) =>
+                     `<div class="sens"><button data-sens="${a}" data-to="${v}">Set ${esc(NAMES[a].toLowerCase())} to ${v}</button></div>`).join("") })),
                  { level: server.level, title: "Server", text: server.text },
                  { level: agent.connected ? "ok" : "off", title: "Laptop launcher", text: agentText }];
   const c3 = calibStatus;
@@ -399,8 +436,10 @@ function renderChecks(s) {
       : c3.session ? { level: "ok", title: "3D", text: `on (cameras placed ${day(c3.session.created)})` }
       : { level: "warn", title: "3D", text: "not calibrated yet: the 3D calibration page", href: "/calibrate" });
   }
-  $("checks").innerHTML = items.map(i => `<div class="check ${i.level}"><span class="dot ${i.level}"></span>
-    <div><b>${esc(i.title)}</b><span>${esc(i.text)}${i.href ? ` <a href="${i.href}">Open it</a>` : ""}</span></div></div>`).join("");
+  const html = items.map(i => `<div class="check ${i.level}"><span class="dot ${i.level}"></span>
+    <div><b>${esc(i.title)}</b><span>${esc(i.text)}${i.href ? ` <a href="${i.href}">Open it</a>` : ""}</span>${i.extra || ""}</div></div>`).join("");
+  // Only when something changed: redrawn every second, a button could lose the click.
+  if (html !== lastChecksHtml) $("checks").innerHTML = lastChecksHtml = html;
   return items.every(i => i.level === "ok" || i.level === "off");
 }
 
@@ -1720,13 +1759,15 @@ function renderReady() {
   const recording = !!(p.face && p.face.recording && p.dtl && p.dtl.recording);
   const needed = choice !== "noball";
   $("n1").className = "n" + (recording || (needed && checksGood && camsGood) ? " ok" : "");
-  const open = readyOpen != null ? readyOpen : needed && !recording;
+  // Square shots the phones missed open it mid-session: the sensitivity is set in it.
+  const missed = status && status.rows.find(r => r.key === "missed");
+  const open = readyOpen != null ? readyOpen : needed && (!recording || !!missed);
   $("ready-full").hidden = !open;
   $("ready-sum").hidden = open;
   if ($("since-last")) $("since-last").hidden = recording || !hasSinceLastData;
   const sq = status && status.rows.find(r => r.key === "square");
   $("ready-text").textContent = !needed ? "No phones or Square needed for drills without a ball."
-    : recording ? "● Both phones recording" + (sq ? ` · ${sq.label}: ${sq.text}` : "")
+    : recording ? "● Both phones recording" + (missed ? ` · ${missed.label}` : sq ? ` · ${sq.label}: ${sq.text}` : "")
     : checksGood && camsGood ? "✓ Both cameras see you; Square and the laptop are ready." : "Something needs a look.";
   $("ready-show").textContent = open ? "Hide the cameras" : "Show the cameras";
 }

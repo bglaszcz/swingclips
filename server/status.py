@@ -83,6 +83,37 @@ STREAK_TO_SAY = {"square": 2, "clip": 2, "camera": 3}
 MISSED_WAIT_S = 45.0
 MISSED_TO_SAY = 2
 
+# The phones' strike trigger (capture app 0.12, Trigger.kt): a sensitivity of 0-120 sets the level a
+# strike's sound must pass (the meter's units). Each phone reports the loud, sudden sounds it heard
+# and what came of each ("strike", or why not: "quiet" = under the threshold, "notSudden",
+# "cooldown", "ownVoice", "otherTalking"); kept this long, by the server's clock.
+SENSITIVITY_MAX = 120
+SOUNDS_KEEP_S = 1800.0
+# A missed Square shot's strike is looked for this long before the shot came (Square reports 6-16 s
+# after the strike; the phones stamp sounds on the server's clock, give or take the Wi-Fi).
+STRIKE_BEFORE_SHOT_S = (3.0, 20.0)
+# A sensitivity set on the Start page waits this long for the phone to take it.
+SENSITIVITY_WAIT_S = 60.0
+SOUND_WHY = {"quiet": "too quiet for its sensitivity", "notSudden": "not sudden enough (the room was loud just before)",
+             "cooldown": "within 3 s of the last strike", "ownVoice": "it was talking",
+             "otherTalking": "the other phone was talking", "strike": "it went off"}
+
+
+def threshold_for(sensitivity: int) -> float:
+    """The level a strike must pass at this sensitivity (Trigger.thresholdFor in the capture app)."""
+    if sensitivity <= 100:
+        return 150 - sensitivity / 100 * 140
+    return 10 - (sensitivity - 100) * 0.4
+
+
+def sensitivity_for(level: float) -> int | None:
+    """The lowest sensitivity, in steps of 5, that a sound this loud would set off with a little room
+    to spare (its threshold at 80% of the level); None when even the top won't."""
+    for v in range(0, SENSITIVITY_MAX + 1, 5):
+        if threshold_for(v) <= level * 0.8:
+            return v
+    return None
+
 # The camera check's codes (summary.js cameraCheck, impactCheck), as said.
 CODE_SAY = {
     "out": "you're partly out of the picture",
@@ -101,6 +132,7 @@ PHONE_FIELDS = {
     "battery": int, "charging": bool, "freeMb": int, "version": str, "pending": int,
     "practiceVoice": bool, "setupVoice": str, "autoStart": bool, "busy": str, "cameraError": str,
     "saved": int, "closing": bool, "speaking": bool, "pre": int,
+    "sensitivity": int, "threshold": float, "noise": float,
 }
 RELAY_FIELDS = {"source": str, "squareRunning": bool, "lastShotAt": str, "version": str,
                 "monitorConnected": bool, "monitorReady": bool}
@@ -136,6 +168,8 @@ def clean(body: dict, fields: dict) -> dict:
             continue
         if kind is int and isinstance(v, (int, float)) and not isinstance(v, bool):
             out[k] = int(v)
+        elif kind is float and isinstance(v, (int, float)) and not isinstance(v, bool):
+            out[k] = round(float(v), 1)
         elif kind is bool and isinstance(v, bool):
             out[k] = v
         elif kind is str and isinstance(v, str):
@@ -284,16 +318,18 @@ class Health:
         self.shots_seen: set[float] = set()
         self.missed = 0
         self.missed_said = False
+        self.missed_times: list[float] = []   # the missed shots in a row, when each came
 
     def new_session(self, t: float) -> None:
         self.start, self.first, self.last = t, None, None
         self.checked, self.checked_times, self.streaks, self.active = set(), [], {}, set()
-        self.shots_seen, self.missed, self.missed_said = set(), 0, False
+        self.shots_seen, self.missed, self.missed_said, self.missed_times = set(), 0, False, []
 
-    def shots_step(self, shots: list[dict], now: float) -> list[str]:
+    def shots_step(self, shots: list[dict], now: float, hint=None) -> list[str]:
         """Square shots of the session ({t: when it came, clipped: a clip is paired with it}), oldest
         first: counts the ones in a row the phones didn't record; says so once at MISSED_TO_SAY, and once
-        when they're heard again. Returns what to say."""
+        when they're heard again. hint(missed shot times) -> what to do about it (Status.missed_hint).
+        Returns what to say."""
         if self.start is None:
             return []
         out = []
@@ -306,13 +342,15 @@ class Health:
             if s["clipped"]:
                 if self.missed_said:
                     out.append("The phones are hearing the shots again.")
-                self.missed, self.missed_said = 0, False
+                self.missed, self.missed_said, self.missed_times = 0, False, []
                 continue
             self.missed += 1
+            self.missed_times = (self.missed_times + [s["t"]])[-10:]
             if self.missed >= MISSED_TO_SAY and not self.missed_said:
                 self.missed_said = True
-                out.append(f"The phones missed the last {self.missed} Square shots. Soft shots can be too quiet "
-                           "to set them off: turn the sensitivity up with the plus button on each phone.")
+                todo = (hint and hint(self.missed_times)) or \
+                    "Soft shots can be too quiet to set them off: turn the sensitivity up on the Start page."
+                out.append(f"The phones missed the last {self.missed} Square shots. {todo}")
             self.notes.append({"kind": "missed", "shotAt": s["t"], "inRow": self.missed})
             del self.notes[:-200]
         return out
@@ -449,6 +487,10 @@ class Status:
         self.want: dict[str, float] = {}
         self.auto_started: dict[str, float] = {}
         self.pre_sent: dict[str, int | None] = {a: None for a in ANGLES}
+        # The strike trigger: each phone's loud, sudden sounds by when (server s), and a sensitivity
+        # set on the Start page that the phone hasn't taken yet: angle -> {"v", "t", "sent"}.
+        self.sounds: dict[str, dict[float, dict]] = {a: {} for a in ANGLES}
+        self.sens_wanted: dict[str, dict] = {}
 
     def _id(self) -> int:
         self.last_id = max(self.last_id + 1, int(self.clock() * 1000))
@@ -482,6 +524,10 @@ class Status:
             self.phones[angle] = {"hb": clean(body, PHONE_FIELDS), "seen": now}
             if self.phones[angle]["hb"].get("pre") != old.get("pre"):
                 self.pre_sent[angle] = None   # it changed on its own (the app restarted): tell it again
+            self._keep_sounds(angle, body.get("sounds"), now)
+            w = self.sens_wanted.get(angle)
+            if w and (self.phones[angle]["hb"].get("sensitivity") == w["v"] or now - w["t"] > SENSITIVITY_WAIT_S):
+                self.sens_wanted.pop(angle)
             self._start_if_wanted(angle, old, now)
             if was and not self.phones[angle]["hb"].get("speaking"):
                 self.talk[angle]["stopped"] = now
@@ -499,6 +545,112 @@ class Status:
                     self.notes.append({"kind": "session", "by": angle,
                                        "sinceRecording": round(now - self.last_recording, 1) if self.last_recording else None})
                 self.last_recording = now
+
+    def _keep_sounds(self, angle: str, sounds, now: float) -> None:
+        """A phone's loud, sudden sounds of the last 2 minutes ({ms, level, jump, result}): kept by when."""
+        keep = self.sounds[angle]
+        for x in sounds if isinstance(sounds, list) else []:
+            if not isinstance(x, dict):
+                continue
+            ms, level, jump = x.get("ms"), x.get("level"), x.get("jump")
+            if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (ms, level, jump)):
+                continue
+            result = x.get("result") if x.get("result") in SOUND_WHY else "quiet"
+            t = round(ms / 1000, 3)
+            keep[t] = {"t": t, "level": round(float(level), 1), "jump": round(float(jump), 1), "result": result}
+        for t in [t for t in keep if now - t > SOUNDS_KEEP_S]:
+            del keep[t]
+
+    def heard(self, angle: str, start: float, end: float) -> list[dict]:
+        """Phone `angle`'s loud, sudden sounds between two times (server s), oldest first."""
+        with self.lock:
+            return sorted((x for t, x in self.sounds[angle].items() if start <= t <= end), key=lambda x: x["t"])
+
+    def set_sensitivity(self, target: str, value: int) -> list[dict]:
+        """The strike trigger's sensitivity for one phone ("face", "dtl") or both, from the Start page:
+        each phone takes it on its next poll, recording or not. Each phone's outcome: sent or why not."""
+        if target not in ANGLES + ("both",):
+            raise ValueError("Unknown phone")
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= SENSITIVITY_MAX:
+            raise ValueError(f"Sensitivity goes from 0 to {SENSITIVITY_MAX}")
+        now = self.clock()
+        with self.lock:
+            out = []
+            for a in [target] if target != "both" else ANGLES:
+                hb = (self.phones.get(a) or {}).get("hb", {})
+                if not self.connected(a, now):
+                    if target != "both":
+                        out.append({"angle": a, "error": "not connected (is the app open?)"})
+                    continue
+                if "sensitivity" not in hb:
+                    out.append({"angle": a, "error": "its app is too old to set this from here: update it"})
+                    continue
+                if hb["sensitivity"] == value:
+                    self.sens_wanted.pop(a, None)
+                else:
+                    self.sens_wanted[a] = {"v": value, "t": now, "sent": False}
+                out.append({"angle": a, "error": None})
+            return out
+
+    def _sens_news(self, angle: str) -> int | None:
+        w = self.sens_wanted.get(angle)
+        return w["v"] if w and not w["sent"] else None
+
+    def trigger(self, angle: str) -> dict | None:
+        """Phone `angle`'s strike trigger for the Start page: sensitivity, threshold, the room's noise,
+        its strikes over the last half hour (how many, the softest, the middle one) and a sensitivity
+        on its way to it. None for apps before 0.12."""
+        hb = (self.phones.get(angle) or {}).get("hb", {})
+        if "sensitivity" not in hb:
+            return None
+        strikes = sorted(x["level"] for x in self.sounds[angle].values() if x["result"] == "strike")
+        w = self.sens_wanted.get(angle)
+        return {"sensitivity": hb["sensitivity"], "threshold": hb.get("threshold"), "noise": hb.get("noise"),
+                "strikes": len(strikes), "softest": strikes[0] if strikes else None,
+                "middle": strikes[len(strikes) // 2] if strikes else None,
+                "setting": w and w["v"]}
+
+    def missed_check(self, times: list[float]) -> dict:
+        """What each phone heard just before the missed Square shots (when each came, server s):
+        {angle: {"heard": how many had a sound, "loudest": level, "why": the loudest one's result,
+        "softest": the softest one too quiet for the trigger, "suggest": a sensitivity that would have
+        caught them, or None}}. Phones with apps before 0.12 (no sounds reported) are left out."""
+        out = {}
+        with self.lock:
+            for a in ANGLES:
+                hb = (self.phones.get(a) or {}).get("hb", {})
+                if "sensitivity" not in hb:
+                    continue
+                best = []
+                for t in times:
+                    near = [x for x in self.sounds[a].values()
+                            if t - STRIKE_BEFORE_SHOT_S[1] <= x["t"] <= t - STRIKE_BEFORE_SHOT_S[0]]
+                    if near:
+                        best.append(max(near, key=lambda x: x["level"]))
+                if not best:
+                    out[a] = {"heard": 0, "loudest": None, "why": None, "softest": None, "suggest": None}
+                    continue
+                quiet = [x["level"] for x in best if x["result"] == "quiet"]
+                top = max(best, key=lambda x: x["level"])
+                suggest = None
+                if quiet:
+                    # Enough for the softest one heard as too quiet (the top if nothing is), only ever up.
+                    want = sensitivity_for(min(quiet))
+                    want = SENSITIVITY_MAX if want is None else want
+                    suggest = want if want > hb["sensitivity"] else None
+                out[a] = {"heard": len(best), "loudest": top["level"], "why": top["result"],
+                          "softest": min(quiet) if quiet else None, "suggest": suggest}
+        return out
+
+    def missed_hint(self, times: list[float]) -> str | None:
+        """What to do about missed shots, said by the speaking phone (None: the general advice)."""
+        check = self.missed_check(times)
+        ups = [f"{NAMES[a].lower()} to {c['suggest']}" for a, c in check.items() if c["suggest"]]
+        if ups:
+            return "They were too quiet for the sensitivity: on the Start page, set " + " and ".join(ups) + "."
+        if check and all(c["heard"] == 0 for c in check.values()):
+            return "The phones heard nothing sudden then: check they're near the mat and nothing covers them."
+        return None
 
     def _start_if_wanted(self, angle: str, old: dict, now: float) -> None:
         """Starts phone `angle` if recording was asked for and it isn't: its app was closed or in the
@@ -599,7 +751,8 @@ class Status:
             self._expire(now)
             return any(c["angle"] == angle and c["state"] == "queued" for c in self.commands) or \
                 any(now - x["made"] <= SAY_WITHIN_S for x in self.outbox[angle]) or \
-                self._quiet_news(angle, now) is not None or self._pre_news(angle) is not None
+                self._quiet_news(angle, now) is not None or self._pre_news(angle) is not None or \
+                self._sens_news(angle) is not None
 
     def take(self, angle: str) -> dict:
         """The commands and sentences for a phone's poll; each goes out once."""
@@ -624,6 +777,10 @@ class Status:
             if pre is not None:
                 self.pre_sent[angle] = pre
                 out["pre"] = pre
+            sens = self._sens_news(angle)
+            if sens is not None:
+                self.sens_wanted[angle]["sent"] = True
+                out["sensitivity"] = sens
             return out
 
     # ---- Commands from the review page ----
@@ -824,7 +981,7 @@ class Status:
             relay = self.relay
             said = self.health.step(swings, now, expect_dtl, self.relay_ok(now), relay_name(relay and relay["hb"]))
             if shots is not None:
-                said += self.health.shots_step(shots, now)
+                said += self.health.shots_step(shots, now, self.missed_hint)
             said += self._phone_problems(now)
             to = self.speaker(now)
             for text in said:
@@ -873,7 +1030,7 @@ class Status:
                 hb = dict(p["hb"]) if p else {}
                 cmd = next((c for c in reversed(self.commands) if c["angle"] == a), None)
                 phones[a] = {**hb, "connected": self.connected(a, now), "age": round(now - p["seen"], 1) if p else None,
-                             "expected": a in expected, "speaks": a == speaker,
+                             "expected": a in expected, "speaks": a == speaker, "trigger": self.trigger(a),
                              "command": cmd and {k: cmd[k] for k in ("id", "action", "state", "error")}
                              | {"age": round(now - cmd["made"], 1)}}
                 rows.append(self._phone_row(a, phones[a], now))
@@ -884,9 +1041,7 @@ class Status:
                 rows.append({"key": "first", "label": "First swing", "level": "ok" if f["ok"] else "warn",
                              "text": f["text"]})
             if self.health.missed >= MISSED_TO_SAY:
-                rows.append({"key": "missed", "label": "Missed shots", "level": "warn",
-                             "text": f"{self.health.missed} Square shots in a row with no swing recorded: soft strikes "
-                                     "may be too quiet. Turn the sensitivity up on both phones (the + button)."})
+                rows.append(self._missed_row())
             queued = pose.get("queued") or 0
             deep_left = pose.get("deepLeft") or 0
             if pose.get("held"):
@@ -914,6 +1069,28 @@ class Status:
                             "spoken": [{**s, "age": round(now - s["t"], 1)} for s in self.spoken]},
                 "commands": [{k: c[k] for k in ("id", "angle", "action", "state", "error")} for c in self.commands[-6:]],
             }
+
+    def _missed_row(self) -> dict:
+        """Square shots the phones didn't record, and what each phone heard just before them."""
+        n = self.health.missed
+        check = self.missed_check(self.health.missed_times)
+        bits = []
+        for a, c in check.items():
+            name = NAMES[a]
+            if not c["heard"]:
+                bits.append(f"{name} heard nothing sudden then")
+            elif c["softest"] is not None:
+                bits.append(f"{name} heard them at {c['softest']:g}, its trigger is at "
+                            f"{threshold_for(self.phones[a]['hb']['sensitivity']):g}"
+                            + (f": set it to {c['suggest']}" if c["suggest"] else ""))
+            elif c["why"] == "strike":
+                bits.append(f"{name} went off (its clip may not have reached the server)")
+            else:
+                bits.append(f"{name} heard a sound at {c['loudest']:g} but {SOUND_WHY[c['why']]}")
+        text = f"{n} Square shots in a row with no swing recorded. " + (
+            "; ".join(bits) + "." if bits else "Soft strikes may be too quiet: turn the sensitivity up.")
+        return {"key": "missed", "label": "Missed shots", "level": "warn", "text": text,
+                "suggest": {a: c["suggest"] for a, c in check.items() if c["suggest"]}}
 
     def _phone_row(self, a: str, p: dict, now: float) -> dict:
         row = {"key": a, "label": NAMES[a], "angle": a}
@@ -956,6 +1133,10 @@ class Status:
             bits.append(p["busy"])
         if p.get("speaks"):
             bits.append("speaks")
+        tr = p.get("trigger")
+        if tr:
+            bits.append(f"sensitivity {tr['sensitivity']}" + (f" (strikes from {tr['softest']:g}, trigger at "
+                                                              f"{threshold_for(tr['sensitivity']):g})" if tr["strikes"] else ""))
         return {**row, "level": level, "text": " · ".join(bits), "problem": ", ".join(problems) or None}
 
     def _square_row(self, now: float, last_shot: float | None) -> dict:

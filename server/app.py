@@ -2550,6 +2550,24 @@ def phone_command(body: PhoneCommand):
     return {"results": out}
 
 
+class PhoneSensitivity(BaseModel):
+    value: int
+    angle: str = "both"
+
+
+@app.post("/api/phones/sensitivity")
+def phone_sensitivity(body: PhoneSensitivity):
+    """The strike trigger's sensitivity from the Start page: {value: 0-120, angle: "face" | "dtl" | "both"}.
+    Each phone takes it on its next poll, recording or not (capture app 0.12 and later)."""
+    try:
+        out = session_status.set_sensitivity(body.angle, body.value)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    print("Phones: " + ", ".join(f"sensitivity {body.value} {r['angle']}: {r['error'] or 'sent'}" for r in out), flush=True)
+    log_event("sensitivity", value=body.value, angle=body.angle)
+    return {"results": out}
+
+
 @app.post("/api/relay/heartbeat")
 async def relay_heartbeat(request: Request):
     """The sim laptop's launcher: {source, squareRunning, lastShotAt, version}, about every 30 s."""

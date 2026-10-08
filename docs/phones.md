@@ -5,7 +5,18 @@ How the capture app records, how the two angles pair, the shutter and clip quali
 ## `capture/` - the phone app (Android, Kotlin, Camera2)
 - Keeps the last few seconds of video in memory (hardware encoder, keyframe every 0.25 s) and cuts
   a clip 2 s either side of each strike. Strike detection is the web app's: 1 kHz high-pass, energy
-  over the threshold and 2.5x the previous windows, 3 s cooldown, 0-100 sensitivity.
+  over the threshold and 2.5x the previous windows, 3 s cooldown, 0-120 sensitivity (`Trigger.kt`:
+  0-100 = a window's energy over 150 down to over 10, 110 / 120 = over 6 / 2; `status.threshold_for`
+  is the same scale). From 0.12 the sensitivity also changes while recording, from the phone or the
+  Start page (`POST /api/phones/sensitivity {value, angle}`; the phone gets `sensitivity` in its next
+  poll reply, and the server drops the request once the phone reports it, or after 60 s). Each poll
+  reports `sensitivity`, `threshold`, `noise` (the level 9 windows in 10 stay under, last ~5 s) and
+  `sounds`: the loud, sudden sounds of the last 2 minutes (level >= 2 and 1.5x louder than just
+  before, the loudest per second) on the server's clock, each with what came of it: `strike`,
+  `quiet` (under the threshold), `notSudden` (under 2.5x), `cooldown`, `ownVoice`, `otherTalking`.
+  The server keeps 30 minutes of them (`Status.sounds`) for the Start page's strike levels and the
+  Missed shots check (`Status.missed_check`: the loudest sound 3-20 s before each missed Square shot,
+  and the lowest sensitivity, in steps of 5, whose threshold is at most 80% of the softest one).
 - Modes: 1080p/720p at 240, 120 or 30 fps. 240 fps drops ~30% of frames on the S23 Ultra, 120 fps
   ~2-7%.
 - Opens **not recording**; settings are locked while recording. Clips wait in an outbox and upload
@@ -141,6 +152,8 @@ v2 measures every clip again.
   shutter: mild on Auto, something to fix at a fixed shutter) and **grainy** with what to do, the
   ball-not-found / impact-doubtful item, and (grey) the shutter setting and what each camera
   really used, from `camera.json`. Clips from before capture app 0.4 simply don't show that line.
+  When there's nothing but quiet notes (the shutter, near the edge, small, mild flicker: none change
+  the numbers), the line shows only with **Advanced data** on.
 - **Shutter test** (button at the top): every analyzed clip grouped by camera and shutter setting
   (Auto, 1/500, 1/1000, 1/2000; "unknown" before app 0.4; "1/1000 (compensation)" where the phone
   locked darker instead), over all clips and per session, with the real shutter, ISO, brightness,

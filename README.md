@@ -71,8 +71,9 @@ and drill from `coach.js`. Keys `1`–`8` jump between key positions (setup, top
 
 **Capture app (0.9)**: the camera fills the screen with which angle and mode it is and whether
 it's recording; below it the status, the server, one big Start / Stop, and the strike trigger
-(level bar and sensitivity). Everything else (angle, mode, shutter, server, voices, auto-start)
-is under **Settings**; the camera ones are locked while recording.
+(level bar and sensitivity; also set from the Start page, recording or not, from 0.12). Everything
+else (angle, mode, shutter, server, voices, auto-start) is under **Settings**; the camera ones are
+locked while recording.
 
 ## Common commands
 

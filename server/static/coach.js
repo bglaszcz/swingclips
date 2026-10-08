@@ -333,8 +333,9 @@
     loft: { more: "more dynamic loft (higher, weaker flight)", less: "less dynamic loft (lower, more penetrating flight)" },
     launch: { more: "a higher launch", less: "a lower launch" },
     spin: { more: "more spin", less: "less spin" },
-    strikeH: { more: "strike moving one way across the face", less: "strike moving the other way across the face", target: 0, band: 5,
-               unit: " mm", side: ["off centre one way", "off centre the other way"] },
+    // Square's + is the heel (strikemap.js).
+    strikeH: { more: "strike moving toward the heel", less: "strike moving toward the toe", target: 0, band: 5,
+               unit: " mm", side: ["toward the toe", "toward the heel"] },
     strikeV: { more: "strike higher on the face", less: "strike lower on the face (thin side)", target: 0, band: 5, unit: " mm",
                side: ["low on the face", "high on the face"] },
   };
