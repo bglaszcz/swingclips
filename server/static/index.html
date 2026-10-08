@@ -566,6 +566,12 @@
   .pr-session { margin-top: 10px; }
   /* Practice games: a target spoken, the shot scored. */
   .gm-target { font-size: 16px; font-weight: 600; color: var(--accent); }
+  .gm-target-big { font-size: 28px; font-weight: 700; line-height: 1.25; margin: 8px 0 4px; color: var(--accent); }
+  .gm-score { font-size: 15px; margin-bottom: 8px; color: var(--text); }
+  .gm-ended { font-size: 15px; font-weight: 600; margin: 8px 0; }
+  @media (max-width: 600px) {
+    .gm-target-big { font-size: 20px; }
+  }
   #gm-now table, #gm-history table { font-size: 13px; border-collapse: collapse; margin-top: 6px; }
   #gm-now td, #gm-now th, #gm-history td, #gm-history th { padding: 2px 10px 2px 0; text-align: left; white-space: nowrap; }
   .pr-shead { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 13px; }
@@ -1542,16 +1548,18 @@
       <div class="note" id="gm-describe"></div>
       <div id="gm-msg" class="note"></div>
       <div id="gm-now"></div>
-      <div class="note">The speaking phone says each target; hit it with the club you would play. Once Square's shot is in
-        (about 15 s) it says where the ball landed against the target and the next one. A net has no roll, so the ball
-        finishes where it lands. Each shot is scored in strokes against a tour player from that distance (+ is better);
-        the Combine is always the same 27 shots, so its score is the one to follow week to week. Starting a game turns
-        the practice number below off.</div>
-      <strong style="margin-top: 8px">Past games</strong>
-      <div class="t-filters" style="margin-top: 4px">
-        <label>Game <select id="gm-history-game"></select></label>
-      </div>
-      <div id="gm-history"></div>
+      <details class="p-more" data-fold="games-scoring">
+        <summary>How games are scored and past games</summary>
+        <div class="note">The speaking phone says each target; hit it with the club you would play. Once Square's shot is in
+          (about 15 s) it says where the ball landed against the target and the next one. A net has no roll, so the ball
+          finishes where it lands. Each shot is scored in strokes against a tour player from that distance (+ is better);
+          the Combine is always the same 27 shots, so its score is the one to follow week to week. Starting a game turns
+          the practice number below off.</div>
+        <div class="t-filters" style="margin-top: 8px">
+          <label>Game <select id="gm-history-game"></select></label>
+        </div>
+        <div id="gm-history"></div>
+      </details>
     </div>
     <details class="t-card p-fold" id="pr-manual">
       <summary><strong>Pick a number yourself</strong></summary>
