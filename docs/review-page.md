@@ -462,9 +462,16 @@ toward the ball". The phones face away from you, so voice is the channel.
   folded under **Pick a number yourself**. Spoken and shown names are plain: "Hands coming down 2.4, too
   far over" (was "Hands at P6").
 - **The videos** draw the skeleton, shaft and plane line; the angle readouts are Advanced data (the
-  Angles button shows with it). The scrubber names Setup, Top, Impact and Finish; the other positions are
+  Angles button shows with it). The scrubber names Setup, Top and Impact; the other positions are
   ticks named on hover. The **habit banner** only fires when the first readable swing of the five was
   clean (a fault creeping in); Oct 7: 7 banners in 63 swings (was 15).
+- **Swing order strip** (under the video's controls, swings with 3D; `view3d.js showStrip`, Show >
+  **Swing order**, on by default, remembered): how fast the hips, chest, lead arm and club turn from 0.25 s
+  before the top to 0.15 s after impact, peaks dotted, the order in one line ("Order: lead arm, club, hips,
+  chest (best: hips, chest, arm, club)"). A playhead follows the video, frame steps included, and reads the
+  four speeds there ("47 ms before impact: hips 32 · chest 261 · lead arm 855 · club 1324 °/s"); a tap or
+  drag on the strip moves the video to that moment. The full chart and its notes stay in the 3D panel
+  (Advanced data).
 
 - **Setting it up** (review page, **Practice** at the top): pick the number, the club, and the
   range. **Use middle half** sets the range to the middle 50% of your last 30 swings with that club

@@ -17,6 +17,7 @@
     ["Hip lift", "pelvisLift", null, "in"], ["Chest slide", "thoraxSway", null, "in"],
   ];
 
+  const SEGMENTS3D = (root.SwingMetrics3D && root.SwingMetrics3D.SEGMENTS) || [["pelvis", "Hips"], ["thorax", "Chest"], ["arm", "Lead arm"], ["club", "Club"]];
   let state = null;       // {box, doc, result, canvas, yaw, pitch}
 
   const fmt = (x, unit) => {
@@ -243,6 +244,94 @@
     return wrap;
   }
 
+  // ---- The swing-order strip under the video: the four speeds from before the top to after impact,
+  // a playhead that follows the video (play, frame steps), and a tap or drag on it moves the video. ----
+
+  let strip = null;   // {box, svg, head, read, x, t0, t1, rows, p7, seek}
+
+  /** Builds the strip for a swing into `box` (the 3D result of compute), or hides it. seek(t): move the video. */
+  function showStrip(box, result, positions, seek) {
+    strip = null;
+    const p4 = positions && positions.find(p => p.key === "p4"), p7 = positions && positions.find(p => p.key === "p7");
+    if (!box) return;
+    box.hidden = !(result && result.sequence && p4 && p7);
+    if (box.hidden) { box.replaceChildren(); return; }
+    const t0 = p4.t - 0.25, t1 = p7.t + 0.15;
+    const rows = result.values.filter(v => v.t >= t0 && v.t <= t1);
+    const W = 800, H = 96, L = 6, R = 6, T = 6, B = 16;
+    let top = 0;
+    for (const v of rows) for (const k in COLORS) if (v[k + "Speed"] > top) top = v[k + "Speed"];
+    top = Math.max(500, top);
+    const x = t => L + (t - t0) / (t1 - t0) * (W - L - R);
+    const y = s => T + (1 - Math.max(0, s) / top) * (H - T - B);
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    svg.setAttribute("preserveAspectRatio", "none");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Swing order: how fast the hips, chest, lead arm and club turn from the top to impact; tap to move the video");
+    const add = (tag, a, text) => {
+      const e = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(a)) e.setAttribute(k, v);
+      if (text != null) e.textContent = text;
+      svg.append(e);
+      return e;
+    };
+    add("line", { x1: x(p7.t), x2: x(p7.t), y1: T, y2: H - B, class: "impact" });
+    add("text", { x: x(p7.t), y: H - 3, "text-anchor": "middle", class: "axis" }, "impact");
+    add("text", { x: x(p4.t), y: H - 3, "text-anchor": "middle", class: "axis" }, "top");
+    for (const k of Object.keys(COLORS)) {
+      const pts = rows.filter(v => v[k + "Speed"] != null).map(v => `${x(v.t).toFixed(1)},${y(v[k + "Speed"]).toFixed(1)}`);
+      if (pts.length) add("polyline", { points: pts.join(" "), fill: "none", stroke: COLORS[k], "stroke-width": 2, "vector-effect": "non-scaling-stroke" });
+    }
+    for (const s of result.sequence.segments) add("circle", { cx: x(s.t), cy: y(s.peak), r: 3.5, fill: COLORS[s.key] });
+    const head = add("line", { x1: 0, x2: 0, y1: T, y2: H - B, class: "playhead" });
+    const legend = el("div", { class: "seq-strip-legend" });
+    const read = el("span", { class: "seq-strip-read" });
+    for (const s of result.sequence.segments) {
+      const item = el("span", { title: `${s.label}: fastest ${Math.round(s.peak)}°/s, ${Math.round(Math.abs(s.beforeImpact))} ms ${s.afterImpact ? "after" : "before"} impact` });
+      item.append(el("i", { style: `background:${COLORS[s.key]}` }), s.label);
+      legend.append(item);
+    }
+    const order = result.sequence.order.map(k => result.sequence.segments.find(s => s.key === k).label.toLowerCase());
+    const verdict = el("span", { class: "seq-strip-order" }, result.sequence.inOrder
+      ? `In order: ${order.join(", ")}`
+      : `Order: ${order.join(", ")} (best: hips, chest, arm, club)`);
+    legend.append(verdict, read);
+    const wrap = el("div", { class: "seq-strip-chart" });
+    wrap.append(svg);
+    box.replaceChildren(wrap, legend);
+    strip = { box, svg, head, read, x, t0, t1, rows, p7, seek, W };
+    // Tap or drag: move the video to that moment.
+    const timeAt = e => {
+      const r = svg.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width * W;
+      return Math.max(t0, Math.min(t1, t0 + (px - L) / (W - L - R) * (t1 - t0)));
+    };
+    let dragging = false;
+    svg.addEventListener("pointerdown", e => { dragging = true; svg.setPointerCapture(e.pointerId); seek && seek(timeAt(e)); });
+    svg.addEventListener("pointermove", e => { if (dragging && seek) seek(timeAt(e)); });
+    svg.addEventListener("pointerup", () => { dragging = false; });
+  }
+
+  /** The playhead and the speeds at time t (face-on clip time). */
+  function stripAt(t) {
+    if (!strip) return;
+    const inside = t >= strip.t0 && t <= strip.t1;
+    const xt = strip.x(Math.max(strip.t0, Math.min(strip.t1, t)));
+    strip.head.setAttribute("x1", xt);
+    strip.head.setAttribute("x2", xt);
+    strip.head.classList.toggle("outside", !inside);
+    if (!inside) { strip.read.textContent = t < strip.t0 ? "Step to the top to follow the order" : ""; return; }
+    let best = strip.rows[0];
+    for (const v of strip.rows) if (Math.abs(v.t - t) < Math.abs(best.t - t)) best = v;
+    const ms = Math.round((t - strip.p7.t) * 1000);
+    const when = ms === 0 ? "at impact" : `${Math.abs(ms)} ms ${ms < 0 ? "before" : "after"} impact`;
+    const sp = SEGMENTS3D.map(([k, label]) => best[k + "Speed"] != null ? `${label.toLowerCase()} ${Math.round(Math.max(0, best[k + "Speed"]))}` : null)
+      .filter(Boolean).join(" · ");
+    strip.read.textContent = `${when}: ${sp} °/s`;
+  }
+
   /**
    * Shows the panel for a swing, or hides it.
    * @param box the panel element
@@ -252,6 +341,7 @@
     state = null;
     const doc = opts && opts.doc;
     const result = doc ? SwingMetrics3D.compute(doc, opts.positions, opts.leadSide, opts.club) : null;
+    showStrip(opts && opts.strip, result, opts && opts.positions, opts && opts.seek);
     box.hidden = !result;
     if (!result) { box.replaceChildren(); return; }
     const head = el("div", { class: "pos-head" });
@@ -316,6 +406,7 @@
   }
 
   function drawAt(t) {
+    stripAt(t);
     if (!state) return;
     state.lastT = t;
     draw(t);
