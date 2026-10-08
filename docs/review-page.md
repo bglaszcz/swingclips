@@ -98,6 +98,12 @@ What the server works out for each swing and what each part of the review page s
   the irons' first ("Your #1 priority with your irons"), then the woods' first ("With the driver and
   woods") or the irons' second. A focus made from one tracks the group's most-hit club (button
   tooltip); with a focus, one line when the numbers now point elsewhere.
+  Under step 2, folded by default: **Pick my own focus** (`static/focuspick.js`), letting the golfer
+  pick any move from `coach.js` with a body number in `summary.js` (only sides without a fault, grouped
+  by phase: Top of swing, Downswing, Impact, Tempo) for irons ("My irons", tracked with the most-hit iron),
+  driver and woods, or any one club; previews the how, drill and thought before saving.
+  Earlier focuses fold below it with **Go back to this**; the history stays clean (same-day slips are
+  dropped, and reactivating an earlier focus removes its old history entry).
   **3. Is it working?** One heading and what to do about it, from the focus's move and results since it
   started (`SwingFocus.working`, focus.js): "It's working" (move and a result the right way), "You're
   making the move; the results haven't followed yet", "The results are moving the right way" (the move
@@ -273,6 +279,10 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   the face pointed left of the target but open to the path"). **Try this**: the fault's swing
   thought and drill (coach.js); with no fault and an off-line out-to-in miss, the hands-drop-under-
   the-plane fix; never a move toward a fault, so no drill for an in-to-out miss.
+  **Focus on this swing**: at the bottom of the coaching card (`.cc-focus`), when there is an active focus
+  and the open swing is within its club or group scope: "Your focus, <plain move name>: <this swing's number>
+  (<better / about the same / further> than your usual <median of the 30 swings before it in scope>)".
+  No line when the swing has no reading or is shaky (tracking noise, bad camera, estimated position).
 - **Habit watch** (`static/habits.js`): a calm amber banner (`.cc-habit`, never red) at the top of the
   coaching card when a bad habit is forming during a session across your last 5 swings with that club.
   It watches body numbers that have a fault in `faults.js`: flagged when at least 4 of the last 5 swings
@@ -406,9 +416,17 @@ drawn by `renderHelps` in `trends.js`):
 
 ## My focus
 On **Progress**, first card (`static/focus.js`, drawn by `renderFocus` in `trends.js`):
-- **Make this my focus** on a practice-plan move saves it in the journal (`journal.json` `focus`:
-  move, which way, club, the results it's for, the day it started; `POST /api/journal/focus`, with
-  `{"move": null}` to end it; the one before goes to `focuses` with the day it ended).
+- **Make this my focus** on a suggested priority or through **Pick my own focus** saves it in the journal
+  (`journal.json` `focus`: move, which way, club, scope: "irons" | "woods" | null, the results it's for, the day it started;
+  `POST /api/journal/focus`, with `{"move": null}` to end it; normal switches go to `focuses` with `until`).
+  Clean history rules: slips ended the same day are omitted from `focuses`, and reactivating a past focus via
+  **Go back to this** removes its previous entry from history.
+- **Pick my own focus** (`static/focuspick.js`): under step 2, allows choosing any move in `coach.js MOVES` with a
+  body number in `summary.js BODY` (only non-fault sides, grouped by where it happens: Top of swing, Downswing,
+  Impact, Tempo) with plain golf names, for irons ("My irons", tracked with the group's most-hit iron), driver and woods,
+  or any individual club. Previews how, drill, and swing thought, and switches via confirmation.
+- **Swing view coaching card**: displays your focus move on every swing within scope at the bottom of the card,
+  comparing that swing's number to the median of the 30 preceding swings in scope ("better / about the same / further than your usual").
 - The card: what to work on, the drill and the swing thought, then for the move and each result:
   the median of the session medians before (the latest 6 sessions with the club) and since, the
   change, and a verdict against the session-to-session wobble (the larger of the spread of the

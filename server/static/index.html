@@ -947,6 +947,7 @@
   #coachcard .cc-drill { color: var(--muted); font-size: 13px; margin-top: 4px; }
   #coachcard .cc-habit { background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); border-radius: 6px; padding: 6px 10px; font-size: 13px; line-height: 1.4; color: var(--text); }
   #coachcard .cc-habit .cc-try { font-weight: 600; cursor: help; }
+  #coachcard .cc-focus { font-size: 13px; color: var(--muted); padding-top: 6px; border-top: 1px solid var(--line); margin-top: 4px; }
   @media (max-width: 560px) { #coachcard .cc-row { grid-template-columns: 1fr; gap: 2px; } }
 
   /* ---- Key positions ---- */
@@ -3303,6 +3304,18 @@ function showNumbers() {
 
 // ---- The swing in plain words (shotstory.js): what the ball did, why, what to try ----
 
+function formatFocusBodyValue(key, v) {
+  if (v == null || !Number.isFinite(v)) return "--";
+  const b = typeof SwingSummary !== "undefined" && SwingSummary.BODY ? SwingSummary.BODY.find(f => f.key === key) : null;
+  const unit = b ? b.unit : "";
+  const dec = unit === "s" ? 2 : unit === "°" ? 1 : unit === ":1" ? 1 : 1;
+  const n = v.toFixed(dec);
+  if (unit === "°") return n + "°";
+  if (unit === ":1") return `${n} : 1`;
+  if (unit) return `${n} ${unit}`;
+  return n;
+}
+
 function renderCoachCard() {
   const box = document.getElementById("coachcard");
   const c = current && clips.find(x => x.name === current);
@@ -3337,8 +3350,110 @@ function renderCoachCard() {
       }
     }
   }
-  box.hidden = !card && !habit;
-  if (!card && !habit) { box.replaceChildren(); return; }
+
+  let focusLine = null;
+  const f = typeof journal !== "undefined" && journal.focus;
+  if (f && f.move && typeof SwingSummary !== "undefined") {
+    const cl = c.shot ? c.shot.club : c.club;
+    const grp = typeof SwingGoodShots !== "undefined" ? SwingGoodShots.groupOf(cl) : null;
+    const inScope = f.scope ? (grp === f.scope) : (!f.club || cl === f.club);
+    if (inScope) {
+      let val = null;
+      let isShaky = false;
+      const isBadTrust = j => {
+        if (!j) return false;
+        if (j.level === "none") return true;
+        const bad = (j.codes || []).filter(c => c !== "noisy" && c !== "ok");
+        return bad.length > 0;
+      };
+      if (typeof swingRow === "function") {
+        const row = swingRow(c);
+        if (row) {
+          if (row.shown && row.shown[f.move] != null) val = row.shown[f.move];
+          else if (row.body && row.body[f.move] != null) val = row.body[f.move];
+          if (row.trust && row.trust[f.move]) isShaky = isBadTrust(row.trust[f.move]);
+          else if (row.shaky && row.shaky[f.move]) isShaky = true;
+        }
+      }
+      if (val == null && typeof swingRecords !== "undefined" && swingRecords) {
+        const rec = swingRecords[c.name] || (c.partner && swingRecords[c.partner]);
+        if (rec && rec.body && rec.body[f.move] != null) {
+          val = rec.body[f.move];
+          if (rec.trust && rec.trust[f.move]) isShaky = isBadTrust(rec.trust[f.move]);
+        }
+      }
+      if (val == null && coachBody && coachBody.body && coachBody.body[f.move] != null) {
+        val = coachBody.body[f.move];
+        const j = coachBody.trust && coachBody.trust[f.move];
+        isShaky = isBadTrust(j);
+      }
+      if (val != null && Number.isFinite(val) && !isShaky) {
+        const curTime = new Date(c.recorded).getTime();
+        const prevVals = [];
+        const allClips = typeof shownClips === "function" ? shownClips() : clips.filter(x => !isSecondary(x));
+        const priorClips = allClips.filter(other => {
+          if (other.excluded || other.name === c.name) return false;
+          const oTime = new Date(other.recorded).getTime();
+          if (!(oTime < curTime)) return false;
+          const oClub = other.shot ? other.shot.club : other.club;
+          const oGrp = typeof SwingGoodShots !== "undefined" ? SwingGoodShots.groupOf(oClub) : null;
+          return f.scope ? (oGrp === f.scope) : (!f.club || oClub === f.club);
+        });
+        priorClips.sort((a, b) => new Date(b.recorded).getTime() - new Date(a.recorded).getTime());
+        for (const other of priorClips) {
+          let oVal = null;
+          let oShaky = false;
+          if (typeof swingRow === "function") {
+            const oRow = swingRow(other);
+            if (oRow) {
+              if (oRow.shown && oRow.shown[f.move] != null) oVal = oRow.shown[f.move];
+              else if (oRow.body && oRow.body[f.move] != null) oVal = oRow.body[f.move];
+              if (oRow.trust && oRow.trust[f.move]) oShaky = isBadTrust(oRow.trust[f.move]);
+              else if (oRow.shaky && oRow.shaky[f.move]) oShaky = true;
+            }
+          }
+          if (oVal == null && typeof swingRecords !== "undefined" && swingRecords) {
+            const rec = swingRecords[other.name] || (other.partner && swingRecords[other.partner]);
+            if (rec && rec.body && rec.body[f.move] != null) {
+              oVal = rec.body[f.move];
+              if (rec.trust && rec.trust[f.move]) oShaky = isBadTrust(rec.trust[f.move]);
+            }
+          }
+          if (oVal != null && Number.isFinite(oVal) && !oShaky) {
+            prevVals.push(oVal);
+            if (prevVals.length >= 30) break;
+          }
+        }
+        if (prevVals.length > 0) {
+          prevVals.sort((a, b) => a - b);
+          const med = typeof quantile === "function" ? quantile(prevVals, 0.5)
+            : (prevVals.length % 2 === 0 ? (prevVals[prevVals.length / 2 - 1] + prevVals[prevVals.length / 2]) / 2 : prevVals[Math.floor(prevVals.length / 2)]);
+          const b = SwingSummary.BODY.find(item => item.key === f.move);
+          const unit = b ? b.unit : "";
+          const dec = unit === "s" ? 2 : unit === "°" ? 1 : unit === ":1" ? 1 : 1;
+          const step = unit === "s" ? 0.02 : unit === "°" ? 0.5 : unit === ":1" ? 0.1 : 0.2;
+
+          let cmp = "about the same";
+          if (Math.abs(val - med) >= step && val.toFixed(dec) !== med.toFixed(dec)) {
+            const diff = val - med;
+            const isBetter = f.aim === "more" ? diff > 0 : diff < 0;
+            cmp = isBetter ? "better" : "further";
+          }
+          const mv = typeof SwingCoach !== "undefined" ? SwingCoach.MOVES[f.move] : null;
+          const fix = mv && mv[f.aim];
+          const plain = typeof SwingShotStory !== "undefined" ? SwingShotStory.plain : (s => s);
+          const moveName = fix ? plain(fix.name) : ((typeof SwingShotStory !== "undefined" && SwingShotStory.label(f.move)) || f.move);
+
+          const fmtVal = formatFocusBodyValue(f.move, val);
+          const fmtMed = formatFocusBodyValue(f.move, med);
+          focusLine = scEl("div", "cc-focus", `Your focus, ${moveName}: ${fmtVal} (${cmp} than your usual ${fmtMed})`);
+        }
+      }
+    }
+  }
+
+  box.hidden = !card && !habit && !focusLine;
+  if (!card && !habit && !focusLine) { box.replaceChildren(); return; }
   const kids = [];
   if (habit) {
     const hEl = scEl("div", "cc-habit");
@@ -3379,6 +3494,7 @@ function renderCoachCard() {
       row("Still there", s);
     }
   }
+  if (focusLine) kids.push(focusLine);
   box.replaceChildren(...kids);
 }
 
@@ -4534,7 +4650,7 @@ async function refresh() {
   trendsTick();
   if (typeof trendDataLoaded !== "undefined" && !trendDataLoaded && !goodLoading && typeof loadTrendData === "function") {
     goodLoading = true;
-    loadTrendData().finally(() => { goodLoading = false; });
+    loadTrendData().then(() => { if (current) renderCoachCard(); }).finally(() => { goodLoading = false; });
   }
   if (window.shutterTick) shutterTick();
   if (window.labelViewTick) labelViewTick();
