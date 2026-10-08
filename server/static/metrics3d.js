@@ -50,6 +50,60 @@
   // Labels in golfer's words (the keys stay pelvis / thorax).
   const SEGMENTS = [["pelvis", "Hips"], ["thorax", "Chest"], ["arm", "Lead arm"], ["club", "Club"]];
 
+  // Core joints (tri.CORE) checked at setup (right-handed golfer: left = lead).
+  const CORE_JOINTS = [
+    [11, "lead shoulder"], [12, "trail shoulder"],
+    [13, "lead elbow"], [14, "trail elbow"],
+    [15, "lead wrist"], [16, "trail wrist"],
+    [23, "lead hip"], [24, "trail hip"],
+    [25, "lead knee"], [26, "trail knee"],
+    [27, "lead ankle"], [28, "trail ankle"],
+  ];
+
+  // Which table rows a missing joint blanks (view3d.js ROWS).
+  const SHOULDER_ROWS = ["thoraxTurn", "separation", "thoraxBend", "thoraxSideBend", "thoraxSway"];
+  const HIP_ROWS = ["pelvisTurn", "separation", "pelvisSideBend", "pelvisSway", "pelvisThrust", "pelvisLift"];
+  const SHOULDER_LABELS = ["Shoulder turn", "Shoulders turned past the hips", "Chest bend toward the ball", "Shoulder tilt", "Chest slide"];
+  const HIP_LABELS = ["Hip turn", "Shoulders turned past the hips", "Hip tilt", "Hip slide", "Hips toward the ball", "Hip lift"];
+
+  const SETUP_BLANKS = {
+    "lead shoulder": SHOULDER_ROWS,
+    "trail shoulder": SHOULDER_ROWS,
+    "shoulders": SHOULDER_ROWS,
+    "lead hip": HIP_ROWS,
+    "trail hip": HIP_ROWS,
+    "hips": HIP_ROWS,
+    "lead elbow": [], "trail elbow": [], "lead wrist": [], "trail wrist": [],
+    "lead knee": [], "trail knee": [], "lead ankle": [], "trail ankle": [],
+  };
+
+  const SETUP_BLANK_LABELS = {
+    "lead shoulder": SHOULDER_LABELS,
+    "trail shoulder": SHOULDER_LABELS,
+    "shoulders": SHOULDER_LABELS,
+    "lead hip": HIP_LABELS,
+    "trail hip": HIP_LABELS,
+    "hips": HIP_LABELS,
+    "lead elbow": [], "trail elbow": [], "lead wrist": [], "trail wrist": [],
+    "lead knee": [], "trail knee": [], "lead ankle": [], "trail ankle": [],
+  };
+
+  function blankedRows(missing) {
+    const keys = new Set();
+    for (const j of missing || []) {
+      for (const k of SETUP_BLANKS[j] || []) keys.add(k);
+    }
+    return Array.from(keys);
+  }
+
+  function blankedRowLabels(missing) {
+    const labels = new Set();
+    for (const j of missing || []) {
+      for (const l of SETUP_BLANK_LABELS[j] || []) labels.add(l);
+    }
+    return Array.from(labels);
+  }
+
   const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
   const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
   const scale = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
@@ -159,6 +213,19 @@
     const frames = doc.frames;
     const find = key => (positions || []).find(p => p.key === key);
     const p1 = find("p1"), p4 = find("p4"), p7 = find("p7");
+
+    // Setup window: from 0.4 s before P1 to takeaway, or P1 + 0.1 s without one.
+    const takeaway = (positions || []).find(p => p.key === "takeaway") || (positions && positions.takeaway ? positions.takeaway : null);
+    const tRef = p1 ? p1.t : (frames[0] ? frames[0].t : 0);
+    const tStart = tRef - 0.4;
+    const tEnd = (takeaway && typeof takeaway.t === "number") ? takeaway.t : tRef + 0.1;
+    const setupFrames = frames.filter(f => f.t >= tStart && f.t <= tEnd);
+    const missing = [];
+    for (const [id, name] of CORE_JOINTS) {
+      const seen = setupFrames.some(f => f.p && f.p[id] != null);
+      if (!seen) missing.push(name);
+    }
+    const setup = { missing, frames: setupFrames.length };
     const ts = frames.map(f => f.t);
     const raw = frames.map(f => frameValues(f.p, f.club || null));
     const ai = p1 ? nearest(frames, p1.t) : raw.findIndex(v => v.pelvisHeading != null && v.thoraxHeading != null);
@@ -276,7 +343,7 @@
                     diffPct: expected ? 100 * (measured - expected) / expected : null,
                     ok: expected ? Math.abs(measured - expected) <= CLUB_TOLERANCE * expected : null };
     }
-    return { values, address: ai, sequence, clubCheck, thoraxTop, pelvisStartMs };
+    return { values, address: ai, sequence, clubCheck, thoraxTop, pelvisStartMs, setup };
   }
 
   /** The numbers at key positions: {p1: values, p4: ..., p6, p7} (nearest 3D frame to each). */
@@ -309,7 +376,7 @@
 
   /**
    * One swing's 3D numbers from its pose inputs (as SwingSummary.summarize takes them) and 3D file.
-   * @returns {numbers: {key: number | null}, sequence, clubCheck, reprojection, boneSpreadPct} | null
+   * @returns {numbers: {key: number | null}, sequence, clubCheck, reprojection, boneSpreadPct, setupMissing, addressError} | null
    */
   function summarize3d(main, other, leadSide, doc, club) {
     const S = root.SwingSummary || (typeof require !== "undefined" && require("./summary.js"));
@@ -330,10 +397,13 @@
     }
     numbers.pelvisStartMs = typeof r.pelvisStartMs === "number" && Number.isFinite(r.pelvisStartMs) ? r.pelvisStartMs : null;
     return { numbers, sequence: r.sequence, clubCheck: r.clubCheck, reprojection: doc.reprojection,
-             boneSpreadPct: doc.boneSpreadPct };
+             boneSpreadPct: doc.boneSpreadPct, setupMissing: r.setup ? r.setup.missing : [],
+             addressError: (doc.reprojection && doc.reprojection.address) ? doc.reprojection.address : null };
   }
 
-  const api = { compute, atPositions, summarize3d, frameValues, SEGMENTS, CLUB_LENGTH, PELVIS_START_SPEED, PELVIS_START_SECONDS };
+  const api = { compute, atPositions, summarize3d, frameValues, SEGMENTS, CLUB_LENGTH,
+                PELVIS_START_SPEED, PELVIS_START_SECONDS, CORE_JOINTS, SETUP_BLANKS,
+                BLANKED_ROWS: SETUP_BLANKS, SETUP_BLANK_LABELS, blankedRows, blankedRowLabels };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingMetrics3D = api;
 })(typeof window !== "undefined" ? window : globalThis);

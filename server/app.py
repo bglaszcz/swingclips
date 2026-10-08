@@ -2185,6 +2185,16 @@ def get_3d(name: str):
     return FileResponse(path, media_type="application/json", headers={"Cache-Control": "no-store"})
 
 
+def calib_doc_loader(name: str) -> dict | None:
+    p = file_3d(name)
+    if p.is_file():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+    return None
+
+
 @app.get("/api/calib")
 def calib_status():
     """Whether 3D from both phones is on, and what's calibrated: lenses, the latest session; and
@@ -2201,6 +2211,9 @@ def calib_status():
             continue
     s = calib.sessions()
     latest = s[-1] if s else None
+    with records_lock:
+        recs = dict(swing_records)
+    health = swing3d.calib_health(s, recs, doc_loader=calib_doc_loader)
     return {"enabled": calib.enabled(), "phones": calib.phones(), "lenses": lenses,
             "recording": run["current"], "job": run["job"], "tripods": run["tripods"], "height": run["height"],
             # Swings filmed from both phones since the tripods were set (for placing the cameras from them).
@@ -2215,7 +2228,8 @@ def calib_status():
             "leftover": calib_leftover(),
             "session": latest and {"id": latest["id"], "created": latest["created"], "method": latest.get("method", "board"),
                                    "cameras": {k: {"position": v["position"], "rms": v.get("rms"), "warnings": v.get("warnings", [])}
-                                               for k, v in latest["cameras"].items()}}}
+                                               for k, v in latest["cameras"].items()}},
+            "health": health}
 
 
 @app.get("/api/calib/session")

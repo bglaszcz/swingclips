@@ -229,5 +229,109 @@ class LensBoardTest(unittest.TestCase):
         self.assertIn("tilt", self.calib.verdict(c))
 
 
+class CalibHealthTest(unittest.TestCase):
+    def test_calib_health_calculation(self):
+        import swing3d
+        sessions = [
+            {"id": "2026-10-02_144534", "created": 1790970334.0, "method": "board"},
+            {"id": "2026-10-06_135224", "created": 1791312744.0, "method": "body"},
+            {"id": "2026-10-06_145832", "created": 1791316712.0, "method": "body"},
+        ]
+        # Swings for session 145832: 5 swings, 2 lost lead shoulder at setup (> 20%)
+        records = {
+            "s1": {
+                "key3d": "2026-10-06_145832|tri2|check3",
+                "body3d": {
+                    "setupMissing": ["lead shoulder"],
+                    "reprojection": {"address": {"median": 3.4, "p90": 13.0}},
+                },
+            },
+            "s2": {
+                "key3d": "2026-10-06_145832|tri2|check3",
+                "body3d": {
+                    "setupMissing": ["lead shoulder"],
+                    "reprojection": {"address": {"median": 3.6, "p90": 14.0}},
+                },
+            },
+            "s3": {
+                "key3d": "2026-10-06_145832|tri2|check3",
+                "body3d": {
+                    "setupMissing": [],
+                    "addressError": {"median": 3.2, "p90": 11.0},
+                },
+            },
+            "s4": {
+                "key3d": "2026-10-06_145832|tri2|check3",
+                "body3d": {
+                    "setupMissing": [],
+                    "addressError": {"median": 3.0, "p90": 10.0},
+                },
+            },
+            "s5": {
+                "key3d": "2026-10-06_145832|tri2|check3",
+                "body3d": {
+                    "setupMissing": [],
+                    "addressError": {"median": 3.5, "p90": 12.0},
+                },
+            },
+            # Swings for session 135224: 2 swings, 0 lost
+            "s6": {
+                "key3d": "2026-10-06_135224|tri2|check3",
+                "body3d": {
+                    "setupMissing": [],
+                    "reprojection": {"address": {"median": 2.7, "p90": 6.8}},
+                },
+            },
+            "s7": {
+                "key3d": "2026-10-06_135224|tri2|check3",
+                "body3d": {
+                    "setupMissing": [],
+                    "addressError": {"median": 2.5, "p90": 6.4},
+                },
+            },
+        }
+
+        h = swing3d.calib_health(sessions, records)
+        # Should return the latest 2 sessions in reverse order
+        self.assertEqual(len(h), 2)
+        latest, prev = h[0], h[1]
+
+        # Latest session (145832)
+        self.assertEqual(latest["id"], "2026-10-06_145832")
+        self.assertEqual(latest["method"], "body")
+        self.assertEqual(latest["swings"], 5)
+        self.assertEqual(latest["lostAtSetup"], 2)
+        self.assertEqual(latest["mostLost"], "lead shoulder")
+        self.assertEqual(latest["lostJoints"], {"lead shoulder": 2})
+        self.assertEqual(latest["typical"], 3.4)  # median of [3.4, 3.6, 3.2, 3.0, 3.5] = 3.4
+        self.assertEqual(latest["worstTenth"], 12.0)  # median of [13, 14, 11, 10, 12] = 12.0
+        self.assertTrue(latest["recalibrate"])  # 2/5 = 40% > 20%
+        # Check that addressError was stored in record
+        self.assertEqual(records["s1"]["body3d"]["addressError"], {"median": 3.4, "p90": 13.0})
+
+        # Previous session (135224)
+        self.assertEqual(prev["id"], "2026-10-06_135224")
+        self.assertEqual(prev["swings"], 2)
+        self.assertEqual(prev["lostAtSetup"], 0)
+        self.assertIsNone(prev["mostLost"])
+        self.assertEqual(prev["typical"], 2.6)  # median of [2.7, 2.5] = 2.6
+        self.assertEqual(prev["worstTenth"], 6.6)  # median of [6.8, 6.4] = 6.6
+        self.assertFalse(prev["recalibrate"])
+
+        # Empty sessions
+        self.assertEqual(swing3d.calib_health([], records), [])
+
+    def test_api_calib_returns_health(self):
+        from fastapi.testclient import TestClient
+        import app
+        client = TestClient(app.app)
+        res = client.get("/api/calib")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("health", data)
+        self.assertIsInstance(data["health"], list)
+
+
 if __name__ == "__main__":
     unittest.main()
+
