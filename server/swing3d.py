@@ -29,7 +29,7 @@ MOVED_PX = 5.0
 # either picture), while a camera that really moved missed by 43-50 px.
 MOVED_PX_BODY = 12.0
 # In the 3D key (app.pass_3d): changing how "moved" is judged checks the swings again.
-CHECK_VERSION = 2
+CHECK_VERSION = 3
 # The ball's place in a picture (share of its width, height) moved more than this: that camera moved.
 BALL_MOVED = (0.04, 0.015)
 BALL_SWINGS = 5
