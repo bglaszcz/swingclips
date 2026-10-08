@@ -491,7 +491,6 @@
   .q-table td.best { color: var(--accent); font-weight: 600; }
   .q-table td.bad { color: var(--warn); }
   #p-status { color: var(--muted); font-size: 13px; flex: 1; }
-  #p-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
   /* Every club at once: the verdict, four tiles, the session's most common fault. */
   .p-ov-head { font-size: 17px; line-height: 1.4; font-weight: 600; margin-bottom: 10px; }
   .p-ov-head .better { color: var(--accent); }
@@ -499,8 +498,8 @@
   .p-ov-head .sub { display: block; font-size: 13px; font-weight: 400; color: var(--muted); margin-top: 2px; }
   .p-ov-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
   .p-ov-tiles .p-tile { cursor: default; }
-  #p-ov-fault { margin-top: 10px; font-size: 14px; }
-  #p-ov-fault:empty { display: none; }
+  #p-ov-fault, #p-today-fault { margin-top: 10px; font-size: 14px; }
+  #p-ov-fault:empty, #p-today-fault:empty { display: none; }
   .p-club-pick { margin-left: 10px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text); }
   #pr-quick { display: flex; flex-direction: column; gap: 6px; }
   #pr-quick .p-focus-name { font-size: 17px; }
@@ -1672,8 +1671,9 @@
     <details class="t-card p-fold" data-fold="today">
       <summary><strong id="p-today-title">Last session with this club</strong></summary>
       <div id="p-today">
-        <div id="p-headline" class="p-headline"></div>
-        <div id="p-tiles"></div>
+        <div id="p-headline" class="p-headline p-ov-head"></div>
+        <div id="p-tiles" class="p-ov-tiles"></div>
+        <div id="p-today-fault" class="p-faults"></div>
         <details class="p-more" data-fold="tiles-more">
           <summary>All numbers from this session</summary>
           <div id="p-tiles-more" class="p-tiles-grid"></div>

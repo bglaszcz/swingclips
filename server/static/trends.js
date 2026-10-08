@@ -917,6 +917,50 @@ function pooledHelps(all) {
   return value;
 }
 
+/** Renders the 4 story tiles (Good shots, On line, Solid strikes, Distance) into targetEl. */
+function renderScoreTiles(cmp, targetEl) {
+  if (!targetEl) return;
+  if (!cmp || !cmp.items) {
+    targetEl.replaceChildren();
+    return;
+  }
+  const pct = v => v == null ? "–" : `${Math.round(v * 100)}%`;
+  const fmt = it => v => it.key === "distance" ? (v == null ? "–" : `${Math.round(v)}%`) : pct(v);
+  targetEl.replaceChildren(...cmp.items.map(it => {
+    const f = fmt(it), tile = pEl("div", "p-tile");
+    const delta = pEl("span", "p-delta");
+    if (it.last != null) {
+      delta.append(`last time ${f(it.last)}`);
+      if ((it.change === "better" || it.change === "worse") && (it.clear || !it.k)) delta.append(" · ", pEl("em", it.change, it.change));
+      else if (it.change === "better" || it.change === "worse") delta.append(` · a little ${it.change}`);
+      else if (it.change === "same") delta.append(" · about the same");
+    } else delta.append(cmp.last ? "no reading last time" : "nothing to compare yet");
+    if (it.usual != null) delta.append(` · usual ${f(it.usual)}`);
+    tile.title = `${it.label}: ${it.hint}`;
+    tile.append(pEl("span", "p-label", it.label), pEl("b", null, f(it.now)), delta, sparkline(cmp.series[it.key]));
+    return tile;
+  }));
+}
+
+/** The session's most common fault, in a line, with its swing thought and trend against last time. */
+function formatSessionTopFault(latestRows, lastRows, when, lastWhen) {
+  if (typeof SwingFaults === "undefined" || !latestRows) return "";
+  const faults = SwingFaults.sessionFaults(latestRows, isShaky).filter(x => x.top);
+  const tf = faults[0];
+  if (!tf) return "";
+  let trend = "";
+  if (lastRows && lastWhen) {
+    const was = SwingFaults.sessionFaults(lastRows, isShaky).find(x => x.key === tf.key && x.name === tf.name);
+    if (was && was.readable >= 10 && tf.readable >= 10) {
+      const now = Math.round(tf.share * 100), then = Math.round(was.share * 100);
+      trend = Math.abs(now - then) < 10 ? ` About the same as ${lastWhen} (${then}%).`
+        : ` ${now > then ? "Up" : "Down"} from ${then}% of swings on ${lastWhen}.`;
+    }
+  }
+  return `Most common fault on ${when}: ${tf.name} (${tf.count} of ${tf.readable ?? tf.total} swings).${trend} `
+    + (tf.thought ? `Swing thought: “${SwingShotStory.plain(tf.thought)}”` : "");
+}
+
 /** Step 1: the latest session against the last one, every club (sessionscore.js). */
 function renderOverall(all) {
   const head = document.getElementById("p-ov-head"), tiles = document.getElementById("p-ov-tiles");
@@ -940,38 +984,9 @@ function renderOverall(all) {
   const lead = pEl("span", cmp.items[0].clear ? cmp.verdict : "", cmp.headline);
   head.replaceChildren(lead, pEl("span", "sub", sub));
 
-  const pct = v => v == null ? "–" : `${Math.round(v * 100)}%`;
-  const fmt = it => v => it.key === "distance" ? (v == null ? "–" : `${Math.round(v)}%`) : pct(v);
-  tiles.replaceChildren(...cmp.items.map(it => {
-    const f = fmt(it), tile = pEl("div", "p-tile");
-    const delta = pEl("span", "p-delta");
-    if (it.last != null) {
-      delta.append(`last time ${f(it.last)}`);
-      if ((it.change === "better" || it.change === "worse") && (it.clear || !it.k)) delta.append(" · ", pEl("em", it.change, it.change));
-      else if (it.change === "better" || it.change === "worse") delta.append(` · a little ${it.change}`);
-      else if (it.change === "same") delta.append(" · about the same");
-    } else delta.append(cmp.last ? "no reading last time" : "nothing to compare yet");
-    if (it.usual != null) delta.append(` · usual ${f(it.usual)}`);
-    tile.title = `${it.label}: ${it.hint}`;
-    tile.append(pEl("span", "p-label", it.label), pEl("b", null, f(it.now)), delta, sparkline(cmp.series[it.key]));
-    return tile;
-  }));
+  renderScoreTiles(cmp, tiles);
 
-  // The session's most common fault, in a line, with its swing thought.
-  const faults = SwingFaults.sessionFaults(cmp.latest.rows, isShaky).filter(x => x.top);
-  const tf = faults[0];
-  // Against last time: a habit growing (or going) across sessions, when both had 10+ readable swings.
-  let trend = "";
-  if (tf && cmp.last) {
-    const was = SwingFaults.sessionFaults(cmp.last.rows, isShaky).find(x => x.key === tf.key && x.name === tf.name);
-    if (was && was.readable >= 10 && tf.readable >= 10) {
-      const now = Math.round(tf.share * 100), then = Math.round(was.share * 100);
-      trend = Math.abs(now - then) < 10 ? ` About the same as ${lastWhen} (${then}%).`
-        : ` ${now > then ? "Up" : "Down"} from ${then}% of swings on ${lastWhen}.`;
-    }
-  }
-  faultEl.textContent = tf ? `Most common fault on ${when}: ${tf.name} (${tf.count} of ${tf.readable ?? tf.total} swings).${trend} `
-    + (tf.thought ? `Swing thought: “${SwingShotStory.plain(tf.thought)}”` : "") : "";
+  faultEl.textContent = formatSessionTopFault(cmp.latest.rows, cmp.last ? cmp.last.rows : null, when, lastWhen);
 
   note.textContent = `Every club in one: each shot against that club's own usual, so wedges and long irons compare. `
     + `Good shots pass your good-shot rules (set under One club at a time > Good shots); on line = within the club's `
@@ -1227,83 +1242,51 @@ const HEAD_TILES = ["carry", "carrySpread", "offlineSpread", "smash"];
 const lowerFirst = t => t.replace(/^./, c => c.toLowerCase());
 const andList = xs => xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
 
-/** One sentence on the latest session: what got better or worse than usual, the rest "as usual". */
-function headline(models) {
-  const el = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, { textContent: text });
-  const name = m => lowerFirst(m.f.label);
-  const said = m => `${name(m)} ${fmtTile(m.f, m.now)} vs ${fmtTile(m.f, m.base)}`;
-  const cap = t => t.replace(/^./, c => c.toUpperCase());
-  const moved = w => models.filter(m => m.bw === w);
-  const usual = models.filter(m => m.d != null && m.known && !m.bw);
-  const early = models.filter(m => m.d != null && !m.known);
-  const out = [];
-  const list = ms => andList(ms.map(said));
-  if (!models.some(m => m.base != null)) {
-    out.push("The first session in this period: nothing to compare it with yet.");
-  } else {
-    const better = moved("better"), worse = moved("worse");
-    if (better.length) out.push(el("span", "better", "Better than usual: "), list(better) + ". ");
-    if (worse.length) out.push(el("span", "worse", "Worse than usual: "), list(worse) + ". ");
-    if (usual.length) out.push(`${usual.length === models.length ? "Everything" : cap(andList(usual.map(name)))} about as usual. `);
-    // Not enough sessions to know the usual wobble: say so rather than colour it.
-    if (early.length) {
-      const n = Math.max(...early.map(m => m.nBefore));
-      out.push(`Only ${n} earlier session${n === 1 ? "" : "s"} to compare with, too few to tell a real change from normal wobble: ${list(early)}.`);
-    }
-  }
-  return out;
-}
-
 function renderTiles(sessions, club) {
   const box = document.getElementById("p-tiles"), more = document.getElementById("p-tiles-more");
   const latest = sessions[sessions.length - 1];
   const note = document.getElementById("p-tiles-note");
   const title = document.getElementById("p-today-title");
   const head = document.getElementById("p-headline");
+  const faultEl = document.getElementById("p-today-fault");
   if (!latest) {
     box.replaceChildren(); more.replaceChildren(); note.textContent = "";
     title.textContent = "Last session with this club";
     head.textContent = club ? `No sessions with the ${clubName(club).toLowerCase()} in this period.` : "";
+    if (faultEl) faultEl.textContent = "";
     return;
   }
-  title.textContent = `${dayOf(latest.start)} with the ${clubName(club).toLowerCase()}`;
-  note.textContent = `${dayOf(latest.start)} (${latest.rows.length} swings with the ${clubName(club).toLowerCase()}) against the median of the sessions before it in this period. `
-    + "A change counts as better or worse only when it's bigger than the usual session-to-session difference (it takes 4 sessions to know that); "
-    + "smaller ones are \"normal variation\". Spreads are the standard deviation of the session's shots. Tap a number to chart it below.";
-  const heads = HEAD_TILES.map(k => tileModel(sessions, k));
-  head.replaceChildren(...headline(heads));
-  const top = (typeof SwingFaults !== "undefined" ? SwingFaults.sessionFaults(latest.rows, isShaky) : [])
-    .filter(f => f.top).slice(0, 3);
-  if (top.length) {
-    const line = document.createElement("div");
-    line.className = "p-faults";
-    line.textContent = "Top faults: " + top.map(f => `${f.name} (${f.count} of ${f.total} swings)`).join(", ") + ".";
-    head.append(line);
+  const when = dayOf(latest.start);
+  title.textContent = `${when} with the ${clubName(club).toLowerCase()}`;
 
-    if (typeof SwingFaultLinks !== "undefined" && typeof faultLinksData === "function") {
-      const links = faultLinksData();
-      const seen = new Set();
-      for (let i = 0; i < top.length; i++) {
-        for (let j = i + 1; j < top.length; j++) {
-          const tA = top[i].name, tB = top[j].name;
-          const match = links.find(l => (l.a.name === tA && l.b.name === tB) || (l.a.name === tB && l.b.name === tA));
-          if (match && !seen.has(match)) {
-            seen.add(match);
-            const linkLine = document.createElement("div");
-            linkLine.className = "p-fault-link";
-            linkLine.textContent = match.sentence;
-            if (match.earlier && match.earlier.drill) {
-              linkLine.title = `Drill: ${match.earlier.drill}${match.earlier.thought ? " · Thought: " + match.earlier.thought : ""}`;
-            }
-            head.append(linkLine);
-          }
-        }
-      }
-    }
+  const data = goodShotData();
+  const cmp = SwingSessionScore.compare(sessions.map(s => ({ start: s.start, key: s.key, rows: s.rows })),
+    { clubs: data.clubs, name: r => r.c.name, settings: goodSettings && goodSettings.settings });
+
+  const lastWhen = cmp && cmp.last ? dayOf(cmp.last.start) : null;
+  const sub = `${latest.rows.length} swing${latest.rows.length === 1 ? "" : "s"} with the ${clubName(club).toLowerCase()}`
+    + (cmp && cmp.last ? `; ${lastWhen}: ${cmp.last.score.n} swing${cmp.last.score.n === 1 ? "" : "s"}` : "");
+  const lead = pEl("span", cmp && cmp.items[0] && cmp.items[0].clear ? cmp.verdict : "", cmp ? cmp.headline : "");
+  head.replaceChildren(lead, pEl("span", "sub", sub));
+
+  renderScoreTiles(cmp, box);
+
+  if (faultEl) {
+    faultEl.textContent = formatSessionTopFault(latest.rows, cmp && cmp.last ? cmp.last.rows : null, when, lastWhen);
   }
-  box.replaceChildren(...heads.map(tileEl));
-  // The body numbers and the other spreads, only when asked for.
-  more.replaceChildren(...(foldOpen("tiles-more") ? TILES.filter(k => !HEAD_TILES.includes(k)).map(k => tileEl(tileModel(sessions, k))) : []));
+
+  // The old tiles (HEAD_TILES and the rest) under "All numbers from this session".
+  const allOldTiles = [...HEAD_TILES, ...TILES.filter(k => !HEAD_TILES.includes(k))];
+  more.replaceChildren(...(foldOpen("tiles-more") ? allOldTiles.map(k => tileEl(tileModel(sessions, k))) : []));
+
+  note.textContent = `The four story tiles compare this club against your earlier sessions with it: `
+    + `good shots pass your good-shot rules (set under Good shots below); on line = within the club's offline allowance; `
+    + `solid strikes = smash at or above your usual with this club; distance = median carry as a share of your usual carry. `
+    + `"Last time" is the latest earlier session with ${SwingSessionScore.MIN_JUDGED} or more shots with a verdict; `
+    + `"usual" the median of up to ${SwingSessionScore.USUAL} earlier ones. A change is clear when it's unlikely to be luck `
+    + `(two-proportion test, about 95% one-sided); smaller gaps of 5 points or more read "a little better / worse". `
+    + `All numbers from this session compares each number against the median of earlier sessions with this club. `
+    + `Tap any number under "All numbers" to chart it below.`;
 
   function tileEl({ key, f, cam, from, series, now, base, d, known, normal, bw, shaky }) {
     const tile = document.createElement("div");
@@ -1760,7 +1743,9 @@ const HELPS_TOP = 15;
 const HELPS_TREND_FIELD = { absOffline: "offline", absFaceToPath: "faceToPath" };
 // How sure, in plain words (helps.js's labels).
 const EVIDENCE = { confirmed: "Strong evidence", emerging: "Worth trying" };
-const pEl = (tag, cls, text) => Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
+function pEl(tag, cls, text) {
+  return Object.assign(document.createElement(tag), cls ? { className: cls } : {}, text != null ? { textContent: text } : {});
+}
 
 /**
  * Each move against each result, within the period's sessions with the club, in golf terms, and the
