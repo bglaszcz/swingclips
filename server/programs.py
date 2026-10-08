@@ -185,16 +185,11 @@ def load_programs(path: Path = PROGRAMS_FILE) -> dict:
 
 
 def say_number(key: str, v) -> str:
+    # Square's strike height is said as the number it gives: its 0 isn't the owner's sweet spot
+    # (7 iron median about -13, best carry -20..-8), so "high" and "low" would mislead. Toe and heel
+    # are said as words (+ is the heel in Square's data).
     if isinstance(v, bool):
         return "arm after hips" if v else "arm before hips"
-    if key == "strikeV":
-        if v is None:
-            return "strike –"
-        if abs(v) < 1.0:
-            return "strike centre"
-        dist = abs(round(v))
-        side = "high" if v > 0 else "low"
-        return f"strike {dist} millimetres {side}"
     if key == "strikeH":
         if v is None:
             return "strike –"
@@ -205,7 +200,7 @@ def say_number(key: str, v) -> str:
         return f"strike {dist} millimetres {side}"
     dec = NUMBERS[key][2]
     s = f"{abs(v):.{dec}f}".rstrip("0").rstrip(".") if dec else f"{abs(round(v))}"
-    sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath") and s != "0" else ""
+    sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath", "strikeV") and s != "0" else ""
     if key == "pelvisPeakMs":
         name = "hips peak"
     elif key == "armPeakMs":
@@ -214,6 +209,8 @@ def say_number(key: str, v) -> str:
         name = "hips open"
     elif key == "pelvisStartMs":
         name = "hips turn start"
+    elif key == "strikeV":
+        name = "strike"
     else:
         name = NUMBERS[key][0].lower()
     return f"{name} {sign}{s}"

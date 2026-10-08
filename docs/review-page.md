@@ -555,7 +555,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   (`count`: need of reps, or `streak`: need in a row) of checks on Square's numbers (`strikeV`, `attack`,
   `faceToPath`, `loft`, ...: min/max) and 3D kinematic numbers (`pelvisPeakMs`, `pelvisOpen`, `armAfterPelvis`, `pelvisStartMs`), plus `mark` for the golfer's tap on what they saw. A gate can also check the block's
   medians (`medians`: e.g. median attack -3 or steeper, the retention check). Square's strike height is
-  spoken in words ("strike 12 millimetres low"): its 0 isn't the owner's sweet spot (7 iron median
+  spoken as Square's number ("strike minus 12", shown as "12 mm low"; toe and heel are said in words): its 0 isn't the owner's sweet spot (7 iron median
   about -13, best carry at -20..-8), so gates use the owner's own band. Square's strike frame has jumped as a whole (about
   -14 mm on every club between Sep 16 and Sep 23 2026, and on Aug 21 alone), so a program's `calibration`
   (strike, 7 iron, usual -13 within 4, 10 shots) checks the median of the session's first 10 readable 7

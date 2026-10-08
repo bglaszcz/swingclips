@@ -627,16 +627,16 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(programs.NUMBERS["strikeH"][0], "Strike heel/toe")
 
     def test_say_number_strike_in_words(self):
-        self.assertEqual(programs.say_number("strikeV", -8), "strike 8 millimetres low")
-        self.assertEqual(programs.say_number("strikeV", 4), "strike 4 millimetres high")
-        self.assertEqual(programs.say_number("strikeV", 0), "strike centre")
+        # Height stays Square's number: its 0 isn't the owner's sweet spot.
+        self.assertEqual(programs.say_number("strikeV", -8), "strike minus 8")
+        self.assertEqual(programs.say_number("strikeV", 4), "strike plus 4")
         self.assertEqual(programs.say_number("strikeH", 8), "strike 8 millimetres heel")
         self.assertEqual(programs.say_number("strikeH", -3), "strike 3 millimetres toe")
         self.assertEqual(programs.say_number("strikeH", 0), "strike centre")
 
         # say_limit
-        self.assertEqual(programs.say_limit({"key": "strikeV", "min": -3}, -9), "strike 3 millimetres low or higher")
-        self.assertEqual(programs.say_limit({"key": "strikeV", "max": 3}, 5), "strike 3 millimetres high or lower")
+        self.assertEqual(programs.say_limit({"key": "strikeV", "min": -3}, -9), "strike minus 3 or higher")
+        self.assertEqual(programs.say_limit({"key": "strikeV", "max": 3}, 5), "strike plus 3 or lower")
 
 
 if __name__ == "__main__":
