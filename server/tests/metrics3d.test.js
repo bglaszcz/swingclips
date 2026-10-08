@@ -195,3 +195,18 @@ test("View3D.firstBodyTime finds first frame with triangulated bones", () => {
 });
 
 
+
+test("smoothSpeeds: a one-frame glitch and the readings next to a tracking gap don't make a peak", () => {
+  // 240 fps, a steady 500 deg/s with a one-frame 2000 glitch at frame 20, then the reading jumps to 1500
+  // on the 2 frames before tracking is lost (frames 60-79), as the clubhead blurring away did on Oct 8.
+  const ts = [], v = [];
+  for (let i = 0; i < 120; i++) {
+    ts.push(i / 240);
+    v.push(i >= 60 && i < 80 ? null : i === 20 ? 2000 : i === 58 || i === 59 ? 1500 : 500);
+  }
+  const s = M.smoothSpeeds(v, ts);
+  assert.ok(Math.max(...s.filter(x => x != null)) < 520, "no peak from the glitch or the gap edge");
+  assert.equal(s[58], null);   // dropped next to the gap
+  assert.equal(s[70], null);   // the gap isn't filled
+  assert.ok(Math.abs(s[40] - 500) < 1);
+});

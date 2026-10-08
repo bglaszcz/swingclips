@@ -120,15 +120,21 @@
      would hide its own bottom and cover the list. */
   @media (max-width: 899px) { #viewer { order: -1; border-bottom: 1px solid var(--line); } }
   /* Two angles of one swing sit side by side (the clips are portrait, so they fit). */
-  #camcheck { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--warn); color: var(--text);
-              font-size: 13px; }
-  #camcheck b { color: var(--warn); }
-  #camcheck .cc-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  #camcheck .cc-head span { flex: 1; min-width: 0; }
-  #camcheck .cc-more { padding: 2px 8px; font-size: 12px; min-width: 0; }
-  #camcheck .cc-detail { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
-  #camcheck .cc-detail[hidden] { display: none; }
-  #camcheck.info { border-color: var(--line); }
+  /* The swing's header row, and the camera check as an icon at its end (hover or tap for the notes). */
+  #headrow { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  #headrow #swinghead { flex: 1; }
+  #camcheck { position: relative; flex: none; }
+  #camcheck[hidden] { display: none; }
+  #camcheck .cc-icon { min-width: 0; width: 36px; height: 36px; padding: 0; display: grid; place-items: center;
+                       color: var(--muted); }
+  #camcheck .cc-icon svg { width: 20px; height: 20px; }
+  #camcheck.warn .cc-icon { color: var(--warn); border-color: var(--warn); }
+  #camcheck .cc-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: min(360px, 86vw);
+                      padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
+                      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); font-size: 13px; color: var(--text);
+                      display: none; flex-direction: column; gap: 4px; }
+  #camcheck:hover .cc-pop, #camcheck.open .cc-pop { display: flex; }
+  #camcheck .cc-pop b { color: var(--warn); }
   #camcheck .cc-info, #camcheck .cc-info b { color: var(--muted); }
   #stages { display: grid; grid-template-columns: 1fr; gap: 8px; }
   #stages.two { grid-template-columns: 1fr 1fr; }
@@ -240,7 +246,7 @@
   #seq-strip { display: flex; flex-direction: column; gap: 4px; }
   #seq-strip[hidden], #viewer.no-seq #seq-strip { display: none; }
   #seq-strip .seq-strip-chart { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); }
-  #seq-strip svg { display: block; width: 100%; height: 84px; cursor: ew-resize; touch-action: none; }
+  #seq-strip svg { display: block; width: 100%; height: 110px; cursor: ew-resize; touch-action: none; }
   #seq-strip .impact { stroke: var(--muted); stroke-dasharray: 4 3; }
   #seq-strip .axis { fill: var(--muted); font-size: 11px; }
   #seq-strip .playhead { stroke: var(--text); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
@@ -978,8 +984,6 @@
   #numbers tr:not(.group):hover td { background: var(--panel-2); }
   #numbers tr.group th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-top: 14px; }
   #tempo { font-size: 15px; font-weight: 600; }
-  #camcheck { border-radius: var(--radius); background: var(--warn-soft); padding: 10px 14px; }
-  #camcheck.info { background: var(--panel); }
   #title { font-size: 11px; opacity: 0.7; }
 
   /* ---- Toast and help ---- */
@@ -1158,8 +1162,7 @@
     <div id="list"><div class="empty"><span class="spin"></span> Loading swings…</div></div>
   </aside>
   <section id="viewer" hidden>
-    <div id="swinghead"></div>
-    <div id="camcheck" hidden></div>
+    <div id="headrow"><div id="swinghead"></div><div id="camcheck" hidden></div></div>
     <div id="stages">
       <div class="stage">
         <span class="angle-tag">Face-on</span>
@@ -2181,11 +2184,13 @@ function positionIndex(key, p = pose) {
   return frameIndexAt(toPartnerTime(pos.t), p);
 }
 
-// The hand path: the wrists and index fingers together, smoothed over this half-width (s); it ends
+// The hand path: the wrists and index fingers together, smoothed over this half-width (s) where the hands
+// are fast, and over more where they're slow (address, the top), up to HAND_SMOOTH_MAX_S: about the same
+// stretch of path either way, so the slow parts don't wobble and the fast ones aren't cut short. It ends
 // once a wrist's visibility falls below HAND_LOST after impact (the hands go behind the head in the
-// finish, and from there MediaPipe only guesses).
+// finish, and from there MediaPipe only guesses), and is drawn to P8 at most.
 const HAND_POINTS = [LM.L_WRIST, LM.R_WRIST, L_INDEX, R_INDEX];
-const HAND_SMOOTH_S = 0.045, HAND_LOST = 0.3;
+const HAND_SMOOTH_S = 0.045, HAND_SMOOTH_MAX_S = 0.12, HAND_LOST = 0.3;
 
 /** Weighted least-squares fit of a + b·u + c·u² at u = 0 (u = time offset / window), or null if underdetermined. */
 function quadAt(u, vals, w, lo, hi) {
@@ -2223,16 +2228,29 @@ function handPath(p) {
     idx.push(i); t.push(f.t); xs.push(sx / sw); ys.push(sy / sw); conf.push(sv / HAND_POINTS.length);
   });
   const n = idx.length, robust = new Array(n).fill(1);
+  // Each frame's half-width: the hands' speed there (over +-3 points, then the median of 9) against
+  // their brisk speed (the 75th percentile): half the speed, twice the window.
+  const rawSpeed = t.map((_, i) => {
+    const a = Math.max(0, i - 3), b = Math.min(n - 1, i + 3);
+    return b > a ? Math.hypot(xs[b] - xs[a], ys[b] - ys[a]) / (t[b] - t[a]) : 0;
+  });
+  const speed = rawSpeed.map((_, i) => {
+    const w = rawSpeed.slice(Math.max(0, i - 4), i + 5).sort((p, q) => p - q);
+    return w[w.length >> 1];
+  });
+  const brisk = [...speed].sort((p, q) => p - q)[Math.floor(n * 0.75)] || 0;
+  const halfW = speed.map(v => Math.min(HAND_SMOOTH_MAX_S, Math.max(HAND_SMOOTH_S, v > 0 ? HAND_SMOOTH_S * brisk / v : HAND_SMOOTH_MAX_S)));
   let out = [];
   for (let pass = 0; pass < 2; pass++) {
     out = [];
-    let lo = 0, hi = 0;
     for (let i = 0; i < n; i++) {
-      while (t[lo] < t[i] - HAND_SMOOTH_S) lo++;
-      while (hi + 1 < n && t[hi + 1] <= t[i] + HAND_SMOOTH_S) hi++;
+      const half = halfW[i];
+      let lo = i, hi = i;
+      while (lo > 0 && t[lo - 1] >= t[i] - half) lo--;
+      while (hi + 1 < n && t[hi + 1] <= t[i] + half) hi++;
       const u = [], w = [];
       for (let j = lo; j <= hi; j++) {
-        const d = (t[j] - t[i]) / (HAND_SMOOTH_S * 1.001);
+        const d = (t[j] - t[i]) / (half * 1.001);
         u[j] = d;
         w[j] = (1 - Math.abs(d) ** 3) ** 3 * conf[j] ** 2 * robust[j];
       }
@@ -2261,10 +2279,11 @@ function handPathEnd(p) {
   return f.length - 1;
 }
 
-/** The hands' path from address into the finish: back in yellow, down and through in pink. */
+/** The hands' path from address to P8 (shaft parallel in the follow-through) at the latest: back in yellow,
+ * down and through in pink. Past P8 the hands wrap behind the head and the path only clutters. */
 function drawHandPath(ctx, r, lineWidth, p = pose) {
-  const path = handPath(p), top = positionIndex("p4", p);
-  const from = positionIndex("p1", p) ?? 0, end = handPathEnd(p), split = Math.min(top ?? end, end);
+  const path = handPath(p), top = positionIndex("p4", p), p8 = positionIndex("p8", p);
+  const from = positionIndex("p1", p) ?? 0, end = Math.min(handPathEnd(p), p8 ?? Infinity), split = Math.min(top ?? end, end);
   ctx.save();
   ctx.lineWidth = lineWidth;
   ctx.lineJoin = ctx.lineCap = "round";
@@ -2990,8 +3009,9 @@ const CHECK_SHORT = { out: "partly out of the picture", edge: "near the edge", s
 // Only worth a note, not a warning: they don't change the numbers.
 const CHECK_MINOR = new Set(["edge", "small"]);
 
-/** Above the videos, one line: what each camera had trouble with (a warning), or quiet notes; the
- * full advice and each camera's shutter and ISO under Details. */
+/** A camera icon at the end of the swing's header: amber when a camera had trouble that changes the
+ * numbers, grey for quiet notes (shutter, near the edge, mild flicker); hover or tap shows each
+ * camera's notes and its shutter and ISO. Hidden when there's nothing to say. */
 function showCameraCheck(a, main) {
   lastCameraCheck = [a, main];   // a new array: openFacts works the facts out again
   const box = document.getElementById("camcheck");
@@ -3013,44 +3033,27 @@ function showCameraCheck(a, main) {
   }
   box.hidden = !items.length && !infos.length;
   const warn = items.filter(i => !i.minor);
-  box.classList.toggle("info", !warn.length);
-  // Quiet notes (shutter, near the edge, mild flicker) don't change the numbers: only with Advanced data.
-  box.classList.toggle("adv-only", !warn.length);
+  box.classList.toggle("warn", !!warn.length);
+  box.classList.remove("open");
   // "Face-on: dark, flicker · Down the line: ball not seen"
   const byName = new Map();
   for (const i of (warn.length ? warn : items)) byName.set(i.name, [...(byName.get(i.name) || []), i.short]);
   const summary = [...byName].map(([n, list]) => `${n}: ${list.join(", ")}`).join(" · ");
-  const head = document.createElement("div");
-  head.className = "cc-head";
-  const label = document.createElement("span");
-  if (warn.length) label.append(Object.assign(document.createElement("b"), { textContent: "Camera check: " }), summary);
-  else label.append(Object.assign(document.createElement("span"), { className: "cc-info",
-    textContent: items.length ? `Camera notes: ${summary}` : "Camera: " + infos.map(i => `${i.name} ${i.text}`).join(" · ") }));
-  head.append(label);
-  const detail = document.createElement("div");
-  detail.className = "cc-detail";
-  let open = false;
-  try { open = localStorage.getItem("camcheckOpen") === "1"; } catch {}
-  detail.hidden = !open;
+  const label = warn.length ? `Camera check: ${summary}` : items.length ? `Camera notes: ${summary}` : "Camera settings";
+  const icon = Object.assign(document.createElement("button"), { className: "cc-icon", title: label });
+  icon.setAttribute("aria-label", label);
+  icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>`;
+  icon.onclick = () => box.classList.toggle("open");
+  const pop = document.createElement("div");
+  pop.className = "cc-pop";
   const row = (i, cls) => {
     const d = document.createElement("div");
     if (cls) d.className = cls;
     d.append(Object.assign(document.createElement("b"), { textContent: i.name + ": " }), i.text + ".");
     return d;
   };
-  detail.append(...items.map(i => row(i, i.minor ? "cc-info" : null)), ...infos.map(i => row(i, "cc-info")));
-  if (items.length) {
-    const more = Object.assign(document.createElement("button"), { className: "cc-more", textContent: open ? "Hide" : "Details" });
-    more.onclick = () => {
-      detail.hidden = !detail.hidden;
-      more.textContent = detail.hidden ? "Details" : "Hide";
-      try { localStorage.setItem("camcheckOpen", detail.hidden ? "0" : "1"); } catch {}
-    };
-    head.append(more);
-    box.replaceChildren(head, detail);
-  } else {
-    box.replaceChildren(head);
-  }
+  pop.append(...items.map(i => row(i, i.minor ? "cc-info" : null)), ...infos.map(i => row(i, "cc-info")));
+  box.replaceChildren(icon, pop);
 }
 
 /** A loaded clip in the shape SwingSummary.analyze takes. */

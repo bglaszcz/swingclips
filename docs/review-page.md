@@ -40,9 +40,10 @@ What the server works out for each swing and what each part of the review page s
   Under the scrubber (when Impact is on, face-on), a small trace shows pelvis vs ball from P1 to P8 with
   a faint zero line for the ball and the target zone band, showing at a glance whether the pelvis moved forward
   and stayed or drifted back. The hand path is
-  the wrists and index fingers weighted by MediaPipe's confidence, smoothed over ±45 ms (a local
-  curve fit that leans on confident frames and drops one-frame glitches), and ends once a wrist is
-  lost behind the head in the finish. Night pass (`Show > Night pass`): draws the skeleton from the
+  the wrists and index fingers weighted by MediaPipe's confidence, smoothed over ±45 ms where the hands
+  are fast and up to ±120 ms where they're slow (address, the top: about the same stretch of path either
+  way; a local curve fit that leans on confident frames and drops one-frame glitches), and ends at P8, or
+  earlier once a wrist is lost behind the head. Night pass (`Show > Night pass`): draws the skeleton from the
   night pass (`/api/night/pose/<clip>`, RTMW-l on the gaming PC) alongside the server's, matched by
   timestamp and drawn in dashed sky blue without angle labels; works during playback and in labeling mode.
   A kinematic
@@ -480,8 +481,10 @@ toward the ball". The phones face away from you, so voice is the channel.
   ticks named on hover. The **habit banner** only fires when the first readable swing of the five was
   clean (a fault creeping in); Oct 7: 7 banners in 63 swings (was 15).
 - **Swing order strip** (under the video's controls, swings with 3D; `view3d.js showStrip`, Show >
-  **Swing order**, on by default, remembered): how fast the hips, chest, lead arm and club turn from 0.25 s
-  before the top to 0.15 s after impact, peaks dotted, the order in one line ("Order: lead arm, club, hips,
+  **Swing order**, on by default, remembered): how fast the hips, chest, lead arm and club turn from 0.08 s
+  before the top to 0.12 s after impact, each line against its own top speed in that window (on one scale
+  the hips and chest lay flat under the club), peaks dotted, lines broken where tracking stops, the order in
+  one line ("Order: lead arm, club, hips,
   chest (best: hips, chest, arm, club)"). A playhead follows the video, frame steps included, and reads the
   four speeds there ("47 ms before impact: hips 32 · chest 261 · lead arm 855 · club 1324 °/s"); a tap or
   drag on the strip moves the video to that moment. The full chart and its notes stay in the 3D panel

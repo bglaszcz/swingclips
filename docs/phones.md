@@ -148,12 +148,11 @@ v2 measures every clip again.
   positions come from. Otherwise `sharpnessSkipped` says why ("ball not found (down the line)",
   "impact doubtful (face-on): 24 ms after the heard strike") and `impact` has each clip's numbers.
   A wrong impact moves P5-P7 off the downswing, and the ratio then comes out backwards.
-- **Review page**: the camera check above the videos adds **dark**, **flicker** (worded by
+- **Review page**: the camera check (a camera icon at the end of the swing's header, amber when something
+  changes the numbers; hover or tap for the notes) adds **dark**, **flicker** (worded by
   shutter: mild on Auto, something to fix at a fixed shutter) and **grainy** with what to do, the
   ball-not-found / impact-doubtful item, and (grey) the shutter setting and what each camera
-  really used, from `camera.json`. Clips from before capture app 0.4 simply don't show that line.
-  When there's nothing but quiet notes (the shutter, near the edge, small, mild flicker: none change
-  the numbers), the line shows only with **Advanced data** on.
+  really used, from `camera.json`. Clips from before capture app 0.4 have no icon unless there's a note.
 - **Shutter test** (button at the top): every analyzed clip grouped by camera and shutter setting
   (Auto, 1/500, 1/1000, 1/2000; "unknown" before app 0.4; "1/1000 (compensation)" where the phone
   locked darker instead), over all clips and per session, with the real shutter, ISO, brightness,

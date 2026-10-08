@@ -179,6 +179,24 @@
     return t;
   }
 
+  // A speed line is broken where there's no reading for longer than this (s): a straight line across
+  // the gap would look like a measurement.
+  const LINE_GAP_S = 0.02;
+
+  /** The points of one speed line as runs without gaps: [[[x, y], ...], ...]. */
+  function speedRuns(rows, key, x, y) {
+    const runs = [];
+    let run = null, last = null;
+    for (const v of rows) {
+      const sp = v[key + "Speed"];
+      if (sp == null) continue;
+      if (!run || v.t - last > LINE_GAP_S) runs.push(run = []);
+      run.push(`${x(v.t).toFixed(1)},${y(sp).toFixed(1)}`);
+      last = v.t;
+    }
+    return runs;
+  }
+
   /** The four speeds from the top to just after impact, peaks marked. */
   function sequenceChart(result, positions) {
     const p4 = positions.find(p => p.key === "p4"), p7 = positions.find(p => p.key === "p7");
@@ -212,8 +230,7 @@
     add("text", { x: x(p7.t), y: H - B + 14, "text-anchor": "middle", class: "axis" }, "impact");
     add("text", { x: x(p4.t), y: H - B + 14, "text-anchor": "middle", class: "axis" }, "top");
     for (const k of Object.keys(COLORS)) {
-      const pts = rows.filter(v => v[k + "Speed"] != null).map(v => `${x(v.t).toFixed(1)},${y(v[k + "Speed"]).toFixed(1)}`);
-      if (pts.length) add("polyline", { points: pts.join(" "), fill: "none", stroke: COLORS[k], "stroke-width": 2 });
+      for (const run of speedRuns(rows, k, x, y)) add("polyline", { points: run.join(" "), fill: "none", stroke: COLORS[k], "stroke-width": 2 });
     }
     for (const s of result.sequence.segments) {
       add("circle", { cx: x(s.t), cy: y(s.peak), r: 4, fill: COLORS[s.key] });
@@ -231,9 +248,14 @@
     wrap.append(el("div", { class: "note" }, result.sequence.inOrder
       ? `In order: ${order.join(", then ")} (the textbook sequence).`
       : `Out of order: ${order.join(", then ")}. The textbook order is pelvis, thorax, arm, club.`));
-    if (result.sequence.segments.some(s => s.unreliable)) {
+    if (result.sequence.segments.some(s => s.unreliable && !s.lost)) {
       wrap.append(el("div", { class: "note" }, `The thorax track jumped ${Math.round(result.sequence.thoraxJump)}° at the `
         + "top (the arms cross the shoulders down the line), so its speed is left out of the order."));
+    }
+    const lost = result.sequence.segments.filter(s => s.lost).map(s => s.label.toLowerCase());
+    if (lost.length) {
+      wrap.append(el("div", { class: "note" }, `The ${lost.join(" and ")} wasn't tracked through impact (it blurs at full `
+        + "speed), so its top speed isn't known and it's left out of the order."));
     }
     if (result.sequence.bodyLate) {
       const late = result.sequence.segments.filter(s => (s.key === "pelvis" || s.key === "thorax") && s.afterImpact)
@@ -244,8 +266,11 @@
     return wrap;
   }
 
-  // ---- The swing-order strip under the video: the four speeds from before the top to after impact,
-  // a playhead that follows the video (play, frame steps), and a tap or drag on it moves the video. ----
+  // ---- The swing-order strip under the video: the four speeds from just before the top to after
+  // impact, a playhead that follows the video (play, frame steps), and a tap or drag on it moves the
+  // video. Each line is drawn against its own top speed in the window (the club turns 2-3 times as fast
+  // as the hips, so on one scale the body lines lay flat along the bottom): the strip shows WHEN each
+  // peaks; the speeds themselves are in the read-out and the legend's tooltips. ----
 
   let strip = null;   // {box, svg, head, read, x, t0, t1, rows, p7, seek}
 
@@ -256,20 +281,22 @@
     if (!box) return;
     box.hidden = !(result && result.sequence && p4 && p7);
     if (box.hidden) { box.replaceChildren(); return; }
-    const t0 = p4.t - 0.25, t1 = p7.t + 0.15;
+    const t0 = p4.t - 0.08, t1 = p7.t + 0.12;
     const rows = result.values.filter(v => v.t >= t0 && v.t <= t1);
-    const W = 800, H = 96, L = 6, R = 6, T = 6, B = 16;
-    let top = 0;
-    for (const v of rows) for (const k in COLORS) if (v[k + "Speed"] > top) top = v[k + "Speed"];
-    top = Math.max(500, top);
+    const W = 800, H = 120, L = 6, R = 6, T = 8, B = 16;
+    const top = {};
+    for (const k in COLORS) {
+      top[k] = 100;
+      for (const v of rows) if (v[k + "Speed"] > top[k]) top[k] = v[k + "Speed"];
+    }
     const x = t => L + (t - t0) / (t1 - t0) * (W - L - R);
-    const y = s => T + (1 - Math.max(0, s) / top) * (H - T - B);
+    const yOf = k => s => T + (1 - Math.max(0, s) / top[k]) * (H - T - B);
     const NS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(NS, "svg");
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
     svg.setAttribute("preserveAspectRatio", "none");
     svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "Swing order: how fast the hips, chest, lead arm and club turn from the top to impact; tap to move the video");
+    svg.setAttribute("aria-label", "Swing order: when the hips, chest, lead arm and club turn fastest from the top to impact, each line against its own top speed; tap to move the video");
     const add = (tag, a, text) => {
       const e = document.createElementNS(NS, tag);
       for (const [k, v] of Object.entries(a)) e.setAttribute(k, v);
@@ -281,15 +308,18 @@
     add("text", { x: x(p7.t), y: H - 3, "text-anchor": "middle", class: "axis" }, "impact");
     add("text", { x: x(p4.t), y: H - 3, "text-anchor": "middle", class: "axis" }, "top");
     for (const k of Object.keys(COLORS)) {
-      const pts = rows.filter(v => v[k + "Speed"] != null).map(v => `${x(v.t).toFixed(1)},${y(v[k + "Speed"]).toFixed(1)}`);
-      if (pts.length) add("polyline", { points: pts.join(" "), fill: "none", stroke: COLORS[k], "stroke-width": 2, "vector-effect": "non-scaling-stroke" });
+      for (const run of speedRuns(rows, k, x, yOf(k))) {
+        add("polyline", { points: run.join(" "), fill: "none", stroke: COLORS[k], "stroke-width": 2, "vector-effect": "non-scaling-stroke" });
+      }
     }
-    for (const s of result.sequence.segments) add("circle", { cx: x(s.t), cy: y(s.peak), r: 3.5, fill: COLORS[s.key] });
+    // A peak dot only where the peak is known (not for a segment lost before impact).
+    for (const s of result.sequence.segments) if (!s.lost) add("circle", { cx: x(s.t), cy: yOf(s.key)(s.peak), r: 3.5, fill: COLORS[s.key] });
     const head = add("line", { x1: 0, x2: 0, y1: T, y2: H - B, class: "playhead" });
     const legend = el("div", { class: "seq-strip-legend" });
     const read = el("span", { class: "seq-strip-read" });
     for (const s of result.sequence.segments) {
-      const item = el("span", { title: `${s.label}: fastest ${Math.round(s.peak)}°/s, ${Math.round(Math.abs(s.beforeImpact))} ms ${s.afterImpact ? "after" : "before"} impact` });
+      const item = el("span", { title: s.lost ? `${s.label}: not tracked through impact, so left out of the order`
+        : `${s.label}: fastest ${Math.round(s.peak)}°/s, ${Math.round(Math.abs(s.beforeImpact))} ms ${s.afterImpact ? "after" : "before"} impact` });
       item.append(el("i", { style: `background:${COLORS[s.key]}` }), s.label);
       legend.append(item);
     }
