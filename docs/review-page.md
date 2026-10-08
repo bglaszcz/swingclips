@@ -86,12 +86,18 @@ What the server works out for each swing and what each part of the review page s
   5+ points otherwise reads "a little better / worse". Then the session's most common fault with its
   swing thought.
   **2. What should I work on?** One thing: the focus if there is one; else the #1 move from what
-  helps / what hurts worked out over every club (each session split by club, so each swing is against
-  its own session-and-club usual), ranked by what matters to an everyday golfer (distance offline 1,
-  smash 0.9, carry 0.8, path 0.8, curve 0.7, ball speed and face 0.6, strike 0.4-0.5, times |r|, half
-  for "worth trying"; attack angle and loft left out, their target depends on the club). A second
-  move only when it scores 70% of the first; with a focus, one line when the numbers now point
-  elsewhere. A focus made here has no club (all clubs); older one-club focuses still work.
+  helps / what hurts worked out **per club group**, irons and wedges apart from woods, hybrids and
+  driver (each session split by club, so each swing is against its own session-and-club usual; the
+  clubs of a group pool), ranked by what matters to an everyday golfer (distance offline 1, smash 0.9,
+  carry 0.8, path 0.8, curve 0.7, ball speed and face 0.6, strike 0.4-0.5, irons' attack angle 0.8
+  against -4, times |r|, half for "worth trying"). Never pooled across groups (2026-10-07): pooled, "the
+  head staying behind the ball" came first from a smash link that was the driver's (woods r -0.39,
+  irons -0.13), while on the irons head ahead went with a steeper strike (r -0.54; head 0.5 in or less
+  ahead: attack 0.0, more than 1.5 in: -4.0) that their -1.9 median needs. A move that helps one result
+  and hurts another, also when the way one result wants is a fault, is a trade-off and left out. Shown:
+  the irons' first ("Your #1 priority with your irons"), then the woods' first ("With the driver and
+  woods") or the irons' second. A focus made from one tracks the group's most-hit club (button
+  tooltip); with a focus, one line when the numbers now point elsewhere.
   **3. Is it working?** One heading and what to do about it, from the focus's move and results since it
   started (`SwingFocus.working`, focus.js): "It's working" (move and a result the right way), "You're
   making the move; the results haven't followed yet", "The results are moving the right way" (the move

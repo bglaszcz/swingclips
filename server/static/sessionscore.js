@@ -11,10 +11,13 @@
 // "clear" when a two-proportion z test says it's unlikely to be luck (|z| >= Z_CLEAR); else it's
 // "about the same" unless the gap is at least SAME_PTS points, then "a little better / worse".
 //
-// What to work on: the "what helps, what hurts" links (helps.js) worked out over every club at
-// once, each swing against its own session-and-club usual, ranked by how much they matter to an
-// everyday golfer (on line, distance, strike first; attack angle and loft left out: their target
-// depends on the club). Coaching from coach.js; never a move toward a fault.
+// What to work on: the "what helps, what hurts" links (helps.js) worked out per club group (irons
+// and wedges; woods, hybrids and driver), each swing against its own session-and-club usual, ranked
+// by how much they matter to an everyday golfer (on line, distance, strike first). Never irons and
+// woods pooled: head ahead of the ball is a steeper, better iron strike but a lower driver smash
+// (owner, Oct 2026: irons attack r -0.54, woods smash r -0.39). Attack angle counts for irons (one
+// target, -4); a move that helps one result and hurts another, including through a fault, is a
+// trade-off and is left out. Coaching from coach.js; never a move toward a fault.
 //
 // Works in the browser (window.SwingSessionScore) and in Node (module.exports).
 (function (root) {
@@ -137,25 +140,31 @@
   }
 
   /**
-   * The moves most worth working on, from helps.js links over all clubs: [{move, aim, fix, goals,
+   * The moves most worth working on, from helps.js links of one club group: [{move, aim, fix, goals,
    * label: "confirmed" | "emerging", score, items}], best first, at most 2 (the second only when it's
-   * at least SECOND_SHARE of the first). Moves whose links point both ways (a trade-off) are left out.
+   * at least SECOND_SHARE of the first). Moves whose links point both ways (a trade-off, also when the
+   * way one result wants is a fault) are left out.
+   * @param opts {club: a club of the group, for targets (attack: irons -4), weights: extra result
+   *   weights (irons: {attack})}
    */
-  function priorities(links) {
+  function priorities(links, opts) {
+    const club = (opts && opts.club) || null, weights = { ...WEIGHT, ...((opts && opts.weights) || {}) };
     const byMove = new Map();
     for (const l of links || []) {
       if (l.label !== "confirmed" && l.label !== "emerging") continue;
-      const w = WEIGHT[l.result];
+      const w = weights[l.result];
       if (!w) continue;
-      const c = Coach.coach(l, null);
-      if (!c || !c.aim || !c.fix || c.fix.fault) continue;
+      const way = Coach.aimOf(l, club).aim;
+      if (!way) continue;
       const m = byMove.get(l.move) || { move: l.move, aims: new Set(), items: [], score: 0 };
-      m.aims.add(c.aim);
+      m.aims.add(way);
+      byMove.set(l.move, m);
+      const c = Coach.coach(l, club);
+      if (!c || !c.aim || !c.fix || c.fix.fault) continue;
       m.items.push({ l, c });
       m.score += w * Math.abs(l.r || 0) * (l.label === "confirmed" ? 1 : 0.5);
-      byMove.set(l.move, m);
     }
-    const ranked = [...byMove.values()].filter(m => m.aims.size === 1).sort((a, b) => b.score - a.score)
+    const ranked = [...byMove.values()].filter(m => m.aims.size === 1 && m.items.length).sort((a, b) => b.score - a.score)
       .map(m => {
         const aim = m.items[0].c.aim;
         return { move: m.move, aim, fix: m.items[0].c.fix, score: m.score, items: m.items,
@@ -165,7 +174,8 @@
     return ranked.slice(0, ranked.length > 1 && ranked[1].score >= SECOND_SHARE * ranked[0].score ? 2 : 1);
   }
 
-  const api = { score, compare, priorities, zOf, ITEMS, MIN_JUDGED, MIN_JUDGED_CLUB, USUAL, WEIGHT };
+  const IRON_WEIGHTS = { attack: 0.8 };
+  const api = { score, compare, priorities, zOf, ITEMS, IRON_WEIGHTS, MIN_JUDGED, MIN_JUDGED_CLUB, USUAL, WEIGHT };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingSessionScore = api;
 })(typeof window !== "undefined" ? window : globalThis);

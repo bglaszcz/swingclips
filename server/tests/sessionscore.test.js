@@ -95,3 +95,14 @@ test("one club's sessions compare from 8 judged shots", () => {
   assert.notEqual(c.verdict, "few");
   assert.equal(c.last.start, 1);
 });
+
+test("irons: a move that helps smash but makes the attack shallower is a trade-off, not a priority", () => {
+  // Owner, Oct 2026 irons: more head toward the target, lower smash (helps: less) but steeper attack;
+  // his irons run -1.9 against the -4 target, so attack wants more of it.
+  const smash = { move: "headSway", result: "smash", r: -0.16, effect: -0.01, label: "confirmed", helps: false };
+  const attack = { move: "headSway", result: "attack", r: -0.54, effect: -0.8, label: "confirmed", helps: null, median: -1.9 };
+  // Without attack counted (woods, or the old all-clubs ranking): smash alone makes it the priority.
+  assert.equal(Score.priorities([smash, attack])[0].move, "headSway");
+  // Irons count attack: the two pull opposite ways, so it's left out.
+  assert.equal(Score.priorities([smash, attack], { club: "I7", weights: Score.IRON_WEIGHTS }).length, 0);
+});

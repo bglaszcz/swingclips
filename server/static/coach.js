@@ -368,7 +368,10 @@
     if (Math.abs(need) <= rs.band) {
       return { aim: null, why: `your usual is already close to ${target === 0 ? "neutral" : "the target"}: this mostly explains your swing-to-swing spread, so keep the move steady` };
     }
-    const usual = `${Math.abs(l.median) < 10 ? Math.abs(l.median).toFixed(1) : Math.abs(l.median).toFixed(0)}${rs.unit || ""}`;
+    // Against neutral the side says which way ("out-to-in: 3.0°"); against another target the sign does
+    // ("-1.9° against -4°", not "1.9°").
+    const size = v => (Math.abs(v) < 10 ? Math.abs(v).toFixed(1) : Math.abs(v).toFixed(0));
+    const usual = `${target !== 0 && l.median < 0 ? "-" : target !== 0 && l.median > 0 ? "+" : ""}${size(l.median)}${rs.unit || ""}`;
     const aimAt = target === 0 ? "neutral" : `${target > 0 ? "+" : ""}${target}${rs.unit || ""}`;
     return { aim: (need > 0) === (l.effect > 0) ? "more" : "less", toward: aimAt,
              why: `yours runs ${rs.side[l.median - target < 0 ? 0 : 1]}: ${usual}${target === 0 ? "" : ` against ${aimAt}`}` };

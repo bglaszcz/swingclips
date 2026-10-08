@@ -865,7 +865,7 @@ function renderProgress() {
 
   // Steps 2 and 3: every club at once, each swing against its own session-and-club usual.
   const helps = pooledHelps(all);
-  const top = SwingSessionScore.priorities(helps.a.links);
+  const top = groupPriorities(helps);
   const focus = journal.focus || null;
   // Until a number is picked, the chart shows the focus move, else the first thing to work on.
   const lead = focus ? focus.move : top[0] ? top[0].move : null;
@@ -877,7 +877,7 @@ function renderProgress() {
 
   renderOverall(all);
   renderPriority(helps, top);
-  renderHelpsEvidence(null, helps.subs, helps);
+  renderHelpsEvidence(null, helps.irons.subs, helps.irons);
   renderChips(focus, top[0]);
   renderWorking(focus);
   const chartSessions = focus && focus.club ? progressSessions(focus.club).filter(s => s.start >= since) : all;
@@ -899,23 +899,43 @@ function renderProgress() {
 }
 
 /**
- * helps.js over every club: each session split by club, so each swing is taken against its own
- * session-and-club usual and clubs pool. Worked out once per data change and period (~1 s).
+ * helps.js per club group (irons and wedges; woods, hybrids and driver): each session split by club,
+ * so each swing is taken against its own session-and-club usual, and the clubs of a group pool.
+ * Never irons with woods: a move can help one and hurt the other (head ahead: a steeper iron strike,
+ * a lower driver smash). {irons: model + subs + club (most hit), woods: ...}. Once per data change (~1 s).
  */
 let pooledHelpsCache = { sig: null, value: null };
 function pooledHelps(all) {
   const sig = `${dataSig}|${clips.length}|${progressPick.period}|${leaveOutShaky}`;
   if (pooledHelpsCache.sig === sig) return pooledHelpsCache.value;
-  const subs = [];
-  for (const s of all) {
-    const by = {};
-    for (const r of s.rows) (by[r.club] = by[r.club] || []).push(r);
-    for (const [c, rows] of Object.entries(by)) subs.push({ key: s.key, start: s.start, rows, moved: s.moved, club: c });
+  const value = {};
+  for (const group of ["irons", "woods"]) {
+    const subs = [], counts = {};
+    for (const s of all) {
+      const by = {};
+      for (const r of s.rows) if (SwingGoodShots.groupOf(r.club) === group) (by[r.club] = by[r.club] || []).push(r);
+      for (const [c, rows] of Object.entries(by)) { subs.push({ key: s.key, start: s.start, rows, moved: s.moved, club: c }); counts[c] = (counts[c] || 0) + rows.length; }
+    }
+    const club = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || null;
+    value[group] = { ...helpsModel(null, subs), subs, club };
   }
-  const value = { ...helpsModel(null, subs), subs };
   pooledHelpsCache = { sig, value };
   return value;
 }
+
+/**
+ * What to work on, at most two: the irons' first move, then the woods' first (said as "with the driver
+ * and woods"), or the irons' second when the woods have none. Each {..., group, club: the group's most
+ * hit club, which a focus made from it tracks}.
+ */
+function groupPriorities(h) {
+  const tag = (list, group) => list.map(m => ({ ...m, group, club: h[group].club }));
+  const irons = tag(SwingSessionScore.priorities(h.irons.a.links, { club: "I7", weights: SwingSessionScore.IRON_WEIGHTS }), "irons");
+  const woods = tag(SwingSessionScore.priorities(h.woods.a.links, { club: "W3" }), "woods");
+  if (!irons.length) return woods.slice(0, 2);
+  return [irons[0], woods[0] || irons[1]].filter(Boolean);
+}
+const groupWords = m => m.group === "woods" ? "with the driver and woods" : "with your irons";
 
 /** Renders the 4 story tiles (Good shots, On line, Solid strikes, Distance) into targetEl. */
 function renderScoreTiles(cmp, targetEl) {
@@ -1883,8 +1903,8 @@ function topPriority() {
     return { move: f.move, aim: f.aim, fix: mv && mv[f.aim], club: f.club || null, focus: true };
   }
   const days = Number(progressPick.period), since = days ? Date.now() - days * 86400000 : -Infinity;
-  const top = SwingSessionScore.priorities(pooledHelps(progressSessions("*").filter(s => s.start >= since)).a.links)[0];
-  return top ? { move: top.move, aim: top.aim, fix: top.fix, club: null, focus: false } : null;
+  const top = groupPriorities(pooledHelps(progressSessions("*").filter(s => s.start >= since)))[0];
+  return top ? { move: top.move, aim: top.aim, fix: top.fix, club: top.club, focus: false, group: top.group } : null;
 }
 
 function focusPracticeRange(f) {
@@ -1931,6 +1951,7 @@ function drillAndThought(fix) {
 
 function focusButton(m, club, text) {
   const b = pEl("button", "small", text || "Make this my focus");
+  if (club) b.title = `Tracked with the ${clubWords(club)}, your most-hit club ${m.group === "woods" ? "of the driver and woods" : "of the irons"}`;
   b.onclick = () => setFocus({ move: m.move, aim: m.aim, club, results: [...new Set(m.items.map(x => x.l.result))] });
   return b;
 }
@@ -1951,30 +1972,30 @@ function renderPriority(h, top) {
     const next = top.find(m => m.move !== f.move || m.aim !== f.aim);
     if (next && top[0] === next) {
       const row = pEl("div", "p-alt p-second");
-      row.append(pEl("span", "muted", `The numbers now point most to ${plain(next.fix.name)}.`), focusButton(next, null, "Switch focus to this"));
+      row.append(pEl("span", "muted", `The numbers now point most to ${plain(next.fix.name)} (${groupWords(next)}).`), focusButton(next, next.club, "Switch focus to this"));
       kids.push(row);
     }
   } else if (top.length) {
     const main = top[0];
     const nameEl = pEl("div", "p-focus-name", `Work on ${plain(main.fix.name)}`);
     nameEl.append(badge(main.label));
-    kids.push(pEl("div", "p-focus-kicker", "Your #1 priority, from every club"), nameEl,
+    kids.push(pEl("div", "p-focus-kicker", `Your #1 priority ${groupWords(main)}`), nameEl,
       pEl("div", null, (main.goals.length ? `For ${main.goals.map(plain).join("; ")}. ` : "") + plain(main.fix.how)),
       ...drillAndThought({ drill: plain(main.fix.drill), thought: plain(main.fix.thought) }));
     if (main.label !== "confirmed") kids.push(pEl("div", "muted", "Not proven yet: try it for a session or two and see whether the numbers follow."));
     const buttons = pEl("div", "t-filters");
-    buttons.append(focusButton(main, null));
+    buttons.append(focusButton(main, main.club));
     kids.push(buttons);
     if (top[1]) {
       const m = top[1], second = pEl("div", "p-second");
       const row = pEl("div", "p-alt");
-      row.append(pEl("span", null, `Also worth it: ${plain(m.fix.name)}`), badge(m.label), focusButton(m, null));
+      row.append(pEl("span", null, `${m.group === main.group ? "Also worth it" : "With the driver and woods"}: ${plain(m.fix.name)}`), badge(m.label), focusButton(m, m.club));
       second.append(row, pEl("div", "muted", `Swing thought: “${plain(m.fix.thought)}”`));
       kids.push(second);
     }
   } else {
     kids.push(pEl("div", "p-focus-name", "Nothing to work on yet"),
-      pEl("div", "muted", h.a.tested
+      pEl("div", "muted", h.irons.a.tested || h.woods.a.tested
         ? "No move stands out from chance yet. Keep hitting balls: it takes 5 to 10 sessions of 20+ swings to say much."
         : "Not enough swings with body numbers yet."));
   }
@@ -2046,7 +2067,7 @@ function focusBlock(f, h) {
   const fname = f.club ? clubWords(f.club) : "all clubs";
   const kids = [pEl("div", "p-focus-kicker", `Your focus · ${fname} · since ${new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}`)];
   const nameEl = pEl("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`);
-  const m = f.club ? null : SwingSessionScore.priorities(h.a.links).find(x => x.move === f.move && x.aim === f.aim);
+  const m = f.club ? null : groupPriorities(h).find(x => x.move === f.move && x.aim === f.aim);
   if (!f.club) nameEl.append(m ? badge(m.label) : badge("none", "Not in the latest numbers"));
   kids.push(nameEl);
   if (fix) kids.push(...drillAndThought(fix));

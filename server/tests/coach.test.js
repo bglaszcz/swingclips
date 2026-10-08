@@ -102,3 +102,10 @@ test("coaching text speaks golf: no P-numbers in any move's words", () => {
     }
   }
 });
+
+test("against a target other than neutral, your usual keeps its sign", () => {
+  // Irons attack: usual -1.9 against -4 (shallower), more of the move -> more down.
+  const c = C.coach(link({ result: "attack", effect: -1, median: -1.9 }), "I7");
+  assert.equal(c.aim, "more");
+  assert.match(c.goal, /yours runs shallower than that: -1\.9° against -4°/);
+});
