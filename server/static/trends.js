@@ -1494,6 +1494,7 @@ function ellipse(xs, ys) {
 }
 
 function getStrikeToeSign() {
+  if (typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.getToeSign) return SwingStrikeMap.getToeSign();
   try {
     const v = localStorage.getItem("strike-toe-sign");
     if (v === "-") return -1;
@@ -1502,8 +1503,9 @@ function getStrikeToeSign() {
 }
 
 function setStrikeToeSign(v) {
+  if (typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.setToeSign) return SwingStrikeMap.setToeSign(v);
   try {
-    localStorage.setItem("strike-toe-sign", v === "-" ? "-" : "+");
+    localStorage.setItem("strike-toe-sign", v === "-" || v === -1 ? "-" : "+");
   } catch {}
 }
 

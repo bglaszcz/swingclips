@@ -226,9 +226,9 @@
     if (Math.abs(h) < 1.0) {
       parts.push("centered");
     } else if (h > 0) {
-      parts.push(`${Math.round(Math.abs(h))} mm toward the toe`);
+      parts.push(`${Math.round(Math.abs(h))} mm ${opts.short ? "toe" : "toward the toe"}`);
     } else {
-      parts.push(`${Math.round(Math.abs(h))} mm toward the heel`);
+      parts.push(`${Math.round(Math.abs(h))} mm ${opts.short ? "heel" : "toward the heel"}`);
     }
 
     if (Math.abs(v) < 1.0) {
@@ -367,6 +367,24 @@
     };
   }
 
+  function getToeSign() {
+    try {
+      if (typeof localStorage !== "undefined") {
+        const v = localStorage.getItem("strike-toe-sign");
+        if (v === "-") return -1;
+      }
+    } catch {}
+    return 1;
+  }
+
+  function setToeSign(v) {
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("strike-toe-sign", v === "-" || v === -1 ? "-" : "+");
+      }
+    } catch {}
+  }
+
   const api = {
     BOX_IRONS,
     BOX_WOODS,
@@ -378,6 +396,8 @@
     trend,
     compare,
     spotText,
+    getToeSign,
+    setToeSign,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

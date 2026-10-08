@@ -4063,6 +4063,71 @@ async function setClub(names, club, squareClub) {
   return true;
 }
 
+function makeStrikeTile(s, strike) {
+  const el = document.createElement("div");
+  el.className = "metric metric-strike";
+
+  const club = s.club || "";
+  const group = typeof SwingGoodShots !== "undefined" ? SwingGoodShots.groupOf(club) : "irons";
+  const isWood = group === "woods";
+  const toeSign = typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.getToeSign ? SwingStrikeMap.getToeSign() : 1;
+
+  // Usual strike centre from goodShotData baseline
+  const gsData = typeof goodShotData === "function" ? goodShotData() : null;
+  const base = gsData && gsData.clubs && gsData.clubs[club] ? gsData.clubs[club].baseline : null;
+  const usual = base && Number.isFinite(base.strikeH) && Number.isFinite(base.strikeV)
+    ? { h: base.strikeH, v: base.strikeV }
+    : null;
+
+  // Title: "Strike: 6 mm toward the toe, 12 mm low (your usual with the 7 iron: 3 mm toe, 17 mm low)"
+  const strikeText = SwingStrikeMap.spotText(strike, { toeSign });
+  let title = `Strike: ${strikeText}`;
+  if (usual) {
+    const usualText = SwingStrikeMap.spotText(usual, { toeSign, short: true });
+    const cWords = clubWords(club);
+    title += ` (your usual with the ${cWords}: ${usualText})`;
+  }
+  el.title = title;
+
+  const clubBox = SwingStrikeMap.boxOf(club);
+  const W_mm = clubBox.width;
+  const H_mm = clubBox.height;
+  const padX = isWood ? 8 : 7;
+  const padY = isWood ? 7 : 6;
+  const vbMinX = -(W_mm / 2 + padX);
+  const vbMinY = -(H_mm / 2 + padY);
+  const vbW = W_mm + padX * 2;
+  const vbH = H_mm + padY * 2;
+
+  const facePathD = isWood
+    ? "M -38 -18 Q 0 -25 38 -18 Q 46 -10 45 0 Q 45 10 38 18 Q 0 25 -38 18 Q -45 10 -45 0 Q -46 -10 -40 -18 L -43 -23 L -46 -21 L -41 -16 Z"
+    : "M -28 -14 L -33 -23 L -39 -20 L -33 -11 Q -35 5 -28 17 Q 0 20 26 18 Q 35 15 36 2 Q 37 -12 30 -17 Q 0 -17 -28 -14 Z";
+
+  const flip = toeSign === -1 ? ' transform="scale(-1, 1)"' : '';
+  const usualDot = usual
+    ? `<circle cx="${usual.h.toFixed(1)}" cy="${(-usual.v).toFixed(1)}" r="2.2" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1.5,1.5" opacity="0.8" />`
+    : '';
+  const strikeDot = `<circle cx="${strike.h.toFixed(1)}" cy="${(-strike.v).toFixed(1)}" r="2.8" fill="var(--accent)" stroke="var(--panel)" stroke-width="1.2" />`;
+
+  el.innerHTML = `
+    <div style="height: 40px; display: flex; align-items: center; justify-content: center; margin-bottom: 2px;">
+      <svg viewBox="${vbMinX} ${vbMinY} ${vbW} ${vbH}" style="height: 36px; width: auto; max-width: 64px; overflow: visible;">
+        <g${flip}>
+          <path d="${facePathD}" fill="var(--panel-2)" stroke="var(--line-strong)" stroke-width="1.2" />
+        </g>
+        <g opacity="0.4">
+          <line x1="-3" y1="0" x2="3" y2="0" stroke="var(--muted)" stroke-width="0.8" />
+          <line x1="0" y1="-3" x2="0" y2="3" stroke="var(--muted)" stroke-width="0.8" />
+        </g>
+        ${usualDot}
+        ${strikeDot}
+      </svg>
+    </div>
+    <span>Strike</span>
+  `;
+  return el;
+}
+
 function showShot(c) {
   const box = document.getElementById("shotdata");
   const s = c && c.shot;
@@ -4097,7 +4162,7 @@ function showShot(c) {
   const HERO = { "Carry yd": "hero lead", "Total yd": "hero", "Ball mph": "hero", "Club mph": "hero", "Smash": "hero" };
   // Without Advanced data: the club, how far, how far off line, how fast and how well struck.
   const SIMPLE = new Set(["Carry yd", "Offline", "Club mph", "Smash"]);
-  box.replaceChildren(...items.map(([cls, value, label, calculated]) => {
+  const elements = items.map(([cls, value, label, calculated]) => {
     const el = document.createElement("div");
     el.className = "metric " + cls + (HERO[label] ? " " + HERO[label] : "") + (cls === "club" || SIMPLE.has(label) ? "" : " adv-only");
     el.innerHTML = "<b></b><span></span>";
@@ -4112,7 +4177,21 @@ function showShot(c) {
       el.querySelector("b").replaceWith(sel);
     }
     return el;
-  }));
+  });
+
+  const strike = typeof SwingStrikeMap !== "undefined" ? SwingStrikeMap.extractStrike(s) : null;
+  if (strike) {
+    const strikeEl = makeStrikeTile(s, strike);
+    const smashIdx = items.findIndex(([c, v, l]) => l === "Smash");
+    if (smashIdx >= 0) {
+      elements.splice(smashIdx + 1, 0, strikeEl);
+    } else {
+      const carryIdx = items.findIndex(([c, v, l]) => l === "Carry yd");
+      elements.splice(carryIdx >= 0 ? carryIdx + 1 : elements.length, 0, strikeEl);
+    }
+  }
+
+  box.replaceChildren(...elements);
   box.hidden = false;
 }
 

@@ -120,4 +120,6 @@ test("spotText formats positions in plain words", () => {
   assert.equal(StrikeMap.spotText({ h: -3, v: -17 }, { toeSign: 1 }), "3 mm toward the heel, 17 mm low");
   assert.equal(StrikeMap.spotText({ h: 6, v: 4 }, { toeSign: 1 }), "6 mm toward the toe, 4 mm high");
   assert.equal(StrikeMap.spotText({ h: 0, v: 0 }), "centered, mid-face");
+  assert.equal(StrikeMap.spotText({ h: 3, v: -17 }, { toeSign: 1, short: true }), "3 mm toe, 17 mm low");
+  assert.equal(StrikeMap.spotText({ h: -3, v: 12 }, { toeSign: 1, short: true }), "3 mm heel, 12 mm high");
 });
