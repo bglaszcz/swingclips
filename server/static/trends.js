@@ -1952,7 +1952,8 @@ function drillAndThought(fix) {
 function focusButton(m, club, text) {
   const b = pEl("button", "small", text || "Make this my focus");
   if (club) b.title = `Tracked with the ${clubWords(club)}, your most-hit club ${m.group === "woods" ? "of the driver and woods" : "of the irons"}`;
-  b.onclick = () => setFocus({ move: m.move, aim: m.aim, club, results: [...new Set(m.items.map(x => x.l.result))] });
+  b.onclick = () => confirmSwitch(SwingShotStory.plain(m.fix.name))
+    && setFocus({ move: m.move, aim: m.aim, club, results: [...new Set(m.items.map(x => x.l.result))] });
   return b;
 }
 
@@ -1993,7 +1994,11 @@ function renderPriority(h, top) {
       second.append(row, pEl("div", "muted", `Swing thought: “${plain(m.fix.thought)}”`));
       kids.push(second);
     }
+    const before = pastFocuses(null);
+    if (before) kids.push(before);
   } else {
+    const before = pastFocuses(null);
+    if (before) kids.push(before);
     kids.push(pEl("div", "p-focus-name", "Nothing to work on yet"),
       pEl("div", "muted", h.irons.a.tested || h.woods.a.tested
         ? "No move stands out from chance yet. Keep hitting balls: it takes 5 to 10 sessions of 20+ swings to say much."
@@ -2089,11 +2094,50 @@ function focusBlock(f, h) {
   end.onclick = () => { if (confirm("End this focus? It stays in the history.")) setFocus({ move: null }); };
   buttons.append(practiceBtn, end);
   kids.push(buttons);
-  const past = (journal.focuses || []).slice(-3).reverse();
-  if (past.length) {
-    kids.push(pEl("div", "muted", "Before: " + past.map(p => `${plain((SwingCoach.MOVES[p.move] || {})[p.aim]?.name || p.move)} (${p.since} to ${p.until})`).join("; ")));
-  }
+  const before = pastFocuses(f);
+  if (before) kids.push(before);
   return kids;
+}
+
+/**
+ * Earlier focuses, each with Go back to this: it picks the focus up again from the day it first
+ * started, so "Is it working?" keeps every session since. The latest of each move and way, newest
+ * first, at most 3, not the one in play; a focus ended the day it started (a slip) is left out.
+ */
+function pastFocuses(current) {
+  const plain = SwingShotStory.plain, seen = new Set(), list = [];
+  for (const p of [...(journal.focuses || [])].reverse()) {
+    const k = `${p.move}|${p.aim}|${p.club || ""}`;
+    if (seen.has(k) || (current && current.move === p.move && current.aim === p.aim && (current.club || null) === (p.club || null))) continue;
+    if (p.since && p.until && p.since === p.until) continue;
+    seen.add(k);
+    list.push(p);
+    if (list.length >= 3) break;
+  }
+  if (!list.length) return null;
+  const box = pEl("div", "p-second");
+  box.append(pEl("div", "p-why-sub", "Earlier focuses"));
+  for (const p of list) {
+    const row = pEl("div", "p-alt");
+    const name = plain((SwingCoach.MOVES[p.move] || {})[p.aim]?.name || p.move);
+    const when = d => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    row.append(pEl("span", null, `${name}${p.club ? " · " + clubWords(p.club) : ""} (${when(p.since)} to ${when(p.until)})`));
+    const back = pEl("button", "small", "Go back to this");
+    back.title = `Picks it up again from ${when(p.since)}, so its progress since then counts`;
+    back.onclick = () => confirmSwitch(name) && setFocus({ move: p.move, aim: p.aim, club: p.club || null, results: p.results || [], since: p.since });
+    row.append(back);
+    box.append(row);
+  }
+  return box;
+}
+
+/** Changing the focus ends the one in play: say so first. */
+function confirmSwitch(name) {
+  const f = journal.focus;
+  if (!f || !f.move) return true;
+  const cur = SwingShotStory.plain((SwingCoach.MOVES[f.move] || {})[f.aim]?.name || f.move);
+  const since = new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return confirm(`Make "${name}" your focus? Your focus on ${cur} (since ${since}) ends; you can go back to it from Earlier focuses.`);
 }
 
 /** The card: bag mapping across all clubs hit in the period. */
