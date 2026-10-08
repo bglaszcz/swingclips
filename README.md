@@ -49,35 +49,25 @@ Tabs along the top (along the bottom on a phone): **Swings**, **Progress**, **Pr
 **Cameras** and **Tools**. On a phone, "Add to Home screen" installs it like an app. **?** lists
 the keyboard shortcuts.
 
-The **Swings** tab shows a scorecard for each swing: one tile per key position (P1-P8), green when its numbers are inside 
-your own good-shot range for that club, amber a little outside, red well outside, grey when there is no range yet or the 
-number is shaky. Click a tile to jump the video to that frame and see its numbers as bars against your range. Named faults 
-come with a severity, the position they happen at, and the swing thought and drill. It measures; it gives no made-up score. 
-Faults, drills, and a summary sentence highlight what went well and what needs work.
+The **Swings** tab opens on a coaching card for each swing (what happened, why, and what to try), with
+**Advanced data** for the underlying launch and body numbers. Named faults come with their severity, swing thought
+and drill from `coach.js`. Keys `1`–`8` jump between key positions (setup, top, impact, etc.).
 
 - **Ready bar** (under the tabs): both phones, Square, framing and the server's queue at a glance,
   with Start and Stop for both phones or each one.
 - **Swings**: the list by session (a club filter at the top, each swing with its club, carry and
-  analysis state) and the open swing: its club and carry with newer / older buttons (K / J), both
-  angles in sync, a scrubber with P1-P8 marked (or keys 1-8), play (Space), frame steps (← →),
-  speeds and full screen (F). **Show ▾** picks the overlays (skeleton, angles, hand path, head,
-  plane). **Compare…** puts it side by side with another swing (a good shot, or one from before
-  your focus), key positions lined up. **Label** is for the scorecard.
-  **⋯** has handedness, Leave out and Delete. Square's numbers lead with carry, then key
-  positions and the swing numbers. Numbers that can't be trusted are greyed with a **~** (hover
-  for why), and a "vs my good shots" column shows where each number sat.
-- **Trends** (per session, in the list): body numbers against Square's numbers.
-- **Progress**: how your numbers and results change across sessions, your good-shot ranges,
-  which numbers separate good shots from the rest, and **what helps, what hurts**: each move against
-  each result with a club, within sessions, labeled confirmed / emerging after a false-discovery
-  correction.
-- **Practice**: pick one number and a range, and after each swing the face-on phone says it. Or play a
-  **game** (Combine, Wedge ladder, Random pick, Ladder, Driving, Shot shaping, Distance control, Hole builder): the phone says each target, then where the ball
-  landed and the next one; shots are scored in strokes against a tour baseline, Driving tests 14 tee shots at a fairway,
-  Shot shaping tests 12 called curves, Distance control tests 15 random carries against a tight 5-yard window (carry only), Hole builder plays 6 par 4s with a tee shot and an approach from where your drive ended, and the Combine (the same 27 shots every time) gives one score to follow week to week.
-- **Cameras**: live pictures from both phones.
-- **Tools**: **Labels** (labeling progress, and a worklist of what to fix, with Go) and
-  **Shutter test** (light, grain, flicker and sharpness by shutter setting).
+  coaching state dots) and the open swing: both angles in sync, scrubber with key positions (keys 1-8),
+  play (Space), frame steps (← →), and full screen (F). **Compare…** puts it side by side with another swing.
+  Numbers that can't be trusted are greyed with a **~** (hover for why).
+- **Trends** (per session, in the list): opens with the session's story: how it went against earlier ones,
+  its top fault, and body numbers against shot results.
+- **Progress**: the three steps across all clubs (how did the last session go, what should I work on, and
+  is it working), with **One club at a time** below: four story tiles (Good shots, On line, Solid strikes,
+  Distance), the club's top fault and trend, and all session numbers folded under "All numbers from this session".
+- **Practice**: practise your #1 priority in one tap; play games (Combine, Wedge ladder, Driving, etc.) with
+  a big target (readable from 2 m), shot count, running score in plain words, and post-game comparison; or pick a
+  number and range yourself.
+- **Tools**: everyday tools first (Tripod setup, Labels, Calibrate, Update server), checks and diagnostics below.
 
 **Capture app (0.9)**: the camera fills the screen with which angle and mode it is and whether
 it's recording; below it the status, the server, one big Start / Stop, and the strike trigger

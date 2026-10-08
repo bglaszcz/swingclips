@@ -57,7 +57,7 @@ test("queue: includes pick-only labels (picked between server and night)", () =>
       picked: { p4: "night" } // Only a pick, not a hand label
     }
   };
-  const q = queue(clips, labels, null, { max: 10 });
+  const q = queue(clips, labels, null, { max: 10, seed: "2026-10-06" });
   assert.equal(q.length, 2);
   // The order is shuffled by the day's seed: which swings, not their order.
   assert.deepEqual(q.map(x => x.name).sort(), ["swing_face_1.mp4", "swing_face_2.mp4"]);
@@ -77,7 +77,7 @@ test("queue: prefers face-on, includes lone DTL, skips paired DTL and drills/exc
     // Not done pose
     makeClip(5, { angle: "face", pose: "failed" })
   ];
-  const q = queue(clips, {}, null, { max: 10 });
+  const q = queue(clips, {}, null, { max: 10, seed: "2026-10-06" });
   assert.equal(q.length, 2);
   assert.deepEqual(q.map(x => x.name).sort(), ["swing_dtl_2.mp4", "swing_face_1.mp4"]);
 });
@@ -221,7 +221,7 @@ test("queue: respects cantTell option (skips swings marked cant-tell today)", ()
     makeClip(3)
   ];
   const cantTellSet = new Set(["swing_face_1.mp4"]);
-  const q = queue(clips, {}, null, { max: 10, cantTell: cantTellSet });
+  const q = queue(clips, {}, null, { max: 10, cantTell: cantTellSet, seed: "2026-10-06" });
   assert.equal(q.length, 2);
   assert.deepEqual(q.map(x => x.name).sort(), ["swing_face_2.mp4", "swing_face_3.mp4"]);
 });

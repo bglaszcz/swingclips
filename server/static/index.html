@@ -491,7 +491,6 @@
   .q-table td.best { color: var(--accent); font-weight: 600; }
   .q-table td.bad { color: var(--warn); }
   #p-status { color: var(--muted); font-size: 13px; flex: 1; }
-  #p-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
   /* Every club at once: the verdict, four tiles, the session's most common fault. */
   .p-ov-head { font-size: 17px; line-height: 1.4; font-weight: 600; margin-bottom: 10px; }
   .p-ov-head .better { color: var(--accent); }
@@ -499,8 +498,8 @@
   .p-ov-head .sub { display: block; font-size: 13px; font-weight: 400; color: var(--muted); margin-top: 2px; }
   .p-ov-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
   .p-ov-tiles .p-tile { cursor: default; }
-  #p-ov-fault { margin-top: 10px; font-size: 14px; }
-  #p-ov-fault:empty { display: none; }
+  #p-ov-fault, #p-today-fault { margin-top: 10px; font-size: 14px; }
+  #p-ov-fault:empty, #p-today-fault:empty { display: none; }
   .p-club-pick { margin-left: 10px; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text); }
   #pr-quick { display: flex; flex-direction: column; gap: 6px; }
   #pr-quick .p-focus-name { font-size: 17px; }
@@ -567,6 +566,12 @@
   .pr-session { margin-top: 10px; }
   /* Practice games: a target spoken, the shot scored. */
   .gm-target { font-size: 16px; font-weight: 600; color: var(--accent); }
+  .gm-target-big { font-size: 28px; font-weight: 700; line-height: 1.25; margin: 8px 0 4px; color: var(--accent); }
+  .gm-score { font-size: 15px; margin-bottom: 8px; color: var(--text); }
+  .gm-ended { font-size: 15px; font-weight: 600; margin: 8px 0; }
+  @media (max-width: 600px) {
+    .gm-target-big { font-size: 20px; }
+  }
   #gm-now table, #gm-history table { font-size: 13px; border-collapse: collapse; margin-top: 6px; }
   #gm-now td, #gm-now th, #gm-history td, #gm-history th { padding: 2px 10px 2px 0; text-align: left; white-space: nowrap; }
   .pr-shead { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 13px; }
@@ -1543,16 +1548,18 @@
       <div class="note" id="gm-describe"></div>
       <div id="gm-msg" class="note"></div>
       <div id="gm-now"></div>
-      <div class="note">The speaking phone says each target; hit it with the club you would play. Once Square's shot is in
-        (about 15 s) it says where the ball landed against the target and the next one. A net has no roll, so the ball
-        finishes where it lands. Each shot is scored in strokes against a tour player from that distance (+ is better);
-        the Combine is always the same 27 shots, so its score is the one to follow week to week. Starting a game turns
-        the practice number below off.</div>
-      <strong style="margin-top: 8px">Past games</strong>
-      <div class="t-filters" style="margin-top: 4px">
-        <label>Game <select id="gm-history-game"></select></label>
-      </div>
-      <div id="gm-history"></div>
+      <details class="p-more" data-fold="games-scoring">
+        <summary>How games are scored and past games</summary>
+        <div class="note">The speaking phone says each target; hit it with the club you would play. Once Square's shot is in
+          (about 15 s) it says where the ball landed against the target and the next one. A net has no roll, so the ball
+          finishes where it lands. Each shot is scored in strokes against a tour player from that distance (+ is better);
+          the Combine is always the same 27 shots, so its score is the one to follow week to week. Starting a game turns
+          the practice number below off.</div>
+        <div class="t-filters" style="margin-top: 8px">
+          <label>Game <select id="gm-history-game"></select></label>
+        </div>
+        <div id="gm-history"></div>
+      </details>
     </div>
     <details class="t-card p-fold" id="pr-manual">
       <summary><strong>Pick a number yourself</strong></summary>
@@ -1672,8 +1679,9 @@
     <details class="t-card p-fold" data-fold="today">
       <summary><strong id="p-today-title">Last session with this club</strong></summary>
       <div id="p-today">
-        <div id="p-headline" class="p-headline"></div>
-        <div id="p-tiles"></div>
+        <div id="p-headline" class="p-headline p-ov-head"></div>
+        <div id="p-tiles" class="p-ov-tiles"></div>
+        <div id="p-today-fault" class="p-faults"></div>
         <details class="p-more" data-fold="tiles-more">
           <summary>All numbers from this session</summary>
           <div id="p-tiles-more" class="p-tiles-grid"></div>
@@ -1752,7 +1760,7 @@
       <dl class="keys">
         <dt><kbd>Space</kbd></dt><dd>Play / pause</dd>
         <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>One frame back / on</dd>
-        <dt><kbd>1</kbd>–<kbd>8</kbd></dt><dd>Jump to P1–P8</dd>
+        <dt><kbd>1</kbd>–<kbd>8</kbd></dt><dd>Jump to setup, top, impact and the other key positions</dd>
         <dt><kbd>J</kbd> <kbd>K</kbd></dt><dd>Older / newer swing</dd>
         <dt><kbd>F</kbd></dt><dd>Full screen</dd>
         <dt><kbd>S</kbd> <kbd>A</kbd> <kbd>H</kbd> <kbd>P</kbd></dt><dd>Skeleton, angles, hand path, plane</dd>
@@ -1765,10 +1773,11 @@
       <div class="help-sub">Where things are</div>
       <dl class="where">
         <dt>Ready bar</dt><dd>Both phones, Square and the server at a glance. Start and stop both phones here.</dd>
-        <dt>Swings</dt><dd>Every swing by session: both angles in sync, Square's numbers, key positions and body numbers. <b>Trends</b> on a session plots body numbers against results.</dd>
-        <dt>Progress</dt><dd>Three questions in order: how the last session went, what to work on, and whether it's working. Shot pattern, sessions, gapping and handicap are folded underneath.</dd>
-        <dt>Practice</dt><dd>Pick one number and a range; a phone says it after each swing.</dd>
-        <dt>Cameras</dt><dd>Live pictures from both phones, to check framing before you start.</dd>
+        <dt>Swings</dt><dd>The coaching card: what happened, why, try this; Advanced data for the numbers; the dots on the list; a session's Trends opens with its story.</dd>
+        <dt>Progress</dt><dd>The three steps, all clubs; one club at a time below.</dd>
+        <dt>Practice</dt><dd>Practise my #1 priority in one tap; games; pick a number yourself.</dd>
+        <dt>Start page</dt><dd>Last swing and end of session cards.</dd>
+        <dt>Tools</dt><dd>Everyday first, checks below.</dd>
         <dt>Greyed ~</dt><dd>A shaky number: noise or the conditions could account for it. <b>--</b> = no reading. Hover for why.</dd>
       </dl>
     </div>

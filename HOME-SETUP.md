@@ -48,12 +48,12 @@ end).
 2. **Stop** under Record (each phone says "Stopped"), or just close the apps.
 3. Leave the server alone: about 10 minutes after the last swing it re-analyzes the session the
    careful way (the review page's Ready bar shows "deep pass: n clips to go").
-4. Look back on the **review page** (`http://192.168.86.250:8000`): **Progress** (how did it go /
-   what to work on / is it working) and each swing's video and numbers.
+4. Look back on the **review page** (`http://192.168.86.250:8000`): **Progress** (the three steps:
+   how did it go / what to work on / is it working; one club at a time below) and each swing's coaching card and numbers.
 
 **Other ways** (still work): **Start both** in the review page's Ready bar; **Auto-start** on the
 phones; `Start golf.cmd -StartCameras` starts both phones without the page; **Practice** on the review
-page (one number spoken after each swing, or games); `Start golf (GSPro).cmd` instead of Square's app
+page (practise your #1 priority in one tap, games, or pick a number yourself); `Start golf (GSPro).cmd` instead of Square's app
 (README, "Sim laptop"; details in [docs/relay.md](docs/relay.md)). `Start golf.cmd -Startup` adds it to
 Windows sign-in; if Square's app isn't found, put its shortcut or .exe path in `square-app.txt` next to it.
 What each Start page part does in detail: docs/review-page.md ("Coach program", "Today's practice
