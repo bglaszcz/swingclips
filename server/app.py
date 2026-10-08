@@ -1546,6 +1546,7 @@ class Focus(BaseModel):
     move: str | None = None
     aim: str | None = None       # "more" | "less"
     club: str | None = None
+    scope: str | None = None     # "irons" | "woods" | None
     results: list[str] = []
     since: str | None = None     # YYYY-MM-DD; default today
 
@@ -1559,6 +1560,8 @@ def set_focus(body: Focus):
             raise HTTPException(400, "A focus needs a move and which way (more or less)")
         if body.club is not None and not re.match(r"^[A-Z0-9]{1,4}$", body.club):
             raise HTTPException(400, "Unknown club")
+        if body.scope is not None and body.scope not in ("irons", "woods"):
+            raise HTTPException(400, "Unknown scope")
         if len(body.results) > 8 or not all(key.match(r) for r in body.results):
             raise HTTPException(400, "Bad results")
         since = body.since or today
@@ -1569,10 +1572,35 @@ def set_focus(body: Focus):
     with files_lock:
         j = load_journal()
         old = j.get("focus")
+        focuses = list(j.get("focuses") or [])
         if old:
-            j["focuses"] = (j.get("focuses") or []) + [{**old, "until": today}]
-        j["focus"] = None if body.move is None else {"move": body.move, "aim": body.aim, "club": body.club,
-                                                     "results": body.results, "since": since}
+            is_slip = (body.move is not None) and (old.get("since") == today)
+            if not is_slip:
+                focuses.append({**old, "until": today})
+        if body.move is not None:
+            focuses = [
+                x for x in focuses
+                if not (
+                    x.get("move") == body.move
+                    and x.get("aim") == body.aim
+                    and x.get("club") == body.club
+                    and x.get("since") == since
+                )
+            ]
+        j["focuses"] = focuses
+        if body.move is None:
+            j["focus"] = None
+        else:
+            focus_dict = {
+                "move": body.move,
+                "aim": body.aim,
+                "club": body.club,
+                "results": body.results,
+                "since": since,
+            }
+            if body.scope is not None:
+                focus_dict["scope"] = body.scope
+            j["focus"] = focus_dict
         save_journal(j)
     return {"ok": True, "focus": j["focus"]}
 

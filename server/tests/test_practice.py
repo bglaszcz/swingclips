@@ -460,6 +460,45 @@ class EndpointsTest(unittest.TestCase):
             # The handicap log and notes are untouched by it.
             self.assertEqual(j["handicap"], [])
 
+    def test_6b_focus_history(self):
+        """Focus history: slips replaced today are not kept, going back removes the old entry, normal switch keeps until."""
+        from datetime import datetime
+        from unittest import mock
+        today = datetime.now().strftime("%Y-%m-%d")
+        d = Path(tempfile.mkdtemp(prefix="swingclips-journal-"))
+        with mock.patch.object(self.app, "JOURNAL_FILE", d / "journal.json"):
+            c = self.client
+
+            # 1. Slip not kept: a focus set today and replaced today is not added to focuses
+            c.post("/api/journal/focus", json={"move": "shoulderTop", "aim": "more", "club": "I7"})
+            self.assertEqual(c.get("/api/journal").json()["focus"]["since"], today)
+            c.post("/api/journal/focus", json={"move": "pelvisTop", "aim": "more", "club": "I7"})
+            j = c.get("/api/journal").json()
+            self.assertEqual(j["focus"]["move"], "pelvisTop")
+            self.assertEqual(j["focuses"], [], "same-day replacement is a slip: not kept in history")
+
+            # 2. Normal switch: older focus is preserved in focuses with until
+            older = {"move": "hipSway", "aim": "less", "club": "I7", "since": "2026-09-15"}
+            c.post("/api/journal/focus", json=older)
+            c.post("/api/journal/focus", json={"move": "handsAhead", "aim": "more", "club": "I7", "since": "2026-09-28"})
+            j = c.get("/api/journal").json()
+            self.assertEqual(j["focus"]["move"], "handsAhead")
+            self.assertEqual(len(j["focuses"]), 1)
+            self.assertEqual(j["focuses"][0]["move"], "hipSway")
+            self.assertEqual(j["focuses"][0]["until"], today)
+
+            # 3. Going back: setting a focus equal to an earlier one removes that entry from focuses
+            c.post("/api/journal/focus", json=older)
+            j = c.get("/api/journal").json()
+            self.assertEqual(j["focus"]["move"], "hipSway")
+            self.assertEqual(j["focus"]["since"], "2026-09-15")
+            self.assertEqual([x["move"] for x in j["focuses"]], ["handsAhead"], "hipSway returned to active focus, removed from history")
+
+            # 4. Scope handling: accepts 'irons' and 'woods', rejects invalid scope
+            c.post("/api/journal/focus", json={"move": "leadHipP6", "aim": "more", "club": "I7", "scope": "irons"})
+            self.assertEqual(c.get("/api/journal").json()["focus"]["scope"], "irons")
+            self.assertEqual(c.post("/api/journal/focus", json={"move": "leadHipP6", "aim": "more", "scope": "wedges"}).status_code, 400)
+
     def test_5_voice_check(self):
         last = self.client.get("/api/practice/latest").json()["last"]
         self.client.post("/api/practice/test")
