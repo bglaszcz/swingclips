@@ -72,7 +72,7 @@ NUMBERS = {
     "loft": ("Dynamic loft", "°", 1),
     "faceToPath": ("Face to path", "°", 1),
     "strikeV": ("Strike height", " mm", 0),
-    "strikeH": ("Strike toe/heel", " mm", 0),
+    "strikeH": ("Strike heel/toe", " mm", 0),
     "clubSpeed": ("Club speed", " mph", 0),
     "carry": ("Carry", " yd", 0),
     "pelvisPeakMs": ("Hips peak vs impact", " ms", 0),
@@ -185,13 +185,27 @@ def load_programs(path: Path = PROGRAMS_FILE) -> dict:
 
 
 def say_number(key: str, v) -> str:
-    # Square's strike height is said as the number it gives: its 0 isn't the owner's sweet spot
-    # (7 iron median about -13, best carry -20..-8), so "high" and "low" would mislead.
     if isinstance(v, bool):
         return "arm after hips" if v else "arm before hips"
+    if key == "strikeV":
+        if v is None:
+            return "strike –"
+        if abs(v) < 1.0:
+            return "strike centre"
+        dist = abs(round(v))
+        side = "high" if v > 0 else "low"
+        return f"strike {dist} millimetres {side}"
+    if key == "strikeH":
+        if v is None:
+            return "strike –"
+        if abs(v) < 1.0:
+            return "strike centre"
+        dist = abs(round(v))
+        side = "heel" if v > 0 else "toe"
+        return f"strike {dist} millimetres {side}"
     dec = NUMBERS[key][2]
     s = f"{abs(v):.{dec}f}".rstrip("0").rstrip(".") if dec else f"{abs(round(v))}"
-    sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath", "strikeV") and s != "0" else ""
+    sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath") and s != "0" else ""
     if key == "pelvisPeakMs":
         name = "hips peak"
     elif key == "armPeakMs":
@@ -200,8 +214,6 @@ def say_number(key: str, v) -> str:
         name = "hips open"
     elif key == "pelvisStartMs":
         name = "hips turn start"
-    elif key == "strikeV":
-        name = "strike"
     else:
         name = NUMBERS[key][0].lower()
     return f"{name} {sign}{s}"
@@ -810,8 +822,18 @@ def fmt(key: str, v) -> str:
         return "–"
     if isinstance(v, bool):
         return "yes" if v else "no"
+    if key == "strikeH":
+        if abs(v) < 1.0:
+            return "centre"
+        dist = round(abs(v))
+        return f"{dist} mm heel" if v > 0 else f"{dist} mm toe"
+    if key == "strikeV":
+        if abs(v) < 1.0:
+            return "centre"
+        dist = round(abs(v))
+        return f"{dist} mm high" if v > 0 else f"{dist} mm low"
     dec = NUMBERS[key][2]
-    return f"{v:+.{dec}f}" if key in ("attack", "faceToPath", "strikeV", "strikeH", "pelvisPeakMs", "armPeakMs", "pelvisOpen",
+    return f"{v:+.{dec}f}" if key in ("attack", "faceToPath", "pelvisPeakMs", "armPeakMs", "pelvisOpen",
                                        "pelvisStartMs", "pelvisBall", "chestBall", "handsAhead", "path", "face",
                                        "startDir") else f"{v:.{dec}f}"
 
@@ -822,7 +844,8 @@ def spread(key: str, values: list) -> str:
         return f"{NUMBERS[key][0].lower()} –"
     med = statistics.median(v)
     rng = f" ({fmt(key, min(v))} to {fmt(key, max(v))})" if len(v) > 1 else ""
-    return f"{NUMBERS[key][0].lower()} {fmt(key, med)}{NUMBERS[key][1]}{rng}"
+    unit = "" if key in ("strikeV", "strikeH") else NUMBERS[key][1]
+    return f"{NUMBERS[key][0].lower()} {fmt(key, med)}{unit}{rng}"
 
 
 REPORT_KEYS = ("attack", "loft", "faceToPath", "strikeV")

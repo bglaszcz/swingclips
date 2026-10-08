@@ -152,9 +152,7 @@ What the server works out for each swing and what each part of the review page s
   (`pooledHelps(...).irons.a.links`, confirmed or emerging) coached with `SwingCoach.coach(l, "I7")` for its swing thought and drill;
   if no link exists yet, it states the fact without inventing a drill.
   A compact trend chart underneath plots each session's centre over time across two tracks (Toe/heel drift and Height on face).
-  When fewer than 10 strikes are recorded for the club in the period, it reports "Not enough strikes with the <club> yet (Square reports it on most shots: N so far)".
-  A folded **Which side is the toe?** setting (+ or -, default + = toe) is stored in browser `localStorage` (`strike-toe-sign`),
-  with instructions to confirm the sign by hitting one shot clearly off the toe and comparing against Square's own strike screen.
+  Strike numbers across the review and Start pages are shown as heel/toe and high/low words (+ = heel in Square Omni data, - = toe, and values under 1 mm as centre); raw signed mm remain in tooltips for Advanced data.
 - **Compare** (Compare… or C on a swing; `static/compare.js`): this swing against another one,
   usually one of your own better ones. The picker lists every other swing with its date, club and
   Square numbers, filtered to this club and the last 90 days by default, sorted by carry (or ball
@@ -557,7 +555,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   (`count`: need of reps, or `streak`: need in a row) of checks on Square's numbers (`strikeV`, `attack`,
   `faceToPath`, `loft`, ...: min/max) and 3D kinematic numbers (`pelvisPeakMs`, `pelvisOpen`, `armAfterPelvis`, `pelvisStartMs`), plus `mark` for the golfer's tap on what they saw. A gate can also check the block's
   medians (`medians`: e.g. median attack -3 or steeper, the retention check). Square's strike height is
-  spoken as the number it gives ("strike minus 12"): its 0 isn't the owner's sweet spot (7 iron median
+  spoken in words ("strike 12 millimetres low"): its 0 isn't the owner's sweet spot (7 iron median
   about -13, best carry at -20..-8), so gates use the owner's own band. Square's strike frame has jumped as a whole (about
   -14 mm on every club between Sep 16 and Sep 23 2026, and on Aug 21 alone), so a program's `calibration`
   (strike, 7 iron, usual -13 within 4, 10 shots) checks the median of the session's first 10 readable 7

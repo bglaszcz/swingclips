@@ -272,7 +272,7 @@ class ProgramsTest(unittest.TestCase):
         n = self.p.state()["program"]["blocks"][1]["judged"][0]["numbers"]
         self.assertEqual((n["pelvisBall"], n["path"], n["face"]), (4.5, 0.0, 0.5))
         rep = self.p.report()["text"]
-        self.assertIn("-4.0 / 24.0 / +0.5 / -12 (path +0.0°, face +0.5°, carry 150 yd)", rep)
+        self.assertIn("-4.0 / 24.0 / +0.5 / 12 mm low (path +0.0°, face +0.5°, carry 150 yd)", rep)
         self.assertIn("(in brackets: club path", rep)
 
     def test_finished_runs_keep_their_gates_and_calibration(self):
@@ -330,7 +330,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(
             block_line,
             "  Shots 1-10: attack angle -4.0° (-4.0 to -4.0); dynamic loft 24.0° (24.0 to 24.0); "
-            "face to path +0.5° (+0.5 to +0.5); strike height -12 mm (-12 to -12); carry 150 yd, SD 0 yd"
+            "face to path +0.5° (+0.5 to +0.5); strike height 12 mm low (12 mm low to 12 mm low); carry 150 yd, SD 0 yd"
         )
 
     def test_retention_median_gate(self):
@@ -603,6 +603,40 @@ class ProgramsTest(unittest.TestCase):
             self.hit(shot(h=0.0, v=0.0))
         self.assertIsNone(self.p.run)
         self.assertEqual(self.p.state()["log"][-1]["how"], "cap")
+
+    def test_strike_words_formatting(self):
+        # fmt for strikeH (+ is heel, - is toe, <1 is centre)
+        self.assertEqual(programs.fmt("strikeH", 8.0), "8 mm heel")
+        self.assertEqual(programs.fmt("strikeH", -3.0), "3 mm toe")
+        self.assertEqual(programs.fmt("strikeH", 0.0), "centre")
+        self.assertEqual(programs.fmt("strikeH", 0.5), "centre")
+        self.assertEqual(programs.fmt("strikeH", -0.8), "centre")
+        self.assertEqual(programs.fmt("strikeH", 7.6), "8 mm heel")
+        self.assertEqual(programs.fmt("strikeH", None), "–")
+
+        # fmt for strikeV (+ is high, - is low, <1 is centre)
+        self.assertEqual(programs.fmt("strikeV", 14.0), "14 mm high")
+        self.assertEqual(programs.fmt("strikeV", -14.0), "14 mm low")
+        self.assertEqual(programs.fmt("strikeV", 0.0), "centre")
+        self.assertEqual(programs.fmt("strikeV", 0.4), "centre")
+        self.assertEqual(programs.fmt("strikeV", -0.9), "centre")
+        self.assertEqual(programs.fmt("strikeV", 5.2), "5 mm high")
+        self.assertEqual(programs.fmt("strikeV", None), "–")
+
+        # NUMBERS label
+        self.assertEqual(programs.NUMBERS["strikeH"][0], "Strike heel/toe")
+
+    def test_say_number_strike_in_words(self):
+        self.assertEqual(programs.say_number("strikeV", -8), "strike 8 millimetres low")
+        self.assertEqual(programs.say_number("strikeV", 4), "strike 4 millimetres high")
+        self.assertEqual(programs.say_number("strikeV", 0), "strike centre")
+        self.assertEqual(programs.say_number("strikeH", 8), "strike 8 millimetres heel")
+        self.assertEqual(programs.say_number("strikeH", -3), "strike 3 millimetres toe")
+        self.assertEqual(programs.say_number("strikeH", 0), "strike centre")
+
+        # say_limit
+        self.assertEqual(programs.say_limit({"key": "strikeV", "min": -3}, -9), "strike 3 millimetres low or higher")
+        self.assertEqual(programs.say_limit({"key": "strikeV", "max": 3}, 5), "strike 3 millimetres high or lower")
 
 
 if __name__ == "__main__":
