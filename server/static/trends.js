@@ -888,6 +888,7 @@ function renderProgress() {
   renderTiles(sessions, club);
   renderGoodShots(club);
   if (foldOpen("pattern")) drawPattern(sessions);
+  if (foldOpen("strike")) renderStrike(sessions, club, all);
   if (foldOpen("hcp")) renderHandicap();
   renderSessionTable(sessions);
   renderGapping();
@@ -1490,6 +1491,323 @@ function ellipse(xs, ys) {
   sxx /= n - 1; syy /= n - 1; sxy /= n - 1;
   const tr = (sxx + syy) / 2, det = Math.sqrt(((sxx - syy) / 2) ** 2 + sxy ** 2);
   return { cx: mx, cy: my, a: Math.sqrt(tr + det), b: Math.sqrt(Math.max(0, tr - det)), th: 0.5 * Math.atan2(2 * sxy, sxx - syy) };
+}
+
+function getStrikeToeSign() {
+  if (typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.getToeSign) return SwingStrikeMap.getToeSign();
+  try {
+    const v = localStorage.getItem("strike-toe-sign");
+    if (v === "-") return -1;
+  } catch {}
+  return 1;
+}
+
+function setStrikeToeSign(v) {
+  if (typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.setToeSign) return SwingStrikeMap.setToeSign(v);
+  try {
+    localStorage.setItem("strike-toe-sign", v === "-" || v === -1 ? "-" : "+");
+  } catch {}
+}
+
+/** "Where on the face": heat map and trend for the selected club. */
+function renderStrike(sessions, club, all) {
+  const box = document.getElementById("p-strike");
+  if (!box || typeof SwingStrikeMap === "undefined") return;
+  box.replaceChildren();
+
+  const toeSign = getStrikeToeSign();
+
+  const allStrikes = [];
+  for (const s of (sessions || [])) {
+    for (const r of (s.rows || [])) {
+      const p = SwingStrikeMap.extractStrike(r);
+      if (p) allStrikes.push({ ...p, start: s.start, sessionKey: s.key });
+    }
+  }
+  const n = allStrikes.length;
+
+  // Toe setting fold (always accessible)
+  const toeFold = document.createElement("details");
+  toeFold.className = "p-more";
+  toeFold.dataset.fold = "strike-toe";
+  try { toeFold.open = localStorage.getItem("fold-strike-toe") === "open"; } catch {}
+  toeFold.addEventListener("toggle", () => {
+    try { localStorage.setItem("fold-strike-toe", toeFold.open ? "open" : "shut"); } catch {}
+  });
+  const toeSum = document.createElement("summary");
+  toeSum.textContent = "Which side is the toe?";
+  const toeBody = document.createElement("div");
+  toeBody.style.cssText = "margin-top: 6px; display: flex; flex-direction: column; gap: 6px;";
+
+  const toeLabel = document.createElement("label");
+  toeLabel.style.cssText = "display: inline-flex; align-items: center; gap: 8px;";
+  toeLabel.innerHTML = '<span>Toe side:</span> <select id="p-strike-toe-select"><option value="+">+ is toe (default)</option><option value="-">- is toe</option></select>';
+  const toeSel = toeLabel.querySelector("select");
+  toeSel.value = toeSign === -1 ? "-" : "+";
+  toeSel.addEventListener("change", () => {
+    setStrikeToeSign(toeSel.value);
+    renderStrike(sessions, club, all);
+  });
+
+  const toeNote = document.createElement("div");
+  toeNote.className = "note";
+  toeNote.textContent = "Hit one shot clearly off the toe and look at Square's own strike screen to confirm.";
+  toeBody.append(toeLabel, toeNote);
+  toeFold.append(toeSum, toeBody);
+
+  // Fewer than 10 strikes with this club in the period
+  if (n < 10) {
+    const emptyNote = document.createElement("div");
+    emptyNote.className = "note";
+    emptyNote.textContent = `Not enough strikes with the ${club} yet (Square reports it on most shots: ${n} so far)`;
+    box.append(emptyNote, toeFold);
+    return;
+  }
+
+  const group = SwingGoodShots.groupOf(club);
+  const isWood = group === "woods";
+  const clubBox = SwingStrikeMap.boxOf(club);
+  const W_mm = clubBox.width;
+  const H_mm = clubBox.height;
+
+  // 1. Club-face SVG outline with heat map
+  const faceSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  faceSvg.id = "p-strike-face";
+  faceSvg.setAttribute("role", "img");
+  faceSvg.setAttribute("aria-label", `Strike heat map for ${club}`);
+  const padX = isWood ? 16 : 14;
+  const padY = isWood ? 8 : 7;
+  const vbMinX = -(W_mm / 2 + padX);
+  const vbMinY = -(H_mm / 2 + padY);
+  const vbW = (W_mm + padX * 2);
+  const vbH = (H_mm + padY * 2);
+  faceSvg.setAttribute("viewBox", `${vbMinX} ${vbMinY} ${vbW} ${vbH}`);
+  faceSvg.style.cssText = "display: block; width: 100%; max-width: 420px; height: auto; margin: 0 auto; overflow: visible;";
+
+  // Club face outline group (flip horizontally if toeSign === -1)
+  const gOutline = svgEl("g", { transform: toeSign === -1 ? "scale(-1, 1)" : "" }, faceSvg);
+
+  const facePathD = isWood
+    ? "M -38 -18 Q 0 -25 38 -18 Q 46 -10 45 0 Q 45 10 38 18 Q 0 25 -38 18 Q -45 10 -45 0 Q -46 -10 -40 -18 L -43 -23 L -46 -21 L -41 -16 Z"
+    : "M -28 -14 L -33 -23 L -39 -20 L -33 -11 Q -35 5 -28 17 Q 0 20 26 18 Q 35 15 36 2 Q 37 -12 30 -17 Q 0 -17 -28 -14 Z";
+
+  svgEl("path", {
+    d: facePathD,
+    fill: "var(--panel-2)",
+    stroke: "var(--line-strong)",
+    "stroke-width": "1.2",
+  }, gOutline);
+
+  const grooveX1 = isWood ? -26 : -22;
+  const grooveX2 = isWood ? 26 : 22;
+  const grooveYs = isWood ? [-14, -7, 0, 7, 14] : [-12, -8, -4, 0, 4, 8, 12];
+  for (const gy of grooveYs) {
+    svgEl("line", {
+      x1: grooveX1, y1: gy, x2: grooveX2, y2: gy,
+      stroke: "var(--line-strong)", "stroke-width": "0.6", opacity: "0.4",
+    }, gOutline);
+  }
+
+  // Face centre (0, 0)
+  const gCentre = svgEl("g", {}, faceSvg);
+  svgEl("line", { x1: -4, y1: 0, x2: 4, y2: 0, stroke: "var(--muted)", "stroke-width": "0.8", "stroke-dasharray": "1,1" }, gCentre);
+  svgEl("line", { x1: 0, y1: -4, x2: 0, y2: 4, stroke: "var(--muted)", "stroke-width": "0.8", "stroke-dasharray": "1,1" }, gCentre);
+  svgEl("circle", { cx: 0, cy: 0, r: 1.5, fill: "none", stroke: "var(--muted)", "stroke-width": "0.8" }, gCentre);
+
+  // Heat map
+  const gridRes = SwingStrikeMap.grid(allStrikes, { club });
+  const { cells, bins } = gridRes;
+  const maxDensity = Math.max(0, ...cells.flatMap(row => [...row]));
+  const gHeat = svgEl("g", {}, faceSvg);
+  if (maxDensity > 0) {
+    for (let r = 0; r < cells.length; r++) {
+      for (let c = 0; c < cells[r].length; c++) {
+        const val = cells[r][c];
+        if (val > 0.05 * maxDensity) {
+          const cellX = bins.minH + c * bins.stepH;
+          const cellY = -(bins.minV + (r + 1) * bins.stepV);
+          const alpha = Math.min(0.75, (val / maxDensity) * 0.7 + 0.1);
+          svgEl("rect", {
+            x: cellX.toFixed(2),
+            y: cellY.toFixed(2),
+            width: bins.stepH.toFixed(2),
+            height: bins.stepV.toFixed(2),
+            fill: "var(--accent)",
+            "fill-opacity": alpha.toFixed(3),
+            rx: "1",
+          }, gHeat);
+        }
+      }
+    }
+  }
+
+  // Latest session shots
+  const latestSession = sessions[sessions.length - 1];
+  const latestStrikes = (latestSession?.rows || []).map(SwingStrikeMap.extractStrike).filter(Boolean);
+  const gDots = svgEl("g", {}, faceSvg);
+  for (const p of latestStrikes) {
+    const dot = svgEl("circle", {
+      cx: p.h.toFixed(2),
+      cy: (-p.v).toFixed(2),
+      r: "2.2",
+      class: "p-latest",
+    }, gDots);
+    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
+    title.textContent = `Latest: ${SwingStrikeMap.spotText(p, { toeSign })}`;
+    dot.append(title);
+  }
+
+  // Toe / Heel / High / Low labels
+  const toeLabelSide = toeSign === 1 ? "right" : "left";
+  const toeX = toeLabelSide === "right" ? (W_mm / 2 + 2) : -(W_mm / 2 + 2);
+  const heelX = toeLabelSide === "right" ? -(W_mm / 2 + 2) : (W_mm / 2 + 2);
+  const toeAnchor = toeLabelSide === "right" ? "start" : "end";
+  const heelAnchor = toeLabelSide === "right" ? "end" : "start";
+
+  const tToe = svgEl("text", {
+    x: toeX, y: 0, "text-anchor": toeAnchor, "dominant-baseline": "middle",
+    style: "font-size: 3.2px; fill: var(--muted); font-weight: 500;",
+  }, faceSvg);
+  tToe.textContent = "Toe";
+
+  const tHeel = svgEl("text", {
+    x: heelX, y: 0, "text-anchor": heelAnchor, "dominant-baseline": "middle",
+    style: "font-size: 3.2px; fill: var(--muted); font-weight: 500;",
+  }, faceSvg);
+  tHeel.textContent = "Heel";
+
+  const tHigh = svgEl("text", {
+    x: 0, y: -(H_mm / 2 + 2), "text-anchor": "middle",
+    style: "font-size: 3.2px; fill: var(--muted); font-weight: 500;",
+  }, faceSvg);
+  tHigh.textContent = "High";
+
+  const tLow = svgEl("text", {
+    x: 0, y: (H_mm / 2 + 4.5), "text-anchor": "middle",
+    style: "font-size: 3.2px; fill: var(--muted); font-weight: 500;",
+  }, faceSvg);
+  tLow.textContent = "Low";
+
+  // Legend
+  const legend = document.createElement("div");
+  legend.className = "p-legend";
+  legend.style.cssText = "justify-content: center; margin-top: 4px;";
+  legend.innerHTML = `<span><i class="p-key" style="background: var(--accent); opacity: 0.7;"></i>All shots (${n})</span>` +
+    `<span><i class="p-key p-latest"></i>Latest session (${latestStrikes.length})</span>` +
+    `<span><i style="display:inline-block; width:8px; height:8px; border:1px dashed var(--muted); border-radius:50%;"></i>Centre</span>`;
+
+  // 2. Compare line + Usual centre
+  const beforeSessions = sessions.slice(0, -1);
+  const cmp = SwingStrikeMap.compare(latestSession, beforeSessions, { toeSign, club });
+  const usual = gridRes.centre;
+  const usualText = SwingStrikeMap.spotText(usual, { toeSign });
+  const cmpLine = document.createElement("div");
+  cmpLine.style.cssText = "margin: 8px 0 4px; font-size: 13px; font-weight: 500; line-height: 1.4;";
+  if (cmp && cmp.text) {
+    cmpLine.textContent = `${cmp.text}. Your usual: ${usualText}.`;
+  } else {
+    cmpLine.textContent = `Your usual: ${usualText}.`;
+  }
+
+  // 3. Low strikes coaching line (if applicable)
+  let coachEl = null;
+  if (group === "irons" && usual && usual.v < -10) {
+    coachEl = document.createElement("div");
+    coachEl.className = "note";
+    coachEl.style.cssText = "margin: 2px 0 8px; font-size: 12px; line-height: 1.4;";
+
+    const h = all ? pooledHelps(all) : null;
+    const vLink = h?.irons?.a?.links?.find(l => l.result === "strikeV" && (l.label === "confirmed" || l.label === "emerging"));
+    const coached = vLink ? SwingCoach.coach(vLink, "I7") : null;
+    if (coached && coached.fix) {
+      coachEl.textContent = `Strikes sit low on the face: "${coached.fix.thought}" (${coached.fix.drill})`;
+    } else {
+      coachEl.textContent = "Strikes usually sit low on the face with your irons.";
+    }
+  }
+
+  // 4. Trend chart (session centres over time)
+  const trendData = SwingStrikeMap.trend(sessions, { club, minShots: 5 });
+  const trendBox = document.createElement("div");
+  trendBox.style.cssText = "margin-top: 8px;";
+
+  if (trendData.length >= 2) {
+    const trendSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    trendSvg.id = "p-strike-trend";
+    trendSvg.setAttribute("role", "img");
+    trendSvg.setAttribute("aria-label", `Strike trend for ${club} over time`);
+    const tW = 360, tH = 130;
+    trendSvg.setAttribute("viewBox", `0 0 ${tW} ${tH}`);
+    trendSvg.style.cssText = "display: block; width: 100%; height: auto; overflow: visible;";
+
+    const mL = 48, mR = 16;
+    const tN = trendData.length;
+    const tStep = (tW - mL - mR) / Math.max(1, tN - 1);
+    const tx = i => mL + i * tStep;
+
+    // Track 1: Toe / Heel (y: 12 to 52)
+    const maxH = Math.max(12, ...trendData.map(d => Math.abs(d.centre.h * toeSign))) * 1.2;
+    const y0_toe = 32;
+    const sy_toe = hToe => y0_toe - (hToe / maxH) * 20;
+
+    svgEl("line", { x1: mL, y1: y0_toe, x2: tW - mR, y2: y0_toe, stroke: "var(--line)", "stroke-dasharray": "2,2", "stroke-width": "0.8" }, trendSvg);
+    const toeTrackLbl = svgEl("text", { x: 4, y: y0_toe, "dominant-baseline": "middle", class: "t-axis", fill: "var(--muted)", "font-size": "9" }, trendSvg);
+    toeTrackLbl.textContent = "Toe/heel";
+
+    const toePts = trendData.map((d, i) => `${tx(i).toFixed(1)},${sy_toe(d.centre.h * toeSign).toFixed(1)}`);
+    svgEl("polyline", { points: toePts.join(" "), fill: "none", stroke: "var(--accent)", "stroke-width": "1.5" }, trendSvg);
+    trendData.forEach((d, i) => {
+      const c = svgEl("circle", { cx: tx(i).toFixed(1), cy: sy_toe(d.centre.h * toeSign).toFixed(1), r: "3", fill: "var(--accent)" }, trendSvg);
+      const tt = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      tt.textContent = `${dayOf(d.start)}: ${SwingStrikeMap.spotText(d.centre, { toeSign })} (${d.n} shots)`;
+      c.append(tt);
+    });
+
+    // Track 2: Height (y: 68 to 108)
+    const vs = trendData.map(d => d.centre.v);
+    const minV = Math.min(-25, Math.min(...vs) - 3);
+    const maxV = Math.max(5, Math.max(...vs) + 3);
+    const sy_v = v => 108 - ((v - minV) / (maxV - minV)) * 40;
+    const y0_v = sy_v(0);
+
+    svgEl("line", { x1: mL, y1: y0_v, x2: tW - mR, y2: y0_v, stroke: "var(--line)", "stroke-dasharray": "2,2", "stroke-width": "0.8" }, trendSvg);
+    const vTrackLbl = svgEl("text", { x: 4, y: (68 + 108) / 2, "dominant-baseline": "middle", class: "t-axis", fill: "var(--muted)", "font-size": "9" }, trendSvg);
+    vTrackLbl.textContent = "Height";
+
+    const vPts = trendData.map((d, i) => `${tx(i).toFixed(1)},${sy_v(d.centre.v).toFixed(1)}`);
+    svgEl("polyline", { points: vPts.join(" "), fill: "none", stroke: "var(--muted)", "stroke-width": "1.5" }, trendSvg);
+    trendData.forEach((d, i) => {
+      const c = svgEl("circle", { cx: tx(i).toFixed(1), cy: sy_v(d.centre.v).toFixed(1), r: "3", fill: "var(--muted)" }, trendSvg);
+      const tt = document.createElementNS("http://www.w3.org/2000/svg", "title");
+      tt.textContent = `${dayOf(d.start)}: ${SwingStrikeMap.spotText(d.centre, { toeSign })} (${d.n} shots)`;
+      c.append(tt);
+    });
+
+    // Date labels
+    const every = Math.ceil(tN / Math.max(1, Math.floor((tW - mL - mR) / 48)));
+    trendData.forEach((d, i) => {
+      if (i % every === 0 || i === tN - 1) {
+        const dt = svgEl("text", { x: tx(i).toFixed(1), y: 122, "text-anchor": "middle", class: "t-axis", fill: "var(--muted)", "font-size": "8" }, trendSvg);
+        dt.textContent = dayOf(d.start);
+      }
+    });
+
+    const trendLegend = document.createElement("div");
+    trendLegend.className = "p-legend";
+    trendLegend.style.cssText = "font-size: 11px; margin-top: 2px;";
+    trendLegend.innerHTML = `<span><i class="p-key" style="background: var(--accent);"></i>Toe / heel drift</span>` +
+      `<span><i class="p-key" style="background: var(--muted);"></i>Height on face</span>`;
+    trendBox.append(trendSvg, trendLegend);
+  } else if (trendData.length === 1) {
+    const note = document.createElement("div");
+    note.className = "note";
+    note.textContent = `1 session with 5+ strikes (${dayOf(trendData[0].start)}: ${SwingStrikeMap.spotText(trendData[0].centre, { toeSign })}).`;
+    trendBox.append(note);
+  }
+
+  box.append(faceSvg, legend, cmpLine);
+  if (coachEl) box.append(coachEl);
+  box.append(trendBox, toeFold);
 }
 
 /** The handicap index over time, from what's typed in here (it isn't read from GHIN). */

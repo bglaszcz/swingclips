@@ -140,8 +140,21 @@ What the server works out for each swing and what each part of the review page s
   and tapping any set opening its first drill swing); step 1 also highlights the session's top faults under
   the headline sentence, along with any strong links between them (e.g. casting and early extension)
   tested within clubs using Cochran-Mantel-Haenszel odds ratios and Benjamini-Hochberg correction (`static/faultlinks.js`);
-  shot pattern, sessions, good-shot rules, gapping,
+  shot pattern, where on the face (strike heat map), sessions, good-shot rules, gapping,
   the wedge matrix and handicap are folded cards underneath.
+- **Where on the face** (Progress card, folded under **Where on the face**, `data-fold="strike"`; `static/strikemap.js`):
+  heat map of impact locations on the club face (from Square's `faceImpactH` and `faceImpactV`) for the chosen club and period.
+  Shows an SVG club-face outline (iron or wood/driver shape, with toe on the side the setting indicates) overlaid with a smoothed
+  2D Gaussian density heat map, the latest session's shots as small dots, and the face centre marked with a crosshair reticle.
+  Below the face: a comparison summary line comparing the latest session's strike centre and spread against the median of up to
+  6 earlier baseline sessions ("Strikes moved 5 mm toward the toe and stayed low (15 mm below centre). Your usual: 2 mm toward the heel, 17 mm low").
+  When low strikes are typical with irons (median strikeV below -10 mm), a coaching line checks the irons' what-helps-what-hurts
+  (`pooledHelps(...).irons.a.links`, confirmed or emerging) coached with `SwingCoach.coach(l, "I7")` for its swing thought and drill;
+  if no link exists yet, it states the fact without inventing a drill.
+  A compact trend chart underneath plots each session's centre over time across two tracks (Toe/heel drift and Height on face).
+  When fewer than 10 strikes are recorded for the club in the period, it reports "Not enough strikes with the <club> yet (Square reports it on most shots: N so far)".
+  A folded **Which side is the toe?** setting (+ or -, default + = toe) is stored in browser `localStorage` (`strike-toe-sign`),
+  with instructions to confirm the sign by hitting one shot clearly off the toe and comparing against Square's own strike screen.
 - **Compare** (Compare… or C on a swing; `static/compare.js`): this swing against another one,
   usually one of your own better ones. The picker lists every other swing with its date, club and
   Square numbers, filtered to this club and the last 90 days by default, sorted by carry (or ball
@@ -310,9 +323,12 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   5+ judged shots. Detailed club breakdown counts ("75 swings · 5i 22 · 4h 14 …") are preserved in the session header's
   tooltip title on hover.
 - **Advanced data** (button under Square's numbers, remembered per browser): off by default.
-  Without it the swing page shows the coaching card and five tiles (club, carry, offline, club
-  speed, smash); with it, Square's other numbers, the scorecard, key positions, the swing numbers
-  table, 3D and the clip names (`adv-only` class in `index.html`). Advanced data uses plain golfer's words
+  Without it the swing page shows the coaching card and simple tiles (club, carry, offline, club
+  speed, smash, and, when the shot has a strike recorded, a mini **Strike** tile with a ~44 px face
+  outline showing this shot's strike and the club's usual centre; tooltip title:
+  e.g. "Strike: 6 mm toward the toe, 12 mm low (your usual with the 7 iron: 3 mm toe, 17 mm low)").
+  With it, Square's other numbers, the scorecard, key positions, the swing numbers
+  table, 3D and the clip names (`adv-only` class in `index.html`) become visible. Advanced data uses plain golfer's words
   everywhere instead of P-system jargon: scorecard phase tiles and table columns read "Setup", "Top of
   swing", "Downswing", "Impact", with P-tags kept only as small secondary hints or tooltips. Metric labels,
   the scorecard summary sentence, row labels and fault locations ("in the downswing", "at impact")
