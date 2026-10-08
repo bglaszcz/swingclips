@@ -101,9 +101,11 @@ What the server works out for each swing and what each part of the review page s
   pointer to step 2. The chart is folded under **See it on a chart** (opens itself when a tile or chip
   picks a number); it pools every club (only numbers that mean the same with any club: body numbers,
   path, face, face to path); a one-club focus charts its own club.
-  Body numbers are named in plain words everywhere in Trends and Progress (`SwingShotStory.LABELS`).
-  **One club at a time** (the club picker): that club's last session tiles, shot pattern, sessions
-  table and good shots, as before.
+  **One club at a time** (the club picker): the club's last session opens with the four story tiles
+  (Good shots, On line, Solid strikes, Distance) comparing against earlier sessions, its headline verdict,
+  and its top fault with swing thought and cross-session trend. The detailed club numbers (carry, spreads,
+  body numbers) fold under **All numbers from this session**. Below: shot pattern, sessions table, and
+  good-shot rules.
 - **Progress** (button at the top): all sessions with one club over time. Tiles compare the latest
   session with the ones before it (median, or spread for consistency numbers), saying "better" /
   "worse" only when the change is bigger than the usual session-to-session difference; a chart of
@@ -490,16 +492,16 @@ toward the ball". The phones face away from you, so voice is the channel.
   `POST /api/practice` (`{on, metric, min, max, club, streak}`), `POST /api/practice/test`,
   `GET /api/practice/latest`, `GET /api/game` (game in play, state, finished games),
   `POST /api/game` (`{game, options}`), `POST /api/game/stop`.
-- **Practice games** (Games card at the top of Practice): pick Combine, Wedge ladder, Random pick, Ladder,
-  Driving, Shot shaping, Distance control or Hole builder and press Start game. The speaking phone says the target; once Square's shot pairs
-  (~15 s) it says where the ball landed ("8 short, 3 right, on the green") and the next target. A swing whose
-  shot never comes is skipped (same target again); a Square mishit scores the worst. Scoring is strokes against
-  a tour baseline from where the ball lands (no roll into a net; within 15 yd counts as the green); Driving
-  scores 14 tee shots against a 30-yard fairway par-4 baseline, Shot shaping scores 12 called draws and
-  fades by spin axis, Distance control tests 15 random carries (50-130 yd) scored on carry alone against a 5-yard window, and Hole builder plays 6 par 4s (340 to 440 yd) where a tee shot at the fairway determines your approach yardage. Targets and scoring are `static/games.js`, the game in play `game.json` and finished
-  games `games-log.jsonl` next to the clips folder (`server/games.py`). Starting a game turns the practice number
-  off, and turning that on stops the game. The Combine is always the same 27 shots (9 targets, 50-170 yd,
-  shuffled), so its score is comparable across weeks. Under the Combine scores table, "Where you lose strokes" breaks down strokes gained by target distance over the last 3 Combines to pinpoint the weakest yardages. The Past games table lets you pick any game to view past sessions with that game's own hit wording (on the green, in the fairway, shaped as called, or within 5 yards). No phone update needed.
+- **Practice games** (Games card in Practice): pick Combine, Wedge ladder, Random pick, Ladder,
+  Driving, Shot shaping, Distance control or Hole builder. The picker shows a single-line description for the
+  game, with a **Start game** button. While in play, the current target is shown in large text (readable from 2 m:
+  28 px desktop, 20 px at 390 px), with the shot count and running score in plain words (e.g. "+0.4: a bit better
+  than a tour player so far" or "-1.2: a little over a stroke behind"). The speaking phone says each target; once
+  Square's shot pairs (~15 s) it says where the ball landed and the next target. Scoring explanation and the Past games
+  history picker fold under **How games are scored and past games** (closed by default, remembered). After a game
+  ends, it gives one sentence comparing the result to your last game of the same kind (e.g. "Combine: -3.1, better than
+  last time (-5.4)") and the best and worst target of the game. Under the Combine scores table, "Where you lose strokes"
+  breaks down strokes gained by target distance over the last 3 Combines. Starting a game turns the practice number off.
 - **Coach program** (`programs.py`, `programs.json`, `/api/program*`, Start page "Coach program"): a coach's drill
   ladder as data: blocks in order, each with its drill (drill mode, so rehearsals stay out of the trends;
   a block without one, like the transfer block, counts as normal swings), ball or no ball, reps, and a gate
