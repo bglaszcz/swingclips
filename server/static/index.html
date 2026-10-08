@@ -3150,7 +3150,7 @@ function openGoodRanges(tp, facts) {
   for (const b of SwingSummary.BODY) out.ranges[b.key] = goodRange(club, b.key);
   const enough = Object.values(out.ranges).filter(r => r && r.enough);
   out.any = enough.length > 0;
-  const name = clubName(club).toLowerCase();
+  const name = clubWords(club);
   if (!out.any) {
     const n = Math.max(0, ...Object.values(out.ranges).map(r => (r ? r.n : 0)));
     note.textContent = `Not enough good shots with the ${name} for personal ranges yet (${n} of ${SwingGoodShots.withDefaults(goodSettings && goodSettings.settings).minCount}): Progress has the rules.`;
@@ -3323,7 +3323,7 @@ function renderCoachCard() {
         const rows = oldestFirst.slice(0, openIdx + 1)
           .filter(clip => !clip.excluded && !isSecondary(clip) && clip.shot && clip.shot.club === club)
           .map(clip => swingRow(clip));
-        const res = SwingHabits.watch(rows, { clubName: clubName(club).toLowerCase() });
+        const res = SwingHabits.watch(rows, { clubName: clubWords(club) });
         if (res && res.length) habit = res[0];
       }
     }
@@ -3345,7 +3345,7 @@ function renderCoachCard() {
   if (card) {
     if (card.verdict) {
       const v = scEl("span", `cc-verdict ${card.verdict.level}`, card.verdict.text);
-      v.title = card.verdict.level === "good" ? `Passes your good-shot rules with the ${clubName(club).toLowerCase()} (set in Progress)`
+      v.title = card.verdict.level === "good" ? `Passes your good-shot rules with the ${clubWords(club)} (set in Progress)`
         : card.verdict.fails.length ? "Not a good shot by your rules: " + card.verdict.fails.join("; ") : "";
       kids.push(v);
     }
@@ -3894,6 +3894,12 @@ function clubName(code) {
   return m ? `${m[2]}${{ W: " wood", H: " hybrid", I: " iron" }[m[1]]}` : code;
 }
 
+/** A club's name inside a sentence: "the 7 iron", "the driver", but "the PW" (wedge codes stay as they are). */
+function clubWords(code) {
+  const n = clubName(code);
+  return /^[A-Z]{2,3}$/.test(n) ? n : n.toLowerCase();
+}
+
 const num = (v, d = 1) => (v === null || v === undefined || isNaN(v)) ? "–" : Number(v).toFixed(d);
 const signed = v => (v > 0 ? "+" : "") + num(v);
 // Launch monitors report left as negative.
@@ -4246,7 +4252,7 @@ function sessionHeaderSub(s) {
 
   const plainName = typeof SwingSessionStory !== "undefined" && SwingSessionStory.plainClub
     ? SwingSessionStory.plainClub
-    : c => clubName(c).toLowerCase();
+    : c => clubWords(c);
   const bestStr = bestClub ? ` · best: ${plainName(bestClub)}` : "";
   const sub = `${Math.round(sc.goodRate * 100)}% good shots${bestStr}`;
   sessionScoreHeaderCache[cacheKey] = sub;

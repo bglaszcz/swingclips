@@ -119,7 +119,7 @@ function renderPracticeForm() {
   prEl("pr-streak").checked = prForm.streak;
 
   const s = practiceSuggestion(m, prForm.club);
-  const withClub = prForm.club ? `with the ${clubName(prForm.club).toLowerCase()}` : "";
+  const withClub = prForm.club ? `with the ${clubWords(prForm.club)}` : "";
   prEl("pr-suggest").textContent = s.lo == null
     ? `Not enough swings ${withClub} with this number yet for a suggested range (${s.n} of ${PR_SUGGEST_MIN}).`
     : `Middle half of your last ${s.n} swings ${withClub}: ${prFmt(m, s.lo)} to ${prFmt(m, s.hi)} (median ${prFmt(m, s.med)}).`;
@@ -127,9 +127,9 @@ function renderPracticeForm() {
   const g = practiceGoodRange(m), goodBtn = prEl("pr-good");
   goodBtn.disabled = !g;
   goodBtn.title = m.kind !== "body" ? "Only for body numbers: Square's numbers decide which shots are good"
-    : g ? `Middle 50% of your good shots with the ${clubName(g.club).toLowerCase()}` : "Not enough good shots with any club for this number yet";
+    : g ? `Middle 50% of your good shots with the ${clubWords(g.club)}` : "Not enough good shots with any club for this number yet";
   if (g) {
-    prEl("pr-suggest").textContent += ` Your good shots with the ${clubName(g.club).toLowerCase()} (${g.r.n}): `
+    prEl("pr-suggest").textContent += ` Your good shots with the ${clubWords(g.club)} (${g.r.n}): `
       + `${prFmt(m, g.r.q25)} to ${prFmt(m, g.r.q75)}${g.r.reliable ? "" : " (range not reliable: most of those numbers were shaky)"}.`;
   }
   if (m.noisy) prEl("pr-suggest").textContent += ` Noisy: ${m.noisy}.`;
@@ -176,7 +176,7 @@ function renderPracticeQuick() {
     return;
   }
   const c = prState.config, on = c.on && c.metric === q.move;
-  const kids = [el("div", "p-focus-kicker", q.focus ? `Practice my focus${q.club ? " · " + clubName(q.club).toLowerCase() : ""}` : "Practice my #1 priority"),
+  const kids = [el("div", "p-focus-kicker", q.focus ? `Practice my focus${q.club ? " · " + clubWords(q.club) : ""}` : "Practice my #1 priority"),
     el("div", "p-focus-name", `Work on ${plain(q.fix.name)}`),
     el("div", null, `Swing thought: “${plain(q.fix.thought).replace(/\.$/, "")}”`)];
   const drill = el("div", "muted", "Drill: " + plain(q.fix.drill));

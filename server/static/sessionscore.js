@@ -21,7 +21,8 @@
   const Coach = root.SwingCoach || (typeof require !== "undefined" && require("./coach.js"));
   const GoodShots = root.SwingGoodShots || (typeof require !== "undefined" && require("./goodshots.js"));
 
-  const MIN_JUDGED = 15, USUAL = 6, Z_CLEAR = 1.64, SAME_PTS = 5;
+  // One club's sessions are smaller (5-30 shots with a club): MIN_JUDGED_CLUB for them.
+  const MIN_JUDGED = 15, MIN_JUDGED_CLUB = 8, USUAL = 6, Z_CLEAR = 1.64, SAME_PTS = 5;
   // What a result is worth to an everyday golfer, for ranking the moves that go with it.
   const WEIGHT = { absOffline: 1, smash: 0.9, carry: 0.8, path: 0.8, faceToPath: 0.7, absFaceToPath: 0.7,
                    ballSpeed: 0.6, face: 0.6, strikeV: 0.5, strikeH: 0.4 };
@@ -85,22 +86,25 @@
 
   /**
    * The latest session against the last one and the usual.
-   * @param sessions [{start, rows}] oldest first (all clubs)
+   * @param sessions [{start, rows}] oldest first (all clubs, or one club's)
+   * @param opts {minJudged}: judged shots a session needs to be compared (default MIN_JUDGED)
    * @returns {latest, last, usual, items: [{key, label, unit, hint, now, last, usual, z, change:
    *   "better" | "worse" | "same" | null, clear}], verdict: "better" | "worse" | "same" | "first" | "few",
    *   headline, series: {key: [value per session]}} or null with no sessions
    */
-  function compare(sessions, ctx) {
+  function compare(sessions, ctx, opts) {
+    const minJudged = (opts && opts.minJudged) || MIN_JUDGED;
     const scored = sessions.map(s => ({ ...s, score: score(s.rows, ctx) }));
     const latest = scored[scored.length - 1];
     if (!latest) return null;
-    const earlier = scored.slice(0, -1).filter(s => s.score.judged >= MIN_JUDGED);
+    const earlier = scored.slice(0, -1).filter(s => s.score.judged >= minJudged);
     const last = earlier[earlier.length - 1] || null;
     const usualOf = key => median(earlier.slice(-USUAL).map(s => s.score[key]));
     const items = ITEMS.map(it => {
       const now = latest.score[it.key], prev = last ? last.score[it.key] : null;
       let z = null, change = null, clear = false;
-      if (now != null && prev != null) {
+      // Too few shots this session: the tiles show last time and the usual, no verdict.
+      if (now != null && prev != null && latest.score.judged >= minJudged) {
         if (it.k) {
           z = zOf(latest.score[it.k], latest.score[it.n], last.score[it.k], last.score[it.n]);
           clear = z != null && Math.abs(z) >= Z_CLEAR;
@@ -116,7 +120,7 @@
     const head = items[0];
     let verdict, headline;
     const pct = v => `${Math.round(v * 100)}%`;
-    if (latest.score.judged < MIN_JUDGED) {
+    if (latest.score.judged < minJudged) {
       verdict = "few";
       headline = `Only ${latest.score.judged} shot${latest.score.judged === 1 ? "" : "s"} with a verdict this session: too few to compare.`;
     } else if (!last) {
@@ -161,7 +165,7 @@
     return ranked.slice(0, ranked.length > 1 && ranked[1].score >= SECOND_SHARE * ranked[0].score ? 2 : 1);
   }
 
-  const api = { score, compare, priorities, zOf, ITEMS, MIN_JUDGED, USUAL, WEIGHT };
+  const api = { score, compare, priorities, zOf, ITEMS, MIN_JUDGED, MIN_JUDGED_CLUB, USUAL, WEIGHT };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingSessionScore = api;
 })(typeof window !== "undefined" ? window : globalThis);

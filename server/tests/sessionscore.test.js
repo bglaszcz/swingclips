@@ -88,3 +88,10 @@ test("two near-equal priorities both show", () => {
   ]);
   assert.equal(p.length, 2);
 });
+
+test("one club's sessions compare from 8 judged shots", () => {
+  assert.equal(Score.compare([session(1, 4, 6), session(2, 5, 4)], ctx).verdict, "few");
+  const c = Score.compare([session(1, 4, 6), session(2, 5, 4)], ctx, { minJudged: Score.MIN_JUDGED_CLUB });
+  assert.notEqual(c.verdict, "few");
+  assert.equal(c.last.start, 1);
+});

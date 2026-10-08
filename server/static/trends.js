@@ -1252,19 +1252,20 @@ function renderTiles(sessions, club) {
   if (!latest) {
     box.replaceChildren(); more.replaceChildren(); note.textContent = "";
     title.textContent = "Last session with this club";
-    head.textContent = club ? `No sessions with the ${clubName(club).toLowerCase()} in this period.` : "";
+    head.textContent = club ? `No sessions with the ${clubWords(club)} in this period.` : "";
     if (faultEl) faultEl.textContent = "";
     return;
   }
   const when = dayOf(latest.start);
-  title.textContent = `${when} with the ${clubName(club).toLowerCase()}`;
+  title.textContent = `${when} with the ${clubWords(club)}`;
 
   const data = goodShotData();
   const cmp = SwingSessionScore.compare(sessions.map(s => ({ start: s.start, key: s.key, rows: s.rows })),
-    { clubs: data.clubs, name: r => r.c.name, settings: goodSettings && goodSettings.settings });
+    { clubs: data.clubs, name: r => r.c.name, settings: goodSettings && goodSettings.settings },
+    { minJudged: SwingSessionScore.MIN_JUDGED_CLUB });
 
   const lastWhen = cmp && cmp.last ? dayOf(cmp.last.start) : null;
-  const sub = `${latest.rows.length} swing${latest.rows.length === 1 ? "" : "s"} with the ${clubName(club).toLowerCase()}`
+  const sub = `${latest.rows.length} swing${latest.rows.length === 1 ? "" : "s"} with the ${clubWords(club)}`
     + (cmp && cmp.last ? `; ${lastWhen}: ${cmp.last.score.n} swing${cmp.last.score.n === 1 ? "" : "s"}` : "");
   const lead = pEl("span", cmp && cmp.items[0] && cmp.items[0].clear ? cmp.verdict : "", cmp ? cmp.headline : "");
   head.replaceChildren(lead, pEl("span", "sub", sub));
@@ -1282,7 +1283,7 @@ function renderTiles(sessions, club) {
   note.textContent = `The four story tiles compare this club against your earlier sessions with it: `
     + `good shots pass your good-shot rules (set under Good shots below); on line = within the club's offline allowance; `
     + `solid strikes = smash at or above your usual with this club; distance = median carry as a share of your usual carry. `
-    + `"Last time" is the latest earlier session with ${SwingSessionScore.MIN_JUDGED} or more shots with a verdict; `
+    + `"Last time" is the latest earlier session with ${SwingSessionScore.MIN_JUDGED_CLUB} or more shots with a verdict; `
     + `"usual" the median of up to ${SwingSessionScore.USUAL} earlier ones. A change is clear when it's unlikely to be luck `
     + `(two-proportion test, about 95% one-sided); smaller gaps of 5 points or more read "a little better / worse". `
     + `All numbers from this session compares each number against the median of earlier sessions with this club. `
@@ -1580,7 +1581,7 @@ const GOOD_FIELDS = [
 function renderGoodShots(club) {
   const data = goodShotData(), c = club ? data.clubs[club] : null, st = data.settings;
   const status = document.getElementById("p-good-status");
-  const name = club ? clubName(club).toLowerCase() : "";
+  const name = club ? clubWords(club) : "";
   if (!c) {
     status.textContent = club ? `No shots with the ${name} that could be judged (the putter isn't).` : "";
   } else {
@@ -1776,7 +1777,7 @@ function helpsModel(club, sessions) {
 /** The evidence under "Why this?": every link, in golf terms, strongest first. */
 function renderHelpsEvidence(club, sessions, h) {
   const status = document.getElementById("p-helps-status"), box = document.getElementById("p-helps-list");
-  const name = club ? clubName(club).toLowerCase() : "clubs";
+  const name = club ? clubWords(club) : "clubs";
   const { a, listed, coached, holdUp } = h;
   const replayMap = new Map((holdUp?.replayed || []).map(r => [`${r.move}:${r.result}`, r]));
   const verdictTags = {
@@ -1982,7 +1983,7 @@ function renderPriority(h, top) {
 
 /** How the focus is going since it started (focus.js): the "So far" line, a camera warning, the numbers folded. */
 function focusProgress(f, cmp) {
-  const fname = f.club ? clubName(f.club).toLowerCase() : "all clubs";
+  const fname = f.club ? clubWords(f.club) : "all clubs";
   const kids = [];
   const so = pEl("div", "p-focus-so");
   if (!cmp.after) {
@@ -2042,7 +2043,7 @@ function focusBlock(f, h) {
   const plain = SwingShotStory.plain;
   const mv = SwingCoach.MOVES[f.move], fix0 = mv && mv[f.aim];
   const fix = fix0 && { ...fix0, name: plain(fix0.name), how: plain(fix0.how), drill: plain(fix0.drill), thought: plain(fix0.thought) };
-  const fname = f.club ? clubName(f.club).toLowerCase() : "all clubs";
+  const fname = f.club ? clubWords(f.club) : "all clubs";
   const kids = [pEl("div", "p-focus-kicker", `Your focus · ${fname} · since ${new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}`)];
   const nameEl = pEl("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`);
   const m = f.club ? null : SwingSessionScore.priorities(h.a.links).find(x => x.move === f.move && x.aim === f.aim);

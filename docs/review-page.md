@@ -103,7 +103,9 @@ What the server works out for each swing and what each part of the review page s
   path, face, face to path); a one-club focus charts its own club.
   **One club at a time** (the club picker): the club's last session opens with the four story tiles
   (Good shots, On line, Solid strikes, Distance) comparing against earlier sessions, its headline verdict,
-  and its top fault with swing thought and cross-session trend. The detailed club numbers (carry, spreads,
+  and its top fault with swing thought and cross-session trend. One club's sessions are smaller, so it
+  compares from 8 judged shots (`MIN_JUDGED_CLUB`; all clubs: 15); below that the tiles show last time and
+  the usual with no verdict. The detailed club numbers (carry, spreads,
   body numbers) fold under **All numbers from this session**. Below: shot pattern, sessions table, and
   good-shot rules.
 - **Progress** (button at the top): all sessions with one club over time. Tiles compare the latest
