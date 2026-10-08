@@ -663,6 +663,10 @@
   .p-focus-so .worse { color: var(--warn); font-weight: 600; }
   .p-focus-note { padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); }
   .p-focus-note.agree { background: var(--accent-soft); }
+  #p-pick-focus-body { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; font-size: 13px; }
+  .p-pick-filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  .p-pick-filters label { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+  .p-pick-desc { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); }
   .p-alt { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
   .p-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .p-chips button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
@@ -1650,6 +1654,10 @@
             them. Greyed ~ = mostly shaky numbers.</div>
         </details>
       </details>
+      <details class="p-more" id="p-pick-focus" data-fold="pick-focus">
+        <summary>Pick my own focus</summary>
+        <div id="p-pick-focus-body"></div>
+      </details>
     </div>
 
     <div class="p-step"><span class="p-step-n">3</span>Is it working?</div>
@@ -1814,6 +1822,7 @@
 <script src="/static/metrics3d.js"></script>
 <script src="/static/view3d.js"></script>
 <script src="/static/programhistory.js"></script>
+<script src="/static/focuspick.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };

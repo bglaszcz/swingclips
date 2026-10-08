@@ -2005,6 +2005,120 @@ function renderPriority(h, top) {
         : "Not enough swings with body numbers yet."));
   }
   box.replaceChildren(...kids);
+  renderPickOwnFocus(h);
+}
+
+/** Fold "Pick my own focus": pick any move from coach.js MOVES with a BODY number, non-fault only. */
+function renderPickOwnFocus(h) {
+  const box = document.getElementById("p-pick-focus-body");
+  if (!box || typeof SwingFocusPick === "undefined") return;
+
+  const groups = SwingFocusPick.groupedMoves();
+  const prevMove = document.getElementById("p-pick-move")?.value;
+  const prevClub = document.getElementById("p-pick-club")?.value;
+
+  const moveSel = pEl("select");
+  moveSel.id = "p-pick-move";
+  for (const g of groups) {
+    const og = document.createElement("optgroup");
+    og.label = g.group;
+    for (const m of g.moves) {
+      const opt = document.createElement("option");
+      opt.value = `${m.move}:${m.aim}`;
+      opt.textContent = m.name;
+      og.append(opt);
+    }
+    moveSel.append(og);
+  }
+  if (prevMove) moveSel.value = prevMove;
+
+  const clubSel = pEl("select");
+  clubSel.id = "p-pick-club";
+  const ironName = h.irons?.club ? clubWords(h.irons.club) : "";
+  const woodName = h.woods?.club ? clubWords(h.woods.club) : "";
+
+  const ironOpt = document.createElement("option");
+  ironOpt.value = "group:irons";
+  ironOpt.textContent = `My irons (tracked with the ${ironName || "irons"})`;
+  clubSel.append(ironOpt);
+
+  const woodOpt = document.createElement("option");
+  woodOpt.value = "group:woods";
+  woodOpt.textContent = `Driver and woods (tracked with the ${woodName || "woods"})`;
+  clubSel.append(woodOpt);
+
+  const allClubs = [...new Set(shownClips().filter(c => !c.excluded && c.club).map(c => c.club))];
+  const sortedClubs = typeof SwingGapping !== "undefined" ? SwingGapping.sortClubs(allClubs) : allClubs.sort();
+  if (sortedClubs.length) {
+    const singleOg = document.createElement("optgroup");
+    singleOg.label = "One club";
+    for (const c of sortedClubs) {
+      const opt = document.createElement("option");
+      opt.value = c;
+      opt.textContent = clubWords(c);
+      singleOg.append(opt);
+    }
+    clubSel.append(singleOg);
+  }
+  if (prevClub) clubSel.value = prevClub;
+
+  const desc = pEl("div", "p-pick-desc");
+  function updateDesc() {
+    const [move, aim] = moveSel.value.split(":");
+    const side = (SwingCoach.MOVES[move] || {})[aim];
+    if (!side) { desc.replaceChildren(); return; }
+    const plain = SwingShotStory.plain;
+    const fix = { how: plain(side.how), drill: plain(side.drill), thought: plain(side.thought) };
+    desc.replaceChildren(
+      pEl("div", null, fix.how),
+      ...drillAndThought(fix)
+    );
+  }
+  moveSel.onchange = updateDesc;
+  updateDesc();
+
+  const btn = pEl("button", "small", "Make this my focus");
+  btn.onclick = () => submitPickFocus(h);
+
+  const filters = pEl("div", "p-pick-filters");
+  const moveLabel = pEl("label", null, "Move: "); moveLabel.append(moveSel);
+  const clubLabel = pEl("label", null, "Club: "); clubLabel.append(clubSel);
+  filters.append(moveLabel, clubLabel);
+
+  box.replaceChildren(filters, desc, pEl("div", "t-filters", btn));
+}
+
+async function submitPickFocus(h) {
+  const moveSel = document.getElementById("p-pick-move");
+  const clubSel = document.getElementById("p-pick-club");
+  if (!moveSel || !clubSel) return;
+  const [move, aim] = moveSel.value.split(":");
+  const side = (SwingCoach.MOVES[move] || {})[aim];
+  if (!side) return;
+  const name = SwingShotStory.plain(side.name);
+  if (!confirmSwitch(name)) return;
+
+  const clubVal = clubSel.value;
+  let scope = null, club = null, group = "irons";
+  if (clubVal === "group:irons") {
+    scope = "irons";
+    club = (h.irons && h.irons.club) || null;
+    group = "irons";
+  } else if (clubVal === "group:woods") {
+    scope = "woods";
+    club = (h.woods && h.woods.club) || null;
+    group = "woods";
+  } else {
+    scope = null;
+    club = clubVal || null;
+    group = club ? SwingGoodShots.groupOf(club) : "irons";
+  }
+
+  const links = (h && h[group] && h[group].a && h[group].a.links) || [];
+  const relevant = links.filter(l => l.move === move && (l.label === "confirmed" || l.label === "emerging"));
+  const results = [...new Set(relevant.filter(l => SwingCoach.aimOf(l, club).aim === aim).map(l => l.result))];
+
+  await setFocus({ move, aim, club, scope, results });
 }
 
 /** How the focus is going since it started (focus.js): the "So far" line, a camera warning, the numbers folded. */
@@ -2107,8 +2221,8 @@ function focusBlock(f, h) {
 function pastFocuses(current) {
   const plain = SwingShotStory.plain, seen = new Set(), list = [];
   for (const p of [...(journal.focuses || [])].reverse()) {
-    const k = `${p.move}|${p.aim}|${p.club || ""}`;
-    if (seen.has(k) || (current && current.move === p.move && current.aim === p.aim && (current.club || null) === (p.club || null))) continue;
+    const k = `${p.move}|${p.aim}|${p.club || ""}|${p.scope || ""}`;
+    if (seen.has(k) || (current && current.move === p.move && current.aim === p.aim && (current.club || null) === (p.club || null) && (current.scope || null) === (p.scope || null))) continue;
     if (p.since && p.until && p.since === p.until) continue;
     seen.add(k);
     list.push(p);
@@ -2121,10 +2235,11 @@ function pastFocuses(current) {
     const row = pEl("div", "p-alt");
     const name = plain((SwingCoach.MOVES[p.move] || {})[p.aim]?.name || p.move);
     const when = d => new Date(d + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
-    row.append(pEl("span", null, `${name}${p.club ? " · " + clubWords(p.club) : ""} (${when(p.since)} to ${when(p.until)})`));
+    const cDesc = p.scope ? (p.scope === "woods" ? "driver & woods" : "irons") : p.club ? clubWords(p.club) : "";
+    row.append(pEl("span", null, `${name}${cDesc ? " · " + cDesc : ""} (${when(p.since)} to ${when(p.until)})`));
     const back = pEl("button", "small", "Go back to this");
     back.title = `Picks it up again from ${when(p.since)}, so its progress since then counts`;
-    back.onclick = () => confirmSwitch(name) && setFocus({ move: p.move, aim: p.aim, club: p.club || null, results: p.results || [], since: p.since });
+    back.onclick = () => confirmSwitch(name) && setFocus({ move: p.move, aim: p.aim, club: p.club || null, scope: p.scope || null, results: p.results || [], since: p.since });
     row.append(back);
     box.append(row);
   }
