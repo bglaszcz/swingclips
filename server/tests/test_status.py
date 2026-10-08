@@ -399,6 +399,41 @@ class HealthTest(unittest.TestCase):
         self.s.relay_heartbeat({"squareRunning": True})
         return self.s.health_step(swings)
 
+    def missed_step(self, shots, at):
+        self.clock.t = at
+        self.s.heartbeat("face", hb(practiceVoice=True, recording=True))
+        self.s.heartbeat("dtl", hb(recording=True))
+        self.s.relay_heartbeat({"squareRunning": True})
+        return self.s.health_step([], shots)
+
+    def test_square_shots_the_phones_missed(self):
+        # Soft wedges: Square reports two shots, the phones record neither (Oct 8, 40-yard wedge matrix).
+        t0 = self.start + 60
+        shots = [{"t": t0, "clipped": False}]
+        # Too soon to call: its clip may still be uploading.
+        self.assertEqual(self.missed_step(shots, t0 + 10), [])
+        # One missed shot isn't said yet.
+        self.assertEqual(self.missed_step(shots, t0 + status.MISSED_WAIT_S + 1), [])
+        shots.append({"t": t0 + 30, "clipped": False})
+        said = self.missed_step(shots, t0 + 30 + status.MISSED_WAIT_S + 1)
+        self.assertEqual(len(said), 1)
+        self.assertIn("missed the last 2 Square shots", said[0])
+        self.assertIn("sensitivity", said[0])
+        row = next(r for r in self.s.snapshot({}, {}, None)["rows"] if r["key"] == "missed")
+        self.assertEqual(row["level"], "warn")
+        # Said once, not again on the third.
+        shots.append({"t": t0 + 60, "clipped": False})
+        self.assertEqual(self.missed_step(shots, t0 + 60 + status.MISSED_WAIT_S + 1), [])
+        # Heard again: said once, the row goes.
+        shots.append({"t": t0 + 90, "clipped": True})
+        self.assertEqual(self.missed_step(shots, t0 + 91), ["The phones are hearing the shots again."])
+        self.assertFalse(any(r["key"] == "missed" for r in self.s.snapshot({}, {}, None)["rows"]))
+
+    def test_shots_with_swings_say_nothing(self):
+        t0 = self.start + 60
+        shots = [{"t": t0 + 30 * i, "clipped": True} for i in range(5)]
+        self.assertEqual(self.missed_step(shots, t0 + 400), [])
+
     def test_session_starts_when_recording_starts(self):
         self.assertEqual(self.s.session_since(), self.start)
         self.s.heartbeat("face", hb(recording=False))

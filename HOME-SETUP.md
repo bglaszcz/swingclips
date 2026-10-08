@@ -92,7 +92,10 @@ plan", "Plan steps", "Drill mode").
   the other one talks (0.9), so a voice can't start a recording.
 - **Sensitivity** (the strike trigger's slider, 0-100): higher triggers on quieter sounds; 100 by
   default. A clip needs a strike over the threshold and 2.5x louder than just before it, at most
-  one every 3 s.
+  one every 3 s. Soft shots (40-yard wedges, chips) are the quietest: keep it near 100 for them. When
+  Square reports 2 shots in a row that neither phone recorded, the speaking phone says so and the Ready
+  bar / Start page show **Missed shots** until a shot is recorded again (`status.Health.shots_step`; a
+  shot counts as missed 45 s after it came with no clip paired to it).
 - **Auto-start** (off by default): starts recording once its own camera check has held good for
   two stills, once per opening of the app.
 - **Install or update the app**: on the dev PC (README, "Dev PC"). `adb install -r` keeps the

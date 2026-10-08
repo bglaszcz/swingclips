@@ -77,6 +77,11 @@ STALE_S = 300.0
 SESSION_TAIL_S = 300.0
 # After the first swing, a problem is spoken once it's been on this many swings in a row.
 STREAK_TO_SAY = {"square": 2, "clip": 2, "camera": 3}
+# The other way round: Square shots the phones didn't record (soft strikes under the sound trigger:
+# 40-yard wedges, Oct 8). A shot counts as missed once it's this old with no clip paired to it (the
+# clip uploads within ~20 s of the strike; Square reports 6-16 s after it); said at this many in a row.
+MISSED_WAIT_S = 45.0
+MISSED_TO_SAY = 2
 
 # The camera check's codes (summary.js cameraCheck, impactCheck), as said.
 CODE_SAY = {
@@ -275,10 +280,42 @@ class Health:
         # Each swing checked, what was found, the streaks after it and what was said about it,
         # for the server's events log (app.py drains it: Status.drain_events).
         self.notes: list[dict] = []
+        # Square shots with no clip, in a row (shots_step).
+        self.shots_seen: set[float] = set()
+        self.missed = 0
+        self.missed_said = False
 
     def new_session(self, t: float) -> None:
         self.start, self.first, self.last = t, None, None
         self.checked, self.checked_times, self.streaks, self.active = set(), [], {}, set()
+        self.shots_seen, self.missed, self.missed_said = set(), 0, False
+
+    def shots_step(self, shots: list[dict], now: float) -> list[str]:
+        """Square shots of the session ({t: when it came, clipped: a clip is paired with it}), oldest
+        first: counts the ones in a row the phones didn't record; says so once at MISSED_TO_SAY, and once
+        when they're heard again. Returns what to say."""
+        if self.start is None:
+            return []
+        out = []
+        for s in sorted(shots, key=lambda s: s["t"]):
+            if s["t"] < self.start - PAIR_SLACK_S or s["t"] in self.shots_seen:
+                continue
+            if not s["clipped"] and now - s["t"] < MISSED_WAIT_S:
+                break  # its clip may still be on its way; later shots wait for it
+            self.shots_seen.add(s["t"])
+            if s["clipped"]:
+                if self.missed_said:
+                    out.append("The phones are hearing the shots again.")
+                self.missed, self.missed_said = 0, False
+                continue
+            self.missed += 1
+            if self.missed >= MISSED_TO_SAY and not self.missed_said:
+                self.missed_said = True
+                out.append(f"The phones missed the last {self.missed} Square shots. Soft shots can be too quiet "
+                           "to set them off: turn the sensitivity up with the plus button on each phone.")
+            self.notes.append({"kind": "missed", "shotAt": s["t"], "inRow": self.missed})
+            del self.notes[:-200]
+        return out
 
     def ready(self, s: dict, now: float, expect_dtl: bool) -> bool:
         """Whether a swing is as done as it's going to get: analyzed, both clips, the shot paired."""
@@ -777,14 +814,17 @@ class Status:
                 return self.health.start
             return None
 
-    def health_step(self, swings: list[dict]) -> list[str]:
-        """The session's swings (see Health.step); queues what to say for the speaking phone."""
+    def health_step(self, swings: list[dict], shots: list[dict] | None = None) -> list[str]:
+        """The session's swings (see Health.step) and Square shots (Health.shots_step); queues what to
+        say for the speaking phone."""
         now = self.clock()
         with self.lock:
             recording = self._recording(now)
             expect_dtl = "dtl" in recording
             relay = self.relay
             said = self.health.step(swings, now, expect_dtl, self.relay_ok(now), relay_name(relay and relay["hb"]))
+            if shots is not None:
+                said += self.health.shots_step(shots, now)
             said += self._phone_problems(now)
             to = self.speaker(now)
             for text in said:
@@ -843,6 +883,10 @@ class Status:
                 f = self.health.first
                 rows.append({"key": "first", "label": "First swing", "level": "ok" if f["ok"] else "warn",
                              "text": f["text"]})
+            if self.health.missed >= MISSED_TO_SAY:
+                rows.append({"key": "missed", "label": "Missed shots", "level": "warn",
+                             "text": f"{self.health.missed} Square shots in a row with no swing recorded: soft strikes "
+                                     "may be too quiet. Turn the sensitivity up on both phones (the + button)."})
             queued = pose.get("queued") or 0
             deep_left = pose.get("deepLeft") or 0
             if pose.get("held"):

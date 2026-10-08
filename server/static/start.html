@@ -388,6 +388,8 @@ function renderChecks(s) {
     : "not connected: open the Golf launcher on the laptop";
   const items = [phoneCheck("face", s), phoneCheck("dtl", s),
                  { level: square.level, title: square.label, text: square.text },
+                 // Square shots the phones didn't record (soft strikes under the sound trigger).
+                 ...s.rows.filter(r => r.key === "missed").map(r => ({ level: r.level, title: r.label, text: r.text })),
                  { level: server.level, title: "Server", text: server.text },
                  { level: agent.connected ? "ok" : "off", title: "Laptop launcher", text: agentText }];
   const c3 = calibStatus;

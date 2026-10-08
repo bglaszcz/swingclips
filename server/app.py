@@ -2487,7 +2487,11 @@ def status_tick() -> list[str]:
             rec = None
         s["record"] = rec
         s["quality"] = {s["angle"]: s["quality"], **({"dtl": partner["quality"]} if partner else {})}
-    said = session_status.health_step(swings_now)
+    # Square shots of the session, and whether a clip got each (listed_clips pairs them): soft
+    # strikes the phones didn't hear show up as shots with no clip.
+    paired = {(c.get("shot") or {}).get("received") for c in clips if c.get("shot")}
+    shots = [{"t": s["_t"], "clipped": s.get("received") in paired} for s in load_shots() if s["_t"] >= since - PAIR_SLACK_S]
+    said = session_status.health_step(swings_now, shots)
     for text in said:
         print(f"Status: {text}", flush=True)
     for e in session_status.drain_events():
