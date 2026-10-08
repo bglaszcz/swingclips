@@ -213,32 +213,69 @@
   }
 
   /**
+   * Plain-words description of horizontal strike position or difference (Square: + is heel, - is toe).
+   * e.g. "8 mm heel", "3 mm toe", "centre" (|h| < 1), or "" for null/non-finite.
+   */
+  function hWords(h, opts) {
+    if (h == null || !finite(h)) return "";
+    opts = opts || {};
+    const toeSign = (opts.toeSign === 1) ? 1 : SQUARE_TOE_SIGN;
+    const isHeel = toeSign === -1 ? h > 0 : h < 0;
+    const abs = Math.abs(h);
+    if (abs < 1.0) {
+      if (opts.diff) return "0 mm";
+      return opts.centered ? "centered" : "centre";
+    }
+    const dist = Math.round(abs);
+    const toward = opts.toward || opts.diff || opts.short === false;
+    const side = isHeel ? (toward ? "toward the heel" : "heel") : (toward ? "toward the toe" : "toe");
+    return `${dist} mm ${side}`;
+  }
+
+  /**
+   * Plain-words description of vertical strike position or difference (+ is high, - is low).
+   * e.g. "14 mm low", "5 mm high", "centre" (|v| < 1), or "" for null/non-finite.
+   */
+  function vWords(v, opts) {
+    if (v == null || !finite(v)) return "";
+    opts = opts || {};
+    const abs = Math.abs(v);
+    if (abs < 1.0) {
+      if (opts.diff) return "0 mm";
+      return opts.midFace ? "mid-face" : "centre";
+    }
+    const dist = Math.round(abs);
+    if (opts.diff || opts.toward) {
+      return v > 0 ? `${dist} mm higher on the face` : `${dist} mm lower on the face`;
+    }
+    const side = v > 0 ? "high" : "low";
+    return `${dist} mm ${side}`;
+  }
+
+  function hDiffWords(dh, opts) {
+    return hWords(dh, { diff: true, ...(opts || {}) });
+  }
+
+  function vDiffWords(dv, opts) {
+    return vWords(dv, { diff: true, ...(opts || {}) });
+  }
+
+  /**
    * Plain text description of a spot on the club face.
    * e.g. "3 mm toward the heel, 17 mm low"
    */
   function spotText(point, opts) {
     if (!point || !finite(point.h) || !finite(point.v)) return "";
     opts = opts || {};
-    const toeSign = (opts.toeSign === -1 || opts.toe === "-") ? -1 : 1;
-    const h = point.h * toeSign;
+    const toeSign = (opts.toeSign === 1) ? 1 : SQUARE_TOE_SIGN;
+    const h = opts.toeSign === 1 ? -point.h : point.h;
     const v = point.v;
 
     const parts = [];
-    if (Math.abs(h) < 1.0) {
-      parts.push("centered");
-    } else if (h > 0) {
-      parts.push(`${Math.round(Math.abs(h))} mm ${opts.short ? "toe" : "toward the toe"}`);
-    } else {
-      parts.push(`${Math.round(Math.abs(h))} mm ${opts.short ? "heel" : "toward the heel"}`);
-    }
-
-    if (Math.abs(v) < 1.0) {
-      parts.push("mid-face");
-    } else if (v > 0) {
-      parts.push(`${Math.round(Math.abs(v))} mm high`);
-    } else {
-      parts.push(`${Math.round(Math.abs(v))} mm low`);
-    }
+    const hPart = hWords(h, { toward: !opts.short, centered: true, toeSign: SQUARE_TOE_SIGN });
+    const vPart = vWords(v, { midFace: true });
+    if (hPart) parts.push(hPart);
+    if (vPart) parts.push(vPart);
     return parts.join(", ");
   }
 
@@ -272,7 +309,7 @@
       before = sessions.slice(0, -1);
     }
     opts = opts || {};
-    const toeSign = (opts.toeSign === -1 || opts.toe === "-") ? -1 : 1;
+    const toeSign = (opts.toeSign === 1) ? 1 : SQUARE_TOE_SIGN;
 
     const rec = toSummary(recent, opts);
     if (!rec || !rec.centre || (rec.n != null && rec.n < MIN_STRIKES_COMPARE)) {
@@ -315,22 +352,14 @@
     const vMoved = Math.abs(diffV) >= threshV;
 
     // Direction toward toe vs heel according to toeSign
-    const toeDelta = diffH * toeSign;
-
     let hText = null;
     if (hMoved) {
-      const dist = Math.round(Math.abs(diffH));
-      hText = toeDelta > 0
-        ? `${dist} mm toward the toe`
-        : `${dist} mm toward the heel`;
+      hText = hWords(diffH, { toward: true, toeSign });
     }
 
     let vText = null;
     if (vMoved) {
-      const dist = Math.round(Math.abs(diffV));
-      vText = diffV > 0
-        ? `${dist} mm higher on the face`
-        : `${dist} mm lower on the face`;
+      vText = vWords(diffV, { diff: true });
     }
 
     // Tighter: spread reduced by at least 2 mm or by 15%+
@@ -386,6 +415,10 @@
     trend,
     compare,
     spotText,
+    hWords,
+    vWords,
+    hDiffWords,
+    vDiffWords,
     getToeSign,
   };
 

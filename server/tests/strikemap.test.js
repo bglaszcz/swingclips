@@ -116,10 +116,73 @@ test("trend extracts valid sessions and skips sessions under 5 strikes", () => {
   assert.equal(tr[1].centre.h, 4);
 });
 
+test("hWords formats horizontal strike in plain words (+ is heel, rounding, centre, null -> '')", () => {
+  // + is heel, - is toe
+  assert.equal(StrikeMap.hWords(8), "8 mm heel");
+  assert.equal(StrikeMap.hWords(-3), "3 mm toe");
+  assert.equal(StrikeMap.hWords(1), "1 mm heel");
+  assert.equal(StrikeMap.hWords(-1), "1 mm toe");
+
+  // Rounding
+  assert.equal(StrikeMap.hWords(7.6), "8 mm heel");
+  assert.equal(StrikeMap.hWords(-2.4), "2 mm toe");
+
+  // |h| < 1 -> "centre"
+  assert.equal(StrikeMap.hWords(0), "centre");
+  assert.equal(StrikeMap.hWords(0.8), "centre");
+  assert.equal(StrikeMap.hWords(-0.9), "centre");
+
+  // null / non-finite -> ""
+  assert.equal(StrikeMap.hWords(null), "");
+  assert.equal(StrikeMap.hWords(undefined), "");
+  assert.equal(StrikeMap.hWords(NaN), "");
+
+  // Difference phrasing
+  assert.equal(StrikeMap.hWords(6, { diff: true }), "6 mm toward the heel");
+  assert.equal(StrikeMap.hWords(-6, { diff: true }), "6 mm toward the toe");
+  assert.equal(StrikeMap.hWords(0.3, { diff: true }), "0 mm");
+  assert.equal(StrikeMap.hDiffWords(6), "6 mm toward the heel");
+  assert.equal(StrikeMap.hDiffWords(-6), "6 mm toward the toe");
+});
+
+test("vWords formats vertical strike in plain words (+ is high, rounding, centre, null -> '')", () => {
+  // + is high, - is low
+  assert.equal(StrikeMap.vWords(14), "14 mm high");
+  assert.equal(StrikeMap.vWords(-14), "14 mm low");
+  assert.equal(StrikeMap.vWords(5), "5 mm high");
+  assert.equal(StrikeMap.vWords(-5), "5 mm low");
+
+  // Rounding
+  assert.equal(StrikeMap.vWords(5.2), "5 mm high");
+  assert.equal(StrikeMap.vWords(-13.8), "14 mm low");
+
+  // |v| < 1 -> "centre"
+  assert.equal(StrikeMap.vWords(0), "centre");
+  assert.equal(StrikeMap.vWords(0.4), "centre");
+  assert.equal(StrikeMap.vWords(-0.7), "centre");
+
+  // null / non-finite -> ""
+  assert.equal(StrikeMap.vWords(null), "");
+  assert.equal(StrikeMap.vWords(undefined), "");
+  assert.equal(StrikeMap.vWords(NaN), "");
+
+  // Difference phrasing
+  assert.equal(StrikeMap.vWords(5, { diff: true }), "5 mm higher on the face");
+  assert.equal(StrikeMap.vWords(-5, { diff: true }), "5 mm lower on the face");
+  assert.equal(StrikeMap.vWords(0.2, { diff: true }), "0 mm");
+  assert.equal(StrikeMap.vDiffWords(5), "5 mm higher on the face");
+  assert.equal(StrikeMap.vDiffWords(-5), "5 mm lower on the face");
+});
+
 test("spotText formats positions in plain words", () => {
+  assert.equal(StrikeMap.spotText({ h: 3, v: -17 }), "3 mm toward the heel, 17 mm low");
+  assert.equal(StrikeMap.spotText({ h: -6, v: 4 }), "6 mm toward the toe, 4 mm high");
+  assert.equal(StrikeMap.spotText({ h: 0, v: 0 }), "centered, mid-face");
+  assert.equal(StrikeMap.spotText({ h: 3, v: -17 }, { short: true }), "3 mm heel, 17 mm low");
+  assert.equal(StrikeMap.spotText({ h: -3, v: 12 }, { short: true }), "3 mm toe, 12 mm high");
+  assert.equal(StrikeMap.spotText({ h: 8, v: -14 }), "8 mm toward the heel, 14 mm low");
+  assert.equal(StrikeMap.spotText({ h: 8, v: -14 }, { short: true }), "8 mm heel, 14 mm low");
+  // Legacy toeSign: 1 compatibility
   assert.equal(StrikeMap.spotText({ h: -3, v: -17 }, { toeSign: 1 }), "3 mm toward the heel, 17 mm low");
   assert.equal(StrikeMap.spotText({ h: 6, v: 4 }, { toeSign: 1 }), "6 mm toward the toe, 4 mm high");
-  assert.equal(StrikeMap.spotText({ h: 0, v: 0 }), "centered, mid-face");
-  assert.equal(StrikeMap.spotText({ h: 3, v: -17 }, { toeSign: 1, short: true }), "3 mm toe, 17 mm low");
-  assert.equal(StrikeMap.spotText({ h: -3, v: 12 }, { toeSign: 1, short: true }), "3 mm heel, 12 mm high");
 });

@@ -113,7 +113,7 @@ test("lastShot: a pass shot", () => {
 
   // Extra reported-not-gated numbers present
   assert.deepEqual(res.extra, [
-    { label: "Strike", text: "-12 mm" },
+    { label: "Strike", text: "12 mm low" },
     { label: "Dynamic loft", text: "22.5°" },
     { label: "Carry", text: "156 yd" },
     { label: "Club path", text: "+1.2°" },
@@ -267,8 +267,12 @@ test("formatMetricText helper handles zero, negative, positive, units", () => {
   assert.equal(formatMetricText("attack", 1.0), "+1.0°");
   assert.equal(formatMetricText("attack", 0.0), "0.0°");
   assert.equal(formatMetricText("pelvisBall", 3.1), "+3.1 in");
-  assert.equal(formatMetricText("strikeV", -12), "-12 mm");
-  assert.equal(formatMetricText("strikeV", 4), "+4 mm");
+  assert.equal(formatMetricText("strikeV", -12), "12 mm low");
+  assert.equal(formatMetricText("strikeV", 4), "4 mm high");
+  assert.equal(formatMetricText("strikeV", 0), "centre");
+  assert.equal(formatMetricText("strikeH", 8), "8 mm heel");
+  assert.equal(formatMetricText("strikeH", -3), "3 mm toe");
+  assert.equal(formatMetricText("strikeH", 0), "centre");
   assert.equal(formatMetricText("carry", 160), "160 yd");
   assert.equal(formatMetricText("smash", 1.45), "1.45");
   assert.equal(formatMetricText("attack", null), "–");

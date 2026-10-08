@@ -70,7 +70,7 @@ test("fixture runs: 4 runs of lowpoint, newest first with medians and state", ()
   assert.equal(summaryLines.length, 1);
   assert.equal(
     summaryLines[0],
-    "Flush line, 4 runs: passed 3/10 → 7/10 (gate 7). Attack -1.4 → -2.8° (now inside the gate). Strike +4 → +1 mm (now inside the gate)."
+    "Flush line, 4 runs: passed 3/10 → 7/10 (gate 7). Attack -1.4 → -2.8° (now inside the gate). Strike 4 mm high → 1 mm high (now inside the gate)."
   );
 });
 

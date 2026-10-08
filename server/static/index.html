@@ -4107,6 +4107,9 @@ function makeStrikeTile(s, strike) {
     const cWords = clubWords(club);
     title += ` (your usual with the ${cWords}: ${usualText})`;
   }
+  if (Number.isFinite(strike.h) && Number.isFinite(strike.v)) {
+    title += ` (${strike.h > 0 ? "+" : ""}${Math.round(strike.h)} / ${strike.v > 0 ? "+" : ""}${Math.round(strike.v)} mm)`;
+  }
   el.title = title;
 
   const clubBox = SwingStrikeMap.boxOf(club);

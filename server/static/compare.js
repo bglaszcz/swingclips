@@ -877,9 +877,35 @@
         el("tr", {}, el("th", { textContent: "Launch monitor" }), el("th", { textContent: "This" }), el("th", { textContent: "Ref" }), el("th", { textContent: "This − ref" })));
       for (const f of shotRows) {
         const F = field(f.key), a = sa[f.key], b = sb[f.key];
-        const diff = a != null && b != null ? ((a - b > 0 ? "+" : "") + (a - b).toFixed(F.dec)).replace(/^[+-]?0(\.0+)?$/, "0") : "–";
-        table.append(el("tr", {}, el("td", { textContent: fieldName(F) }), el("td", { textContent: fmtField(F, a) }),
-          el("td", { textContent: fmtField(F, b) }), el("td", { className: "diff", textContent: diff })));
+        let aText = fmtField(F, a), bText = fmtField(F, b);
+        let diff = a != null && b != null ? ((a - b > 0 ? "+" : "") + (a - b).toFixed(F.dec)).replace(/^[+-]?0(\.0+)?$/, "0") : "–";
+        let aTitle = null, bTitle = null, diffTitle = null;
+        if (f.key === "strikeH" && typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.hWords) {
+          aText = a != null ? SwingStrikeMap.hWords(a) : "–";
+          bText = b != null ? SwingStrikeMap.hWords(b) : "–";
+          if (a != null) aTitle = `${a > 0 ? "+" : ""}${a.toFixed(1)} mm`;
+          if (b != null) bTitle = `${b > 0 ? "+" : ""}${b.toFixed(1)} mm`;
+          if (a != null && b != null) {
+            diff = SwingStrikeMap.hDiffWords(a - b);
+            diffTitle = `${a - b > 0 ? "+" : ""}${(a - b).toFixed(1)} mm`;
+          }
+        } else if (f.key === "strikeV" && typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.vWords) {
+          aText = a != null ? SwingStrikeMap.vWords(a) : "–";
+          bText = b != null ? SwingStrikeMap.vWords(b) : "–";
+          if (a != null) aTitle = `${a > 0 ? "+" : ""}${a.toFixed(1)} mm`;
+          if (b != null) bTitle = `${b > 0 ? "+" : ""}${b.toFixed(1)} mm`;
+          if (a != null && b != null) {
+            diff = SwingStrikeMap.vDiffWords(a - b);
+            diffTitle = `${a - b > 0 ? "+" : ""}${(a - b).toFixed(1)} mm`;
+          }
+        }
+        const tdA = el("td", { textContent: aText });
+        if (aTitle) tdA.title = aTitle;
+        const tdB = el("td", { textContent: bText });
+        if (bTitle) tdB.title = bTitle;
+        const tdDiff = el("td", { className: "diff", textContent: diff });
+        if (diffTitle) tdDiff.title = diffTitle;
+        table.append(el("tr", {}, el("td", { textContent: fieldName(F) }), tdA, tdB, tdDiff));
       }
       wrap.append(el("div", { className: "c-scroll" }, table));
     }

@@ -142,7 +142,7 @@
     ["attack", "Attack angle", "°", s => s.clubData.angleOfAttack], ["loft", "Dynamic loft", "°", s => s.clubData.loft],
     ["launch", "Launch", "°", s => s.ball.vla], ["direction", "Direction", "°", s => s.ball.hla],
     ["spinAxis", "Spin axis", "°", s => s.ball.spinAxis], ["spin", "Spin", "rpm", s => s.ball.totalSpin],
-    ["strikeH", "Strike toe/heel", "mm", s => s.clubData.faceImpactH],
+    ["strikeH", "Strike heel/toe", "mm", s => s.clubData.faceImpactH],
     ["strikeV", "Strike high/low", "mm", s => s.clubData.faceImpactV],
   ].map(([key, label, unit, get]) => ({ key, label, unit, get }));
 

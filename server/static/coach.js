@@ -341,7 +341,7 @@
   };
 
   const LABELS = { offline: "offline", path: "club path", face: "face to target", faceToPath: "face to path",
-                   attack: "attack angle", strikeH: "strike toe/heel", strikeV: "strike high/low" };
+                   attack: "attack angle", strikeH: "strike heel/toe", strikeV: "strike high/low" };
 
   /** The target for a result with a club: a number, or null. */
   function targetOf(result, club) {

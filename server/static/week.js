@@ -475,9 +475,17 @@
       }
 
       if (medStrike != null) {
-        let strikeStr = `strike ${medStrike > 0 ? "+" : ""}${Math.round(medStrike)} mm`;
+        const StrikeMap = (typeof root !== "undefined" && root.SwingStrikeMap) ||
+          (typeof globalThis !== "undefined" && globalThis.SwingStrikeMap) ||
+          (typeof window !== "undefined" && window.SwingStrikeMap) ||
+          (typeof require !== "undefined" && (() => { try { return require("./strikemap.js"); } catch { return null; } })());
+        let strikeVal = StrikeMap && StrikeMap.vWords ? StrikeMap.vWords(medStrike) : `${medStrike > 0 ? "+" : ""}${Math.round(medStrike)} mm`;
+        let strikeStr = `strike ${strikeVal}`;
         if (sigStrike) {
-          strikeStr += ` (${diffStrike > 0 ? "+" : ""}${Math.round(diffStrike)} mm vs last week)`;
+          const diffStr = diffStrike > 0
+            ? `${Math.round(Math.abs(diffStrike))} mm higher vs last week`
+            : `${Math.round(Math.abs(diffStrike))} mm lower vs last week`;
+          strikeStr += ` (${diffStr})`;
         }
         parts.push(strikeStr);
       }

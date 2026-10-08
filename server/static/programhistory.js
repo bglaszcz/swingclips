@@ -17,6 +17,12 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
+  const StrikeMap = (typeof globalThis !== "undefined" && globalThis.SwingStrikeMap) ||
+    (typeof window !== "undefined" && window.SwingStrikeMap) ||
+    (typeof require !== "undefined" && (() => {
+      try { return require("./strikemap.js"); } catch { return null; }
+    })());
+
   // ---- Named constants (thresholds for "about the same") ----
   // Sensor noise / launch monitor reading steps below which a metric change between runs
   // is considered "about the same".
@@ -57,7 +63,7 @@
     loft: { label: "Dynamic loft", unit: "°", decimals: 1, signed: false },
     faceToPath: { label: "Face to path", unit: "°", decimals: 1, signed: true },
     strikeV: { label: "Strike", unit: " mm", decimals: 0, signed: true },
-    strikeH: { label: "Strike toe/heel", unit: " mm", decimals: 0, signed: true },
+    strikeH: { label: "Strike heel/toe", unit: " mm", decimals: 0, signed: true },
     clubSpeed: { label: "Club speed", unit: " mph", decimals: 0, signed: false },
     carry: { label: "Carry", unit: " yd", decimals: 0, signed: false },
     // 3D angles and timings (server/programs.py BODY3D_KEYS)
@@ -349,11 +355,23 @@
     const checkParts = [];
     for (const c of t.checks || []) {
       if (c.firstMedian == null || c.lastMedian == null) continue;
-      const v1Str = formatNum(c.firstMedian, c.decimals, c.signed);
-      const v2Str = formatNum(c.lastMedian, c.decimals, c.signed);
+      let v1Str, v2Str, unitStr;
+      if (c.key === "strikeH" && StrikeMap && StrikeMap.hWords) {
+        v1Str = StrikeMap.hWords(c.firstMedian);
+        v2Str = StrikeMap.hWords(c.lastMedian);
+        unitStr = "";
+      } else if (c.key === "strikeV" && StrikeMap && StrikeMap.vWords) {
+        v1Str = StrikeMap.vWords(c.firstMedian);
+        v2Str = StrikeMap.vWords(c.lastMedian);
+        unitStr = "";
+      } else {
+        v1Str = formatNum(c.firstMedian, c.decimals, c.signed);
+        v2Str = formatNum(c.lastMedian, c.decimals, c.signed);
+        unitStr = c.unit;
+      }
       const target = targetPhrase(c.check, c.movement);
       const d3Part = c.d3Note ? ` ${c.d3Note}` : "";
-      checkParts.push(`${c.name} ${v1Str} → ${v2Str}${c.unit} (${target})${d3Part}.`);
+      checkParts.push(`${c.name} ${v1Str} → ${v2Str}${unitStr} (${target})${d3Part}.`);
     }
 
     const prefix = `${t.blockName}, ${t.runs.length} runs:`;

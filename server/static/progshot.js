@@ -15,13 +15,19 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
+  const StrikeMap = (typeof globalThis !== "undefined" && globalThis.SwingStrikeMap) ||
+    (typeof window !== "undefined" && window.SwingStrikeMap) ||
+    (typeof require !== "undefined" && (() => {
+      try { return require("./strikemap.js"); } catch { return null; }
+    })());
+
   const CHECK_LABELS = {
     attack: "Attack",
     faceToPath: "Face to path",
     pelvisOpen: "Hips open",
     pelvisBall: "Hips ahead of ball",
     strikeV: "Strike",
-    strikeH: "Strike toe/heel",
+    strikeH: "Strike heel/toe",
     loft: "Dynamic loft",
     clubSpeed: "Club speed",
     carry: "Carry",
@@ -116,6 +122,12 @@
     }
     if (typeof val === "boolean") {
       return val ? "arm after pelvis" : "arm before pelvis";
+    }
+    if (key === "strikeH") {
+      return StrikeMap && StrikeMap.hWords ? StrikeMap.hWords(val) : (val > 0 ? `${Math.round(val)} mm heel` : (val < 0 ? `${Math.round(Math.abs(val))} mm toe` : "centre"));
+    }
+    if (key === "strikeV") {
+      return StrikeMap && StrikeMap.vWords ? StrikeMap.vWords(val) : (val > 0 ? `${Math.round(val)} mm high` : (val < 0 ? `${Math.round(Math.abs(val))} mm low` : "centre"));
     }
     const def = METRIC_DEFS[key] || { unit: "", dec: 1, signed: false };
     const d = def.dec;

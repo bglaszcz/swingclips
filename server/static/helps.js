@@ -50,7 +50,7 @@
     { key: "loft", label: "Dynamic loft", unit: "°", more: "more", less: "less" },
     { key: "launch", label: "Launch", unit: "°", more: "higher", less: "lower" },
     { key: "spin", label: "Spin", unit: "rpm", more: "more", less: "less" },
-    { key: "strikeH", label: "Strike toe/heel", unit: "mm", more: "higher", less: "lower" },
+    { key: "strikeH", label: "Strike heel/toe", unit: "mm", more: "toward the heel", less: "toward the toe" },
     { key: "strikeV", label: "Strike high/low", unit: "mm", more: "higher on the face", less: "lower on the face" },
   ];
 

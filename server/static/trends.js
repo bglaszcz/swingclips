@@ -53,6 +53,12 @@ const BETTER = {
 function fmtField(f, v) {
   if (v == null) return "–";
   if (f.unit === ":1") return `${v.toFixed(1)} : 1`;
+  if (f.key === "strikeH" && typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.hWords) {
+    return SwingStrikeMap.hWords(v);
+  }
+  if (f.key === "strikeV" && typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.vWords) {
+    return SwingStrikeMap.vWords(v);
+  }
   const n = v.toFixed(f.dec);
   const plain = f.shot || f.unit === "s" || f.key === "order" || v <= 0 || Number(n) === 0;
   return (plain ? n : "+" + n).replace(/^-0(\.0+)?$/, "0");
@@ -792,7 +798,12 @@ function renderTrendTable(rows, fx, fy) {
     }
     for (const f of cols) {
       const td = document.createElement("td");
-      if (f.shot) td.textContent = fmtField(f, r[f.key]);
+      if (f.shot) {
+        td.textContent = fmtField(f, r[f.key]);
+        if ((f.key === "strikeH" || f.key === "strikeV") && r[f.key] != null) {
+          td.title = `${(r[f.key] > 0 ? "+" : "") + r[f.key].toFixed(1)} mm`;
+        }
+      }
       else if (!r.body) td.textContent = swingPending(r.c) ? "…" : "–";
       else trustCell(td, fmtField(f, r.shown[f.key]), r.trust[f.key]);
       tr.append(td);
