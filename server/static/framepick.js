@@ -84,7 +84,8 @@
           const targetName = angle === "dtl"
             ? (c.angle === "dtl" ? c.name : c.partner)
             : (c.angle === "face" ? c.name : c.partner);
-          if (targetName && isLabeled(targetName, ev)) continue;
+          if (!targetName) continue;
+          if (isLabeled(targetName, ev)) continue;
           const u = usual[angle + key] || 0;
           const ms = raw - u;
           if (Math.abs(ms) >= minMs && (!best || Math.abs(ms) > Math.abs(best.ms)) && a.t && a.t[key] != null)

@@ -60,6 +60,23 @@ test("shotsFromRun: extracts ordered ball shots with DTL partner, skips taps and
   assert.equal(shots[3].wrist, null);
 });
 
+test("shotsFromRun: includes lone DTL shots without partner when judging DTL", () => {
+  const run = {
+    started: 1728250000,
+    reps: [
+      { t: 10, block: "b1", kind: "shot", clip: "swing_dtl_solo.mp4", partner: null, club: "7I", gate: true },
+      { t: 20, block: "b1", kind: "shot", clip: "swing_face_solo.mp4", partner: null, club: "7I", gate: true },
+    ]
+  };
+  const dtlShots = shotsFromRun(run, null, "dtl");
+  assert.equal(dtlShots.length, 1);
+  assert.equal(dtlShots[0].clip, "swing_dtl_solo.mp4");
+
+  const faceShots = shotsFromRun(run, null, "face");
+  assert.equal(faceShots.length, 1);
+  assert.equal(faceShots[0].clip, "swing_face_solo.mp4");
+});
+
 test("shotsFromRun: handles empty run or no ball reps", () => {
   assert.deepEqual(shotsFromRun(null), []);
   assert.deepEqual(shotsFromRun({}), []);

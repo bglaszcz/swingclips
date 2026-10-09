@@ -5,7 +5,7 @@
 // Uses the page's globals: clips, open, clubName, fmtWhen, sessionsOf, sessionTitle, showView,
 // renderList, closeTrendView (trends.js), shutterGroup (shutter.js) and window.Labels (labels.js).
 
-const labelBox = document.getElementById("labelview");
+const labelBox = typeof document !== "undefined" ? document.getElementById("labelview") : null;
 // The goals: key moments on both angles of 20 swings, and points on 10 of them.
 const GOAL_MOMENTS = 20, GOAL_POINTS = 10;
 // Frames with points for an angle to count as done (labeling mode suggests about a dozen).
@@ -34,24 +34,40 @@ function lightOf(c) {
 }
 
 /** The labeled swings: pass-1 label rows paired by swing, keyed by the face-on (main) clip. */
-function labeledSwings(rows) {
-  const byClip = new Map(rows.filter(r => r.pass === 1).map(r => [r.clip, r]));
+function labeledSwings(rows, clipsList = (typeof clips !== "undefined" ? clips : [])) {
+  const byClip = new Map((rows || []).filter(r => r.pass === 1).map(r => [r.clip, r]));
   const swings = new Map();
   for (const r of byClip.values()) {
-    const main = r.angle === "dtl" && r.partner ? r.partner : r.clip;
-    if (swings.has(main)) continue;
-    const c = clips.find(x => x.name === main) || clips.find(x => x.name === r.clip);
-    const faceRow = byClip.get(main) || (r.angle !== "dtl" ? r : null);
-    const dtlName = r.angle === "dtl" ? r.clip : r.partner;
+    const c = (clipsList || []).find(x => x.name === r.clip) || null;
+    const isDtl = r.angle === "dtl";
+    const partnerName = r.partner || (c && c.partner) || null;
+    const faceName = !isDtl ? r.clip : partnerName;
+    const dtlName = isDtl ? r.clip : partnerName;
+    const main = faceName || dtlName;
+    if (!main || swings.has(main)) continue;
+
+    const faceRow = faceName ? byClip.get(faceName) || null : null;
     const dtlRow = dtlName ? byClip.get(dtlName) || null : null;
-    const angles = [faceRow, dtlRow].filter(Boolean);
-    const expected = dtlName ? 2 : 1;
+    const validFaceRow = faceRow && faceRow.angle !== "dtl" ? faceRow : null;
+    const validDtlRow = dtlRow && dtlRow.angle !== "face" ? dtlRow : null;
+
+    const hasFace = !!faceName;
+    const hasDtl = !!dtlName;
+    const bothExist = hasFace && hasDtl;
+
+    const angles = [validFaceRow, validDtlRow].filter(Boolean);
+    const swingClip = (clipsList || []).find(x => x.name === main) || c;
     swings.set(main, {
-      main, c, face: faceRow, dtl: dtlRow, hasDtl: !!dtlName,
-      moments: angles.length === expected && angles.every(a => a.events === 8),
-      points: angles.length === expected && angles.every(a => a.pointFrames >= POINT_FRAMES),
-      issues: angles.flatMap(a => a.issues.map(i => ({ angle: a.angle, text: i }))),
-      updated: angles.map(a => a.updated || "").sort().pop(),
+      main,
+      c: swingClip,
+      face: validFaceRow,
+      dtl: validDtlRow,
+      hasFace,
+      hasDtl,
+      moments: bothExist && !!validFaceRow && !!validDtlRow && validFaceRow.events === 8 && validDtlRow.events === 8,
+      points: bothExist && !!validFaceRow && !!validDtlRow && validFaceRow.pointFrames >= POINT_FRAMES && validDtlRow.pointFrames >= POINT_FRAMES,
+      issues: angles.flatMap(a => (a.issues || []).map(i => ({ angle: a.angle, text: i }))),
+      updated: angles.map(a => a.updated || "").sort().pop() || "",
     });
   }
   return [...swings.values()].sort((a, b) => (b.c ? b.c.recorded : "").localeCompare(a.c ? a.c.recorded : ""));
@@ -175,7 +191,8 @@ function nightDisagreements(swings) {
         const targetName = angle === "dtl"
           ? (c.angle === "dtl" ? c.name : c.partner)
           : (c.angle === "face" ? c.name : c.partner);
-        if (targetName && isLabeled(targetName, ev)) continue;
+        if (!targetName) continue;
+        if (isLabeled(targetName, ev)) continue;
         const ms = raw - usual[angle + key];
         if (Math.abs(ms) >= NIGHT_MIN_MS && (!best || Math.abs(ms) > Math.abs(best.ms)) && a.t[key] != null)
           best = { c, angle, key, ms, t: a.t[key] };
@@ -437,7 +454,7 @@ function renderLabelView() {
       check.append(lvEl("span", { className: "lv-muted", textContent: "moments done" }));
     }
     tr.append(lvEl("td", { textContent: when + (s.c ? "" : " (in the trash)") }), lvEl("td", { textContent: club }),
-              angleCell(s.face, true), angleCell(s.dtl, s.hasDtl), check);
+              angleCell(s.face, s.hasFace), angleCell(s.dtl, s.hasDtl), check);
     body.append(tr);
   }
   if (!swings.length) body.append(lvEl("tr", {}, lvEl("td", { colSpan: 5, textContent: "Nothing labeled yet: open a swing and press L." })));
@@ -494,5 +511,13 @@ function labelViewTick() {
   loadLabelView();
 }
 
-document.getElementById("labels-btn").onclick = () => labelBox.hidden ? openLabelView() : closeTrendView();
-document.getElementById("lv-close").onclick = () => closeTrendView();
+if (typeof document !== "undefined") {
+  const btn = document.getElementById("labels-btn");
+  if (btn) btn.onclick = () => labelBox && labelBox.hidden ? openLabelView() : closeTrendView();
+  const close = document.getElementById("lv-close");
+  if (close) close.onclick = () => closeTrendView();
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { labeledSwings, POINT_FRAMES, GOAL_MOMENTS, GOAL_POINTS };
+}

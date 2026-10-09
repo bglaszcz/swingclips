@@ -176,6 +176,22 @@ test("filterDisagreements: drops only labeled (clip, position) pairs and skips p
   assert.equal(rows.length, 0);
 });
 
+test("filterDisagreements: skips disagreements on camera angles that do not exist", () => {
+  const clips = [
+    { name: "swing_solo_face.mp4", angle: "face", partner: null, excluded: false },
+  ];
+  const nightSwings = {
+    "swing_solo_face.mp4": {
+      dtl: {
+        ms: { p7: 25.0 },
+        t: { p7: 2.0 },
+      },
+    },
+  };
+  const rows = filterDisagreements(nightSwings, clips, []);
+  assert.equal(rows.length, 0);
+});
+
 test("nightBroken: detects inverted or equal night pass timestamps in swing order", () => {
   assert.equal(nightBroken(null), false);
   assert.equal(nightBroken({}), false);

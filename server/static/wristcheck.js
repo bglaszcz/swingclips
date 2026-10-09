@@ -14,6 +14,23 @@
    * @param {Object} [program] Program definition with block names
    * @returns {Array<Object>} List of shots to display
    */
+  function clipForAngle(r, targetAngle) {
+    if (!r) return null;
+    const isDtl = name => typeof name === "string" && name.includes("_dtl_");
+    const isFace = name => typeof name === "string" && (name.includes("_face_") || !name.includes("_dtl_"));
+    if (targetAngle === "dtl") {
+      if (r.partner && isDtl(r.partner)) return r.partner;
+      if (r.clip && isDtl(r.clip)) return r.clip;
+      return null;
+    }
+    if (targetAngle === "face") {
+      if (r.clip && isFace(r.clip)) return r.clip;
+      if (r.partner && isFace(r.partner)) return r.partner;
+      return null;
+    }
+    return r.clip || null;
+  }
+
   function shotsFromRun(run, program, angle = "dtl") {
     if (!run || !Array.isArray(run.reps)) return [];
     const reps = [...run.reps].sort((a, b) => (a.t || 0) - (b.t || 0));
@@ -32,7 +49,8 @@
     let shotIndex = 1;
     for (const r of reps) {
       if (r.kind !== "shot" && r.kind !== "ball") continue;
-      if (angle === "dtl" && !r.partner) continue;   // face-on: every shot has its own clip
+      const targetClip = clipForAngle(r, angle);
+      if (!targetClip) continue;
 
       const wristCall = wristMap[r.clip] || (r.partner ? wristMap[r.partner] : null) || null;
       let verdict = "";
@@ -45,6 +63,7 @@
         index: shotIndex++,
         clip: r.clip,
         partner: r.partner,
+        targetClip,
         blockId: r.block,
         block: blockMap[r.block] || r.block || "",
         club: r.club || "",
@@ -213,7 +232,7 @@
     } else if (run.started) {
       dateStr = new Date(run.started * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
     }
-    const ballCount = (run.reps || []).filter(r => (r.kind === "shot" || r.kind === "ball") && r.partner).length;
+    const ballCount = (run.reps || []).filter(r => (r.kind === "shot" || r.kind === "ball") && clipForAngle(r, angle)).length;
     return `${name} – ${dateStr} (${ballCount} shots)`;
   }
 
@@ -350,7 +369,7 @@
 
   async function renderShotStill(shot) {
     const canvas = document.getElementById(`wrist-canvas-${shot.index}`);
-    const clip = angle === "dtl" ? shot.partner : shot.clip;
+    const clip = shot.targetClip || clipForAngle(shot, angle);
     if (!canvas || !clip) return;
 
     let pose = poseCache[clip];
