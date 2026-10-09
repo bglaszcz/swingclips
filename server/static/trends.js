@@ -1541,131 +1541,29 @@ function renderStrike(sessions, club, all) {
   const W_mm = clubBox.width;
   const H_mm = clubBox.height;
 
-  // 1. Club-face SVG outline with heat map
-  const faceSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  faceSvg.id = "p-strike-face";
-  faceSvg.setAttribute("role", "img");
-  faceSvg.setAttribute("aria-label", `Strike heat map for the ${clubWords(club)}`);
-  const padX = isWood ? 16 : 14;
-  const padY = isWood ? 8 : 7;
-  const vbMinX = -(W_mm / 2 + padX);
-  const vbMinY = -(H_mm / 2 + padY);
-  const vbW = (W_mm + padX * 2);
-  const vbH = (H_mm + padY * 2);
-  faceSvg.setAttribute("viewBox", `${vbMinX} ${vbMinY} ${vbW} ${vbH}`);
-  faceSvg.style.cssText = "display: block; width: 100%; max-width: 420px; height: auto; margin: 0 auto; overflow: visible;";
-
-  // Club face outline group (flip horizontally if toeSign === -1)
-  const gOutline = svgEl("g", { transform: toeSign === -1 ? "scale(-1, 1)" : "" }, faceSvg);
-
-  const facePathD = isWood
-    ? "M -38 -18 Q 0 -25 38 -18 Q 46 -10 45 0 Q 45 10 38 18 Q 0 25 -38 18 Q -45 10 -45 0 Q -46 -10 -40 -18 L -43 -23 L -46 -21 L -41 -16 Z"
-    : "M -28 -14 L -33 -23 L -39 -20 L -33 -11 Q -35 5 -28 17 Q 0 20 26 18 Q 35 15 36 2 Q 37 -12 30 -17 Q 0 -17 -28 -14 Z";
-
-  svgEl("path", {
-    d: facePathD,
-    fill: "var(--panel-2)",
-    stroke: "var(--line-strong)",
-    "stroke-width": "1.2",
-  }, gOutline);
-
-  const grooveX1 = isWood ? -26 : -22;
-  const grooveX2 = isWood ? 26 : 22;
-  const grooveYs = isWood ? [-14, -7, 0, 7, 14] : [-12, -8, -4, 0, 4, 8, 12];
-  for (const gy of grooveYs) {
-    svgEl("line", {
-      x1: grooveX1, y1: gy, x2: grooveX2, y2: gy,
-      stroke: "var(--line-strong)", "stroke-width": "0.6", opacity: "0.4",
-    }, gOutline);
-  }
-
-  // Face centre (0, 0)
-  const gCentre = svgEl("g", {}, faceSvg);
-  svgEl("line", { x1: -4, y1: 0, x2: 4, y2: 0, stroke: "var(--muted)", "stroke-width": "0.8", "stroke-dasharray": "1,1" }, gCentre);
-  svgEl("line", { x1: 0, y1: -4, x2: 0, y2: 4, stroke: "var(--muted)", "stroke-width": "0.8", "stroke-dasharray": "1,1" }, gCentre);
-  svgEl("circle", { cx: 0, cy: 0, r: 1.5, fill: "none", stroke: "var(--muted)", "stroke-width": "0.8" }, gCentre);
-
-  // Heat map
+  // 1. The club face (strikemap.js faceSvg): the heat of every strike in the period, the latest
+  // session's as small dots, its last shot as the big dot, the usual spot as a dashed ring.
   const gridRes = SwingStrikeMap.grid(allStrikes, { club });
-  const { cells, bins } = gridRes;
-  const maxDensity = Math.max(0, ...cells.flatMap(row => [...row]));
-  const gHeat = svgEl("g", {}, faceSvg);
-  if (maxDensity > 0) {
-    for (let r = 0; r < cells.length; r++) {
-      for (let c = 0; c < cells[r].length; c++) {
-        const val = cells[r][c];
-        if (val > 0.05 * maxDensity) {
-          const cellX = bins.minH + c * bins.stepH;
-          const cellY = -(bins.minV + (r + 1) * bins.stepV);
-          const alpha = Math.min(0.75, (val / maxDensity) * 0.7 + 0.1);
-          svgEl("rect", {
-            x: cellX.toFixed(2),
-            y: cellY.toFixed(2),
-            width: bins.stepH.toFixed(2),
-            height: bins.stepV.toFixed(2),
-            fill: "var(--accent)",
-            "fill-opacity": alpha.toFixed(3),
-            rx: "1",
-          }, gHeat);
-        }
-      }
-    }
-  }
-
-  // Latest session shots
   const latestSession = sessions[sessions.length - 1];
   const latestStrikes = (latestSession?.rows || []).map(SwingStrikeMap.extractStrike).filter(Boolean);
-  const gDots = svgEl("g", {}, faceSvg);
-  for (const p of latestStrikes) {
-    const dot = svgEl("circle", {
-      cx: p.h.toFixed(2),
-      cy: (-p.v).toFixed(2),
-      r: "2.2",
-      class: "p-latest",
-    }, gDots);
-    const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-    title.textContent = `Latest: ${SwingStrikeMap.spotText(p, { toeSign })}`;
-    dot.append(title);
-  }
+  const faceSvg = SwingStrikeMap.faceSvg({
+    club, shots: allStrikes, dots: latestStrikes.slice(0, -1), latest: latestStrikes[latestStrikes.length - 1],
+    usual: gridRes.centre, grid: true, title: p => SwingStrikeMap.spotText(p, { toeSign }),
+  });
+  faceSvg.id = "p-strike-face";
+  faceSvg.setAttribute("aria-label", `Strike heat map for the ${clubWords(club)}: where ${n} strikes landed on the face`);
 
-  // Toe / Heel / High / Low labels
-  const toeLabelSide = toeSign === 1 ? "right" : "left";
-  const toeX = toeLabelSide === "right" ? (W_mm / 2 + 2) : -(W_mm / 2 + 2);
-  const heelX = toeLabelSide === "right" ? -(W_mm / 2 + 2) : (W_mm / 2 + 2);
-  const toeAnchor = toeLabelSide === "right" ? "start" : "end";
-  const heelAnchor = toeLabelSide === "right" ? "end" : "start";
-
-  const tToe = svgEl("text", {
-    x: toeX, y: 0, "text-anchor": toeAnchor, "dominant-baseline": "middle",
-    style: "font-size: 3.2px; fill: var(--muted); font-weight: 500;",
-  }, faceSvg);
-  tToe.textContent = "Toe";
-
-  const tHeel = svgEl("text", {
-    x: heelX, y: 0, "text-anchor": heelAnchor, "dominant-baseline": "middle",
-    style: "font-size: 3.2px; fill: var(--muted); font-weight: 500;",
-  }, faceSvg);
-  tHeel.textContent = "Heel";
-
-  const tHigh = svgEl("text", {
-    x: 0, y: -(H_mm / 2 + 2), "text-anchor": "middle",
-    style: "font-size: 3.2px; fill: var(--muted); font-weight: 500;",
-  }, faceSvg);
-  tHigh.textContent = "High";
-
-  const tLow = svgEl("text", {
-    x: 0, y: (H_mm / 2 + 4.5), "text-anchor": "middle",
-    style: "font-size: 3.2px; fill: var(--muted); font-weight: 500;",
-  }, faceSvg);
-  tLow.textContent = "Low";
-
-  // Legend
   const legend = document.createElement("div");
   legend.className = "p-legend";
   legend.style.cssText = "justify-content: center; margin-top: 4px;";
-  legend.innerHTML = `<span><i class="p-key" style="background: var(--accent); opacity: 0.7;"></i>All shots (${n})</span>` +
-    `<span><i class="p-key p-latest"></i>Latest session (${latestStrikes.length})</span>` +
-    `<span><i style="display:inline-block; width:8px; height:8px; border:1px dashed var(--muted); border-radius:50%;"></i>Centre</span>`;
+  legend.innerHTML = `<span><i class="p-key" style="background: linear-gradient(90deg, rgb(70,205,70), rgb(245,225,40), rgb(230,45,35));"></i>All strikes (${n}): red where most land</span>` +
+    `<span><i class="p-key" style="background:#1d6fd8; border-radius:50%;"></i>Latest session (${latestStrikes.length}), big dot the last shot</span>` +
+    `<span><i style="display:inline-block; width:8px; height:8px; border:1px dashed var(--muted); border-radius:50%;"></i>Your usual spot</span>`;
+  // Square's height reads about 14 mm low on every club since Sep 23 (programs.py calibration): strikes
+  // below the sole are Square's numbers, not a miss off the bottom of the club.
+  const belowSole = latestStrikes.concat(allStrikes).some(p => p.v < -20);
+  const offNote = belowSole ? Object.assign(document.createElement("div"), { className: "note",
+    textContent: "Strikes below the bottom of the club are Square's numbers as reported: its height has read about 14 mm low on every club since Sep 23, so the whole picture may sit that much too low." }) : null;
 
   // 2. Compare line + Usual centre
   const beforeSessions = sessions.slice(0, -1);
@@ -1784,7 +1682,7 @@ function renderStrike(sessions, club, all) {
     trendBox.append(note);
   }
 
-  box.append(faceSvg, legend, cmpLine);
+  box.append(faceSvg, legend, ...(offNote ? [offNote] : []), cmpLine);
   if (coachEl) box.append(coachEl);
   box.append(trendBox);
 }

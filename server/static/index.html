@@ -640,6 +640,11 @@
   .p-links { display: flex; flex-direction: column; gap: 8px; }
   #p-focus-body { display: flex; flex-direction: column; gap: 6px; font-size: 13px; margin-top: 6px; }
   #p-focus-body .p-why-sub, #p-working .p-why-sub, #p-focus-others .p-why-sub { margin-top: 6px; }
+  /* The strike face (strikemap.js faceSvg): the inch grid and its labels. */
+  #p-strike-face { display: block; width: 100%; max-width: 560px; height: auto; margin: 0 auto; }
+  svg .sf-grid line { stroke: var(--line); stroke-width: 0.4; }
+  svg .sf-label text { fill: var(--muted); font-size: 4.2px; }
+  svg .sf-label .sf-word { font-weight: 600; }
   #p-focus .p-evid { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   #p-focus-others { display: flex; flex-direction: column; gap: 8px; font-size: 13px; margin: 6px 0; }
   #p-focus-others .p-alt-name { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -4101,8 +4106,6 @@ function makeStrikeTile(s, strike) {
   el.className = "metric metric-strike";
 
   const club = s.club || "";
-  const group = typeof SwingGoodShots !== "undefined" ? SwingGoodShots.groupOf(club) : "irons";
-  const isWood = group === "woods";
   const toeSign = typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.getToeSign ? SwingStrikeMap.getToeSign() : -1;
 
   // Usual strike centre from goodShotData baseline
@@ -4125,42 +4128,13 @@ function makeStrikeTile(s, strike) {
   }
   el.title = title;
 
-  const clubBox = SwingStrikeMap.boxOf(club);
-  const W_mm = clubBox.width;
-  const H_mm = clubBox.height;
-  const padX = isWood ? 8 : 7;
-  const padY = isWood ? 7 : 6;
-  const vbMinX = -(W_mm / 2 + padX);
-  const vbMinY = -(H_mm / 2 + padY);
-  const vbW = W_mm + padX * 2;
-  const vbH = H_mm + padY * 2;
-
-  const facePathD = isWood
-    ? "M -38 -18 Q 0 -25 38 -18 Q 46 -10 45 0 Q 45 10 38 18 Q 0 25 -38 18 Q -45 10 -45 0 Q -46 -10 -40 -18 L -43 -23 L -46 -21 L -41 -16 Z"
-    : "M -28 -14 L -33 -23 L -39 -20 L -33 -11 Q -35 5 -28 17 Q 0 20 26 18 Q 35 15 36 2 Q 37 -12 30 -17 Q 0 -17 -28 -14 Z";
-
-  const flip = toeSign === -1 ? ' transform="scale(-1, 1)"' : '';
-  const usualDot = usual
-    ? `<circle cx="${usual.h.toFixed(1)}" cy="${(-usual.v).toFixed(1)}" r="2.2" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1.5,1.5" opacity="0.8" />`
-    : '';
-  const strikeDot = `<circle cx="${strike.h.toFixed(1)}" cy="${(-strike.v).toFixed(1)}" r="2.8" fill="var(--accent)" stroke="var(--panel)" stroke-width="1.2" />`;
-
-  el.innerHTML = `
-    <div style="height: 40px; display: flex; align-items: center; justify-content: center; margin-bottom: 2px;">
-      <svg viewBox="${vbMinX} ${vbMinY} ${vbW} ${vbH}" style="height: 36px; width: auto; max-width: 64px; overflow: visible;">
-        <g${flip}>
-          <path d="${facePathD}" fill="var(--panel-2)" stroke="var(--line-strong)" stroke-width="1.2" />
-        </g>
-        <g opacity="0.4">
-          <line x1="-3" y1="0" x2="3" y2="0" stroke="var(--muted)" stroke-width="0.8" />
-          <line x1="0" y1="-3" x2="0" y2="3" stroke="var(--muted)" stroke-width="0.8" />
-        </g>
-        ${usualDot}
-        ${strikeDot}
-      </svg>
-    </div>
-    <span>Strike</span>
-  `;
+  // The face (strikemap.js faceSvg): this strike as the dot, the usual spot as a dashed ring.
+  const face = SwingStrikeMap.faceSvg({ club, latest: strike, usual, tile: true });
+  face.style.cssText = "height: 40px; width: auto; max-width: 76px;";
+  const pic = document.createElement("div");
+  pic.style.cssText = "height: 40px; display: flex; align-items: center; justify-content: center; margin-bottom: 2px;";
+  pic.append(face);
+  el.append(pic, Object.assign(document.createElement("span"), { textContent: "Strike" }));
   return el;
 }
 

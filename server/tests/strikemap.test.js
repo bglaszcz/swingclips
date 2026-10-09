@@ -186,3 +186,24 @@ test("spotText formats positions in plain words", () => {
   assert.equal(StrikeMap.spotText({ h: -3, v: -17 }, { toeSign: 1 }), "3 mm toward the heel, 17 mm low");
   assert.equal(StrikeMap.spotText({ h: 6, v: 4 }, { toeSign: 1 }), "6 mm toward the toe, 4 mm high");
 });
+
+test("density: busiest where the strikes cluster, normalised to 1, nothing far away", () => {
+  const S = require("../static/strikemap.js");
+  const pts = [{ x: 0, v: -10 }, { x: 1, v: -10 }, { x: -1, v: -11 }, { x: 20, v: 10 }];
+  const d = S.density(pts, { extent: [-30, 30, -20, 20], step: 1, sigma: 5 });
+  const at = (x, v) => d.d[(v - d.v0) * d.nx + (x - d.x0)];
+  assert.equal(Math.max(...d.d), 1);
+  assert.ok(at(0, -10) > 0.9);
+  assert.ok(at(20, 10) < at(0, -10));
+  assert.ok(at(-30, 20) < 0.001);
+});
+
+test("heatColor: clear below the floor, green, yellow, red at the busiest", () => {
+  const S = require("../static/strikemap.js");
+  assert.equal(S.heatColor(0.02)[3], 0);
+  const low = S.heatColor(0.2), mid = S.heatColor(0.55), top = S.heatColor(1);
+  assert.ok(low[1] > low[0]);                 // green
+  assert.ok(mid[0] > 200 && mid[1] > 200);    // yellow
+  assert.ok(top[0] > 200 && top[1] < 80);     // red
+  assert.ok(top[3] > low[3]);
+});

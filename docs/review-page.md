@@ -156,8 +156,14 @@ What the server works out for each swing and what each part of the review page s
   the wedge matrix and handicap are folded cards underneath.
 - **Where on the face** (Progress card, folded under **Where on the face**, `data-fold="strike"`; `static/strikemap.js`):
   heat map of impact locations on the club face (from Square's `faceImpactH` and `faceImpactV`) for the chosen club and period.
-  Shows an SVG club-face outline (iron or wood/driver shape, with toe on the side the setting indicates) overlaid with a smoothed
-  2D Gaussian density heat map, the latest session's shots as small dots, and the face centre marked with a crosshair reticle.
+  The picture (`SwingStrikeMap.faceSvg`, Oct 9, the owner's ask: like FlightScope's): a club face seen from the front, toe on the
+  left and the hosel on the right (an iron with grooves, or a wood face for the driver, woods and hybrids), an inch grid (half-inch
+  lines, labelled every inch, "← Toe" / "Heel →"), a smooth heat map of every strike in the period (`density`: each strike a
+  Gaussian of 5 mm, 7 mm for woods; `heatColor`: clear below 6% of the busiest spot, then green, yellow, red where most land),
+  the latest session's strikes as small blue dots and its last one as the big dot, the usual spot as a dashed ring, and the face
+  centre as a small cross. The heat isn't cut to the face: Square's heights have read about 14 mm low on every club since
+  Sep 23, which puts many strikes at or below the sole; a note says so when any are. The swing view's strike tile uses the same
+  drawing, cropped to the face (`tile: true`): this shot's dot and the usual ring.
   Below the face: a comparison summary line comparing the latest session's strike centre and spread against the median of up to
   6 earlier baseline sessions ("Strikes moved 5 mm toward the toe and stayed low (15 mm below centre). Your usual: 2 mm toward the heel, 17 mm low").
   When low strikes are typical with irons (median strikeV below -10 mm), a coaching line checks the irons' what-helps-what-hurts

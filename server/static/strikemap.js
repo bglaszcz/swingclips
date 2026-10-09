@@ -404,7 +404,185 @@
     return SQUARE_TOE_SIGN;
   }
 
+  // ---- The face picture (Oct 9, the owner: like FlightScope's): a club face seen from the front, toe on
+  // the left and the hosel on the right (a right-hander's club), a smooth heat map of where the strikes
+  // land (green, yellow, red where most are), the latest shot as a dot, the usual spot as a dashed ring,
+  // and an inch grid. Drawn in mm, the units Square reports, with y up (SVG y = -v). ----
+
+  const MM_PER_INCH = 25.4;
+  // Heat: each strike spread as a Gaussian of this many mm (irons, woods), on a grid of this many mm.
+  const HEAT_SIGMA = { irons: 5, woods: 7 }, HEAT_STEP = 1;
+  // Where a share of the busiest spot starts to show, and the colours from there to the busiest.
+  const HEAT_FLOOR = 0.06;
+  const HEAT_STOPS = [[0, [70, 205, 70]], [0.55, [245, 225, 40]], [1, [230, 45, 35]]];
+
+  // The outlines in SVG coordinates (mm, y down), x = toward the heel. Iron: sole, round toe, top line
+  // sloping down to the heel, hosel up to the right. Wood: a wide rounded face with a short hosel.
+  const FACES = {
+    irons: {
+      face: "M 27 19 L -28 21 Q -44 21 -46 8 Q -48 -12 -38 -22 Q -33 -27 -26 -27 L 20 -14 Q 27 -13 31 -17 L 46 -48 L 57 -45 L 40 -8 Q 37 14 27 19 Z",
+      grooves: { x0: -34, x1: 22, ys: [-12, -8.8, -5.6, -2.4, 0.8, 4, 7.2, 10.4, 13.6] },
+      view: [-62, -48, 130, 82],
+      tile: [-50, -30, 92, 56],
+    },
+    woods: {
+      face: "M -54 -4 Q -52 -27 -20 -29 L 30 -27 Q 34 -27 38 -30 L 50 -46 L 59 -41 L 50 -22 Q 54 -8 52 4 Q 48 22 30 26 Q 0 30 -32 26 Q -54 20 -54 -4 Z",
+      grooves: { x0: -18, x1: 18, ys: [-8, -4, 0, 4, 8] },
+      view: [-68, -48, 140, 86],
+      tile: [-58, -32, 116, 62],
+    },
+  };
+
+  /**
+   * The heat: a Gaussian density of the strikes on a grid over [x0, x1] x [v0, v1] (mm), normalised to
+   * its busiest cell. {x0, v0, step, nx, nv, d: Float64Array (row 0 = v0, the low edge), max}.
+   */
+  function density(points, opts = {}) {
+    const sigma = opts.sigma || HEAT_SIGMA.irons, step = opts.step || HEAT_STEP;
+    const [x0, x1, v0, v1] = opts.extent || [-60, 60, -40, 40];
+    const nx = Math.round((x1 - x0) / step) + 1, nv = Math.round((v1 - v0) / step) + 1;
+    const d = new Float64Array(nx * nv);
+    const reach = 3 * sigma, k = -0.5 / (sigma * sigma);
+    for (const p of points || []) {
+      if (!p || !finite(p.x) || !finite(p.v)) continue;
+      const i0 = Math.max(0, Math.floor((p.x - reach - x0) / step)), i1 = Math.min(nx - 1, Math.ceil((p.x + reach - x0) / step));
+      const j0 = Math.max(0, Math.floor((p.v - reach - v0) / step)), j1 = Math.min(nv - 1, Math.ceil((p.v + reach - v0) / step));
+      for (let j = j0; j <= j1; j++) {
+        const dv = v0 + j * step - p.v;
+        for (let i = i0; i <= i1; i++) {
+          const dx = x0 + i * step - p.x;
+          d[j * nx + i] += Math.exp(k * (dx * dx + dv * dv));
+        }
+      }
+    }
+    let max = 0;
+    for (const v of d) if (v > max) max = v;
+    if (max > 0) for (let i = 0; i < d.length; i++) d[i] /= max;
+    return { x0, v0, step, nx, nv, d, max };
+  }
+
+  /** A density share (0-1) as [r, g, b, a] (0-255): clear below HEAT_FLOOR, then green, yellow, red. */
+  function heatColor(t) {
+    if (!(t > HEAT_FLOOR)) return [0, 0, 0, 0];
+    let i = 1;
+    while (i < HEAT_STOPS.length - 1 && t > HEAT_STOPS[i][0]) i++;
+    const [ta, ca] = HEAT_STOPS[i - 1], [tb, cb] = HEAT_STOPS[i];
+    const f = Math.max(0, Math.min(1, (t - ta) / (tb - ta)));
+    const rgb = ca.map((c, k) => Math.round(c + (cb[k] - c) * f));
+    // Soft edge: fades in over the first third, then mostly opaque.
+    const a = Math.round(255 * Math.min(0.88, 0.88 * (t - HEAT_FLOOR) / 0.3));
+    return [...rgb, a];
+  }
+
+  let faceIds = 0;
+
+  /**
+   * The face picture as an SVG element (browser only). opts: {club, shots: [{h, v}] (the heat), dots:
+   * [{h, v}] (small dots, e.g. the latest session), latest: {h, v} (the big dot), usual: {h, v} (dashed
+   * ring), grid: true for the inch grid and labels, tile: true for a small picture (the face only, bigger
+   * dots), title: text for each dot's tooltip (p => text)}.
+   */
+  function faceSvg(opts = {}) {
+    const NS = "http://www.w3.org/2000/svg", id = `sf${++faceIds}`;
+    const group = boxOf(opts.club || "irons").width === BOX_WOODS.width ? "woods" : "irons";
+    const F = FACES[group];
+    // Screen x: toe on the left (Square's - is the toe), so x = h; SVG y = -v.
+    const sx = p => -SQUARE_TOE_SIGN * p.h, sy = p => -p.v;
+    const svg = document.createElementNS(NS, "svg");
+    const [vx, vy, vw, vh] = opts.tile ? F.tile : F.view;
+    const big = opts.tile ? 2 : 1;
+    const pad = opts.grid ? 9 : 0;
+    svg.setAttribute("viewBox", `${vx - pad} ${vy} ${vw + pad} ${vh + (opts.grid ? 16 : 0)}`);
+    svg.setAttribute("role", "img");
+    const add = (parent, tag, a, text) => {
+      const e = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(a)) e.setAttribute(k, v);
+      if (text != null) e.textContent = text;
+      parent.append(e);
+      return e;
+    };
+    const defs = add(svg, "defs", {});
+    const metal = add(defs, "linearGradient", { id: id + "m", x1: "0", y1: "0", x2: "0", y2: "1" });
+    for (const [o, c] of [["0", "#f1f2f4"], ["0.55", "#c9cdd2"], ["1", "#9aa0a7"]]) add(metal, "stop", { offset: o, "stop-color": c });
+    const clip = add(defs, "clipPath", { id: id + "c" });
+    add(clip, "path", { d: F.face });
+
+    // The inch grid behind the club: lines every half inch, labelled every inch.
+    if (opts.grid) {
+      const g = add(svg, "g", { class: "sf-grid" });
+      for (let k = -3; k <= 3; k++) {
+        const x = k * MM_PER_INCH / 2;
+        if (x < vx || x > vx + vw) continue;
+        add(g, "line", { x1: x, x2: x, y1: vy, y2: vy + vh, "stroke-dasharray": k % 2 ? "2 2" : "" });
+      }
+      for (let k = -3; k <= 3; k++) {
+        const y = k * MM_PER_INCH / 2;
+        if (y < vy || y > vy + vh) continue;
+        add(g, "line", { x1: vx, x2: vx + vw, y1: y, y2: y, "stroke-dasharray": k % 2 ? "2 2" : "" });
+      }
+      const t = add(svg, "g", { class: "sf-label" });
+      for (const k of [-2, -1, 0, 1, 2]) {
+        const x = k * MM_PER_INCH;
+        if (x < vx || x > vx + vw) continue;
+        add(t, "text", { x, y: vy + vh + 6, "text-anchor": "middle" }, k === 0 ? "0" : `${Math.abs(k)}"`);
+      }
+      for (const k of [-1, 0, 1]) add(t, "text", { x: vx - 2, y: -k * MM_PER_INCH + 1.5, "text-anchor": "end" }, k === 0 ? "0" : `${k > 0 ? "" : "-"}${Math.abs(k)}"`);
+      add(t, "text", { x: vx + 2, y: vy + vh + 13, "text-anchor": "start", class: "sf-word" }, "← Toe");
+      add(t, "text", { x: vx + vw - 2, y: vy + vh + 13, "text-anchor": "end", class: "sf-word" }, "Heel →");
+    }
+
+    // The club: the metal, the grooves, the outline.
+    add(svg, "path", { d: F.face, fill: `url(#${id}m)` });
+    const grooves = add(svg, "g", { "clip-path": `url(#${id}c)`, stroke: "#6f757c", "stroke-width": "0.9", "stroke-linecap": "round", opacity: "0.75" });
+    for (const y of F.grooves.ys) add(grooves, "line", { x1: F.grooves.x0, x2: F.grooves.x1, y1: y, y2: y });
+
+    // The heat, drawn on a canvas and laid over the face, not cut to it: Square's heights can put strikes
+    // below the sole (since Sep 23 they read about 14 mm lower on every club), and cutting would hide them.
+    const shots = (opts.shots || []).filter(p => p && finite(p.h) && finite(p.v));
+    if (shots.length && typeof document !== "undefined" && document.createElement) {
+      const step = 0.5, ext = [vx, vx + vw, -(vy + vh), -vy];
+      const dens = density(shots.map(p => ({ x: sx(p), v: p.v })), { sigma: HEAT_SIGMA[group], step, extent: ext });
+      const canvas = document.createElement("canvas");
+      canvas.width = dens.nx;
+      canvas.height = dens.nv;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const img = ctx.createImageData(dens.nx, dens.nv);
+        for (let j = 0; j < dens.nv; j++) {
+          for (let i = 0; i < dens.nx; i++) {
+            const c = heatColor(dens.d[j * dens.nx + i]), o = ((dens.nv - 1 - j) * dens.nx + i) * 4;   // canvas row 0 = top = high v
+            img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = c[3];
+          }
+        }
+        ctx.putImageData(img, 0, 0);
+        add(svg, "image", { href: canvas.toDataURL(), x: ext[0], y: -ext[3], width: ext[1] - ext[0], height: ext[3] - ext[2],
+                            preserveAspectRatio: "none" });
+      }
+    }
+    add(svg, "path", { d: F.face, fill: "none", stroke: "#7d838a", "stroke-width": "1" });
+
+    // The face centre, the usual spot, the dots.
+    add(svg, "path", { d: "M -2.5 0 H 2.5 M 0 -2.5 V 2.5", stroke: "#4b5158", "stroke-width": "0.6" });
+    const title = (e, p) => { if (opts.title) add(e, "title", {}, opts.title(p)); return e; };
+    if (opts.usual && finite(opts.usual.h) && finite(opts.usual.v)) {
+      title(add(svg, "circle", { cx: sx(opts.usual), cy: sy(opts.usual), r: 3.2 * big, fill: "none", stroke: "#1f2937",
+                                 "stroke-width": 0.9 * big, "stroke-dasharray": `${1.6 * big} ${1.2 * big}` }), opts.usual);
+    }
+    for (const p of opts.dots || []) {
+      if (!p || !finite(p.h) || !finite(p.v)) continue;
+      title(add(svg, "circle", { cx: sx(p), cy: sy(p), r: 1.5, fill: "#1d6fd8", stroke: "#fff", "stroke-width": "0.5", opacity: "0.9" }), p);
+    }
+    if (opts.latest && finite(opts.latest.h) && finite(opts.latest.v)) {
+      title(add(svg, "circle", { cx: sx(opts.latest), cy: sy(opts.latest), r: 2.8 * big, fill: "#1d6fd8", stroke: "#fff", "stroke-width": 0.9 * big }), opts.latest);
+    }
+    return svg;
+  }
+
   const api = {
+    MM_PER_INCH,
+    density,
+    heatColor,
+    faceSvg,
     BOX_IRONS,
     BOX_WOODS,
     MIN_STRIKES_COMPARE,
