@@ -44,6 +44,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import aicoach
 import ballflight
 import bodycalib
 import calib
@@ -1982,6 +1983,37 @@ def program_report(started: float | None = None):
     if got is None:
         raise HTTPException(404, "No program yet")
     return got
+
+
+class CoachAskBody(BaseModel):
+    session: str | int | float
+    brief: str = ""
+    again: bool = False
+
+
+@app.post("/api/coach/ask")
+def coach_ask(body: CoachAskBody):
+    """The AI coach's short take on a session."""
+    return aicoach.ask(
+        session=body.session,
+        brief=body.brief,
+        again=body.again,
+        lock=files_lock,
+    )
+
+
+@app.get("/api/coach/notes")
+def coach_notes(session: str | None = None):
+    """The kept note for a session, or all kept notes newest first."""
+    if session is not None and str(session).strip():
+        return aicoach.get_kept_note(session)
+    return aicoach.get_all_notes()
+
+
+@app.get("/api/coach/status")
+def coach_status():
+    """Whether a key is configured, calls made today, and the daily cap."""
+    return aicoach.status()
 
 
 @app.get("/api/still/{name}")

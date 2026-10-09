@@ -284,6 +284,33 @@ class TestAICoach(unittest.TestCase):
         # Status must never expose the key
         self.assertNotIn("secret_key", json.dumps(st2))
 
+    def test_endpoints(self):
+        try:
+            from fastapi.testclient import TestClient
+        except ImportError:
+            return
+        import app
+        client = TestClient(app.app)
+
+        # Status endpoint
+        resp = client.get("/api/coach/status")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("ready", data)
+        self.assertIn("callsToday", data)
+        self.assertEqual(data["cap"], 10)
+        self.assertIn("howToAdd", data)
+
+        # Notes endpoint when not found
+        resp2 = client.get("/api/coach/notes?session=nonexistent_session_999999")
+        self.assertEqual(resp2.status_code, 200)
+        self.assertIsNone(resp2.json())
+
+        # Ask endpoint without API key returns error message
+        resp3 = client.post("/api/coach/ask", json={"session": "test_session_1", "brief": "test brief"})
+        self.assertEqual(resp3.status_code, 200)
+        self.assertIn("error", resp3.json())
+
 
 if __name__ == "__main__":
     unittest.main()
