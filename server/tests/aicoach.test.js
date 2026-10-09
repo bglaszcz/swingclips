@@ -170,3 +170,76 @@ describe("SwingAICoach.takeParts", () => {
     assert.deepStrictEqual(AICoach.takeParts(""), []);
   });
 });
+
+describe("SwingAICoach.questionBrief", () => {
+  it("formats latest session brief, 30-day club medians with shot counts, and current focus", () => {
+    const input = {
+      session: {
+        start: 1789123456,
+        rows: [
+          { club: "I7", carry: 155, offline: 2, smash: 1.38, strikeV: 0 },
+        ],
+      },
+      story: {
+        headline: "Solid strikes today",
+      },
+      sessions: [
+        {
+          start: 1789123456 - 5 * 86400,
+          rows: [
+            { club: "I7", carry: 150, offline: 1.0, path: 2.0, faceToPath: -0.5, attack: -3.0, strikeV: 0.5 },
+            { club: "I7", carry: 154, offline: 3.0, path: 2.2, faceToPath: -1.0, attack: -3.5, strikeV: -0.5 },
+            { club: "DR", carry: 240, offline: -5.0, path: 1.5, faceToPath: 0.5, attack: 1.5, strikeV: 2.0 },
+          ],
+        },
+        {
+          start: 1789123456,
+          rows: [
+            { club: "I7", carry: 152, offline: 2.0, path: 1.8, faceToPath: -0.8, attack: -3.2, strikeV: 0.0 },
+          ],
+        },
+      ],
+      focus: {
+        move: "hipSway",
+        aim: "more",
+        club: "I7",
+        since: "2026-10-01",
+      },
+    };
+
+    const brief = AICoach.questionBrief(input);
+
+    // 1. Session section
+    assert.match(brief, /# Session/);
+    assert.match(brief, /Solid strikes today/);
+
+    // 2. 30 days section
+    assert.match(brief, /# Last 30 Days by Club/);
+    assert.match(brief, /7 iron \(3 shots\):/);
+    assert.match(brief, /carry 152\.0 yd/);
+    assert.match(brief, /offline \+2\.0 yd/);
+    assert.match(brief, /club path \+2\.0°/);
+    assert.match(brief, /face to path -0\.8°/);
+    assert.match(brief, /attack angle -3\.2°/);
+    assert.match(brief, /strike 0\.0 mm \(face-centred\)/);
+
+    // Driver in bag order
+    assert.match(brief, /driver \(1 shots\):/);
+    assert.match(brief, /carry 240\.0 yd/);
+
+    // 3. Current focus section
+    assert.match(brief, /# Current Focus/);
+    assert.match(brief, /hip slide at impact, aiming for more/);
+
+    // Length check
+    const words = brief.split(/\s+/).filter(Boolean).length;
+    assert.ok(words < 4000);
+  });
+
+  it("handles null or empty input safely", () => {
+    assert.strictEqual(AICoach.questionBrief(null), "");
+    const emptyBrief = AICoach.questionBrief({});
+    assert.match(emptyBrief, /# Last 30 Days by Club/);
+    assert.match(emptyBrief, /No shots recorded in the last 30 days/);
+  });
+});

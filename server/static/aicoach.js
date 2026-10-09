@@ -291,76 +291,10 @@
     }
 
     // 3. Focus Section
-    const focus = input.focus;
-    if (focus && (focus.move || focus.aim)) {
+    const focusSec = formatFocus(input);
+    if (focusSec) {
       lines.push("");
-      lines.push("# Current Focus");
-
-      const moveLabel = METRIC_LABELS[focus.move] || focus.move || "Current focus";
-      const scopeText = focus.scope
-        ? ` (${focus.scope === "woods" ? "driver and woods" : "irons"})`
-        : focus.club
-        ? ` (${plainClubName(focus.club)})`
-        : "";
-      const sinceText = focus.since ? ` since ${focus.since}` : "";
-      // The move in golf words, with what it is, its drill and swing thought (coach.js).
-      const plain = (root.SwingShotStory && root.SwingShotStory.plain) || (t => t);
-      const fix = Coach && Coach.MOVES && Coach.MOVES[focus.move] ? Coach.MOVES[focus.move][focus.aim] : null;
-      if (fix) {
-        lines.push(`Focus: ${plain(fix.name)}${scopeText}${sinceText} (measured as ${moveLabel.toLowerCase()}, aiming for ${focus.aim === "more" ? "more" : "less"})`);
-        if (fix.how) lines.push(`What it is: ${plain(fix.how)}`);
-        if (fix.drill) lines.push(`Its drill: ${plain(fix.drill)}`);
-        if (fix.thought) lines.push(`Its swing thought: ${plain(fix.thought)}`);
-      } else {
-        lines.push(`Focus move: ${moveLabel}${focus.aim ? ` - aim: ${focus.aim}` : ""}${scopeText}${sinceText}`);
-      }
-
-      // Evidence lines
-      if (Array.isArray(focus.evidence) && focus.evidence.length > 0) {
-        lines.push("Evidence for focus:");
-        for (const ev of focus.evidence) {
-          lines.push(`  - ${ev}`);
-        }
-      } else if (typeof focus.evidence === "string" && focus.evidence.trim()) {
-        lines.push(`Evidence for focus: ${focus.evidence.trim()}`);
-      }
-
-      // Focus progress / working
-      let focusWorking = input.focusWorking;
-      let focusCmp = input.focusCmp;
-
-      if (!focusWorking && Focus && focusCmp) {
-        try {
-          focusWorking = Focus.working(focusCmp, k => METRIC_LABELS[k] || k);
-        } catch (e) {
-          focusWorking = null;
-        }
-      }
-
-      if (focusWorking) {
-        if (focusWorking.head) lines.push(`Focus status: ${focusWorking.head}`);
-        if (focusWorking.next) lines.push(`Focus next step: ${focusWorking.next}`);
-      }
-
-      if (focusCmp) {
-        if (focusCmp.move && focusCmp.move.before != null && focusCmp.move.after != null) {
-          const mv = focusCmp.move;
-          const k = mv.key || focus.move;
-          const vrd = Focus && Focus.verdict ? Focus.verdict(mv) : mv.level || "";
-          lines.push(`Move progress (${METRIC_LABELS[k] || k}):`);
-          lines.push(`  Before median: ${formatMetricValue(k, mv.before)}, since median: ${formatMetricValue(k, mv.after)} (change: ${formatMetricValue(k, mv.change)}, verdict: ${vrd})`);
-        }
-
-        if (Array.isArray(focusCmp.results) && focusCmp.results.length > 0) {
-          lines.push("Results following focus:");
-          for (const res of focusCmp.results) {
-            if (res.before == null || res.after == null) continue;
-            const rk = res.key;
-            const rVrd = Focus && Focus.verdict ? Focus.verdict(res) : res.level || "";
-            lines.push(`  - ${METRIC_LABELS[rk] || rk}: before ${formatMetricValue(rk, res.before)}, since ${formatMetricValue(rk, res.after)} (change: ${formatMetricValue(rk, res.change)}, verdict: ${rVrd})`);
-          }
-        }
-      }
+      lines.push(focusSec);
     }
 
     // 4. Coach Program Section
@@ -381,6 +315,239 @@
       return words.slice(0, 3950).join(" ") + "\n... [brief truncated under 4000 words]";
     }
 
+    return result;
+  }
+
+  function formatFocus(input) {
+    if (!input) return "";
+    const focus = input.focus;
+    if (!focus || (!focus.move && !focus.aim)) return "";
+    const lines = [];
+    lines.push("# Current Focus");
+
+    const moveLabel = METRIC_LABELS[focus.move] || focus.move || "Current focus";
+    const scopeText = focus.scope
+      ? ` (${focus.scope === "woods" ? "driver and woods" : "irons"})`
+      : focus.club
+      ? ` (${plainClubName(focus.club)})`
+      : "";
+    const sinceText = focus.since ? ` since ${focus.since}` : "";
+    const plain = (root.SwingShotStory && root.SwingShotStory.plain) || (t => t);
+    const fix = Coach && Coach.MOVES && Coach.MOVES[focus.move] ? Coach.MOVES[focus.move][focus.aim] : null;
+    if (fix) {
+      lines.push(`Focus: ${plain(fix.name)}${scopeText}${sinceText} (measured as ${moveLabel.toLowerCase()}, aiming for ${focus.aim === "more" ? "more" : "less"})`);
+      if (fix.how) lines.push(`What it is: ${plain(fix.how)}`);
+      if (fix.drill) lines.push(`Its drill: ${plain(fix.drill)}`);
+      if (fix.thought) lines.push(`Its swing thought: ${plain(fix.thought)}`);
+    } else {
+      lines.push(`Focus move: ${moveLabel}${focus.aim ? ` - aim: ${focus.aim}` : ""}${scopeText}${sinceText}`);
+    }
+
+    if (Array.isArray(focus.evidence) && focus.evidence.length > 0) {
+      lines.push("Evidence for focus:");
+      for (const ev of focus.evidence) {
+        lines.push(`  - ${ev}`);
+      }
+    } else if (typeof focus.evidence === "string" && focus.evidence.trim()) {
+      lines.push(`Evidence for focus: ${focus.evidence.trim()}`);
+    }
+
+    let focusWorking = input.focusWorking;
+    let focusCmp = input.focusCmp;
+
+    if (!focusWorking && Focus && focusCmp) {
+      try {
+        focusWorking = Focus.working(focusCmp, k => METRIC_LABELS[k] || k);
+      } catch (e) {
+        focusWorking = null;
+      }
+    }
+
+    if (focusWorking) {
+      if (focusWorking.head) lines.push(`Focus status: ${focusWorking.head}`);
+      if (focusWorking.next) lines.push(`Focus next step: ${focusWorking.next}`);
+    }
+
+    if (focusCmp) {
+      if (focusCmp.move && focusCmp.move.before != null && focusCmp.move.after != null) {
+        const mv = focusCmp.move;
+        const k = mv.key || focus.move;
+        const vrd = Focus && Focus.verdict ? Focus.verdict(mv) : mv.level || "";
+        lines.push(`Move progress (${METRIC_LABELS[k] || k}):`);
+        lines.push(`  Before median: ${formatMetricValue(k, mv.before)}, since median: ${formatMetricValue(k, mv.after)} (change: ${formatMetricValue(k, mv.change)}, verdict: ${vrd})`);
+      }
+
+      if (Array.isArray(focusCmp.results) && focusCmp.results.length > 0) {
+        lines.push("Results following focus:");
+        for (const res of focusCmp.results) {
+          if (res.before == null || res.after == null) continue;
+          const rk = res.key;
+          const rVrd = Focus && Focus.verdict ? Focus.verdict(res) : res.level || "";
+          lines.push(`  - ${METRIC_LABELS[rk] || rk}: before ${formatMetricValue(rk, res.before)}, since ${formatMetricValue(rk, res.after)} (change: ${formatMetricValue(rk, res.change)}, verdict: ${rVrd})`);
+        }
+      }
+    }
+
+    return lines.join("\n");
+  }
+
+  /**
+   * Builds the 30-day question brief:
+   * 1. Latest session brief (via brief(), without focus).
+   * 2. Per club last 30 days' medians of carry, offline, club path, face to path,
+   *    attack angle and strike (face-centred) with shot count.
+   * 3. Focus section (as brief() gives it).
+   */
+  function questionBrief(input) {
+    if (!input) return "";
+
+    const lines = [];
+
+    // 1. Latest session brief
+    let sessionBrief = "";
+    if (typeof input.brief === "string") {
+      sessionBrief = input.brief;
+      const fIdx = sessionBrief.indexOf("# Current Focus");
+      if (fIdx !== -1) {
+        sessionBrief = sessionBrief.slice(0, fIdx).trim();
+      }
+    } else if (input.session || input.rows) {
+      sessionBrief = brief({ ...input, focus: null });
+    }
+    if (sessionBrief) {
+      lines.push(sessionBrief);
+    }
+
+    // 2. Per club last 30 days' medians
+    lines.push("");
+    lines.push("# Last 30 Days by Club");
+
+    const nowMs = (input.session && input.session.start)
+      ? (input.session.start < 1e11 ? input.session.start * 1000 : input.session.start)
+      : Date.now();
+    const thirtyDaysAgo = nowMs - 30 * 86400 * 1000;
+
+    let allRows = [];
+    if (Array.isArray(input.rows30d)) {
+      allRows = input.rows30d;
+    } else if (Array.isArray(input.sessions30d)) {
+      allRows = input.sessions30d.flatMap(s => s.rows || []);
+    } else if (Array.isArray(input.sessions)) {
+      for (const s of input.sessions) {
+        const sTime = s.start < 1e11 ? s.start * 1000 : s.start;
+        if (sTime >= thirtyDaysAgo && sTime <= nowMs + 86400 * 1000) {
+          allRows.push(...(s.rows || []));
+        }
+      }
+    } else if (Array.isArray(input.earlier)) {
+      const sessList = [...input.earlier];
+      if (input.session && typeof input.session === "object" && !Array.isArray(input.session)) {
+        sessList.push(input.session);
+      }
+      for (const s of sessList) {
+        const sTime = s.start < 1e11 ? s.start * 1000 : s.start;
+        if (sTime >= thirtyDaysAgo && sTime <= nowMs + 86400 * 1000) {
+          allRows.push(...(s.rows || []));
+        }
+      }
+    } else if (Array.isArray(input.rows)) {
+      allRows = input.rows.filter(r => {
+        if (!r.t) return true;
+        const t = r.t < 1e11 ? r.t * 1000 : r.t;
+        return t >= thirtyDaysAgo && t <= nowMs + 86400 * 1000;
+      });
+    }
+
+    function rowVal(r, key) {
+      if (r[key] != null && Number.isFinite(r[key])) return r[key];
+      if (r.shot && r.shot[key] != null && Number.isFinite(r.shot[key])) return r.shot[key];
+      if (r.c && r.c.shot && r.c.shot[key] != null && Number.isFinite(r.c.shot[key])) return r.c.shot[key];
+      return null;
+    }
+
+    function rowClub(r) {
+      return r.club || (r.shot && r.shot.club) || (r.c && r.c.shot && r.c.shot.club) || null;
+    }
+
+    function calcMedian(vals) {
+      const nums = vals.filter(v => v != null && Number.isFinite(v)).sort((a, b) => a - b);
+      if (!nums.length) return null;
+      const mid = Math.floor(nums.length / 2);
+      return nums.length % 2 !== 0 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+    }
+
+    function bagRank(code) {
+      if (!code) return -1;
+      const c = String(code).toUpperCase().trim();
+      if (c === "PT" || c === "PUTTER") return -1;
+      if (c === "DR" || c === "1W" || c === "DRIVER") return 100;
+      let m = c.match(/^(?:W(\d+)|(\d+)W)$/);
+      if (m) return 200 + parseInt(m[1] || m[2], 10);
+      m = c.match(/^(?:H(\d+)|(\d+)H)$/);
+      if (m) return 300 + parseInt(m[1] || m[2], 10);
+      m = c.match(/^(?:I(\d+)|(\d+)I)$/);
+      if (m) return 400 + parseInt(m[1] || m[2], 10);
+      m = c.match(/^(\d+)\s*WOOD$/);
+      if (m) return 200 + parseInt(m[1], 10);
+      m = c.match(/^(\d+)\s*HYBRID$/);
+      if (m) return 300 + parseInt(m[1], 10);
+      m = c.match(/^(\d+)\s*IRON$/);
+      if (m) return 400 + parseInt(m[1], 10);
+      if (c === "PW" || c === "PITCHING" || c === "PITCHING WEDGE") return 500;
+      if (c === "GW" || c === "GAP" || c === "GAP WEDGE" || c === "AW" || c === "UW") return 510;
+      if (c === "SW" || c === "SAND" || c === "SAND WEDGE") return 520;
+      if (c === "LW" || c === "LOB" || c === "LOB WEDGE") return 530;
+      return 999;
+    }
+
+    const byClub = new Map();
+    for (const r of allRows) {
+      const c = rowClub(r);
+      if (!c) continue;
+      if (!byClub.has(c)) byClub.set(c, []);
+      byClub.get(c).push(r);
+    }
+
+    const sortedClubs = [...byClub.keys()].sort((a, b) => bagRank(a) - bagRank(b));
+
+    if (sortedClubs.length === 0) {
+      lines.push("No shots recorded in the last 30 days.");
+    } else {
+      for (const cl of sortedClubs) {
+        const cRows = byClub.get(cl);
+        const count = cRows.length;
+        const medCarry = calcMedian(cRows.map(r => rowVal(r, "carry")));
+        const medOffline = calcMedian(cRows.map(r => rowVal(r, "offline")));
+        const medPath = calcMedian(cRows.map(r => rowVal(r, "path")));
+        const medFaceToPath = calcMedian(cRows.map(r => rowVal(r, "faceToPath")));
+        const medAttack = calcMedian(cRows.map(r => rowVal(r, "attack")));
+        const medStrikeV = calcMedian(cRows.map(r => rowVal(r, "strikeV")));
+
+        const parts = [];
+        if (medCarry != null) parts.push(`carry ${formatMetricValue("carry", medCarry).trim()}`);
+        if (medOffline != null) parts.push(`offline ${formatMetricValue("offline", medOffline).trim()}`);
+        if (medPath != null) parts.push(`club path ${formatMetricValue("path", medPath).trim()}`);
+        if (medFaceToPath != null) parts.push(`face to path ${formatMetricValue("faceToPath", medFaceToPath).trim()}`);
+        if (medAttack != null) parts.push(`attack angle ${formatMetricValue("attack", medAttack).trim()}`);
+        if (medStrikeV != null) parts.push(`strike ${formatMetricValue("strikeV", medStrikeV).trim()}`);
+
+        const itemsStr = parts.length > 0 ? parts.join(", ") : "no launch metrics";
+        lines.push(`  - ${plainClubName(cl)} (${count} shots): ${itemsStr}`);
+      }
+    }
+
+    // 3. Focus Section
+    const focusSection = formatFocus(input);
+    if (focusSection) {
+      lines.push("");
+      lines.push(focusSection);
+    }
+
+    const result = lines.join("\n").trim();
+    const words = result.split(/\s+/).filter(Boolean);
+    if (words.length > 4000) {
+      return words.slice(0, 3950).join(" ") + "\n... [brief truncated under 4000 words]";
+    }
     return result;
   }
 
@@ -435,6 +602,7 @@
     renderTake,
     focusProgress,
     brief,
+    questionBrief,
     formatMetricValue,
     plainClubName,
     METRIC_LABELS,

@@ -148,6 +148,153 @@
         }
       }
       renderRuns();
+      renderCoachReview();
+    }
+  }
+
+  function getWeekKey(d) {
+    const dt = window.SwingWeek ? window.SwingWeek.weekStartOf(d) : new Date(d);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const day = String(dt.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  async function getFullWeekText() {
+    if (!currentSummary || !currentSummary.text) return "";
+    const runs = getWeekRuns();
+    const shouldIncludeRuns = copyRunsCb && copyRunsWrap && !copyRunsWrap.hidden && copyRunsCb.checked && runs.length > 0;
+    let fullText = currentSummary.text;
+
+    if (shouldIncludeRuns) {
+      const runsWithReports = await Promise.all(runs.map(async (r) => {
+        let text = runReports[r.started];
+        if (text == null) {
+          try {
+            const res = await fetch(`/api/program/report?started=${encodeURIComponent(r.started)}`);
+            text = res.ok ? ((await res.json()) || {}).text || "" : "";
+          } catch { text = ""; }
+          runReports[r.started] = text;
+        }
+        return { name: r.name, started: r.started, day: r.day, date: r.date, text };
+      }));
+      if (window.SwingWeek && window.SwingWeek.joinWeekAndRuns) {
+        fullText = window.SwingWeek.joinWeekAndRuns(currentSummary.text, runsWithReports);
+      }
+    }
+    return fullText;
+  }
+
+  async function renderCoachReview() {
+    if (!weekCards) return;
+    const weekKey = getWeekKey(currentWeekStart);
+    const card = document.createElement("div");
+    card.className = "t-card week-card";
+    card.id = "week-coach-review";
+    weekCards.append(card);
+
+    let note = null;
+    try {
+      const res = await fetch(`/api/coach/notes?session=${encodeURIComponent(weekKey)}&kind=week`);
+      note = res.ok ? await res.json() : null;
+    } catch {}
+
+    if (getWeekKey(currentWeekStart) !== weekKey) return;
+    drawCoachReview(card, weekKey, note);
+  }
+
+  function drawCoachReview(card, weekKey, note) {
+    card.replaceChildren();
+    if (note && note.text) {
+      const fold = document.createElement("details");
+      const sum = document.createElement("summary");
+      sum.style.cursor = "pointer";
+      sum.style.fontWeight = "600";
+      sum.style.color = "var(--accent)";
+      sum.textContent = "Coach's review of the week";
+      fold.append(sum);
+
+      const body = document.createElement("div");
+      body.style.cssText = "margin-top: 10px; line-height: 1.5; font-size: 14px; white-space: pre-wrap;";
+      if (window.SwingAICoach && window.SwingAICoach.renderTake) {
+        SwingAICoach.renderTake(body, note.text);
+      } else {
+        body.textContent = note.text;
+      }
+      fold.append(body);
+
+      const foot = document.createElement("div");
+      foot.style.cssText = "margin-top: 12px; display: flex; align-items: center; gap: 8px;";
+      const againBtn = document.createElement("button");
+      againBtn.className = "small";
+      againBtn.type = "button";
+      againBtn.textContent = "Ask again";
+      againBtn.onclick = async () => {
+        againBtn.disabled = true;
+        againBtn.textContent = "Asking…";
+        try {
+          const brief = await getFullWeekText();
+          const res = await fetch("/api/coach/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "week", session: weekKey, brief, again: true }),
+          }).then(r => r.ok ? r.json() : null);
+          if (res && res.text) {
+            drawCoachReview(card, weekKey, res);
+          } else {
+            alert((res && res.error) || "Could not get weekly review");
+            againBtn.disabled = false;
+            againBtn.textContent = "Ask again";
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+          againBtn.disabled = false;
+          againBtn.textContent = "Ask again";
+        }
+      };
+      foot.append(againBtn);
+      fold.append(foot);
+      card.append(fold);
+    } else {
+      const h = document.createElement("div");
+      h.className = "week-card-title";
+      h.textContent = "Coach's review of the week";
+
+      const desc = document.createElement("div");
+      desc.className = "muted";
+      desc.style.fontSize = "13px";
+      desc.textContent = "Have the AI coach read this week's text and give a review in at most 200 words.";
+
+      const askBtn = document.createElement("button");
+      askBtn.className = "small";
+      askBtn.type = "button";
+      askBtn.style.marginTop = "6px";
+      askBtn.style.alignSelf = "flex-start";
+      askBtn.textContent = "Ask the coach";
+      askBtn.onclick = async () => {
+        askBtn.disabled = true;
+        askBtn.textContent = "Asking…";
+        try {
+          const brief = await getFullWeekText();
+          const res = await fetch("/api/coach/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "week", session: weekKey, brief, again: false }),
+          }).then(r => r.ok ? r.json() : null);
+          if (res && res.text) {
+            drawCoachReview(card, weekKey, res);
+          } else {
+            alert((res && res.error) || "Could not get weekly review");
+            askBtn.disabled = false;
+            askBtn.textContent = "Ask the coach";
+          }
+        } catch (e) {
+          alert("Error: " + e.message);
+          askBtn.disabled = false;
+          askBtn.textContent = "Ask the coach";
+        }
+      };
+      card.append(h, desc, askBtn);
     }
   }
 
@@ -210,34 +357,13 @@
 
   async function copyForCoach() {
     if (!currentSummary || !currentSummary.text) return;
-    const runs = getWeekRuns();
-    const shouldIncludeRuns = copyRunsCb && copyRunsWrap && !copyRunsWrap.hidden && copyRunsCb.checked && runs.length > 0;
-    let fullText = currentSummary.text;
-
-    if (shouldIncludeRuns) {
-      const orig = weekCopyBtn ? weekCopyBtn.textContent : "";
-      if (weekCopyBtn) weekCopyBtn.textContent = "Copying…";
-      try {
-        const runsWithReports = await Promise.all(runs.map(async (r) => {
-          let text = runReports[r.started];
-          if (text == null) {
-            try {
-              const res = await fetch(`/api/program/report?started=${encodeURIComponent(r.started)}`);
-              text = res.ok ? ((await res.json()) || {}).text || "" : "";
-            } catch { text = ""; }
-            runReports[r.started] = text;
-          }
-          return { name: r.name, started: r.started, day: r.day, date: r.date, text };
-        }));
-        if (window.SwingWeek && window.SwingWeek.joinWeekAndRuns) {
-          fullText = window.SwingWeek.joinWeekAndRuns(currentSummary.text, runsWithReports);
-        }
-      } finally {
-        if (weekCopyBtn) weekCopyBtn.textContent = orig;
-      }
-    }
-
-    copyText(fullText, weekCopyBtn);
+    const orig = weekCopyBtn ? weekCopyBtn.textContent : "";
+    if (weekCopyBtn) weekCopyBtn.textContent = "Copying…";
+    try {
+      const fullText = await getFullWeekText();
+      copyText(fullText, weekCopyBtn);
+    } finally {
+      if (weekCopyBtn) weekCopyBtn.textContent = orig;
   }
 
   function copyText(text, btn) {

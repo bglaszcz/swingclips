@@ -1576,6 +1576,31 @@
           Only the text brief below goes out: no video, pictures or names. One call per session, at most 10 a day: a few cents each
           with the big providers' best models (the brief and answer are short).</div>
       </div>
+      <div class="t-card" id="aicoach-question-card">
+        <h3 style="margin-top: 0;">Ask the coach a question</h3>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <textarea id="aicoach-question-input" maxlength="500" rows="3" placeholder="e.g. Why do my 7 irons go right? Is my driver strike getting better?" style="width: 100%; box-sizing: border-box; resize: vertical; font-family: inherit; font-size: 14px; padding: 8px; border-radius: 6px; border: 1px solid var(--border, #333); background: var(--bg-card, #1a1a1a); color: var(--text);"></textarea>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span id="aicoach-question-chars" class="muted" style="font-size: 12px;">500 characters left</span>
+            <button id="aicoach-question-send" class="small" type="button">Send</button>
+          </div>
+        </div>
+        <div id="aicoach-question-status" class="muted" style="font-size: 13px; margin-top: 6px;" hidden></div>
+        <div id="aicoach-question-answer" style="margin-top: 10px; background: var(--bg-card, #1a1a1a); padding: 12px; border-radius: 6px; border: 1px solid var(--border, #333);" hidden>
+          <div style="font-weight: 600; margin-bottom: 6px; font-size: 13px; color: var(--accent);">Coach's answer</div>
+          <div id="aicoach-question-answer-text" style="white-space: pre-wrap; line-height: 1.5; font-size: 14px;"></div>
+        </div>
+        <details id="aicoach-question-brief-fold" style="margin-top: 12px;">
+          <summary style="cursor: pointer; font-size: 13px; color: var(--muted);">What the coach sees (30-day brief)</summary>
+          <div style="margin-top: 8px;">
+            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 4px;">
+              <span id="aicoach-question-copied" class="muted" style="font-size: 13px;" hidden>Copied!</span>
+              <button id="aicoach-copy-question-brief" class="small" type="button">Copy</button>
+            </div>
+            <pre id="aicoach-question-brief-text" style="white-space: pre-wrap; font-family: monospace; font-size: 12px; line-height: 1.4; background: var(--bg-card, #1a1a1a); padding: 12px; border-radius: 6px; max-height: 280px; overflow-y: auto; border: 1px solid var(--border, #333);"></pre>
+          </div>
+        </details>
+      </div>
       <div class="t-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <h3 style="margin: 0;">What goes out (latest session brief)</h3>
