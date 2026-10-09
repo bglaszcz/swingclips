@@ -165,8 +165,8 @@ What the server works out for each swing and what each part of the review page s
   server (Square read about 14 mm low on every club from mid-September; `app.recentre_strike`), and a note says so. The swing view's strike tile uses the same
   drawing, cropped to the face (`tile: true`): this shot's dot and the usual ring.
   Below the face: a comparison summary line comparing the latest session's strike centre and spread against the median of up to
-  6 earlier baseline sessions ("Strikes moved 5 mm toward the toe and stayed low (15 mm below centre). Your usual: 2 mm toward the heel, 17 mm low").
-  When low strikes are typical with irons (median strikeV below -10 mm), a coaching line checks the irons' what-helps-what-hurts
+  6 earlier baseline sessions ("Strikes moved 5 mm toward the toe and stayed low (1 mm below centre). Your usual: 2 mm toward the heel, 3 mm low").
+  When low strikes are typical with irons (median strikeV below -10 mm, listed for review under re-centred heights), a coaching line checks the irons' what-helps-what-hurts
   (`pooledHelps(...).irons.a.links`, confirmed or emerging) coached with `SwingCoach.coach(l, "I7")` for its swing thought and drill;
   if no link exists yet, it states the fact without inventing a drill.
   A compact trend chart underneath plots each session's centre over time across two tracks (Toe/heel drift and Height on face).
@@ -283,8 +283,8 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   - woods, hybrids and driver: the same, offline within **6%** of carry;
   - strike (on by default): within **20 mm** heel/toe and **20 mm** high/low of your usual spot on
     the face (the median of Square's face-impact numbers with the club). Square reports where on the
-    face, not a strike-quality score, and its high/low numbers aren't centered on 0 (your 7-iron
-    median is about -10 mm), so it's measured from your own usual spot.
+    face, not a strike-quality score; heights are re-centred on 0 by the server (+14 mm; your 7-iron
+    median is near 0 mm, ~-14 mm raw), and strike tolerance is measured from your own usual spot.
   "Your median" is over the club's latest 200 shots, good or not, and only once there are 5 of them;
   before that no shot with the club counts as good. A rule Square gives no number for (the driver
   often has no smash or strike) is skipped for that shot rather than held against it. Swings left
