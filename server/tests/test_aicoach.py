@@ -272,6 +272,135 @@ class KeysAndSettingsTest(Base):
         self.assertEqual(c.post("/api/coach/settings", json={"provider": "nope"}).status_code, 400)
         self.assertEqual(c.get("/api/coach/models?provider=nope").status_code, 400)
         self.assertEqual(c.get("/api/coach/models?provider=google").json()["models"], [])   # no key: an error, no call
+        self.assertIn("error", c.post("/api/coach/ask", json={"kind": "question", "question": ""}).json())
+        self.assertIsInstance(c.get("/api/coach/notes?kind=week").json(), list)
+        self.assertIsInstance(c.get("/api/coach/notes?kind=question").json(), list)
+
+
+class KindsAndPromptsTest(Base):
+    def setUp(self):
+        super().setUp()
+        self.key_file.write_text("sk-ant-test\n", encoding="utf-8")
+
+    def test_session_prompt_and_content(self):
+        client = FakeClient(FakeResponse([FakeBlock("Take on session.")]))
+        res = self.ask(session="s1", brief="Session brief.", kind="session", client=client)
+        self.assertEqual(res["text"], "Take on session.")
+        call = client.messages.last_call
+        self.assertIn("single-digit handicap", call["system"])
+        self.assertIn("How it went", call["system"])
+        self.assertEqual(call["messages"], [{"role": "user", "content": "Session brief."}])
+
+    def test_week_prompt_and_content(self):
+        client = FakeClient(FakeResponse([FakeBlock("The week: solid progress.")]))
+        res = self.ask(session="2031-03-24", brief="Week text.", kind="week", client=client)
+        self.assertEqual(res["text"], "The week: solid progress.")
+        self.assertEqual(res["kind"], "week")
+        call = client.messages.last_call
+        self.assertIn("The week", call["system"])
+        self.assertIn("Next week", call["system"])
+        self.assertEqual(call["messages"], [{"role": "user", "content": "Week text."}])
+
+    def test_question_prompt_and_content(self):
+        client = FakeClient(FakeResponse([FakeBlock("Your 7 irons go right because...")]))
+        res = aicoach.ask(
+            kind="question",
+            question="Why do my 7 irons go right?",
+            brief="30-day brief.",
+            client=client,
+            notes_file=self.notes,
+            key_file=self.key_file,
+        )
+        self.assertEqual(res["text"], "Your 7 irons go right because...")
+        self.assertEqual(res["kind"], "question")
+        self.assertEqual(res["question"], "Why do my 7 irons go right?")
+        call = client.messages.last_call
+        self.assertIn("Answer the question asked", call["system"])
+        self.assertEqual(call["messages"], [{"role": "user", "content": "Question: Why do my 7 irons go right?\n\n30-day brief."}])
+
+    def test_week_reused_unless_again(self):
+        client1 = FakeClient(FakeResponse([FakeBlock("Week review 1")]))
+        res1 = self.ask(session="2031-03-24", brief="Week text.", kind="week", client=client1)
+        self.assertFalse(res1["kept"])
+        never = FakeClient(exception=RuntimeError("must not call"))
+        res2 = self.ask(session="2031-03-24", brief="Week text.", kind="week", client=never)
+        self.assertTrue(res2["kept"])
+        self.assertEqual(res2["text"], "Week review 1")
+        self.assertEqual(never.messages.call_count, 0)
+        client2 = FakeClient(FakeResponse([FakeBlock("Week review 2")]))
+        res3 = self.ask(session="2031-03-24", brief="Week text.", kind="week", again=True, client=client2)
+        self.assertFalse(res3["kept"])
+        self.assertEqual(res3["text"], "Week review 2")
+
+    def test_question_never_reused(self):
+        client = FakeClient(FakeResponse([FakeBlock("Answer A")]))
+        res1 = aicoach.ask(
+            kind="question",
+            question="Why do my 7 irons go right?",
+            brief="Brief.",
+            client=client,
+            notes_file=self.notes,
+            key_file=self.key_file,
+        )
+        self.assertFalse(res1["kept"])
+        self.assertEqual(client.messages.call_count, 1)
+
+        client.messages.response = FakeResponse([FakeBlock("Answer B")])
+        res2 = aicoach.ask(
+            kind="question",
+            question="Why do my 7 irons go right?",
+            brief="Brief.",
+            client=client,
+            notes_file=self.notes,
+            key_file=self.key_file,
+        )
+        self.assertFalse(res2["kept"])
+        self.assertEqual(res2["text"], "Answer B")
+        self.assertEqual(client.messages.call_count, 2)
+
+    def test_question_requires_question_text(self):
+        res = aicoach.ask(kind="question", question="", notes_file=self.notes, key_file=self.key_file)
+        self.assertIn("question is required", res["error"])
+
+    def test_shared_cap_across_kinds(self):
+        aicoach.save_note({"session": "s1", "kind": "session", "t": time.time(), "text": "t"}, notes_file=self.notes)
+        aicoach.save_note({"session": "2031-03-17", "kind": "week", "t": time.time(), "text": "t"}, notes_file=self.notes)
+        aicoach.save_note({"kind": "question", "question": "q?", "t": time.time(), "text": "t"}, notes_file=self.notes)
+        for i in range(aicoach.DAILY_CAP - 3):
+            aicoach.save_note({"session": f"s{i+2}", "t": time.time(), "text": "t"}, notes_file=self.notes)
+        client = FakeClient(FakeResponse([FakeBlock("no")]))
+        res = aicoach.ask(kind="question", question="one more?", client=client, notes_file=self.notes, key_file=self.key_file)
+        self.assertIn("Daily limit", res["error"])
+        self.assertEqual(client.messages.call_count, 0)
+
+    def test_old_notes_still_read_as_sessions_and_filtering(self):
+        # Note with no kind (legacy note)
+        aicoach.save_note({"session": "legacy_s1", "t": time.time() - 100, "text": "Old session take."}, notes_file=self.notes)
+        # Note of kind week
+        aicoach.save_note({"session": "2031-03-10", "kind": "week", "t": time.time() - 50, "text": "Week take."}, notes_file=self.notes)
+        # Note of kind question
+        aicoach.save_note({"kind": "question", "question": "Why?", "t": time.time() - 10, "text": "Because."}, notes_file=self.notes)
+
+        # Legacy note can be found by session
+        kept = aicoach.get_kept_note("legacy_s1", self.notes)
+        self.assertIsNotNone(kept)
+        self.assertEqual(kept["text"], "Old session take.")
+
+        # Filtering by kind
+        sessions = aicoach.get_all_notes(self.notes, kind="session")
+        self.assertEqual(len(sessions), 1)
+        self.assertEqual(sessions[0]["session"], "legacy_s1")
+
+        weeks = aicoach.get_all_notes(self.notes, kind="week")
+        self.assertEqual(len(weeks), 1)
+        self.assertEqual(weeks[0]["session"], "2031-03-10")
+
+        questions = aicoach.get_all_notes(self.notes, kind="question")
+        self.assertEqual(len(questions), 1)
+        self.assertEqual(questions[0]["question"], "Why?")
+
+        all_notes = aicoach.get_all_notes(self.notes)
+        self.assertEqual(len(all_notes), 3)
 
 
 if __name__ == "__main__":

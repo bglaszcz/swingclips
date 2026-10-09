@@ -1986,28 +1986,32 @@ def program_report(started: float | None = None):
 
 
 class CoachAskBody(BaseModel):
-    session: str | int | float
+    session: str | int | float = ""
     brief: str = ""
     again: bool = False
+    kind: str = "session"
+    question: str | None = None
 
 
 @app.post("/api/coach/ask")
 def coach_ask(body: CoachAskBody):
-    """The AI coach's short take on a session."""
+    """The AI coach's short take on a session, week, or question."""
     return aicoach.ask(
         session=body.session,
         brief=body.brief,
         again=body.again,
+        kind=body.kind,
+        question=body.question,
         lock=files_lock,
     )
 
 
 @app.get("/api/coach/notes")
-def coach_notes(session: str | None = None):
+def coach_notes(session: str | None = None, kind: str | None = None):
     """The kept note for a session, or all kept notes newest first."""
     if session is not None and str(session).strip():
-        return aicoach.get_kept_note(session)
-    return aicoach.get_all_notes()
+        return aicoach.get_kept_note(session, kind=kind)
+    return aicoach.get_all_notes(kind=kind)
 
 
 @app.get("/api/coach/status")

@@ -28,7 +28,12 @@ except ImportError:   # not installed yet: Claude can't be used until it is (req
     anthropic = None
 
 DAILY_CAP = 10
-PROMPT_FILE = Path(__file__).parent / "aicoach_prompt.md"
+PROMPT_FILES = {
+    "session": Path(__file__).parent / "aicoach_prompt.md",
+    "week": Path(__file__).parent / "aicoach_week_prompt.md",
+    "question": Path(__file__).parent / "aicoach_question_prompt.md",
+}
+PROMPT_FILE = PROMPT_FILES["session"]
 MAX_TOKENS = 2000
 TIMEOUT_S = 120
 
@@ -159,9 +164,10 @@ def current(key_file: Path | None = None) -> dict[str, Any]:
             "key": get_api_key(provider, key_file if provider == "anthropic" else None)}
 
 
-def get_system_prompt() -> str:
+def get_system_prompt(kind: str = "session") -> str:
+    f = PROMPT_FILES.get(kind, PROMPT_FILES["session"])
     try:
-        return PROMPT_FILE.read_text(encoding="utf-8").strip()
+        return f.read_text(encoding="utf-8").strip()
     except OSError:
         return ""
 
@@ -183,16 +189,24 @@ def load_notes(notes_file: Path | None = None) -> list[dict[str, Any]]:
     return notes
 
 
-def get_kept_note(session: str | int, notes_file: Path | None = None) -> dict[str, Any] | None:
+def get_kept_note(session: str | int, notes_file: Path | None = None, kind: str | None = None) -> dict[str, Any] | None:
     target = str(session).strip()
     for note in reversed(load_notes(notes_file)):
+        if kind is not None:
+            note_kind = note.get("kind") or "session"
+            if note_kind != kind:
+                continue
         if str(note.get("session", "")).strip() == target:
             return note
     return None
 
 
-def get_all_notes(notes_file: Path | None = None) -> list[dict[str, Any]]:
-    return list(reversed(load_notes(notes_file)))
+def get_all_notes(notes_file: Path | None = None, kind: str | None = None) -> list[dict[str, Any]]:
+    notes = list(reversed(load_notes(notes_file)))
+    if kind:
+        target_kind = kind.strip()
+        notes = [n for n in notes if (n.get("kind") or "session") == target_kind]
+    return notes
 
 
 def calls_today(notes_file: Path | None = None) -> int:
@@ -353,24 +367,33 @@ def call_google(model: str, key: str, system: str, brief: str, http: Callable = 
 
 
 def ask(
-    session: str | int,
-    brief: str,
+    session: str | int | float = "",
+    brief: str = "",
     again: bool = False,
+    kind: str = "session",
+    question: str | None = None,
     client: Any = None,
     notes_file: Path | None = None,
     key_file: Path | None = None,
     lock: threading.Lock | None = None,
     http: Callable = _http,
 ) -> dict[str, Any]:
-    """The coach's take on a session: the kept one, or a new call to the provider in use."""
-    session_str = str(session).strip()
-    if not session_str:
-        return {"error": "session is required"}
-    if not again:
-        kept = get_kept_note(session_str, notes_file=notes_file)
-        if kept is not None:
-            return {"text": kept.get("text", ""), "model": kept.get("model", ""), "provider": kept.get("provider", "anthropic"),
-                    "t": kept.get("t", 0), "kept": True}
+    """The coach's take on a session, a week review, or an answer to a question."""
+    if kind not in ("session", "week", "question"):
+        return {"error": f"Unknown kind: {kind}"}
+    session_str = str(session).strip() if session is not None else ""
+    if kind == "question":
+        q_str = str(question or "").strip()
+        if not q_str:
+            return {"error": "question is required"}
+    else:
+        if not session_str:
+            return {"error": "session is required"}
+        if not again:
+            kept = get_kept_note(session_str, notes_file=notes_file, kind=kind)
+            if kept is not None:
+                return {"text": kept.get("text", ""), "model": kept.get("model", ""), "provider": kept.get("provider", "anthropic"),
+                        "t": kept.get("t", 0), "kept": True, "kind": kept.get("kind") or "session"}
     cur = current(key_file)
     provider, model = cur["provider"], cur["model"]
     if not cur["key"] and client is None:
@@ -379,23 +402,37 @@ def ask(
         return {"error": "Pick a model for the coach (Tools > AI coach)"}
     if calls_today(notes_file=notes_file) >= DAILY_CAP:
         return {"error": f"Daily limit reached ({DAILY_CAP} calls a day). Try again tomorrow."}
-    system = get_system_prompt()
+    system = get_system_prompt(kind)
+    if kind == "question":
+        user_content = f"Question: {q_str}\n\n{brief}".strip() if brief else f"Question: {q_str}"
+    else:
+        user_content = brief
     try:
         if provider == "anthropic":
-            got = call_anthropic(model, cur["key"], system, brief, client=client)
+            got = call_anthropic(model, cur["key"], system, user_content, client=client)
         elif provider == "google":
-            got = call_google(model, cur["key"], system, brief, http=http)
+            got = call_google(model, cur["key"], system, user_content, http=http)
         elif provider == "openai":
-            got = call_openai(model, cur["key"], system, brief, http=http)
+            got = call_openai(model, cur["key"], system, user_content, http=http)
         else:
             if not cur["baseUrl"]:
                 return {"error": "Add the provider's API base URL (Tools > AI coach)"}
-            got = call_openai(model, cur["key"], system, brief, base_url=cur["baseUrl"], http=http)
+            got = call_openai(model, cur["key"], system, user_content, base_url=cur["baseUrl"], http=http)
     except CoachError as e:
         return {"error": str(e)}
     if not got["text"].strip():
         return {"error": "The coach sent back nothing: try again later"}
     now = time.time()
-    save_note({"session": session_str, "t": now, "provider": provider, "model": model, "brief": brief,
-               "text": got["text"], "usage": got["usage"]}, notes_file=notes_file, lock=lock)
-    return {"text": got["text"], "model": model, "provider": provider, "t": now, "kept": False}
+    note = {"kind": kind, "t": now, "provider": provider, "model": model, "brief": brief,
+            "text": got["text"], "usage": got["usage"]}
+    if kind == "question":
+        note["question"] = q_str
+        if session_str:
+            note["session"] = session_str
+    else:
+        note["session"] = session_str
+    save_note(note, notes_file=notes_file, lock=lock)
+    res = {"text": got["text"], "model": model, "provider": provider, "t": now, "kept": False, "kind": kind}
+    if kind == "question":
+        res["question"] = q_str
+    return res
