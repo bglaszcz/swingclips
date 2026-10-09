@@ -245,7 +245,7 @@
         }
       }
       if (story.best && story.best.why) {
-        lines.push(`Rewatch swing: ${story.best.name || "Swing"} - ${story.best.why}`);
+        lines.push(`Best swing to rewatch: ${story.best.why}`);
       }
       if (story.fault) {
         const faultName = (typeof story.fault.name === "string" && story.fault.name)
@@ -297,14 +297,23 @@
       lines.push("# Current Focus");
 
       const moveLabel = METRIC_LABELS[focus.move] || focus.move || "Current focus";
-      const aimText = focus.aim ? `aim: ${focus.aim}` : "";
       const scopeText = focus.scope
         ? ` (${focus.scope === "woods" ? "driver and woods" : "irons"})`
         : focus.club
         ? ` (${plainClubName(focus.club)})`
         : "";
       const sinceText = focus.since ? ` since ${focus.since}` : "";
-      lines.push(`Focus move: ${moveLabel}${aimText ? ` - ${aimText}` : ""}${scopeText}${sinceText}`);
+      // The move in golf words, with what it is, its drill and swing thought (coach.js).
+      const plain = (root.SwingShotStory && root.SwingShotStory.plain) || (t => t);
+      const fix = Coach && Coach.MOVES && Coach.MOVES[focus.move] ? Coach.MOVES[focus.move][focus.aim] : null;
+      if (fix) {
+        lines.push(`Focus: ${plain(fix.name)}${scopeText}${sinceText} (measured as ${moveLabel.toLowerCase()}, aiming for ${focus.aim === "more" ? "more" : "less"})`);
+        if (fix.how) lines.push(`What it is: ${plain(fix.how)}`);
+        if (fix.drill) lines.push(`Its drill: ${plain(fix.drill)}`);
+        if (fix.thought) lines.push(`Its swing thought: ${plain(fix.thought)}`);
+      } else {
+        lines.push(`Focus move: ${moveLabel}${focus.aim ? ` - aim: ${focus.aim}` : ""}${scopeText}${sinceText}`);
+      }
 
       // Evidence lines
       if (Array.isArray(focus.evidence) && focus.evidence.length > 0) {
@@ -375,7 +384,27 @@
     return result;
   }
 
+  /**
+   * How the focus is going, for pages without Progress's code (the Start page): the move itself and its
+   * results, before and since the focus started (focus.js), from sessions [{start, rows}] of any club
+   * (oldest first), kept to the focus's club or club group. {} when focus.js isn't loaded or no focus.
+   */
+  function focusProgress(focus, sessions) {
+    if (!focus || !focus.move || !Focus || !GoodShots) return {};
+    const scope = focus.scope || focus.club || null;
+    const keep = r => scope === "irons" || scope === "woods" ? GoodShots.groupOf(r.club) === scope
+      : scope ? r.club === scope : !!GoodShots.groupOf(r.club);
+    const ss = (sessions || []).map(s => ({ start: s.start, rows: (s.rows || []).filter(keep), moved: {} })).filter(s => s.rows.length);
+    try {
+      const focusCmp = Focus.compare(ss, focus);
+      return { focusCmp, focusWorking: Focus.working(focusCmp, k => (METRIC_LABELS[k] || k).toLowerCase()) };
+    } catch (e) {
+      return {};
+    }
+  }
+
   const api = {
+    focusProgress,
     brief,
     formatMetricValue,
     plainClubName,

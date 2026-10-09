@@ -71,7 +71,8 @@ describe("SwingAICoach.brief", () => {
     assert.match(brief, /Clubs: 7 iron \(1 swings\), driver \(1 swings\)/);
     assert.match(brief, /Headline: A little better than last session/);
     assert.match(brief, /Club performance:/);
-    assert.match(brief, /Rewatch swing:/);
+    assert.match(brief, /Best swing to rewatch: /);
+    assert.doesNotMatch(brief, /.mp4/);   // no clip names go out
     assert.match(brief, /Top fault: Hips toward the ball at impact \(8 swings\)/);
     assert.match(brief, /Drill: Chair drill/);
     assert.match(brief, /Swing thought: Stay in your posture/);
@@ -81,7 +82,9 @@ describe("SwingAICoach.brief", () => {
     assert.match(brief, /Good shots: now 60%/);
 
     assert.match(brief, /# Current Focus/);
-    assert.match(brief, /Focus move: Hip slide at impact - aim: more \(7 iron\) since 2026-10-01/);
+    assert.match(brief, /Focus: more of a hip bump toward the target \(7 iron\) since 2026-10-01 \(measured as hip slide at impact, aiming for more\)/);
+    assert.match(brief, /Its drill: /);
+    assert.match(brief, /Its swing thought: /);
     assert.match(brief, /Evidence for focus:/);
     assert.match(brief, /Focus status: It's working/);
     assert.match(brief, /Focus next step: You're making the move and smash followed/);
@@ -134,4 +137,25 @@ describe("SwingAICoach.brief", () => {
     assert.strictEqual(AICoach.brief(null), "");
     assert.strictEqual(AICoach.brief({}), "# Session");
   });
+});
+
+it("SwingAICoach.focusProgress: the move and its results since the focus started, kept to its club", () => {
+  global.SwingSummary = require("../static/summary.js");
+  const A = require("../static/aicoach.js");
+  const day = d => new Date(`2026-10-${String(d).padStart(2, "0")}T12:00:00`).getTime();
+  const sessions = [];
+  for (let d = 1; d <= 12; d++) {
+    const rows = [];
+    for (let i = 0; i < 8; i++) {
+      rows.push({ club: "I7", hipSway: (d < 6 ? 1 : 3) + (i % 3) * 0.1, shot: null });
+      rows.push({ club: "DR", hipSway: 9, shot: null });       // another club: left out
+    }
+    sessions.push({ start: day(d), rows });
+  }
+  const got = A.focusProgress({ move: "hipSway", aim: "more", club: "I7", since: "2026-10-06", results: [] }, sessions);
+  assert.equal(got.focusCmp.after, 7);
+  assert.ok(got.focusCmp.move.after > got.focusCmp.move.before);
+  assert.equal(got.focusCmp.move.good, true);
+  assert.ok(got.focusWorking.head);
+  assert.deepEqual(A.focusProgress(null, sessions), {});
 });

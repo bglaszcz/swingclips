@@ -42,33 +42,82 @@
     };
   }
 
+  const $id = id => document.getElementById(id);
+  let st = null;
+
+  /** The setup card from /api/coach/status: providers (with whether each has a key), the model in use. */
+  async function renderSetup() {
+    try { st = await fetch("/api/coach/status").then(r => r.ok ? r.json() : null); } catch { st = null; }
+    if (!st) return;
+    const sel = $id("aicoach-provider");
+    sel.replaceChildren(...st.providers.map(p => Object.assign(document.createElement("option"),
+      { value: p.id, textContent: p.name + (p.hasKey ? " (key saved)" : "") })));
+    sel.value = st.provider;
+    const showProvider = () => {
+      const p = st.providers.find(x => x.id === sel.value) || {};
+      $id("aicoach-baseurl-row").hidden = sel.value !== "other";
+      $id("aicoach-baseurl").value = st.baseUrl || "";
+      $id("aicoach-key").value = "";
+      $id("aicoach-key-note").textContent = p.hasKey
+        ? "A key is saved for this provider: leave the box empty to keep it, or paste a new one."
+        : `No key yet: make one at ${p.keys}, then paste it here.`;
+    };
+    sel.onchange = () => { showProvider(); fillModels(sel.value, null); };
+    showProvider();
+    if (statusBadge) {
+      statusBadge.textContent = st.ready ? "Ready" : "Not set up";
+      statusBadge.style.color = st.ready ? "var(--accent)" : "var(--muted)";
+    }
+    if (statusText) {
+      const name = (st.providers.find(x => x.id === st.provider) || {}).name || st.provider;
+      statusText.textContent = st.ready
+        ? `Using ${name}, model ${st.model}. Calls today: ${st.callsToday} of ${st.cap}.`
+        : `Not set up yet: pick a provider, paste its API key and pick a model. Calls today: ${st.callsToday} of ${st.cap}.`;
+    }
+    $id("aicoach-save").onclick = save;
+    $id("aicoach-model").onchange = async () => {
+      await post({ provider: sel.value, model: $id("aicoach-model").value });
+      await renderSetup();
+    };
+    fillModels(st.provider, st.model);
+  }
+
+  /** The provider's models, from its own list (needs its key); the one in use selected. */
+  async function fillModels(provider, current) {
+    const ms = $id("aicoach-model"), note = $id("aicoach-model-note");
+    ms.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "Loading the provider's models…" }));
+    let got = null;
+    try { got = await fetch("/api/coach/models?provider=" + encodeURIComponent(provider)).then(r => r.json()); } catch {}
+    const models = (got && got.models) || [];
+    if (current && !models.includes(current)) models.unshift(current);
+    ms.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: models.length ? "Pick a model" : "No models yet" }),
+      ...models.map(m => Object.assign(document.createElement("option"), { value: m, textContent: m })));
+    ms.value = current || "";
+    note.textContent = got && got.error ? got.error
+      : "Newest models are usually the best: the coach needs good judgment more than speed.";
+  }
+
+  async function post(body) {
+    const res = await fetch("/api/coach/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
+    return res.json();
+  }
+
+  async function save() {
+    const provider = $id("aicoach-provider").value, key = $id("aicoach-key").value.trim();
+    const body = { provider };
+    if (key) body.key = key;
+    if (provider === "other") body.baseUrl = $id("aicoach-baseurl").value.trim();
+    try { await post(body); } catch (e) { $id("aicoach-key-note").textContent = `Couldn't save: ${e.message}`; return; }
+    await renderSetup();
+  }
+
   async function loadData() {
     if (typeof loadTrendData === "function") {
       await loadTrendData();
     }
-    // 1. Status
-    try {
-      const st = await fetch("/api/coach/status").then(r => r.ok ? r.json() : null);
-      const ready = st ? st.ready : false;
-      const callsToday = st ? st.callsToday : 0;
-      const cap = st ? st.cap : 10;
-      const howToAdd = st ? st.howToAdd : "Make an API key at console.anthropic.com, paste it into anthropic-key.txt next to shots.jsonl (or set ANTHROPIC_API_KEY), then Tools > Update the server.";
-
-      if (statusBadge) {
-        statusBadge.textContent = ready ? "Key configured" : "No key";
-        statusBadge.style.color = ready ? "var(--good, #4caf50)" : "var(--muted, #888)";
-      }
-      if (statusText) {
-        statusText.textContent = ready
-          ? `API key configured. Calls today: ${callsToday} of ${cap} daily cap.`
-          : `No API key found. Calls today: ${callsToday} of ${cap} daily cap.`;
-      }
-      if (howToAddEl) {
-        howToAddEl.textContent = howToAdd;
-      }
-    } catch (e) {
-      console.warn("Error fetching coach status:", e);
-    }
+    // 1. Which AI: provider, key (write-only), model from the provider's own list.
+    await renderSetup();
 
     // 2. Latest session brief
     try {
@@ -98,18 +147,14 @@
               name: r => (r.c ? r.c.name : r.name),
             });
           }
-          let progReport = null;
-          try {
-            const prog = await fetch("/api/program/report").then(r => r.ok ? r.json() : null);
-            if (prog && prog.text) progReport = prog.text;
-          } catch {}
+          const progReport = typeof coachProgramReport === "function" ? await coachProgramReport(latest.start) : null;
 
           latestBrief = SwingAICoach.brief({
             session: latest,
             earlier: earlier,
             story: story,
             compare: cmp,
-            focus: typeof journal !== "undefined" ? journal.focus : null,
+            ...(typeof coachFocusInput === "function" ? coachFocusInput() : {}),
             programReport: progReport,
           });
         }

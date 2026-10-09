@@ -1099,11 +1099,7 @@ function renderOverall(all) {
             name: r => r.c?.name || r.name,
           });
         }
-        let progReport = null;
-        try {
-          const p = await fetch("/api/program/report").then(r => r.ok ? r.json() : null);
-          if (p && p.text) progReport = p.text;
-        } catch {}
+        const progReport = await coachProgramReport(sessStart);
 
         brief = SwingAICoach.brief({
           session: cmp.latest,
@@ -1111,7 +1107,7 @@ function renderOverall(all) {
           ctx: { clubs: data.clubs, settings: goodSettings && goodSettings.settings },
           story,
           compare: cmp,
-          focus: journal && journal.focus,
+          ...coachFocusInput(),
           programReport: progReport,
         });
       }
@@ -2532,6 +2528,35 @@ function focusProgress(f, cmp) {
     kids.push(nums);
   }
   return kids;
+}
+
+/** The focus for the AI coach's brief (aicoach.js): the focus, its evidence lines, and how it's going (the
+ * move itself and its results, before and since), as the focus card says them. {} without a focus. */
+function coachFocusInput() {
+  const f = journal.focus && journal.focus.move ? journal.focus : null;
+  if (!f) return {};
+  const h = pooledHelps(progressSessions("*"));
+  const group = f.scope || (f.club ? SwingGoodShots.groupOf(f.club) : "irons");
+  const items = moveEvidence(h, f.move, f.aim, group, f.club || (h[group] && h[group].club));
+  const plain = SwingShotStory.plain;
+  const evidence = items.slice(0, 3).map(({ l, c }) => `${plain(c.when)} -> ${c.then} (${(EVIDENCE[l.label] || l.label).toLowerCase()}): `
+    + `${plain(SwingHelps.sentence(l))}; ${SwingHelps.support(l)}`
+    + (f.aim === "less" ? " [this describes MORE of the move; the focus is less of it]" : ""));
+  const results = [...new Set([...(f.results || []), ...items.map(x => x.l.result)])];
+  const focusCmp = SwingFocus.compare(progressSessions(f.scope || f.club || "*"), { ...f, results });
+  const focusWorking = SwingFocus.working(focusCmp, key => lowerFirst(focusLabel(key)));
+  return { focus: { ...f, evidence }, focusCmp, focusWorking };
+}
+
+/** A coach program run's report for the brief, only when the run started the day of the session. */
+async function coachProgramReport(sessionStart) {
+  try {
+    const p = await fetch("/api/program/report").then(r => r.ok ? r.json() : null);
+    const started = p && (p.started || (p.run && p.run.started));
+    if (!p || !p.text || !started) return null;
+    const day = t => new Date(t > 1e12 ? t : t * 1000).toDateString();
+    return day(started) === day(sessionStart) ? p.text : null;
+  } catch { return null; }
 }
 
 /** Is the focus working? Under the focus in step 2: one sentence with what to do about it, then the swing

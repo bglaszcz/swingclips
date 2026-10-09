@@ -2012,8 +2012,41 @@ def coach_notes(session: str | None = None):
 
 @app.get("/api/coach/status")
 def coach_status():
-    """Whether a key is configured, calls made today, and the daily cap."""
+    """The provider in use and its model, which providers have a key (never the key), calls today, the cap."""
     return aicoach.status()
+
+
+class CoachSettingsBody(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    baseUrl: str | None = None
+    key: str | None = None
+
+
+@app.post("/api/coach/settings")
+def coach_settings(body: CoachSettingsBody):
+    """Tools > AI coach: the provider, its model, the base URL (other providers) and, when given, its key
+    (kept in the provider's key file next to shots.jsonl; never sent back)."""
+    try:
+        if body.key is not None:
+            aicoach.save_key(body.provider or aicoach.current()["provider"], body.key)
+        aicoach.save_settings(body.provider, body.model, body.baseUrl)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    print(f"AI coach: provider {aicoach.current()['provider']}, model {aicoach.current()['model']}"
+          + (" (key saved)" if body.key else ""), flush=True)
+    return aicoach.status()
+
+
+@app.get("/api/coach/models")
+def coach_models(provider: str):
+    """The provider's models that can write a reply (from its own list, with the saved key)."""
+    if provider not in aicoach.PROVIDERS:
+        raise HTTPException(400, "Unknown provider")
+    try:
+        return {"models": aicoach.list_models(provider, base_url=aicoach.load_settings().get("baseUrl") or "")}
+    except aicoach.CoachError as e:
+        return {"models": [], "error": str(e)}
 
 
 @app.get("/api/still/{name}")

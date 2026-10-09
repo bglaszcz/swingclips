@@ -226,6 +226,8 @@
 <script src="/static/sessionscore.js"></script>
 <script src="/static/sessionstory.js"></script>
 <script src="/static/swingrow.js"></script>
+<script src="/static/helps.js"></script>
+<script src="/static/focus.js"></script>
 <script src="/static/aicoach.js"></script>
 </head>
 <body>
@@ -895,6 +897,8 @@ function renderEndOfSessionCard(st, session, earlier, ctx) {
           ctx,
           story: st,
           focus: journalData && journalData.focus,
+          // Is the focus working: the move itself and its results since it started (every session, oldest first).
+          ...SwingAICoach.focusProgress(journalData && journalData.focus, coachSessions),
         });
       }
       const res = await fetch("/api/coach/ask", {
@@ -983,6 +987,8 @@ async function checkEndOfSession() {
   const goodData = getBayGoodData();
   const clipsMap = new Map(clipsList.map(c => [c.name, c]));
   const toRow = c => SwingRow.row(c, swingRecords, clipsMap, noiseTable);
+  // Every session's rows, oldest first, for the AI coach's "is the focus working" (aicoach.js focusProgress).
+  coachSessions = [...allSessions].reverse().map(s => ({ start: s.start, rows: [...s.clips].reverse().filter(c => !c.excluded).map(toRow) }));
   const earlier = allSessions
     .filter(s => s.start < lastSession.start)
     .slice(0, 8)
@@ -1009,6 +1015,7 @@ async function checkEndOfSession() {
 }
 
 // ---- 5. Today's plan ----
+let coachSessions = [];
 let journalData = null, allClips = null, practiceConfig = null, swingRecords = null, planStep = null;
 let drillState = null, recentClips = [];
 

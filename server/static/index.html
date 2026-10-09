@@ -243,6 +243,9 @@
   #panel3d .seq-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; }
   #panel3d .seq-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
   /* The swing-order strip under the video. */
+  .aicoach-setup { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+  .aicoach-setup label { display: flex; flex-direction: column; gap: 4px; }
+  .aicoach-setup input, .aicoach-setup select { max-width: 420px; }
   #seq-strip { display: flex; flex-direction: column; gap: 4px; }
   #seq-strip[hidden], #viewer.no-seq #seq-strip { display: none; }
   #seq-strip .seq-strip-chart { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); }
@@ -1558,10 +1561,20 @@
     </div>
     <div class="aicoach-content" style="padding: 12px; display: flex; flex-direction: column; gap: 16px; max-width: 820px; margin: 0 auto;">
       <div class="t-card">
-        <h3 style="margin-top: 0;">Status</h3>
+        <h3 style="margin-top: 0;">Which AI</h3>
         <div id="aicoach-status-text" style="margin-bottom: 8px;"></div>
-        <div id="aicoach-how-to-add" class="note" style="margin-bottom: 8px;"></div>
-        <div class="muted" style="font-size: 13px;">Cost: One call per session, a few cents with Claude Opus 5.5 at medium effort (the brief and answer are small).</div>
+        <div class="aicoach-setup">
+          <label>Provider <select id="aicoach-provider"></select></label>
+          <label id="aicoach-baseurl-row" hidden>API base URL <input id="aicoach-baseurl" type="url" placeholder="https://api.x.ai/v1" autocomplete="off"></label>
+          <label>API key <input id="aicoach-key" type="password" autocomplete="off" placeholder="paste the key here"></label>
+          <div class="note" id="aicoach-key-note"></div>
+          <div class="aicoach-row"><button id="aicoach-save" class="small" type="button">Save and load its models</button></div>
+          <label>Model <select id="aicoach-model"></select></label>
+          <div class="note" id="aicoach-model-note"></div>
+        </div>
+        <div class="muted" style="font-size: 13px; margin-top: 8px;">The key is kept on the home server (a file next to shots.jsonl) and never shown again.
+          Only the text brief below goes out: no video, pictures or names. One call per session, at most 10 a day: a few cents each
+          with the big providers' best models (the brief and answer are short).</div>
       </div>
       <div class="t-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
