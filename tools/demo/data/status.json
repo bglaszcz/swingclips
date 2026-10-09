@@ -1,0 +1,93 @@
+{
+ "level": "ok",
+ "headline": "Ready to hit: Square connected \u00b7 both phones connected",
+ "rows": [
+  {
+   "key": "face",
+   "label": "Face-on",
+   "angle": "face",
+   "level": "ok",
+   "text": "connected \u00b7 battery 95% \u00b7 Wi-Fi strong"
+  },
+  {
+   "key": "dtl",
+   "label": "Down the line",
+   "angle": "dtl",
+   "level": "ok",
+   "text": "connected \u00b7 battery 91% \u00b7 Wi-Fi strong"
+  },
+  {
+   "key": "square",
+   "label": "Square",
+   "level": "ok",
+   "text": "Square connected (driving range)"
+  },
+  {
+   "key": "framing",
+   "label": "Framing",
+   "level": "ok",
+   "text": "both cameras in position"
+  },
+  {
+   "key": "server",
+   "label": "Server",
+   "level": "ok",
+   "text": "Pose: up to date"
+  },
+  {
+   "key": "agent",
+   "label": "Laptop launcher",
+   "level": "ok",
+   "text": "laptop: running \u00b7 shots from Square"
+  }
+ ],
+ "phones": {
+  "face": {
+   "connected": true,
+   "recording": false,
+   "age": 1.2,
+   "expected": true,
+   "speaks": false,
+   "trigger": {
+    "sensitivity": 100,
+    "setting": null,
+    "threshold": 320,
+    "softest": 410,
+    "strikes": true
+   },
+   "command": null
+  },
+  "dtl": {
+   "connected": true,
+   "recording": false,
+   "age": 1.5,
+   "expected": true,
+   "speaks": false,
+   "trigger": {
+    "sensitivity": 100,
+    "setting": null,
+    "threshold": 320,
+    "softest": 405,
+    "strikes": true
+   },
+   "command": null
+  }
+ },
+ "speaker": null,
+ "relay": null,
+ "agent": {
+  "connected": true,
+  "computer": "laptop",
+  "source": "Square Golf app",
+  "age": 2.1,
+  "commands": []
+ },
+ "combined": null,
+ "session": {
+  "start": 1932477300,
+  "first": 1932477300,
+  "last": 1932479700,
+  "spoken": []
+ },
+ "commands": []
+}

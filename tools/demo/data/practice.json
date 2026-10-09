@@ -1,0 +1,13 @@
+{
+ "config": {
+  "on": false,
+  "metric": "path",
+  "min": -2.0,
+  "max": 2.0,
+  "club": "I7"
+ },
+ "metrics": [],
+ "log": [],
+ "listeners": {},
+ "timing": {}
+}

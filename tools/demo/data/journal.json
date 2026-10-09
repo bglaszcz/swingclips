@@ -1,0 +1,35 @@
+{
+ "handicap": [
+  {
+   "date": "2031-03-01",
+   "handicap": 9.4
+  },
+  {
+   "date": "2031-03-28",
+   "handicap": 8.8
+  }
+ ],
+ "notes": {},
+ "focus": {
+  "move": "leadHipP6",
+  "aim": "more",
+  "club": "7 iron",
+  "results": [
+   "carry",
+   "smash"
+  ],
+  "since": "2031-03-16"
+ },
+ "focuses": [
+  {
+   "move": "leadHipP6",
+   "aim": "more",
+   "club": "7 iron",
+   "results": [
+    "carry",
+    "smash"
+   ],
+   "since": "2031-03-16"
+  }
+ ]
+}

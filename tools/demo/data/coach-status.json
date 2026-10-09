@@ -1,0 +1,35 @@
+{
+ "ready": true,
+ "provider": "anthropic",
+ "model": "claude-opus-5-5",
+ "baseUrl": "",
+ "providers": [
+  {
+   "id": "anthropic",
+   "name": "Anthropic (Claude)",
+   "hasKey": true,
+   "keys": "console.anthropic.com"
+  },
+  {
+   "id": "openai",
+   "name": "OpenAI (ChatGPT)",
+   "hasKey": false,
+   "keys": "platform.openai.com"
+  },
+  {
+   "id": "google",
+   "name": "Google (Gemini)",
+   "hasKey": false,
+   "keys": "aistudio.google.com"
+  },
+  {
+   "id": "other",
+   "name": "Other (OpenAI-compatible)",
+   "hasKey": false,
+   "keys": "your provider's dashboard"
+  }
+ ],
+ "callsToday": 1,
+ "cap": 10,
+ "howToAdd": "Make an API key at console.anthropic.com, then paste it here."
+}

@@ -1,0 +1,45 @@
+{
+ "program": null,
+ "programs": [
+  {
+   "id": "lowpoint",
+   "name": "Low point forward",
+   "from": "Coach review Mar 2031",
+   "cap": 30,
+   "clubs": "7 iron only",
+   "bringBack": "Per swing: attack angle, dynamic loft, face to path, strike height, carry",
+   "blocks": [
+    {
+     "id": "leadfoot",
+     "name": "Lead foot only",
+     "drill": "leadfoot",
+     "ball": false,
+     "reps": 10
+    },
+    {
+     "id": "stepthrough",
+     "name": "Step through",
+     "drill": "stepthrough",
+     "ball": false,
+     "reps": 10
+    },
+    {
+     "id": "flush",
+     "name": "Flush line",
+     "drill": null,
+     "ball": true,
+     "reps": 10
+    }
+   ]
+  }
+ ],
+ "log": [
+  {
+   "id": "lowpoint",
+   "name": "Low point forward",
+   "started": 1932477300,
+   "finished": 1932479100,
+   "blocks": []
+  }
+ ]
+}

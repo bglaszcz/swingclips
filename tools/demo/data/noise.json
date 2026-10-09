@@ -1,0 +1,225 @@
+{
+ "swings": 336,
+ "sessions": 12,
+ "share": 0.5,
+ "keys": {
+  "face.tempo": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.backswing": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.downswing": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.releaseArm": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.shoulderTop": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.pelvisTop": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.xFactor": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.hipSway": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.leadHipP6": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.trailHipTop": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.handsAhead": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.pelvisBall": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.chestBall": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.headSway": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.headRise": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.spineTiltImpact": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.lagP5": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.earlyExt": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.bendLoss": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.headToBall": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.handsPlaneP6": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.handsPlaneTop": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.handHeightTop": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  },
+  "face.handDepthTop": {
+   "noise": 0.001,
+   "spread": 0.005,
+   "ratio": 0.2,
+   "clips": 336,
+   "swings": 336,
+   "sessions": 12,
+   "shaky": false
+  }
+ },
+ "code": "demo",
+ "updated": "2031-03-28T10:15:00"
+}

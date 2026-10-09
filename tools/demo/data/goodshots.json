@@ -1,0 +1,42 @@
+{
+ "settings": {
+  "minCount": 8,
+  "irons": {
+   "offlinePct": 5,
+   "carryBelowPct": 10,
+   "carryAbovePct": 12,
+   "smashBelow": 0
+  },
+  "woods": {
+   "offlinePct": 6,
+   "carryBelowPct": 10,
+   "carryAbovePct": 12,
+   "smashBelow": 0
+  },
+  "strike": {
+   "on": true,
+   "heelToeMm": 20,
+   "highLowMm": 20
+  }
+ },
+ "defaults": {
+  "minCount": 8,
+  "irons": {
+   "offlinePct": 5,
+   "carryBelowPct": 10,
+   "carryAbovePct": 12,
+   "smashBelow": 0
+  },
+  "woods": {
+   "offlinePct": 6,
+   "carryBelowPct": 10,
+   "carryAbovePct": 12,
+   "smashBelow": 0
+  },
+  "strike": {
+   "on": true,
+   "heelToeMm": 20,
+   "highLowMm": 20
+  }
+ }
+}
