@@ -165,8 +165,8 @@ What the server works out for each swing and what each part of the review page s
   server (Square read about 14 mm low on every club from mid-September; `app.recentre_strike`), and a note says so. The swing view's strike tile uses the same
   drawing, cropped to the face (`tile: true`): this shot's dot and the usual ring.
   Below the face: a comparison summary line comparing the latest session's strike centre and spread against the median of up to
-  6 earlier baseline sessions ("Strikes moved 5 mm toward the toe and stayed low (1 mm below centre). Your usual: 2 mm toward the heel, 3 mm low").
-  When low strikes are typical with irons (median strikeV below -10 mm, listed for review under re-centred heights), a coaching line checks the irons' what-helps-what-hurts
+  6 earlier baseline sessions ("Strikes moved 5 mm toward the toe and 4 mm lower on the face. Your usual: 2 mm toward the heel, 3 mm low").
+  When low strikes are typical with irons (median strikeV below -6 mm, the floor of the programs' strike band, re-centred heights), a coaching line checks the irons' what-helps-what-hurts
   (`pooledHelps(...).irons.a.links`, confirmed or emerging) coached with `SwingCoach.coach(l, "I7")` for its swing thought and drill;
   if no link exists yet, it states the fact without inventing a drill.
   A compact trend chart underneath plots each session's centre over time across two tracks (Toe/heel drift and Height on face).

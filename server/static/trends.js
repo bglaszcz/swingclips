@@ -1578,12 +1578,9 @@ function renderStrike(sessions, club, all) {
 
   // 3. Low strikes coaching line (if applicable)
   let coachEl = null;
-  // NOTE(strike-recentre): In the old raw frame (Square reading ~-14 mm at face centre),
-  // usual.v < -10 triggered when irons struck below -10 mm raw (~4 mm above old baseline).
-  // In the re-centred frame (+14 mm, centre at 0), shifting by +14 mm would be < 4, which
-  // would falsely flag dead-centre (0 mm) strikes as "sitting low". Listed for Claude to
-  // decide whether to use < -6 (outside flush band), < 0, or keep < -10 (10 mm below centre).
-  if (group === "irons" && usual && usual.v < -10) {
+  // Heights are re-centred on the face (app.recentre_strike): "low" = the usual below the floor of the
+  // coach programs' strike band (-6 mm, programs.json), not just under the centre.
+  if (group === "irons" && usual && usual.v < -6) {
     coachEl = document.createElement("div");
     coachEl.className = "note";
     coachEl.style.cssText = "margin: 2px 0 8px; font-size: 12px; line-height: 1.4;";
