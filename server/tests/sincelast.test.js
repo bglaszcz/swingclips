@@ -333,4 +333,23 @@ test("summary leaves out club model line when newFrames is null", () => {
   assert.equal(line, undefined, "no Club model line when newFrames is null");
 });
 
+test("formatDate: converts dates, timestamps, ISO strings, and handles null/undefined safely", () => {
+  // ISO date string
+  assert.equal(formatDate("2026-10-04"), "Sun Oct 4");
+  assert.equal(formatDate("2026-09-25"), "Fri Sep 25");
+
+  // Date object
+  assert.equal(formatDate(new Date(2026, 9, 4, 14, 0)), "Sun Oct 4");
+
+  // Epoch ms
+  const t = new Date(2026, 9, 4, 12, 0).getTime();
+  assert.equal(formatDate(t), "Sun Oct 4");
+
+  // Edge cases: null, undefined, invalid string return empty string
+  assert.equal(formatDate(null), "");
+  assert.equal(formatDate(undefined), "");
+  assert.equal(formatDate("not-a-date"), "");
+});
+
+
 

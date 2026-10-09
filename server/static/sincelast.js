@@ -26,6 +26,7 @@
   }
 
   function formatDate(t) {
+    if (t == null) return "";
     let d;
     if (typeof t === "string" && /^\d{4}-\d{2}-\d{2}/.test(t)) {
       const parts = t.slice(0, 10).split("-").map(Number);

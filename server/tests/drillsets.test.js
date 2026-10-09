@@ -307,3 +307,22 @@ test("real Sep 30 data: 10 pump drill swings, 14 normal after (1 null left out)"
   assert.ok(line.includes("no carry-over yet"));
   assert.ok(line.includes("(1 left out)"));
 });
+
+test("thoughtFor: retrieves thought for pump drill or focus move, edge cases", () => {
+  // Pump drill set
+  const pumpSet = { drill: "pump" };
+  assert.equal(DrillSets.thoughtFor(pumpSet, null), "Hands drop to the trail pocket.");
+
+  // Focus move with aim
+  const focus = { move: "hipSway", aim: "less" };
+  assert.equal(DrillSets.thoughtFor(null, focus), "Belt buckle to the target, not to the side.");
+
+  // Focus move without aim or unknown move returns null
+  assert.equal(DrillSets.thoughtFor(null, { move: "hipSway" }), null);
+  assert.equal(DrillSets.thoughtFor(null, { move: "unknownMove", aim: "less" }), null);
+
+  // Both null or empty returns null
+  assert.equal(DrillSets.thoughtFor(null, null), null);
+  assert.equal(DrillSets.thoughtFor({}, {}), null);
+});
+

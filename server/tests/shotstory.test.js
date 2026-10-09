@@ -134,3 +134,33 @@ test("a good shot with a fault: the why is what worked; the fault is only 'still
   assert.equal(c.still.name, "casting");
   assert.equal(c.tip.thought, "Same feel on the next one.");
 });
+
+test("worked: selects what worked from good ranges, edge cases with null/missing data", () => {
+  const ranges = {
+    handsAhead: { enough: true, n: 20, q10: 1, q25: 2, q50: 3, q75: 4, q90: 5 },
+    bendLoss: { enough: true, n: 20, q10: -5, q25: -2, q50: 0, q75: 2, q90: 5 },
+  };
+
+  // Normal: in-range metric
+  const res = Story.worked({ body: { handsAhead: 3 }, trust: {}, ranges });
+  assert.match(res, /hands were leading the clubhead/);
+
+  // Shaky trust is skipped
+  const shaky = Story.worked({ body: { handsAhead: 3 }, trust: { handsAhead: { level: "shaky" } }, ranges });
+  assert.equal(shaky, "");
+
+  // Missing metric or not enough shots in range returns empty string
+  const notEnough = Story.worked({ body: { handsAhead: 3 }, trust: {}, ranges: { handsAhead: { enough: false } } });
+  assert.equal(notEnough, "");
+
+  // Edge cases: null or undefined input safely returns empty string
+  assert.equal(Story.worked(null), "");
+  assert.equal(Story.worked(undefined), "");
+  assert.equal(Story.worked({}), "");
+
+  // Story.label helper
+  assert.equal(Story.label("tempo"), "Tempo");
+  assert.equal(Story.label("handsAhead"), "Hands ahead of the ball at impact");
+  assert.equal(Story.label("customMetric"), "customMetric");
+});
+

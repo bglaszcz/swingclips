@@ -239,7 +239,8 @@
 
   /** The best thing that matched your good shots on this swing, as a sentence, or "". */
   function worked(input) {
-    const body = input.body || {}, trust = input.trust || {}, ranges = input.ranges || {};
+    const inp = input || {};
+    const body = inp.body || {}, trust = inp.trust || {}, ranges = inp.ranges || {};
     for (const [key, text] of WORKED) {
       const t = trust[key];
       if (!finite(body[key]) || (t && (t.level === "none" || t.level === "shaky"))) continue;

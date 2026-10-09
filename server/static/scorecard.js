@@ -27,6 +27,7 @@
 
   function faultSeverity(faultDef, value) {
     if (!faultDef || typeof faultDef.threshold !== 'number') return 1;
+    if (typeof value !== 'number' || !Number.isFinite(value)) return 1;
     const diff = Math.abs(value - faultDef.threshold);
     const scale = Math.abs(faultDef.threshold) || 10;
     if (diff > scale) return 3;

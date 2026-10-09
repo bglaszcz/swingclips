@@ -175,7 +175,7 @@
   }
 
   const IRON_WEIGHTS = { attack: 0.8 };
-  const api = { score, compare, priorities, zOf, ITEMS, IRON_WEIGHTS, MIN_JUDGED, MIN_JUDGED_CLUB, USUAL, WEIGHT };
+  const api = { score, compare, priorities, zOf, ITEMS, IRON_WEIGHTS, MIN_JUDGED, MIN_JUDGED_CLUB, USUAL, WEIGHT, Z_CLEAR };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingSessionScore = api;
 })(typeof window !== "undefined" ? window : globalThis);

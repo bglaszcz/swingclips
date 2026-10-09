@@ -262,7 +262,11 @@ def cue(c: dict, v) -> str:
     key, hi = c["key"], c.get("max")
     if key == "armAfterPelvis":
         return "arms before hips"
-    up, down = CUES.get(key, (f"{NUMBERS[key][0].lower()} too high", f"{NUMBERS[key][0].lower()} too low"))
+    if key in CUES:
+        up, down = CUES[key]
+    else:
+        lbl = NUMBERS[key][0].lower() if key in NUMBERS else key
+        up, down = f"{lbl} too high", f"{lbl} too low"
     return up if hi is not None and (v is None or v > hi) else down
 
 

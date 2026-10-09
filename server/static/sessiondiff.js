@@ -21,15 +21,20 @@
   const CLUB_NAMES = { DR: "driver", PW: "PW", GW: "GW", SW: "SW", LW: "LW", PT: "putter" };
   function clubName(code) {
     if (!code) return "";
-    if (CLUB_NAMES[code]) return CLUB_NAMES[code];
-    const m = code.match(/^([WHI])(\d)$/);
-    return m ? `${m[2]}${{ W: " wood", H: " hybrid", I: " iron" }[m[1]]}` : code;
+    const upper = String(code).trim().toUpperCase();
+    if (CLUB_NAMES[upper]) return CLUB_NAMES[upper];
+    let m = upper.match(/^([WHI])(\d)$/);
+    if (m) return `${m[2]}${{ W: " wood", H: " hybrid", I: " iron" }[m[1]]}`;
+    m = upper.match(/^(\d)([WHI])$/);
+    if (m) return `${m[1]}${{ W: " wood", H: " hybrid", I: " iron" }[m[2]]}`;
+    return code;
   }
 
   function formatClubPlural(code) {
     if (!code) return "shots";
-    // "7 irons", "3 woods", "drivers"; wedge codes stay as they're written ("PWs").
-    const name = CLUB_NAMES[code] && CLUB_NAMES[code] === code ? code : clubName(code).toLowerCase();
+    const upper = String(code).trim().toUpperCase();
+    if (CLUB_NAMES[upper] === upper) return upper + "s";
+    const name = clubName(code).toLowerCase();
     return name.endsWith("s") ? name : name + "s";
   }
 

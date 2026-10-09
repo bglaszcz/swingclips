@@ -142,3 +142,28 @@ test("faults receive linkNote when a strong link matches another fault on this s
   assert.strictEqual(casting.linkNote, "Often comes with early extension");
   assert.strictEqual(ee.linkNote, "Often comes with casting");
 });
+
+test("faultSeverity: normal severity tiers (1, 2, 3) and edge cases with null/missing values", () => {
+  const fDef = { threshold: 10 };
+  // Normal tiers
+  assert.strictEqual(Scorecard.faultSeverity(fDef, 12), 1); // diff = 2 <= 5 -> 1
+  assert.strictEqual(Scorecard.faultSeverity(fDef, 16), 2); // diff = 6 > 5 -> 2
+  assert.strictEqual(Scorecard.faultSeverity(fDef, 25), 3); // diff = 15 > 10 -> 3
+
+  // Zero threshold falls back to scale 10
+  const zeroDef = { threshold: 0 };
+  assert.strictEqual(Scorecard.faultSeverity(zeroDef, 2), 1);  // diff = 2 <= 5 -> 1
+  assert.strictEqual(Scorecard.faultSeverity(zeroDef, 6), 2);  // diff = 6 > 5 -> 2
+  assert.strictEqual(Scorecard.faultSeverity(zeroDef, 12), 3); // diff = 12 > 10 -> 3
+
+  // Edge cases: null, undefined, NaN, non-number value safely return 1
+  assert.strictEqual(Scorecard.faultSeverity(fDef, null), 1);
+  assert.strictEqual(Scorecard.faultSeverity(fDef, undefined), 1);
+  assert.strictEqual(Scorecard.faultSeverity(fDef, NaN), 1);
+  assert.strictEqual(Scorecard.faultSeverity(fDef, "15"), 1);
+
+  // Missing or invalid faultDef returns 1
+  assert.strictEqual(Scorecard.faultSeverity(null, 15), 1);
+  assert.strictEqual(Scorecard.faultSeverity({}, 15), 1);
+  assert.strictEqual(Scorecard.faultSeverity({ threshold: null }, 15), 1);
+});

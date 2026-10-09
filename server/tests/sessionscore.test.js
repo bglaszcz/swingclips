@@ -106,3 +106,26 @@ test("irons: a move that helps smash but makes the attack shallower is a trade-o
   // Irons count attack: the two pull opposite ways, so it's left out.
   assert.equal(Score.priorities([smash, attack], { club: "I7", weights: Score.IRON_WEIGHTS }).length, 0);
 });
+
+test("zOf: two-proportion z score for session comparisons, edge cases", () => {
+  // Clear improvement: 8/10 vs 2/10
+  const zUp = Score.zOf(8, 10, 2, 10);
+  assert.ok(zUp > Score.Z_CLEAR, `expected z > 1.64, got ${zUp}`);
+
+  // Clear drop: 2/10 vs 8/10
+  const zDown = Score.zOf(2, 10, 8, 10);
+  assert.ok(zDown < -Score.Z_CLEAR, `expected z < -1.64, got ${zDown}`);
+
+  // Identical proportions: 5/10 vs 5/10 -> z is 0
+  assert.equal(Score.zOf(5, 10, 5, 10), 0);
+
+  // Both 0% or both 100%: variance is 0, returns 0
+  assert.equal(Score.zOf(0, 10, 0, 10), 0);
+  assert.equal(Score.zOf(10, 10, 10, 10), 0);
+
+  // Edge cases: n1 or n0 is 0 or null -> returns null
+  assert.equal(Score.zOf(5, 0, 5, 10), null);
+  assert.equal(Score.zOf(5, 10, 5, 0), null);
+  assert.equal(Score.zOf(5, null, 5, 10), null);
+});
+

@@ -349,3 +349,28 @@ test("wedge plurals keep their capitals; too few misses says so", () => {
   assert.deepEqual(SessionDiff.lines({ clubPlural: "7 irons", nGood: 8, nRest: 2, total: 10, leftOutCount: 0, enough: false, separating: [], minPerSide: 3 }),
                    ["Too few misses to compare: 8 good 7 irons of 10 this session."]);
 });
+
+test("clubName formats clubs, handles reverse codes and case insensitivity", () => {
+  assert.equal(SessionDiff.clubName("DR"), "driver");
+  assert.equal(SessionDiff.clubName("dr"), "driver");
+  assert.equal(SessionDiff.clubName("I7"), "7 iron");
+  assert.equal(SessionDiff.clubName("7I"), "7 iron");
+  assert.equal(SessionDiff.clubName("7i"), "7 iron");
+  assert.equal(SessionDiff.clubName("W3"), "3 wood");
+  assert.equal(SessionDiff.clubName("3W"), "3 wood");
+  assert.equal(SessionDiff.clubName("H4"), "4 hybrid");
+  assert.equal(SessionDiff.clubName("4H"), "4 hybrid");
+  assert.equal(SessionDiff.clubName("PW"), "PW");
+  assert.equal(SessionDiff.clubName("pw"), "PW");
+  assert.equal(SessionDiff.clubName("PT"), "putter");
+  assert.equal(SessionDiff.clubName("pt"), "putter");
+  assert.equal(SessionDiff.clubName(""), "");
+  assert.equal(SessionDiff.clubName(null), "");
+  assert.equal(SessionDiff.clubName("custom"), "custom");
+
+  // formatClubPlural with reverse and lowercase codes
+  assert.equal(SessionDiff.formatClubPlural("7I"), "7 irons");
+  assert.equal(SessionDiff.formatClubPlural("3w"), "3 woods");
+  assert.equal(SessionDiff.formatClubPlural("pw"), "PWs");
+});
+

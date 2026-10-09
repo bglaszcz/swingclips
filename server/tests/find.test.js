@@ -49,3 +49,20 @@ test("nothing to find: everything shows; words alone find nothing", () => {
   assert.ok(Find.isEmpty(Find.parse("the top")));
   assert.ok(hit("", [face]));
 });
+
+test("clipNumber extracts unix timestamp from clip names, edge cases", () => {
+  // Standard naming with millisecond suffix
+  assert.equal(Find.clipNumber("swing_face_1920x1080_240fps_1790353993_2007ms.mp4"), 1790353993);
+  assert.equal(Find.clipNumber("swing_dtl_1920x1080_240fps_1790371548_2023ms.mp4"), 1790371548);
+
+  // Early naming without angle/fps
+  assert.equal(Find.clipNumber("swing_1920x1080_240fps_1790206507.mp4"), 1790206507);
+
+  // Edge cases: null, undefined, empty, or string without timestamp
+  assert.equal(Find.clipNumber(null), null);
+  assert.equal(Find.clipNumber(undefined), null);
+  assert.equal(Find.clipNumber(""), null);
+  assert.equal(Find.clipNumber("video.mp4"), null);
+  assert.equal(Find.clipNumber("swing_face_invalid.mp4"), null);
+});
+

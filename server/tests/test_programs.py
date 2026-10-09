@@ -644,6 +644,46 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(programs.say_limit({"key": "strikeV", "min": -3}, -9), "strike 3 millimetres low or higher")
         self.assertEqual(programs.say_limit({"key": "strikeV", "max": 3}, 5), "strike 3 millimetres high or lower")
 
+    def test_cue(self):
+        # Failed checks as short spoken cues
+        self.assertEqual(programs.cue({"key": "attack", "max": -3.0}, -2.0), "attack too shallow")
+        self.assertEqual(programs.cue({"key": "attack", "min": -4.5}, -5.0), "attack too steep")
+        self.assertEqual(programs.cue({"key": "strikeV", "max": 6.0}, 8.0), "strike high on the face")
+        self.assertEqual(programs.cue({"key": "strikeV", "min": -6.0}, -8.0), "strike low on the face")
+        self.assertEqual(programs.cue({"key": "faceToPath", "max": 2.0}, 3.0), "face open to path")
+        self.assertEqual(programs.cue({"key": "faceToPath", "min": -2.0}, -3.0), "face closed to path")
+        self.assertEqual(programs.cue({"key": "pelvisOpen", "min": 10.0}, 5.0), "hips not open enough")
+        self.assertEqual(programs.cue({"key": "pelvisOpen", "max": 10.0}, 15.0), "hips too open")
+        self.assertEqual(programs.cue({"key": "armAfterPelvis"}, False), "arms before hips")
+        # Fallback for unlisted metric
+        self.assertEqual(programs.cue({"key": "tempo", "max": 3.0}, 4.0), "tempo too high")
+        self.assertEqual(programs.cue({"key": "tempo", "min": 2.0}, 1.0), "tempo too low")
+
+    def test_gate_text(self):
+        # Streak gate
+        self.assertEqual(programs.gate_text({"reps": 10, "gate": {"kind": "streak", "need": 5}}), "5 in a row")
+        # Count gate
+        self.assertEqual(programs.gate_text({"reps": 15, "gate": {"kind": "count", "need": 8}}), "8 of 15")
+        # Gate with median checks
+        streak_med = {"reps": 10, "gate": {"kind": "streak", "need": 5, "medians": [{"key": "loft", "max": 26.5}]}}
+        self.assertEqual(programs.gate_text(streak_med), "5 in a row, median dynamic loft 26.5 or less")
+        count_med = {"reps": 10, "gate": {"kind": "count", "need": 6, "medians": [{"key": "attack", "min": -3.0}]}}
+        self.assertEqual(programs.gate_text(count_med), "6 of 10, median attack angle -3 or more")
+
+    def test_progress_text(self):
+        # Streak progress
+        block_streak = {"gate": {"kind": "streak", "need": 5}}
+        self.assertEqual(programs.progress_text(block_streak, {"streak": 3, "best": 4}), "3 in a row, best 4")
+        self.assertEqual(programs.progress_text(block_streak, {"streak": 5, "best": 5}), "5 in a row")
+        self.assertEqual(programs.progress_text(block_streak, {"streak": 5, "best": 5, "medians": {"loft": 25.4}}),
+                         "5 in a row, median dynamic loft 25.4")
+        # Count progress
+        block_count = {"gate": {"kind": "count", "need": 8}}
+        self.assertEqual(programs.progress_text(block_count, {"passes": 6, "reps": 10}), "6 of 10 passed, 8 needed")
+        self.assertEqual(programs.progress_text(block_count, {"passes": 8, "reps": 10, "medians": {"attack": -3.8}}),
+                         "8 of 10 passed, 8 needed, median attack angle -3.8")
+
 
 if __name__ == "__main__":
     unittest.main()
+
