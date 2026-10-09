@@ -12,9 +12,10 @@ tapped reps, shots, and swings whose shot never came.
 
 Shots Square didn't read are left out of the gate (neither pass nor miss): club speed 0, or the
 strike's across-the-face reading exactly 0.0 (Square's failed impact read, whose up-down reading is
-filler: 15.9, 20.0, or 0.0, which would pass a strike gate). A strike gate's floor (strikeV min -8 in
-programs.json) keeps a fat strike, low on the face, from passing as "not high"; adjust it once real
-numbers are in.
+filler: 15.9, 20.0, or 0.0, which would pass a strike gate). A strike gate's floor (strikeV min -6 in
+programs.json) keeps a fat strike, low on the face, from passing as "not high". Strike heights are the
+server's re-centred ones (app.recentre_strike: Square's reading + 14 mm since Sep 17 2026), so 0 is the
+face centre; programs.json's gates are in those units.
 
 Drill blocks switch drill mode on (drills.py), so their swings stay out of the trends; their Square
 numbers stay here for the gate and the report for the coach (report()).
@@ -185,11 +186,16 @@ def load_programs(path: Path = PROGRAMS_FILE) -> dict:
 
 
 def say_number(key: str, v) -> str:
-    # Square's strike height is said as the number it gives: its 0 isn't the owner's sweet spot
-    # (7 iron median about -13, best carry -20..-8), so "high" and "low" would mislead. Toe and heel
-    # are said as words (+ is the heel in Square's data).
+    # Strike height and toe / heel in words: heights are re-centred on the face (app.recentre_strike),
+    # and + is the heel in Square's data.
     if isinstance(v, bool):
         return "arm after hips" if v else "arm before hips"
+    if key == "strikeV":
+        if v is None:
+            return "strike –"
+        if abs(v) < 1.0:
+            return "strike centre"
+        return f"strike {abs(round(v))} millimetres {'high' if v > 0 else 'low'}"
     if key == "strikeH":
         if v is None:
             return "strike –"
@@ -200,7 +206,7 @@ def say_number(key: str, v) -> str:
         return f"strike {dist} millimetres {side}"
     dec = NUMBERS[key][2]
     s = f"{abs(v):.{dec}f}".rstrip("0").rstrip(".") if dec else f"{abs(round(v))}"
-    sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath", "strikeV") and s != "0" else ""
+    sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath") and s != "0" else ""
     if key == "pelvisPeakMs":
         name = "hips peak"
     elif key == "armPeakMs":
@@ -209,8 +215,6 @@ def say_number(key: str, v) -> str:
         name = "hips open"
     elif key == "pelvisStartMs":
         name = "hips turn start"
-    elif key == "strikeV":
-        name = "strike"
     else:
         name = NUMBERS[key][0].lower()
     return f"{name} {sign}{s}"

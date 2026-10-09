@@ -139,3 +139,21 @@ class Pairing(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StrikeHeight(unittest.TestCase):
+    def test_recentred_since_the_shift(self):
+        """Square's height read about 14 mm low on every club from mid-September 2026: shots from then on
+        are re-centred as they're read (the raw reading kept); older ones and missing readings aren't."""
+        import app
+        new = {"_t": datetime(2026, 10, 8, 12).timestamp(), "clubData": {"faceImpactV": -17.0, "faceImpactH": 3.0}}
+        app.recentre_strike(new)
+        self.assertEqual(new["clubData"]["faceImpactV"], -3.0)
+        self.assertEqual(new["clubData"]["faceImpactVRaw"], -17.0)
+        app.recentre_strike(new)                     # once only
+        self.assertEqual(new["clubData"]["faceImpactV"], -3.0)
+        old = {"_t": datetime(2026, 9, 10, 12).timestamp(), "clubData": {"faceImpactV": -3.0}}
+        self.assertEqual(app.recentre_strike(old)["clubData"]["faceImpactV"], -3.0)
+        none = {"_t": datetime(2026, 10, 8).timestamp(), "clubData": {"faceImpactV": None}}
+        self.assertIsNone(app.recentre_strike(none)["clubData"]["faceImpactV"])
+        self.assertEqual(app.recentre_strike({"_t": 0})["_t"], 0)   # no club data

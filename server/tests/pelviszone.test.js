@@ -2,7 +2,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const PelvisZone = require("../static/pelviszone.js");
 
-function makeSwing(club, pelvisBall, angleOfAttack, faceImpactV) {
+// Strike heights below are Square's as sent (the shifted era); the server re-centres them (+14 mm,
+// app.recentre_strike) before the page sees them, as makeSwing does.
+const SQUARE_V_OFFSET = 14;
+function makeSwing(club, pelvisBall, angleOfAttack, faceImpactVSent) {
+  const faceImpactV = faceImpactVSent == null ? faceImpactVSent : faceImpactVSent + SQUARE_V_OFFSET;
   return {
     club,
     body: { pelvisBall },
@@ -62,7 +66,7 @@ test("failed Square reads skipped; other clubs skipped", () => {
     makeSwing("I7", 1.0, null, -12.0),       // failed attack read
     makeSwing("I7", 1.0, -4.0, null),        // failed strike read
     makeSwing("DR", 1.0, -4.0, -12.0),       // wrong club
-    { club: "I7", pelvisBall: 2.0, clubData: { angleOfAttack: -5.0, faceImpactV: -10.0 } }, // alternative shape
+    { club: "I7", pelvisBall: 2.0, clubData: { angleOfAttack: -5.0, faceImpactV: -10.0 + SQUARE_V_OFFSET } }, // alternative shape
   ];
   const r = PelvisZone.zone(swings, "I7");
   assert.equal(r.n, 2);

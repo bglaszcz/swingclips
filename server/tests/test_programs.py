@@ -20,10 +20,15 @@ class Clock:
         return self.t
 
 
+# Strike heights below are Square's as sent (the shifted era); programs get them re-centred by the
+# server (app.recentre_strike: + SQUARE_V_OFFSET), as here.
+SQUARE_V_OFFSET = 14.0
+
+
 def shot(attack=-4.0, v=-12.0, face=0.5, path=0.0, h=4.0, speed=80.0, loft=24.0, club="I7"):
     return {"club": club, "ball": {"carry": 150.0, "side": 1.0},
             "clubData": {"speed": speed, "angleOfAttack": attack, "faceToTarget": face, "path": path,
-                         "loft": loft, "faceImpactH": h, "faceImpactV": v}}
+                         "loft": loft, "faceImpactH": h, "faceImpactV": None if v is None else v + SQUARE_V_OFFSET}}
 
 
 def body3d(pelvis_peak=-10, arm_peak=-50, pelvis_open=18.0, pelvis_start=-100.0):
@@ -272,7 +277,7 @@ class ProgramsTest(unittest.TestCase):
         n = self.p.state()["program"]["blocks"][1]["judged"][0]["numbers"]
         self.assertEqual((n["pelvisBall"], n["path"], n["face"]), (4.5, 0.0, 0.5))
         rep = self.p.report()["text"]
-        self.assertIn("-4.0 / 24.0 / +0.5 / 12 mm low (path +0.0°, face +0.5°, carry 150 yd)", rep)
+        self.assertIn("-4.0 / 24.0 / +0.5 / 2 mm high (path +0.0°, face +0.5°, carry 150 yd)", rep)
         self.assertIn("(in brackets: club path", rep)
 
     def test_finished_runs_keep_their_gates_and_calibration(self):
@@ -330,7 +335,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(
             block_line,
             "  Shots 1-10: attack angle -4.0° (-4.0 to -4.0); dynamic loft 24.0° (24.0 to 24.0); "
-            "face to path +0.5° (+0.5 to +0.5); strike height 12 mm low (12 mm low to 12 mm low); carry 150 yd, SD 0 yd"
+            "face to path +0.5° (+0.5 to +0.5); strike height 2 mm high (2 mm high to 2 mm high); carry 150 yd, SD 0 yd"
         )
 
     def test_retention_median_gate(self):
@@ -378,7 +383,7 @@ class ProgramsTest(unittest.TestCase):
         self.flush()
         for _ in range(10):
             self.hit(shot(v=-15.0))
-        self.assertIn("Strike calibration: median -15.0", self.p.report()["text"])
+        self.assertIn("Strike calibration: median -1.0", self.p.report()["text"])
         self.assertNotIn("Calibration shifted", " ".join(self.said()))
 
     def test_report_has_the_camera_numbers(self):
@@ -627,16 +632,17 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(programs.NUMBERS["strikeH"][0], "Strike heel/toe")
 
     def test_say_number_strike_in_words(self):
-        # Height stays Square's number: its 0 isn't the owner's sweet spot.
-        self.assertEqual(programs.say_number("strikeV", -8), "strike minus 8")
-        self.assertEqual(programs.say_number("strikeV", 4), "strike plus 4")
+        # Heights are re-centred on the face (app.recentre_strike), so they're said in words.
+        self.assertEqual(programs.say_number("strikeV", -8), "strike 8 millimetres low")
+        self.assertEqual(programs.say_number("strikeV", 4), "strike 4 millimetres high")
+        self.assertEqual(programs.say_number("strikeV", 0.3), "strike centre")
         self.assertEqual(programs.say_number("strikeH", 8), "strike 8 millimetres heel")
         self.assertEqual(programs.say_number("strikeH", -3), "strike 3 millimetres toe")
         self.assertEqual(programs.say_number("strikeH", 0), "strike centre")
 
         # say_limit
-        self.assertEqual(programs.say_limit({"key": "strikeV", "min": -3}, -9), "strike minus 3 or higher")
-        self.assertEqual(programs.say_limit({"key": "strikeV", "max": 3}, 5), "strike plus 3 or lower")
+        self.assertEqual(programs.say_limit({"key": "strikeV", "min": -3}, -9), "strike 3 millimetres low or higher")
+        self.assertEqual(programs.say_limit({"key": "strikeV", "max": 3}, 5), "strike 3 millimetres high or lower")
 
 
 if __name__ == "__main__":

@@ -140,8 +140,8 @@
             "checks": [
               {
                 "key": "strikeV",
-                "min": -20,
-                "max": -8
+                "min": -6,
+                "max": 6
               },
               {
                 "key": "attack",
@@ -165,8 +165,8 @@
             "checks": [
               {
                 "key": "strikeV",
-                "min": -20,
-                "max": -8
+                "min": -6,
+                "max": 6
               },
               {
                 "key": "attack",
@@ -191,7 +191,7 @@
       "calibration": {
         "key": "strikeV",
         "club": "I7",
-        "center": -14,
+        "center": 0,
         "within": 8,
         "shots": 10
       }
@@ -217,8 +217,8 @@
             "checks": [
               {
                 "key": "strikeV",
-                "min": -20,
-                "max": -8
+                "min": -6,
+                "max": 6
               }
             ],
             "medians": [
@@ -237,7 +237,7 @@
       "calibration": {
         "key": "strikeV",
         "club": "I7",
-        "center": -14,
+        "center": 0,
         "within": 8,
         "shots": 10
       }

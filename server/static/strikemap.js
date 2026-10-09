@@ -536,8 +536,8 @@
     const grooves = add(svg, "g", { "clip-path": `url(#${id}c)`, stroke: "#6f757c", "stroke-width": "0.9", "stroke-linecap": "round", opacity: "0.75" });
     for (const y of F.grooves.ys) add(grooves, "line", { x1: F.grooves.x0, x2: F.grooves.x1, y1: y, y2: y });
 
-    // The heat, drawn on a canvas and laid over the face, not cut to it: Square's heights can put strikes
-    // below the sole (since Sep 23 they read about 14 mm lower on every club), and cutting would hide them.
+    // The heat, drawn on a canvas and laid over the face, not cut to it: a strike off the face (a thin
+    // one, or a reading Square got wrong) would otherwise disappear.
     const shots = (opts.shots || []).filter(p => p && finite(p.h) && finite(p.v));
     if (shots.length && typeof document !== "undefined" && document.createElement) {
       const step = 0.5, ext = [vx, vx + vw, -(vy + vh), -vy];

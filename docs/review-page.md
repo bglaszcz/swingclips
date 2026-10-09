@@ -161,8 +161,8 @@ What the server works out for each swing and what each part of the review page s
   lines, labelled every inch, "← Toe" / "Heel →"), a smooth heat map of every strike in the period (`density`: each strike a
   Gaussian of 5 mm, 7 mm for woods; `heatColor`: clear below 6% of the busiest spot, then green, yellow, red where most land),
   the latest session's strikes as small blue dots and its last one as the big dot, the usual spot as a dashed ring, and the face
-  centre as a small cross. The heat isn't cut to the face: Square's heights have read about 14 mm low on every club since
-  Sep 23, which puts many strikes at or below the sole; a note says so when any are. The swing view's strike tile uses the same
+  centre as a small cross. The heat isn't cut to the face (a strike off it would vanish). Heights are re-centred by the
+  server (Square read about 14 mm low on every club from mid-September; `app.recentre_strike`), and a note says so. The swing view's strike tile uses the same
   drawing, cropped to the face (`tile: true`): this shot's dot and the usual ring.
   Below the face: a comparison summary line comparing the latest session's strike centre and spread against the median of up to
   6 earlier baseline sessions ("Strikes moved 5 mm toward the toe and stayed low (15 mm below centre). Your usual: 2 mm toward the heel, 17 mm low").
@@ -575,10 +575,11 @@ toward the ball". The phones face away from you, so voice is the channel.
   (`count`: need of reps, or `streak`: need in a row) of checks on Square's numbers (`strikeV`, `attack`,
   `faceToPath`, `loft`, ...: min/max) and 3D kinematic numbers (`pelvisPeakMs`, `pelvisOpen`, `armAfterPelvis`, `pelvisStartMs`), plus `mark` for the golfer's tap on what they saw. A gate can also check the block's
   medians (`medians`: e.g. median attack -3 or steeper, the retention check). Square's strike height is
-  spoken as Square's number ("strike minus 12", shown as "12 mm low"; toe and heel are said in words): its 0 isn't the owner's sweet spot (7 iron median
-  about -13, best carry at -20..-8), so gates use the owner's own band. Square's strike frame has jumped as a whole (about
+  spoken and shown in words ("strike 8 millimetres low"), re-centred on the face since Oct 9 (`app.recentre_strike`: Square's
+  reading + 14 mm for shots from Sep 17 2026; it had read about 14 mm low on every club, 7 iron median -13 as sent); the
+  gates are in those units (the band -20..-8 as sent is -6..+6, the calibration centre -14 is 0). Square's strike frame has jumped as a whole (about
   -14 mm on every club between Sep 16 and Sep 23 2026, and on Aug 21 alone), so a program's `calibration`
-  (strike, 7 iron, usual -13 within 4, 10 shots) checks the median of the session's first 10 readable 7
+  (strike, 7 iron, usual 0 within 8 since Oct 9, 10 shots) checks the median of the session's first 10 readable 7
   irons: outside it, the phone says "Calibration shifted" and strike stops gating for that run (attack and
   loft still gate). Invalid reads (Square's null, or the CSV's H0.0 / club speed 0) are checked before any
   comparison and left out of both sides of the count ("invalid read, not counted"). For 3D blocks (like Tier 2

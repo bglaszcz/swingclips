@@ -6,8 +6,8 @@
   const DEFAULTS = {
     attackMin: -6,       // Flush gate: attack angle from -6 to -3 degrees
     attackMax: -3,
-    strikeVMin: -20,     // Flush gate: strike height from -20 to -8 mm
-    strikeVMax: -8,
+    strikeVMin: -6,      // Flush gate: strike height from -6 to +6 mm (re-centred on the face: app.recentre_strike)
+    strikeVMax: 6,
     minTotal: 30,        // At least 30 swings with this club
     minBest: 8,          // At least 8 best low-point swings
   };

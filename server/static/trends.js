@@ -1559,11 +1559,9 @@ function renderStrike(sessions, club, all) {
   legend.innerHTML = `<span><i class="p-key" style="background: linear-gradient(90deg, rgb(70,205,70), rgb(245,225,40), rgb(230,45,35));"></i>All strikes (${n}): red where most land</span>` +
     `<span><i class="p-key" style="background:#1d6fd8; border-radius:50%;"></i>Latest session (${latestStrikes.length}), big dot the last shot</span>` +
     `<span><i style="display:inline-block; width:8px; height:8px; border:1px dashed var(--muted); border-radius:50%;"></i>Your usual spot</span>`;
-  // Square's height reads about 14 mm low on every club since Sep 23 (programs.py calibration): strikes
-  // below the sole are Square's numbers, not a miss off the bottom of the club.
-  const belowSole = latestStrikes.concat(allStrikes).some(p => p.v < -20);
-  const offNote = belowSole ? Object.assign(document.createElement("div"), { className: "note",
-    textContent: "Strikes below the bottom of the club are Square's numbers as reported: its height has read about 14 mm low on every club since Sep 23, so the whole picture may sit that much too low." }) : null;
+  // Heights are re-centred on the face by the server (app.recentre_strike): say so once, quietly.
+  const offNote = Object.assign(document.createElement("div"), { className: "note",
+    textContent: "Heights are re-centred: Square has read about 14 mm low on every club since mid-September, so 14 mm is added back." });
 
   // 2. Compare line + Usual centre
   const beforeSessions = sessions.slice(0, -1);

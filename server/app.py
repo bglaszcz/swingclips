@@ -1334,6 +1334,27 @@ async def add_shot(request: Request):
     return {"ok": True}
 
 
+# Square's strike height reads about 14 mm low on every club since about Sep 17 2026 (CSV exports before:
+# iron median -3 mm; every shot here, Sep 23 to Oct 8: -13 to -23 by day, -17 overall; the owner reads
+# that as the face centre). Shots from then on are re-centred as they're read, so everything (the review
+# page, programs, games, practice, the coach report) gets the face-centred height; the reading as sent
+# stays in shots.jsonl and in clubData.faceImpactVRaw. programs.json's strike gates are in the
+# re-centred units (the band -20..-8 as sent is -6..+6).
+SQUARE_V_OFFSET_MM = 14.0
+SQUARE_V_SHIFT_SINCE = datetime(2026, 9, 17).timestamp()
+
+
+def recentre_strike(shot: dict) -> dict:
+    """Adds SQUARE_V_OFFSET_MM to the strike height of a shot from the shifted era (keeps the raw one)."""
+    cd = shot.get("clubData")
+    v = cd.get("faceImpactV") if isinstance(cd, dict) else None
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and "faceImpactVRaw" not in cd \
+            and shot.get("_t", 0) >= SQUARE_V_SHIFT_SINCE:
+        cd["faceImpactVRaw"] = v
+        cd["faceImpactV"] = round(v + SQUARE_V_OFFSET_MM, 2)
+    return shot
+
+
 def load_shots() -> list[dict]:
     if not SHOTS_FILE.exists():
         return []
@@ -1342,7 +1363,7 @@ def load_shots() -> list[dict]:
         try:
             s = json.loads(line)
             s["_t"] = datetime.fromisoformat(s["received"]).timestamp()
-            shots.append(s)
+            shots.append(recentre_strike(s))
         except (ValueError, KeyError):
             continue
     return shots
