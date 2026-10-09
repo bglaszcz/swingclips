@@ -761,3 +761,25 @@ test("queue: reads /api/labels/summary's clubFrames (there frames is only a coun
   const fromDone = q.filter(i => i.clip === "done.mp4").map(i => i.t);
   assert.ok(!fromDone.some(t => Math.abs(t - 1.85) < 0.002 || Math.abs(t - 1.9) < 0.002), `served done frames: ${fromDone}`);
 });
+
+test("queue and balanceSwings: face-on clips come up too, each clip judged by its own points", () => {
+  const ClubCheck = require("../static/clubcheck.js");
+  // As /api/clips lists them: each swing's down-the-line clip first. Swing 1's down-the-line clip has points.
+  const clips = [];
+  for (let i = 1; i <= 3; i++) {
+    clips.push({ name: `d${i}`, angle: "dtl", partner: `f${i}`, recorded: "2026-10-08T12:0" + i + ":00", strike: 1.5, shot: { club: "I7" } });
+    clips.push({ name: `f${i}`, angle: "face", partner: `d${i}`, recorded: "2026-10-08T12:0" + i + ":00", strike: 1.5, shot: { club: "I7" } });
+  }
+  const round0 = ClubCheck.balanceSwings(clips).slice(0, 2).map(c => c.angle).sort();
+  assert.deepEqual(round0, ["dtl", "face"]);
+  const frames = [];
+  for (let t = 0; t <= 2.0001; t += 1 / 60) frames.push({ t, clubhead: [0.5, 0.5, 0.2] });
+  const pose = { frames };
+  const poses = Object.fromEntries(clips.map(c => [c.name, pose]));
+  const labeled = [{ clip: "d1", clubFrames: [1.0] }];
+  const q = ClubCheck.queue(clips, poses, labeled, { max: 100 });
+  const firstClips = [...new Set(q.map(x => x.clip))];
+  // f1 (its partner has points, it has none) is with the unlabeled clips, ahead of d1.
+  assert.ok(firstClips.indexOf("f1") < firstClips.indexOf("d1"));
+  assert.ok(firstClips.slice(0, 2).some(n => n.startsWith("f")));
+});

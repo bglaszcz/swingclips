@@ -196,13 +196,15 @@
     return "Downswing";
   }
 
-  /** Balances swings across (day, club) buckets, round-robin. */
+  /** Balances clips across (day, club, camera) buckets, round-robin. The camera is in the key since Oct 8:
+   * the clip list has each swing's down-the-line clip first, so one pick per (day, club) was always
+   * down the line and face-on clips never came up. */
   function balanceSwings(list) {
     const groups = new Map();
     for (const c of (list || [])) {
       const day = c.recorded ? c.recorded.slice(0, 10) : "";
       const club = c.shot?.club || c.club || "";
-      const key = `${day}_${club}`;
+      const key = `${day}_${club}_${c.angle || "face"}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(c);
     }
@@ -260,8 +262,10 @@
       return Array.isArray(doc.clubFrames) ? doc.clubFrames : [];
     }
 
-    function swingHasClubPoints(clipName, partnerName) {
-      return [clipName, partnerName].filter(Boolean).some(name => clubTimes(name).length > 0);
+    // Each camera's clip on its own: the model learns each view from its own frames (before Oct 8 a swing
+    // with points on its down-the-line clip counted as done, so its face-on clip went to the back).
+    function swingHasClubPoints(clipName) {
+      return clubTimes(clipName).length > 0;
     }
 
     function swingHasBackswingClubPoints(clipName, partnerName, pTimes) {
@@ -294,7 +298,7 @@
     const hasBackswingSwings = [];
 
     for (const c of validClips) {
-      if (!swingHasClubPoints(c.name, c.partner)) {
+      if (!swingHasClubPoints(c.name)) {
         unlabeledSwings.push(c);
       } else {
         const p = getPose(c.name);
@@ -1152,7 +1156,7 @@
       const labelMap = new Map(summaryList.map(c => [c.clip, c]));
 
       function hasClubPoints(c) {
-        return [c.name, c.partner].filter(Boolean).some(name => (labelMap.get(name)?.clubFrames || []).length > 0);
+        return (labelMap.get(c.name)?.clubFrames || []).length > 0;
       }
 
       const valid = allClips.filter(c => !c.excluded && c.pose === "done");
