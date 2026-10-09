@@ -182,42 +182,54 @@ Say "Newest shot already saved: #$last. Only shots after it are sent. Sending to
 Say "Play in Square's app as usual. Close this window (or press Ctrl+C) to stop."
 
 $files = @($Database, "$Database-journal", "$Database-wal")
-function Stamp { ($files | ForEach-Object { if (Test-Path -LiteralPath $_) { (Get-Item -LiteralPath $_).LastWriteTimeUtc.Ticks } }) -join "," }
+# Square makes and deletes the -journal file on every save, so it can vanish between a check and a read
+# (2026-10-09 16:59: "Cannot find path ...-journal" stopped the watcher and 18 shots were lost). This
+# read gives year 1601 for a missing file instead of failing.
+function Stamp { ($files | ForEach-Object { [System.IO.File]::GetLastWriteTimeUtc($_).Ticks }) -join "," }
 $seen = Stamp
 $lastRetry = Get-Date
 
 while ($true) {
     Start-Sleep -Milliseconds 500
-    if (((Get-Date) - $lastBeat).TotalSeconds -ge 20) { $lastBeat = Get-Date; Send-Heartbeat }
-    if ($unsent.Count -gt 0 -and ((Get-Date) - $lastRetry).TotalSeconds -gt 15) {
-        $lastRetry = Get-Date
-        $retry = @($unsent); $unsent.Clear()
-        foreach ($s in $retry) { if (Send-Shot $s) { Say "         sent #$($s.shotNumber) (retry)" "DarkGray" } }
-    }
-    $now = Stamp
-    if ($now -eq $seen) { continue }
-    $seen = $now
-    $received = Get-Date
+    # Anything that goes wrong in one look is logged and the next look carries on: a stopped watcher
+    # loses every shot after it.
     try {
-        $rows = [WinSqlite]::Query($Database,
-            "select l.ShotID, l.SessionID, l.ClubType, l.Mode, l.ShotData, l.ShotResult, l.ClubData, s.Name " +
-            "from IVShotLog l left join IVSession s on s.SessionID = l.SessionID where l.ShotID > $last order by l.ShotID")
+        if (((Get-Date) - $lastBeat).TotalSeconds -ge 20) { $lastBeat = Get-Date; Send-Heartbeat }
+        if ($unsent.Count -gt 0 -and ((Get-Date) - $lastRetry).TotalSeconds -gt 15) {
+            $lastRetry = Get-Date
+            $retry = @($unsent); $unsent.Clear()
+            foreach ($s in $retry) { if (Send-Shot $s) { Say "         sent #$($s.shotNumber) (retry)" "DarkGray" } }
+        }
+        $now = Stamp
+        if ($now -eq $seen) { continue }
+        $seen = $now
+        $received = Get-Date
+        try {
+            $rows = [WinSqlite]::Query($Database,
+                "select l.ShotID, l.SessionID, l.ClubType, l.Mode, l.ShotData, l.ShotResult, l.ClubData, s.Name " +
+                "from IVShotLog l left join IVSession s on s.SessionID = l.SessionID where l.ShotID > $last order by l.ShotID")
+        } catch {
+            Say "Couldn't read Square's database just now ($($_.Exception.Message)) - will try again" "Yellow"
+            $seen = ""
+            continue
+        }
+        foreach ($row in $rows) {
+            $last = [long]$row[0]
+            try { $shot = New-Shot $row $received } catch { Say "Skipped shot #$last (unreadable: $($_.Exception.Message))" "Yellow"; continue }
+            $b = $shot.ball; $c = $shot.clubData
+            $line = "{0}  #{1} {2}  ball {3} mph | launch {4} | spin {5} | carry {6} yd, total {7} yd" -f `
+                $received.ToString("HH:mm:ss.fff"), $shot.shotNumber, $shot.club, $b.speed, $b.vla, $b.totalSpin, $b.carry, $b.total
+            if ($c) { $line += " | club {0} mph, smash {1}" -f $c.speed, $c.smash }
+            Say $line "White"
+            try {
+                Add-Content -Path (Join-Path $LogDir ("square-shots-" + $received.ToString("yyyy-MM-dd") + ".jsonl")) `
+                    -Value ($shot | ConvertTo-Json -Depth 5 -Compress) -Encoding UTF8
+            } catch {}  # only a local copy; Dropbox can hold the file for a moment
+            $lastShotAt = $received.ToString("o")
+            if (Send-Shot $shot) { Say "         sent to the server" "DarkGray" }
+        }
     } catch {
-        Say "Couldn't read Square's database just now ($($_.Exception.Message)) - will try again" "Yellow"
-        $seen = ""
-        continue
-    }
-    foreach ($row in $rows) {
-        $last = [long]$row[0]
-        try { $shot = New-Shot $row $received } catch { Say "Skipped shot #$last (unreadable: $($_.Exception.Message))" "Yellow"; continue }
-        $b = $shot.ball; $c = $shot.clubData
-        $line = "{0}  #{1} {2}  ball {3} mph | launch {4} | spin {5} | carry {6} yd, total {7} yd" -f `
-            $received.ToString("HH:mm:ss.fff"), $shot.shotNumber, $shot.club, $b.speed, $b.vla, $b.totalSpin, $b.carry, $b.total
-        if ($c) { $line += " | club {0} mph, smash {1}" -f $c.speed, $c.smash }
-        Say $line "White"
-        Add-Content -Path (Join-Path $LogDir ("square-shots-" + $received.ToString("yyyy-MM-dd") + ".jsonl")) `
-            -Value ($shot | ConvertTo-Json -Depth 5 -Compress) -Encoding UTF8
-        $lastShotAt = $received.ToString("o")
-        if (Send-Shot $shot) { Say "         sent to the server" "DarkGray" }
+        Say "Error, carrying on: $($_.Exception.Message)" "Yellow"
+        Start-Sleep -Seconds 1
     }
 }
