@@ -51,9 +51,11 @@
    "trigger": {
     "sensitivity": 100,
     "setting": null,
-    "threshold": 320,
-    "softest": 410,
-    "strikes": true
+    "threshold": 10.0,
+    "softest": 38.5,
+    "middle": 71.0,
+    "noise": 1.4,
+    "strikes": 24
    },
    "command": null
   },
@@ -66,9 +68,11 @@
    "trigger": {
     "sensitivity": 100,
     "setting": null,
-    "threshold": 320,
-    "softest": 405,
-    "strikes": true
+    "threshold": 10.0,
+    "softest": 41.0,
+    "middle": 76.5,
+    "noise": 1.6,
+    "strikes": 24
    },
    "command": null
   }

@@ -1045,7 +1045,7 @@ function renderOverall(all) {
         const textDiv = document.createElement("div");
         textDiv.style.whiteSpace = "pre-wrap";
         textDiv.style.marginBottom = "8px";
-        textDiv.textContent = note.text;
+        SwingAICoach.renderTake(textDiv, note.text);
         coachEl.append(textDiv);
 
         const foot = document.createElement("div");

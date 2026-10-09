@@ -159,3 +159,14 @@ it("SwingAICoach.focusProgress: the move and its results since the focus started
   assert.ok(got.focusWorking.head);
   assert.deepEqual(A.focusProgress(null, sessions), {});
 });
+
+describe("SwingAICoach.takeParts", () => {
+  it("keeps bold as bold, drops other Markdown marks, never HTML", () => {
+    const parts = AICoach.takeParts("**How it went**\nA solid session.\n## Next session\n- Drag drill <b>x</b>");
+    assert.deepStrictEqual(parts.filter(p => p.bold).map(p => p.text), ["How it went", "Next session"]);
+    const all = parts.map(p => p.text).join("");
+    assert.ok(!all.includes("**") && !all.includes("##"));
+    assert.ok(all.includes("• Drag drill <b>x</b>"));   // left as text: renderTake puts it in a text node
+    assert.deepStrictEqual(AICoach.takeParts(""), []);
+  });
+});

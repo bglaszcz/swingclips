@@ -189,7 +189,7 @@
 
             const body = document.createElement("div");
             body.style.cssText = "white-space: pre-wrap; line-height: 1.5; font-size: 14px;";
-            body.textContent = n.text || "";
+            SwingAICoach.renderTake(body, n.text || "");
 
             card.append(head, body);
             notesList.append(card);

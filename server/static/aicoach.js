@@ -403,7 +403,36 @@
     }
   }
 
+  /**
+   * The coach's take as text pieces: [{text, bold}]. Models write a little Markdown (**How it went**,
+   * # headings, - bullets); bold is kept as bold, the other marks are dropped, nothing is HTML.
+   */
+  function takeParts(text) {
+    const clean = String(text || "").split("\n")
+      .map(l => l.replace(/^\s{0,3}#{1,6}\s+(.*)$/, "**$1**").replace(/^(\s*)[-*]\s+/, "$1• "))
+      .join("\n").replace(/__([^_\n]+)__/g, "**$1**");
+    const out = [];
+    const re = /\*\*([^*\n]+)\*\*/g;
+    let at = 0, m;
+    while ((m = re.exec(clean))) {
+      if (m.index > at) out.push({ text: clean.slice(at, m.index), bold: false });
+      out.push({ text: m[1], bold: true });
+      at = re.lastIndex;
+    }
+    if (at < clean.length) out.push({ text: clean.slice(at), bold: false });
+    return out.map(p => ({ ...p, text: p.text.replace(/\*\*/g, "") }));
+  }
+
+  /** Fills an element with the take (browser): text nodes, and <b> for bold. */
+  function renderTake(el, text) {
+    el.replaceChildren(...takeParts(text).map(p => p.bold
+      ? Object.assign(document.createElement("b"), { textContent: p.text }) : document.createTextNode(p.text)));
+    return el;
+  }
+
   const api = {
+    takeParts,
+    renderTake,
     focusProgress,
     brief,
     formatMetricValue,

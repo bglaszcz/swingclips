@@ -12,42 +12,36 @@ swing is tagged with the Square Omni's numbers for that shot.
  2 s + 2 s clip, uploads      Ready bar: starts/stops both phones
 ```
 
-<p align="center">
-  <img src="docs/img/progress-step1.png" alt="Progress step 1: Did your session go better" width="700"><br>
-  <img src="docs/img/progress-focus.png" alt="Progress step 2: What should I work on and is it working" width="700"><br>
-  <img src="docs/img/start-coach-take.png" alt="Start page: Coach's take after each session" width="700">
-</p>
+## What you see
 
 *The pictures use made-up data ([tools/demo](tools/demo)).*
 
-## What you see
-
-- **Did your last session go better?** ([docs/img/progress-step1.png](docs/img/progress-step1.png))  
+- **Did your last session go better?**  
   Four plain tiles (good shots, on line, solid strikes, distance) compare today's session against your usual benchmarks and the session before.
   <br><img src="docs/img/progress-step1.png" alt="Progress step 1" width="600">
 
-- **What should I work on, and is it working?** ([docs/img/progress-focus.png](docs/img/progress-focus.png))  
+- **What should I work on, and is it working?**  
   Keeps you on one focus at a time with its drill and swing thought, and tracks whether the move and its ball-flight results have changed across sessions.
   <br><img src="docs/img/progress-focus.png" alt="Progress step 2" width="600">
 
-- **Where on the face?** ([docs/img/strike-map.png](docs/img/strike-map.png))  
-  A face-centred strike heat map showing your impact cluster and sweet-spot consistency for each club in the bag.
+- **Where on the face?**  
+  A strike heat map on the club face for each club: where your strikes land, your usual spot, and the latest session's shots.
   <br><img src="docs/img/strike-map.png" alt="Strike heat map" width="550">
 
-- **Get ready before hitting** ([docs/img/start-ready.png](docs/img/start-ready.png))  
+- **Get ready before hitting**  
   Checks both camera phones, microphone strike triggers with sensitivity controls, launch monitor, and server at a glance before you swing.
   <br><img src="docs/img/start-ready.png" alt="Start page get ready" width="550">
 
-- **The coach's take after each session** ([docs/img/start-coach-take.png](docs/img/start-coach-take.png))  
+- **The coach's take after each session**  
   A grounded coaching take right after you stop: how it went, how your focus is progressing, and the one thing for next time.
   <br><img src="docs/img/start-coach-take.png" alt="Start page coach's take" width="600">
 
-- **AI coach setup** ([docs/img/aicoach-setup.png](docs/img/aicoach-setup.png))  
-  Pick your preferred AI provider (Claude, OpenAI, Gemini, or local models). Your API key stays safe on your home server, and you can inspect the exact session brief sent out.
+- **AI coach setup**  
+  Pick an AI provider (Claude, OpenAI, Gemini, or any OpenAI-compatible service, local models included). Your API key stays safe on your home server, and you can inspect the exact session brief sent out.
   <br><img src="docs/img/aicoach-setup.png" alt="AI coach setup" width="550">
 
-- **In the bay on a phone** ([docs/img/progress-focus-mobile.png](docs/img/progress-focus-mobile.png))  
-  Responsive layout designed to be clean and readable on a phone mounted in the simulator bay or at the range.
+- **On a phone**  
+  Every page works at phone width, so the review page can sit on a phone in the bay.
   <br><img src="docs/img/progress-focus-mobile.png" alt="Mobile focus view" width="320">
 
 ## Getting going (once)
@@ -84,7 +78,7 @@ Full setup, build, deploy and network details are in **[HOME-SETUP.md](HOME-SETU
 ## The review page
 
 Tabs along the top (along the bottom on a phone): **Swings**, **Progress**, **Practice**,
-**Cameras** (camera icon) and **Tools**. On a phone, "Add to Home screen" installs it like an app. **?** lists
+**Cameras** and **Tools**. On a phone, "Add to Home screen" installs it like an app. **?** lists
 the keyboard shortcuts.
 
 The **Swings** tab opens on a coaching card for each swing (what happened, why, and what to try), with

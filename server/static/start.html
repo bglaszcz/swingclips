@@ -918,7 +918,7 @@ function renderEndOfSessionCard(st, session, earlier, ctx) {
       coachContent.replaceChildren();
       const textDiv = document.createElement("div");
       textDiv.style.whiteSpace = "pre-wrap";
-      textDiv.textContent = (res && res.text) || "";
+      SwingAICoach.renderTake(textDiv, (res && res.text) || "");
       coachContent.append(textDiv);
 
       const footDiv = document.createElement("div");
