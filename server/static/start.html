@@ -226,6 +226,7 @@
 <script src="/static/sessionscore.js"></script>
 <script src="/static/sessionstory.js"></script>
 <script src="/static/swingrow.js"></script>
+<script src="/static/aicoach.js"></script>
 </head>
 <body>
 <header>
@@ -792,7 +793,7 @@ function renderLastSwingCard(latestClip) {
   }
 }
 
-function renderEndOfSessionCard(st) {
+function renderEndOfSessionCard(st, session, earlier, ctx) {
   const cardBox = $("bay-card");
   if (!cardBox) return;
   if (!st) {
@@ -865,6 +866,84 @@ function renderEndOfSessionCard(st) {
   if (st.best && st.best.why) {
     addRow("Best swing", st.best.why);
   }
+
+  const coachContent = document.createElement("div");
+  coachContent.className = "bay-coach-content";
+  addRow("Coach's take", coachContent);
+
+  async function loadCoachTake(forceAgain = false) {
+    if (!session || !session.start) return;
+    try {
+      const stRes = await getJson("/api/coach/status");
+      if (!stRes || !stRes.ready) {
+        const muted = document.createElement("span");
+        muted.className = "muted";
+        muted.textContent = "Add an API key to get the coach's take after each session (Tools > AI coach)";
+        coachContent.replaceChildren(muted);
+        return;
+      }
+      const waiting = document.createElement("span");
+      waiting.className = "muted";
+      waiting.textContent = "The coach is reading your session…";
+      coachContent.replaceChildren(waiting);
+
+      let brief = "";
+      if (typeof SwingAICoach !== "undefined") {
+        brief = SwingAICoach.brief({
+          session,
+          earlier,
+          ctx,
+          story: st,
+          focus: journalData && journalData.focus,
+        });
+      }
+      const res = await fetch("/api/coach/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session: session.start, brief, again: forceAgain }),
+      }).then(r => r.json());
+
+      if (res && res.error) {
+        const errSpan = document.createElement("span");
+        errSpan.className = "muted";
+        errSpan.textContent = res.error;
+        coachContent.replaceChildren(errSpan);
+        return;
+      }
+
+      coachContent.replaceChildren();
+      const textDiv = document.createElement("div");
+      textDiv.style.whiteSpace = "pre-wrap";
+      textDiv.textContent = (res && res.text) || "";
+      coachContent.append(textDiv);
+
+      const footDiv = document.createElement("div");
+      footDiv.className = "muted";
+      footDiv.style.marginTop = "4px";
+      footDiv.style.fontSize = "12px";
+      const timeStr = res && res.t ? new Date(res.t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+      if (timeStr) {
+        footDiv.append(document.createTextNode(`Answered at ${timeStr} · `));
+      }
+      const askAgainBtn = document.createElement("button");
+      askAgainBtn.className = "small-link";
+      askAgainBtn.style.cssText = "background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline;";
+      askAgainBtn.textContent = "Ask again";
+      askAgainBtn.onclick = (e) => {
+        e.preventDefault();
+        loadCoachTake(true);
+      };
+      footDiv.append(askAgainBtn);
+      coachContent.append(footDiv);
+    } catch (e) {
+      const errSpan = document.createElement("span");
+      errSpan.className = "muted";
+      errSpan.textContent = "try again later";
+      coachContent.replaceChildren(errSpan);
+    }
+  }
+
+  loadCoachTake(false);
 }
 
 async function checkEndOfSession() {
@@ -925,7 +1004,7 @@ async function checkEndOfSession() {
   const st = SwingSessionStory.story(session, earlier, ctx);
   if (st) {
     lastEndedSessionStory = st;
-    renderEndOfSessionCard(st);
+    renderEndOfSessionCard(st, session, earlier, ctx);
   }
 }
 

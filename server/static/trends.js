@@ -221,15 +221,19 @@ function showView(which) {
   if (wristBox) wristBox.hidden = which !== "wristcheck";
   const wristBtn = document.getElementById("wristcheck-btn");
   if (wristBtn) wristBtn.classList.toggle("on", which === "wristcheck");
+  const coachBox = document.getElementById("aicoach");
+  if (coachBox) coachBox.hidden = which !== "aicoach";
+  const coachBtn = document.getElementById("aicoach-btn");
+  if (coachBtn) coachBtn.classList.toggle("on", which === "aicoach");
   viewer.hidden = which !== "swing" || !current;
   tipEl.hidden = pTipEl.hidden = true;
   if (which !== "swing") video.pause();
   if (which !== "trends") trendsKey = null;
   progressOpen = which === "progress";
   document.getElementById("progress-btn").classList.toggle("on", progressOpen);
-  // The tabs: a session's trends belong to Swings; Labels, Club check, P4 check, Night report, Week for coach, Wrist check and the shutter test are under Tools.
+  // The tabs: a session's trends belong to Swings; Labels, Club check, P4 check, Night report, Week for coach, Wrist check, AI coach and the shutter test are under Tools.
   document.getElementById("swings-btn").classList.toggle("on", which === "swing" || which === "trends");
-  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck" || which === "p4check" || which === "week" || which === "wristcheck");
+  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck" || which === "p4check" || which === "week" || which === "wristcheck" || which === "aicoach");
   document.body.dataset.view = which;
 }
 
@@ -241,7 +245,8 @@ function leaveTrendViews() {
       && (!document.getElementById("clubcheck") || document.getElementById("clubcheck").hidden)
       && (!document.getElementById("p4check") || document.getElementById("p4check").hidden)
       && (!document.getElementById("week") || document.getElementById("week").hidden)
-      && (!document.getElementById("wristcheck") || document.getElementById("wristcheck").hidden)) return;
+      && (!document.getElementById("wristcheck") || document.getElementById("wristcheck").hidden)
+      && (!document.getElementById("aicoach") || document.getElementById("aicoach").hidden)) return;
   showView("swing");
   renderList();
 }
@@ -1028,6 +1033,116 @@ function renderOverall(all) {
     + `${SwingSessionScore.MIN_JUDGED} or more shots with a verdict; "usual" the median of up to ${SwingSessionScore.USUAL} earlier ones. `
     + `A change is clear when it's unlikely to be luck (two-proportion test, about 95% one-sided); smaller gaps of 5 points `
     + `or more read "a little better / worse".`;
+
+  const coachEl = document.getElementById("p-ov-coach");
+  if (coachEl && cmp && cmp.latest) {
+    const sessStart = cmp.latest.start;
+    coachEl.replaceChildren();
+
+    function renderNoteUI(note) {
+      coachEl.replaceChildren();
+      if (note && note.text) {
+        const textDiv = document.createElement("div");
+        textDiv.style.whiteSpace = "pre-wrap";
+        textDiv.style.marginBottom = "8px";
+        textDiv.textContent = note.text;
+        coachEl.append(textDiv);
+
+        const foot = document.createElement("div");
+        foot.className = "muted";
+        foot.style.fontSize = "12px";
+        const timeStr = note.t ? new Date(note.t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+        if (timeStr) foot.append(document.createTextNode(`Answered at ${timeStr} · `));
+
+        const againBtn = document.createElement("button");
+        againBtn.className = "small-link";
+        againBtn.style.cssText = "background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline;";
+        againBtn.textContent = "Ask again";
+        againBtn.onclick = (e) => {
+          e.preventDefault();
+          askCoach(true);
+        };
+        foot.append(againBtn);
+        coachEl.append(foot);
+      } else {
+        const askBtn = document.createElement("button");
+        askBtn.className = "small";
+        askBtn.textContent = "Ask the coach";
+        askBtn.onclick = () => askCoach(false);
+        coachEl.append(askBtn);
+      }
+    }
+
+    async function checkKeptNote() {
+      try {
+        const res = await fetch(`/api/coach/notes?session=${encodeURIComponent(sessStart)}`).then(r => r.ok ? r.json() : null);
+        renderNoteUI(res);
+      } catch (e) {
+        renderNoteUI(null);
+      }
+    }
+
+    async function askCoach(isAgain) {
+      coachEl.replaceChildren();
+      const waitDiv = document.createElement("div");
+      waitDiv.className = "muted";
+      waitDiv.textContent = "The coach is reading your session…";
+      coachEl.append(waitDiv);
+
+      let brief = "";
+      if (typeof SwingAICoach !== "undefined") {
+        let story = null;
+        if (typeof SwingSessionStory !== "undefined") {
+          story = SwingSessionStory.story(cmp.latest, all.filter(s => s.start < sessStart), {
+            clubs: data.clubs,
+            settings: goodSettings && goodSettings.settings,
+            name: r => r.c?.name || r.name,
+          });
+        }
+        let progReport = null;
+        try {
+          const p = await fetch("/api/program/report").then(r => r.ok ? r.json() : null);
+          if (p && p.text) progReport = p.text;
+        } catch {}
+
+        brief = SwingAICoach.brief({
+          session: cmp.latest,
+          earlier: all.filter(s => s.start < sessStart),
+          ctx: { clubs: data.clubs, settings: goodSettings && goodSettings.settings },
+          story,
+          compare: cmp,
+          focus: journal && journal.focus,
+          programReport: progReport,
+        });
+      }
+
+      try {
+        const res = await fetch("/api/coach/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session: sessStart, brief, again: isAgain }),
+        }).then(r => r.json());
+
+        if (res && res.error) {
+          coachEl.replaceChildren();
+          const errDiv = document.createElement("div");
+          errDiv.className = "muted";
+          errDiv.textContent = res.error;
+          coachEl.append(errDiv);
+          return;
+        }
+        renderNoteUI(res);
+      } catch (e) {
+        coachEl.replaceChildren();
+        const errDiv = document.createElement("div");
+        errDiv.className = "muted";
+        errDiv.textContent = "try again later";
+        coachEl.append(errDiv);
+      }
+    }
+
+    checkKeptNote();
+  }
 }
 
 async function renderProgressPrograms() {

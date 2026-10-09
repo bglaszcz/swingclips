@@ -248,8 +248,14 @@
         lines.push(`Rewatch swing: ${story.best.name || "Swing"} - ${story.best.why}`);
       }
       if (story.fault) {
-        const faultName = story.fault.readable || story.fault.name || "Fault";
-        const countStr = story.fault.count ? ` (${story.fault.count} swings)` : "";
+        const faultName = (typeof story.fault.name === "string" && story.fault.name)
+          || (typeof story.fault.readable === "string" && story.fault.readable)
+          || "Fault";
+        const countStr = story.fault.count
+          ? (typeof story.fault.readable === "number"
+            ? ` (${story.fault.count} of ${story.fault.readable} swings)`
+            : ` (${story.fault.count} swings)`)
+          : "";
         lines.push(`Top fault: ${faultName}${countStr}`);
         if (story.fault.drill) lines.push(`  Drill: ${story.fault.drill}`);
         if (story.fault.thought) lines.push(`  Swing thought: ${story.fault.thought}`);

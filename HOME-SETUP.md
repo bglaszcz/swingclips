@@ -50,6 +50,7 @@ end).
    careful way (the review page's Ready bar shows "deep pass: n clips to go").
 4. Look back on the **review page** (`http://192.168.86.250:8000`): **Progress** (the three steps:
    how did it go / what to work on / is it working; one club at a time below) and each swing's coaching card and numbers.
+5. **AI coach take**: when an Anthropic API key is added (in `anthropic-key.txt` next to `shots.jsonl` or `ANTHROPIC_API_KEY`), the Start page shows the **Coach's take** after your session ends (and Progress step 1 folds it under **Coach's take**). Only a text brief of numbers and words goes out from the server: no video, no pictures, no names, and the key never reaches the browser. Cost is one call per session, a few cents with Claude Opus 5.5 at medium effort (brief and take are short, capped at 10 calls/day). See **Tools > AI coach** on the review page.
 
 **Other ways** (still work): **Start both** in the review page's Ready bar; **Auto-start** on the
 phones; `Start golf.cmd -StartCameras` starts both phones without the page; **Practice** on the review

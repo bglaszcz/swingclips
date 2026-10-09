@@ -1147,6 +1147,7 @@
         <button class="small" data-page="/start" title="The session start page: checks, both cameras, Start / Stop recording, coach program, plan and games">Start a session</button>
         <button class="small" data-page="/tripods" title="Find the tripod spots: live pictures, framing meters, level and alignment-stick tools, saved spots">Tripod setup</button>
         <button id="week-btn" class="small" title="Week for coach: one page a week for the coach with practice, ball flight, focus move, faults, and games">Week for coach</button>
+        <button id="aicoach-btn" class="small" title="The AI coach: status, how to add an API key, the brief sent for your latest session, and kept notes">AI coach</button>
         <button id="update-btn" class="small" title="Get the latest version from GitHub; the server restarts itself when the change needs it">Update the server</button>
         <button id="help-menu-btn" class="small" title="Keyboard shortcuts and what the page shows">Shortcuts &amp; help <kbd>?</kbd></button>
         <hr class="menu-divider">
@@ -1545,6 +1546,39 @@
     <div id="week-copied" class="s-note" style="color: var(--accent);" hidden></div>
     <div id="week-cards" class="week-cards-container"></div>
   </section>
+  <section id="aicoach" class="aicoach-view" hidden>
+    <div class="t-head" style="flex-wrap: wrap; gap: 8px; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <strong>AI coach</strong>
+        <span id="aicoach-status-badge" class="badge"></span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; margin-left: auto;">
+        <button id="aicoach-close" class="small" type="button">Close</button>
+      </div>
+    </div>
+    <div class="aicoach-content" style="padding: 12px; display: flex; flex-direction: column; gap: 16px; max-width: 820px; margin: 0 auto;">
+      <div class="t-card">
+        <h3 style="margin-top: 0;">Status</h3>
+        <div id="aicoach-status-text" style="margin-bottom: 8px;"></div>
+        <div id="aicoach-how-to-add" class="note" style="margin-bottom: 8px;"></div>
+        <div class="muted" style="font-size: 13px;">Cost: One call per session, a few cents with Claude Opus 5.5 at medium effort (the brief and answer are small).</div>
+      </div>
+      <div class="t-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <h3 style="margin: 0;">What goes out (latest session brief)</h3>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="aicoach-copied" class="muted" style="font-size: 13px;" hidden>Copied!</span>
+            <button id="aicoach-copy-brief" class="small" type="button">Copy</button>
+          </div>
+        </div>
+        <pre id="aicoach-brief-text" style="white-space: pre-wrap; font-family: monospace; font-size: 12px; line-height: 1.4; background: var(--bg-card, #1a1a1a); padding: 12px; border-radius: 6px; max-height: 380px; overflow-y: auto; border: 1px solid var(--border, #333);"></pre>
+      </div>
+      <div class="t-card">
+        <h3 style="margin-top: 0;">Kept notes</h3>
+        <div id="aicoach-notes-list" style="display: flex; flex-direction: column; gap: 12px;"></div>
+      </div>
+    </div>
+  </section>
   <section id="wristcheck" class="wristcheck-view" hidden>
     <div class="t-head" style="flex-wrap: wrap; gap: 8px; align-items: center;">
       <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -1649,6 +1683,10 @@
       <div id="p-ov-head" class="p-ov-head"></div>
       <div id="p-ov-tiles" class="p-ov-tiles"></div>
       <div id="p-ov-fault" class="p-faults"></div>
+      <details class="explain" data-fold="coach-take">
+        <summary>Coach's take</summary>
+        <div id="p-ov-coach" style="padding: 8px 0;"></div>
+      </details>
       <details class="explain">
         <summary>How it's worked out</summary>
         <div class="note" id="p-ov-note"></div>
@@ -1855,6 +1893,7 @@
 <script src="/static/scorecard.js"></script>
 <script src="/static/sessionscore.js"></script>
 <script src="/static/sessionstory.js"></script>
+<script src="/static/aicoach.js"></script>
 <script src="/static/swingrow.js"></script>
 <script src="/static/habits.js"></script>
 <script src="/static/metrics3d.js"></script>
@@ -4759,7 +4798,7 @@ async function refresh() {
     try { wanted = pair ? wanted : decodeURIComponent(wanted); } catch {}
     // A link to a Tools view (#labels, #clubcheck, #p4check, #nightreport, #week: the Start page's "Since last time")
     // opens it over the newest swing (read before open() puts the swing's name in the address).
-    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", p4check: "p4check-btn", nightreport: "nightreport-btn", week: "week-btn", wristcheck: "wristcheck-btn" }[location.hash.slice(1)];
+    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", p4check: "p4check-btn", nightreport: "nightreport-btn", week: "week-btn", wristcheck: "wristcheck-btn", aicoach: "aicoach-btn" }[location.hash.slice(1)];
     open(clips.some(c => c.name === wanted) ? wanted : (filteredClips()[0] || shownClips()[0]).name);
     if (pair && clips.some(c => c.name === pair[0])) Compare.show(pair[0], pair[1]);
     if (view) setTimeout(() => document.getElementById(view)?.click(), 0);
@@ -4847,6 +4886,7 @@ setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 <script src="/static/week.js"></script>
 <script src="/static/week-view.js"></script>
 <script src="/static/wristcheck.js"></script>
+<script src="/static/aicoach-view.js"></script>
 <script src="/static/compare.js"></script>
 <script src="/static/update.js"></script>
 </body>
