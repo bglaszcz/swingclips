@@ -29,6 +29,14 @@ The Square watcher, the GSPro-connector option, and the ball-flight fill-in. (Mo
   `winsqlite3.dll` and posts them to `/api/shots`. The laptop's launcher also posts a heartbeat,
   `POST /api/relay/heartbeat`, which the review page's Ready bar shows. Units: m/s and m (converted to mph and yd);
   spin axis and side spin are positive-left in Square's data and flipped to positive-right.
+- **`server/square_watch.py`** (one PC): the same watcher inside the server, for when Square Golf's
+  app runs on the server's own PC (no sim laptop, relay scripts or Dropbox). It starts with the server
+  whenever Square's database is on that PC (`SWINGCLIPS_SQUARE_DB`: `off` or a path to change that),
+  reads new rows read-only with Python's `sqlite3`, keeps each shot as `POST /api/shots` would, and
+  reports the same `square-watcher` heartbeat for the Ready bar (version `server`). Shots saved while
+  the server is down are skipped (stamped late, they'd pair with the wrong swings). The server keeps a
+  Square shot number once, so the laptop's watcher and this one both running, or a retried send,
+  don't double a shot. The launcher agent's start/stop watcher actions still control only the laptop's.
 - **`shot-listener.ps1`** (the option, `Start golf (GSPro).cmd`): stands in for GSPro on
   127.0.0.1:921 so Square's official **SQG GSPro Connect** can be used instead of Square's app.
   Sends GSPro's player info and "ready" so the Omni arms. Square's connector sends each shot as a

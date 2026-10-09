@@ -61,6 +61,7 @@ import quality
 import practice
 import programs
 import setup
+import square_watch
 import status
 import swing3d
 import swings
@@ -1084,6 +1085,7 @@ async def lifespan(app: FastAPI):
     worker.start()
     threading.Thread(target=practice_worker, args=(stop,), daemon=True).start()
     threading.Thread(target=status_worker, args=(stop,), daemon=True).start()
+    start_square_watch(stop)
     yield
     stop.set()
     worker.join(timeout=5)  # lets it close its JavaScript engine, which otherwise holds up the exit
@@ -1316,13 +1318,29 @@ SHOT_SLACK_S = 7.0
 LONE_PENALTY_S = 3.0
 
 
+# Square shot numbers already taken, so the same shot from both the laptop's watcher and the server's
+# own (square_watch.py), or a retried send, is kept once.
+recent_square_shots: collections.deque = collections.deque(maxlen=500)
+
+
 @app.post("/api/shots")
 async def add_shot(request: Request):
-    global last_shot_at
     shot = await request.json()
     if not isinstance(shot, dict) or "received" not in shot or "ball" not in shot:
         raise HTTPException(400, "Expected a shot with 'received' and 'ball'")
+    return record_shot(shot)
+
+
+def record_shot(shot: dict) -> dict:
+    """Keeps a shot from a launch monitor (POST /api/shots, or the server's own Square watcher)."""
+    global last_shot_at
     sent = datetime.fromisoformat(shot["received"])  # rejects a bad timestamp
+    number = shot.get("shotNumber")
+    if shot.get("source") == "square-app" and isinstance(number, int):
+        with files_lock:
+            if number in recent_square_shots:
+                return {"ok": True, "duplicate": True}
+            recent_square_shots.append(number)
     # Our own clock too: the difference shows whether the sending PC's clock is off.
     shot["serverReceived"] = datetime.now().astimezone().isoformat(timespec="milliseconds")
     skew = datetime.now().astimezone().timestamp() - sent.timestamp()
@@ -2550,6 +2568,16 @@ def newest_shot() -> float | None:
         except OSError:
             pass
     return last_shot_at
+
+
+def start_square_watch(stop: threading.Event) -> square_watch.SquareWatcher | None:
+    """Watches Square's app's shots when it runs on this PC (square_watch.py; SWINGCLIPS_SQUARE_DB)."""
+    db = square_watch.configured_db()
+    if db is None:
+        return None
+    watcher = square_watch.SquareWatcher(db, on_shot=record_shot, on_beat=session_status.relay_heartbeat)
+    threading.Thread(target=watcher.run, args=(stop,), daemon=True).start()
+    return watcher
 
 
 def status_worker(stop: threading.Event):

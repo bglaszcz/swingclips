@@ -190,6 +190,7 @@ set SWINGCLIPS_POSE_WORKERS=8
 | `SWINGCLIPS_QUICK` | `on` | Set to `off` to disable quick pass optimizations during a session. |
 | `SWINGCLIPS_3D` | off | Set to `1` or `on` to turn on 3D joint triangulation (needs calibrated phones). |
 | `SWINGCLIPS_CLUB_BACKEND` | `raycast` | Club tracker: `raycast` (ray casting) or `yolo` (YOLO pose model). |
+| `SWINGCLIPS_SQUARE_DB` | Square's database, if on this PC | The server's own Square watcher, for when Square Golf's app runs on the server's PC: unset = watch `%USERPROFILE%\AppData\LocalLow\Invant\Square Golf\SQGDB.bytes` if it's there (on the home server it isn't, so nothing runs), `off` = never, or a path. Don't also run `square-watcher.ps1` on that PC. See [docs/relay.md](docs/relay.md). |
 
 The speed settings that trade accuracy for time (`SWINGCLIPS_MP_STRIDE_AFTER`,
 `SWINGCLIPS_FRAME_CONVERT`, `SWINGCLIPS_POSE_SPLIT`, `SWINGCLIPS_SHAFT_STRIDE`, ...) and the GPU
