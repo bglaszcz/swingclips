@@ -826,7 +826,7 @@
     for (const [label, k, d, unit] of [["Tempo", "ratio", 1, " : 1"], ["Backswing", "back", 2, " s"], ["Downswing", "down", 2, " s"]]) {
       const a = tA ? tA[k] : null, b = tB ? tB[k] : null;
       const f = x => finite(x) ? x.toFixed(d) + unit : "--";
-      const diff = finite(a) && finite(b) ? (a - b > 0 ? "+" : "") + (a - b).toFixed(d) + unit : "--";
+      const diff = finite(a) && finite(b) ? ((a - b > 0 ? "+" : "") + (a - b).toFixed(d)).replace(/^[+-]?0(\.0+)?$/, "0") + unit : "--";
       const n = SwingTrust.numberOf({ ratio: "tempo", back: "backswing", down: "downswing" }[k]);
       const jA = judge(A, n, a), jB = judge(B, n, b);
       timing.append(el("tr", {}, el("td", { textContent: label }), cell(f(a), jA), cell(f(b), jB), cell(diff, both(jA, jB), "diff")));
@@ -887,7 +887,7 @@
           if (b != null) bTitle = `${b > 0 ? "+" : ""}${b.toFixed(1)} mm`;
           if (a != null && b != null) {
             diff = SwingStrikeMap.hDiffWords(a - b);
-            diffTitle = `${a - b > 0 ? "+" : ""}${(a - b).toFixed(1)} mm`;
+            diffTitle = `${((a - b > 0 ? "+" : "") + (a - b).toFixed(1)).replace(/^[+-]?0(\.0+)?$/, "0")} mm`;
           }
         } else if (f.key === "strikeV" && typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.vWords) {
           aText = a != null ? SwingStrikeMap.vWords(a) : "–";
@@ -896,7 +896,7 @@
           if (b != null) bTitle = `${b > 0 ? "+" : ""}${b.toFixed(1)} mm`;
           if (a != null && b != null) {
             diff = SwingStrikeMap.vDiffWords(a - b);
-            diffTitle = `${a - b > 0 ? "+" : ""}${(a - b).toFixed(1)} mm`;
+            diffTitle = `${((a - b > 0 ? "+" : "") + (a - b).toFixed(1)).replace(/^[+-]?0(\.0+)?$/, "0")} mm`;
           }
         }
         const tdA = el("td", { textContent: aText });

@@ -1189,7 +1189,7 @@ async function renderProgressCombine() {
     const combines = (data.log || []).filter(x => x.id === "combine" && x.summary);
     if (combines.length < 2) return;
     const first = combines[0], latest = combines[combines.length - 1];
-    const fmt = v => v == null || !Number.isFinite(v) ? "–" : (v >= 0 ? "+" : "") + v.toFixed(2);
+    const fmt = v => v == null || !Number.isFinite(v) ? "–" : ((v > 0 ? "+" : "") + v.toFixed(2)).replace(/^[+-]?0(\.0+)?$/, "0.00");
     el.textContent = `Combine: ${fmt(latest.summary.sgPerShot)} strokes a shot on ${dayOf(latest.started * 1000)}, first ${fmt(first.summary.sgPerShot)} on ${dayOf(first.started * 1000)}.`;
     el.hidden = false;
   } catch {}

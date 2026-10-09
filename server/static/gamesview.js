@@ -24,7 +24,7 @@ const HIT_WORDS = {
   holes: "on the green",
 };
 
-const gmSg = v => v == null || !Number.isFinite(v) ? "–" : (v >= 0 ? "+" : "") + v.toFixed(2);
+const gmSg = v => v == null || !Number.isFinite(v) ? "–" : ((v > 0 ? "+" : "") + v.toFixed(2)).replace(/^[+-]?0(\.0+)?$/, "0.00");
 const gmYd = v => v == null || !Number.isFinite(v) ? "–" : Math.round(v) + " yd";
 const gmDay = t => new Date(t * 1000).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 
@@ -43,7 +43,7 @@ function wrapTable(table) {
 function runningScoreWords(sg) {
   if (sg == null || !Number.isFinite(sg)) return "";
   const sign = sg >= 0 ? "+" : "";
-  const numStr = sign + sg.toFixed(1);
+  const numStr = sign + (Object.is(sg, -0) ? 0 : sg).toFixed(1);
   const abs = Math.abs(sg);
   let words = "";
   if (abs < 0.15) {

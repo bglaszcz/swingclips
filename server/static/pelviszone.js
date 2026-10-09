@@ -198,7 +198,7 @@
     if (zoneResult && zoneResult.enough && zoneResult.zone) {
       const lo = zoneResult.zone.lo;
       const hi = zoneResult.zone.hi;
-      const fmt = x => (x > 0 ? "+" : "") + x.toFixed(1);
+      const fmt = x => ((x > 0 ? "+" : "") + x.toFixed(1)).replace(/^[+-]?0(\.0+)?$/, "0");
       targetText = `Target: ${fmt(lo)} to ${fmt(hi)} in.`;
     } else {
       const n = zoneResult?.n ?? 0;

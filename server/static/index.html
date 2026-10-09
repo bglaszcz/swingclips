@@ -3340,8 +3340,8 @@ function formatFocusBodyValue(key, v) {
   const b = typeof SwingSummary !== "undefined" && SwingSummary.BODY ? SwingSummary.BODY.find(f => f.key === key) : null;
   const unit = b ? b.unit : "";
   const dec = unit === "s" ? 2 : unit === "°" ? 1 : unit === ":1" ? 1 : 1;
-  const n = v.toFixed(dec);
-  if (unit === "°") return n + "°";
+  const n = v.toFixed(dec).replace(/^-0(\.0+)?$/, "0$1");
+  if (unit === "°") return (n.startsWith("0.") ? n : n.replace(/^0$/, "0")) + "°";
   if (unit === ":1") return `${n} : 1`;
   if (unit) return `${n} ${unit}`;
   return n;

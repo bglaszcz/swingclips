@@ -164,4 +164,9 @@ test("sentence wording: both sides of the ball and at the ball", () => {
     PelvisZone.sentence(0.0, calibrated),
     "Pelvis at the ball at impact. Target: +0.5 to +2.0 in."
   );
+  assert.equal(
+    PelvisZone.sentence(0.0, { enough: true, zone: { lo: 0.0, hi: 2.0 } }),
+    "Pelvis at the ball at impact. Target: 0 to +2.0 in."
+  );
 });
+

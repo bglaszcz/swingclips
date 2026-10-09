@@ -153,3 +153,12 @@ test("no P[1-8] jargon in touched string tables", () => {
     assert.doesNotMatch(v, /\bP[1-8]\b/, `ShotStory PHASES[${k}] contains P-number`);
   }
 });
+
+test("compare: diff clean up strips -0 and -0.0", () => {
+  const cleanDiff = (a, b, d) => ((a - b > 0 ? "+" : "") + (a - b).toFixed(d)).replace(/^[+-]?0(\.0+)?$/, "0");
+  assert.equal(cleanDiff(2.44, 2.45, 1), "0");
+  assert.equal(cleanDiff(10.0, 10.03, 1), "0");
+  assert.equal(cleanDiff(10.0, 9.5, 1), "+0.5");
+  assert.equal(cleanDiff(9.5, 10.0, 1), "-0.5");
+});
+
