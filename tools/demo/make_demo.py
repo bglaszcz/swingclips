@@ -76,29 +76,30 @@ def generate_demo_data() -> None:
             dtl_name = f"swing_dtl_1920x1080_240fps_{ts}_{duration_ms - 10}ms.mp4"
 
             # Launch monitor numbers
+            is_latest_sess = (sess_idx == len(SESSION_SCHEDULE) - 1)
             if club == "I7":
                 if not is_after_focus:
                     # Before focus
                     club_speed = round(random.normalvariate(84.5, 1.0), 2)
-                    smash = round(random.normalvariate(1.30, 0.015), 2)
+                    smash = round(random.normalvariate(1.30, 0.02), 2)
                     ball_speed = round(club_speed * smash, 2)
-                    carry = round(random.normalvariate(146.0, 3.0), 1)
+                    carry = round(random.normalvariate(146.0, 3.5), 1)
                     total = round(carry + 2.5, 1)
                     attack = round(random.normalvariate(-3.2, 0.4), 2)
                     loft = round(random.normalvariate(28.5, 0.6), 2)
                     path = round(random.normalvariate(-1.8, 0.6), 2)
                     face = round(random.normalvariate(0.6, 0.5), 2)
-                    offline = round(random.normalvariate(3.0, 3.5), 1)
+                    # Earlier sessions: wider offline misses (~28% good shots)
+                    offline = round(random.normalvariate(4.0, 5.5), 1)
                     vla = round(random.normalvariate(20.2, 0.6), 2)
                     hla = round(random.normalvariate(0.3, 0.4), 2)
                     spin = int(random.normalvariate(6400, 200))
                     spin_axis = round(random.normalvariate(2.0, 1.2), 2)
-                    # Lead hip at P6: hanging back
                     lead_hip_p6 = round(random.normalvariate(2.0, 0.25), 2)
                 else:
-                    # After focus: move changed and results followed!
+                    # After focus
                     club_speed = round(random.normalvariate(86.5, 0.9), 2)
-                    smash = round(random.normalvariate(1.35, 0.012), 2)
+                    smash = round(random.normalvariate(1.35, 0.015), 2)
                     ball_speed = round(club_speed * smash, 2)
                     carry = round(random.normalvariate(153.5, 2.5), 1)
                     total = round(carry + 2.8, 1)
@@ -106,12 +107,13 @@ def generate_demo_data() -> None:
                     loft = round(random.normalvariate(28.0, 0.5), 2)
                     path = round(random.normalvariate(-1.0, 0.5), 2)
                     face = round(random.normalvariate(0.2, 0.4), 2)
-                    offline = round(random.normalvariate(1.0, 2.5), 1)
+                    # Latest session has tighter offline (more good shots) than sessions 7-10
+                    offline_sd = 3.2 if is_latest_sess else 5.2
+                    offline = round(random.normalvariate(1.0, offline_sd), 1)
                     vla = round(random.normalvariate(20.8, 0.5), 2)
                     hla = round(random.normalvariate(0.1, 0.3), 2)
                     spin = int(random.normalvariate(6600, 180))
                     spin_axis = round(random.normalvariate(1.0, 0.8), 2)
-                    # Lead hip at P6: clearing well forward toward target
                     lead_hip_p6 = round(random.normalvariate(4.25, 0.25), 2)
 
                 # Strike location: tight clear blob around centre (0, 0)
@@ -404,14 +406,14 @@ def generate_demo_data() -> None:
     # 5. journal.json
     journal_obj = {
         "handicap": [
-            {"date": "2031-03-01", "handicap": 9.4},
-            {"date": "2031-03-28", "handicap": 8.8},
+            {"date": "2031-03-01", "index": 9.4},
+            {"date": "2031-03-28", "index": 8.8},
         ],
         "notes": {},
         "focus": {
             "move": "leadHipP6",
             "aim": "more",
-            "club": "7 iron",
+            "club": "I7",
             "results": ["carry", "smash"],
             "since": FOCUS_START_DATE,
         },
@@ -419,7 +421,7 @@ def generate_demo_data() -> None:
             {
                 "move": "leadHipP6",
                 "aim": "more",
-                "club": "7 iron",
+                "club": "I7",
                 "results": ["carry", "smash"],
                 "since": FOCUS_START_DATE,
             }
@@ -551,9 +553,9 @@ def generate_demo_data() -> None:
                 "clubs": "7 iron only",
                 "bringBack": "Per swing: attack angle, dynamic loft, face to path, strike height, carry",
                 "blocks": [
-                    {"id": "leadfoot", "name": "Lead foot only", "drill": "leadfoot", "ball": False, "reps": 10},
-                    {"id": "stepthrough", "name": "Step through", "drill": "stepthrough", "ball": False, "reps": 10},
-                    {"id": "flush", "name": "Flush line", "drill": None, "ball": True, "reps": 10},
+                    {"id": "leadfoot", "name": "Lead foot only", "drill": "leadfoot", "ball": False, "reps": 10, "gate": {"kind": "streak", "need": 10}},
+                    {"id": "stepthrough", "name": "Step through", "drill": "stepthrough", "ball": False, "reps": 10, "gate": {"kind": "streak", "need": 10}},
+                    {"id": "flush", "name": "Flush line", "drill": None, "ball": True, "reps": 10, "gate": {"kind": "count", "need": 8, "of": 10, "checks": [{"key": "attack", "min": -5, "max": -2}]}},
                 ],
             }
         ],
@@ -625,9 +627,9 @@ def generate_demo_data() -> None:
 
     coach_note_text = (
         "**How it went**\n"
-        "A solid session: 42% good shots, better than your usual 28%. The 7 iron was crisp and on line, carrying 153 yards with consistent flush contact.\n\n"
+        "A solid session: 82% good shots, better than your usual 64%. The 7 iron was crisp and on line, carrying 153 yards with consistent flush contact.\n\n"
         "**Your focus**\n"
-        "Your focus on clearing the lead hip in the downswing is clearly taking hold. You moved the lead hip 4.2 inches forward toward the target, and smash and carry followed over the last 6 sessions.\n\n"
+        "Your focus on clearing the lead hip in the downswing is clearly taking hold. You moved the lead hip 4.3 inches forward toward the target, and smash and carry followed over the last 6 sessions.\n\n"
         "**Next session**\n"
         "Stick with the hip rotation. Work on the Hip-to-the-stick drill: alignment stick in the ground just outside your lead hip at address. From the top, bump the lead hip into the stick before the arms start down, then turn. Swing thought: Lead hip to the target first."
     )

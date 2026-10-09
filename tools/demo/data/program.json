@@ -14,21 +14,41 @@
      "name": "Lead foot only",
      "drill": "leadfoot",
      "ball": false,
-     "reps": 10
+     "reps": 10,
+     "gate": {
+      "kind": "streak",
+      "need": 10
+     }
     },
     {
      "id": "stepthrough",
      "name": "Step through",
      "drill": "stepthrough",
      "ball": false,
-     "reps": 10
+     "reps": 10,
+     "gate": {
+      "kind": "streak",
+      "need": 10
+     }
     },
     {
      "id": "flush",
      "name": "Flush line",
      "drill": null,
      "ball": true,
-     "reps": 10
+     "reps": 10,
+     "gate": {
+      "kind": "count",
+      "need": 8,
+      "of": 10,
+      "checks": [
+       {
+        "key": "attack",
+        "min": -5,
+        "max": -2
+       }
+      ]
+     }
     }
    ]
   }
