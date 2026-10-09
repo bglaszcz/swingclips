@@ -783,3 +783,77 @@ test("queue and balanceSwings: face-on clips come up too, each clip judged by it
   assert.ok(firstClips.indexOf("f1") < firstClips.indexOf("d1"));
   assert.ok(firstClips.slice(0, 2).some(n => n.startsWith("f")));
 });
+
+test("ClubCheck.back: does not revert frame index if closed while fetch is pending", async () => {
+  const origWindow = global.window;
+  const origDoc = global.document;
+  const origFetch = global.fetch;
+  const origImage = global.Image;
+
+  global.window = { addEventListener: () => {} };
+  global.Image = class { constructor() {} };
+  global.document = {
+    addEventListener: () => {},
+    getElementById: () => ({
+      hidden: false,
+      style: {},
+      replaceChildren: () => {},
+      scrollIntoView: () => {},
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      appendChild: () => {},
+      addEventListener: () => {},
+      append: () => {},
+      classList: { add: () => {}, remove: () => {}, toggle: () => {} },
+      getContext: () => ({ clearRect: () => {}, drawImage: () => {}, fillRect: () => {}, stroke: () => {} })
+    }),
+    createElement: () => ({
+      className: "",
+      style: {},
+      textContent: "",
+      appendChild: () => {},
+      replaceChildren: () => {},
+      addEventListener: () => {},
+      append: () => {}
+    })
+  };
+
+  let resolveLabels;
+  const promiseLabels = new Promise(r => { resolveLabels = r; });
+
+  global.fetch = async (url) => {
+    if (url.includes("/api/labels/")) {
+      await promiseLabels;
+      return { ok: true, json: async () => ({ schema: 1, frames: {} }) };
+    }
+    if (url.includes("/api/clips")) {
+      return {
+        ok: true,
+        json: async () => [
+          { name: "clip1.mp4", angle: "face", recorded: "2026-10-01T12:00:00", shot: { club: "7I" } },
+          { name: "clip2.mp4", angle: "face", recorded: "2026-10-01T12:01:00", shot: { club: "7I" } }
+        ]
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const ClubCheck = require("../static/clubcheck.js");
+
+  try {
+    await ClubCheck.open();
+    ClubCheck.showFrame(1);
+    const p = ClubCheck.back();
+    ClubCheck.close();
+    resolveLabels();
+    await p;
+    // Should have safely returned without attempting to show frame in closed modal
+    assert.ok(true);
+  } finally {
+    global.window = origWindow;
+    global.document = origDoc;
+    global.fetch = origFetch;
+    global.Image = origImage;
+  }
+});
+

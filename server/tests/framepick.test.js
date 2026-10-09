@@ -371,4 +371,85 @@ test("tally: counts picks by position, angle, and source, with plain-words summa
   assert.equal(res.summary, "Takeaway: the server won 14 of 17. P4: the night pass won 9 of 12.");
 });
 
+test("loadRow: discards stale response if row changed or closed while fetching", async () => {
+  const origDoc = global.document;
+  const origFetch = global.fetch;
+  const origImage = global.Image;
+
+  global.Image = class { constructor() {} };
+  global.document = {
+    addEventListener: () => {},
+    getElementById: () => ({
+      hidden: false,
+      replaceChildren: () => {},
+      scrollIntoView: () => {},
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      appendChild: () => {},
+      addEventListener: () => {},
+      append: () => {}
+    }),
+    createElement: () => ({
+      className: "",
+      textContent: "",
+      appendChild: () => {},
+      replaceChildren: () => {},
+      addEventListener: () => {},
+      append: () => {}
+    })
+  };
+
+  let resolveA;
+  const promiseA = new Promise(r => { resolveA = r; });
+
+  global.fetch = async (url) => {
+    if (url.includes("clipA")) {
+      await promiseA;
+      return { ok: true, json: async () => ({ schema: 1, events: { takeaway: 1.0 } }) };
+    }
+    return { ok: true, json: async () => ({ schema: 1, events: { takeaway: 2.0 } }) };
+  };
+
+  const { loadRow, getCurrentRow, getCurrentDoc, close } = require("../static/framepick.js");
+
+  const rowA = { key: "takeaway", t: 1.0, ms: 10, c: { name: "clipA.mp4" } };
+  const rowB = { key: "takeaway", t: 2.0, ms: 20, c: { name: "clipB.mp4" } };
+
+  try {
+    const pA = loadRow(rowA);
+    const pB = loadRow(rowB);
+    await pB;
+
+    assert.equal(getCurrentRow(), rowB);
+    assert.equal(getCurrentDoc().events.takeaway, 2.0);
+
+    // Now resolve slow rowA - it must not overwrite rowB
+    resolveA();
+    await pA;
+
+    assert.equal(getCurrentRow(), rowB);
+    assert.equal(getCurrentDoc().events.takeaway, 2.0);
+
+    // Also verify when closed
+    let resolveC;
+    const promiseC = new Promise(r => { resolveC = r; });
+    global.fetch = async () => {
+      await promiseC;
+      return { ok: true, json: async () => ({ schema: 1, events: { takeaway: 3.0 } }) };
+    };
+    const rowC = { key: "takeaway", t: 3.0, ms: 10, c: { name: "clipC.mp4" } };
+    const pC = loadRow(rowC);
+    close();
+    resolveC();
+    await pC;
+    // Does not overwrite since closed
+    assert.notEqual(getCurrentDoc()?.events?.takeaway, 3.0);
+  } finally {
+    global.document = origDoc;
+    global.fetch = origFetch;
+    global.Image = origImage;
+  }
+});
+
+
 

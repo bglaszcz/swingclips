@@ -2830,8 +2830,9 @@ async function loadPose(name) {
 async function loadPartnerPose() {
   const want = partner;
   if (!want) return;
+  const myClip = current;
   const p = await fetchPose(want.name, video2);
-  if (!p || partner !== want) return;
+  if (!p || partner !== want || current !== myClip) return;
   partner.pose = p;
   // Now in step by the ball, if both saw it; and the cards get this angle too.
   syncPartner();
@@ -3141,6 +3142,7 @@ async function show3d(name) {
   if (calibState === null) {
     try { calibState = await (await fetch("/api/calib")).json(); } catch { calibState = { enabled: false }; }
   }
+  if (!want()) return;
   let doc = null;
   if (calibState.enabled && partner && pose.angle !== "dtl") {
     try {

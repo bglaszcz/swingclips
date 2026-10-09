@@ -84,7 +84,7 @@
           e.state = "ready";
         })
         .catch(err => { e.state = "error"; message = `Couldn't load labels: ${err.message}`; })
-        .finally(() => { render(); redraw(); });
+        .finally(() => { if (on && activeClip() && activeClip().name === name) { render(); redraw(); } });
     }
     return e;
   }

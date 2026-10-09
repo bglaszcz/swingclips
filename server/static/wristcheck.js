@@ -368,6 +368,8 @@
   }
 
   async function renderShotStill(shot) {
+    const runNow = currentRun;
+    const angleNow = angle;
     const canvas = document.getElementById(`wrist-canvas-${shot.index}`);
     const clip = shot.targetClip || clipForAngle(shot, angle);
     if (!canvas || !clip) return;
@@ -382,6 +384,8 @@
       }
       poseCache[clip] = pose;
     }
+    if (!isOpen || currentRun !== runNow || angle !== angleNow) return;
+
     const impact = pose && (pose.impact ?? pose.strike);
     // Frames round impact, the same crop round the lead wrist on each, side by side.
     const times = impact != null ? STRIP.map(k => Math.max(0, impact + k / 240)) : [null];
@@ -396,6 +400,9 @@
       if (img.complete && img.naturalWidth) resolve(img);
       else { img.onload = () => resolve(img); img.onerror = () => resolve(null); }
     })));
+    if (!isOpen || currentRun !== runNow || angle !== angleNow) return;
+    if (document.getElementById(`wrist-canvas-${shot.index}`) !== canvas) return;
+
     const first = imgs.find(i => i && i.naturalWidth);
     if (!first) return;
     const crop = cropBoxFromWrist(getWristPoint(pose), first.naturalWidth, first.naturalHeight, { size: 0.28 });
@@ -547,7 +554,8 @@
     cropBoxFromWrist,
     open,
     close,
-    loadData
+    loadData,
+    renderShotStill
   };
 
   if (typeof module !== "undefined" && module.exports) {

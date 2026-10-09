@@ -417,6 +417,7 @@
       fetchPoseData(targetClipName, false),
       fetchPoseData(targetClipName, true),
     ]);
+    if (!isOpen || currentRow !== row) return;
 
     currentDoc = doc;
     const ev = labelEvent(row.key);
@@ -619,7 +620,8 @@
   async function pick(picIdx) {
     if (busy || picIdx < 0 || picIdx >= pictures.length) return;
     const pic = pictures[picIdx];
-    const ev = labelEvent(currentRow.key);
+    const pickRow = currentRow;
+    const ev = labelEvent(pickRow.key);
     if (!ev) return;
 
     if (existingLabelTime != null && pic.id !== "label") {
@@ -646,8 +648,10 @@
         throw new Error(err.detail || res.statusText);
       }
 
+      if (!isOpen || currentRow !== pickRow) return;
+
       currentDoc = docToSave;
-      const posName = POSITION_NAMES[currentRow.key] || currentRow.key.toUpperCase();
+      const posName = POSITION_NAMES[pickRow.key] || pickRow.key.toUpperCase();
       const savedText = `Saved: ${posName} at ${pic.t.toFixed(4)} s`;
       if (statusEl) statusEl.textContent = savedText;
       if (typeof showToast === "function") showToast(savedText);
@@ -768,6 +772,9 @@
     tally,
     open,
     close,
+    loadRow,
+    getCurrentDoc: () => currentDoc,
+    getCurrentRow: () => currentRow,
     step,
     pick,
     skip,

@@ -660,6 +660,7 @@
         }
       } catch (e) {}
     }
+    if (!isOpen || currentIndex !== idx) return;
     currentPose = pose;
 
     let partnerPose = null;
@@ -675,6 +676,7 @@
         } catch (e) {}
       }
     }
+    if (!isOpen || currentIndex !== idx) return;
 
     let lead = "left";
     try {
@@ -707,6 +709,7 @@
 
   async function saveTop() {
     if (!isOpen || currentIndex >= currentQueue.length) return;
+    const saveIdx = currentIndex;
     const c = currentClip;
     if (!c || !currentWindow || currentFrameIndex == null) return;
     const chosenT = currentWindow[currentFrameIndex];
@@ -777,8 +780,10 @@
       }
 
       setStatusMessage("Saved!", false);
-      currentIndex++;
-      showSwing(currentIndex);
+      if (isOpen && currentIndex === saveIdx) {
+        currentIndex++;
+        showSwing(currentIndex);
+      }
     } catch (err) {
       setStatusMessage(`Error saving: ${err.message}`, true);
     }

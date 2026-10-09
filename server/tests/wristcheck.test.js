@@ -175,9 +175,65 @@ test("cropBoxFromWrist: handles pixel coordinate inputs", () => {
 });
 
 test("index.html contains Wrist check tools button, section, and script tag", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
   const html = fs.readFileSync(path.join(__dirname, "../static/index.html"), "utf8");
   assert.ok(html.includes('id="wristcheck-btn"'));
   assert.ok(html.includes('id="wristcheck"'));
   assert.ok(html.includes('src="/static/wristcheck.js"'));
   assert.ok(html.includes('wristcheck: "wristcheck-btn"'));
 });
+
+test("renderShotStill: discards response if modal closed or run changed while fetching", async () => {
+  const origDoc = global.document;
+  const origFetch = global.fetch;
+  const origImage = global.Image;
+
+  let drawn = false;
+  const canvasMock = {
+    width: 0,
+    height: 0,
+    getContext: () => ({
+      drawImage: () => { drawn = true; }
+    })
+  };
+
+  global.Image = class {
+    constructor() {
+      this.naturalWidth = 100;
+      this.naturalHeight = 100;
+      this.complete = true;
+    }
+  };
+
+  global.document = {
+    getElementById: (id) => (id === "wrist-canvas-1" ? canvasMock : null)
+  };
+
+  let resolvePose;
+  const promisePose = new Promise(r => { resolvePose = r; });
+
+  global.fetch = async (url) => {
+    if (url.includes("/api/pose/")) {
+      await promisePose;
+      return { ok: true, json: async () => ({ impact: 1.5, frames: [] }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const { renderShotStill, close } = require("../static/wristcheck.js");
+
+  try {
+    const shot = { index: 1, targetClip: "clip_stale.mp4" };
+    const p = renderShotStill(shot);
+    close();
+    resolvePose();
+    await p;
+    assert.equal(drawn, false, "stale fetch did not draw onto canvas after close");
+  } finally {
+    global.document = origDoc;
+    global.fetch = origFetch;
+    global.Image = origImage;
+  }
+});
+

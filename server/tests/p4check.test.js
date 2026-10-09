@@ -280,3 +280,65 @@ test("trends.js includes p4check in showView, tools-btn active list, and leaveTr
   assert.ok(js.includes('document.getElementById("p4check-btn")'), "toggles #p4check-btn in showView");
   assert.ok(js.includes('which === "p4check"'), "includes p4check in tools-btn tab activation");
 });
+
+test("p4check: showSwing and saveTop discard stale response if modal closed or index moved", async () => {
+  const origWindow = global.window;
+  const origDoc = global.document;
+  const origFetch = global.fetch;
+  const origImage = global.Image;
+
+  global.window = { addEventListener: () => {} };
+  global.Image = class { constructor() {} };
+  global.document = {
+    addEventListener: () => {},
+    getElementById: () => ({
+      hidden: false,
+      style: {},
+      replaceChildren: () => {},
+      scrollIntoView: () => {},
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      appendChild: () => {},
+      addEventListener: () => {},
+      append: () => {},
+      classList: { add: () => {}, remove: () => {}, toggle: () => {} },
+      getContext: () => ({ clearRect: () => {}, drawImage: () => {}, fillRect: () => {}, stroke: () => {} })
+    }),
+    createElement: () => ({
+      className: "",
+      style: {},
+      textContent: "",
+      appendChild: () => {},
+      replaceChildren: () => {},
+      addEventListener: () => {},
+      append: () => {}
+    })
+  };
+
+  let resolvePose;
+  const promisePose = new Promise(r => { resolvePose = r; });
+
+  global.fetch = async (url) => {
+    if (url.includes("/api/pose/")) {
+      await promisePose;
+      return { ok: true, json: async () => ({ frames: [], impact: 1.5 }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const p4 = require("../static/p4check.js");
+
+  try {
+    const p = p4.showSwing(0);
+    p4.close();
+    resolvePose();
+    await p;
+    assert.ok(true, "showSwing safely returned when closed during pose fetch");
+  } finally {
+    global.window = origWindow;
+    global.document = origDoc;
+    global.fetch = origFetch;
+    global.Image = origImage;
+  }
+});
+

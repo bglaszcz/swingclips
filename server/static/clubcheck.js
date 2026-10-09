@@ -932,6 +932,7 @@
         savedPts = savedPointsFor(doc, item.t);
       }
     } catch (_) {}
+    if (!isOpen || currentIndex - 1 !== targetIdx) return;
     currentIndex = targetIdx;
     showFrame(currentIndex, savedPts);
     setStatusMessage("", false);
@@ -1038,6 +1039,7 @@
 
   async function save() {
     if (!isOpen || currentIndex >= currentQueue.length) return;
+    const saveIdx = currentIndex;
     const item = currentQueue[currentIndex];
     if (!item) return;
 
@@ -1129,8 +1131,10 @@
       renderProgress();
       refreshProgress();
       setStatusMessage("Saved", false);
-      currentIndex++;
-      showFrame(currentIndex);
+      if (isOpen && currentIndex === saveIdx) {
+        currentIndex++;
+        showFrame(currentIndex);
+      }
     } catch (err) {
       setStatusMessage(`Error saving: ${err.message}`, true);
     }
