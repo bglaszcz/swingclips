@@ -12,6 +12,44 @@ swing is tagged with the Square Omni's numbers for that shot.
  2 s + 2 s clip, uploads      Ready bar: starts/stops both phones
 ```
 
+<p align="center">
+  <img src="docs/img/progress-step1.png" alt="Progress step 1: Did your session go better" width="700"><br>
+  <img src="docs/img/progress-focus.png" alt="Progress step 2: What should I work on and is it working" width="700"><br>
+  <img src="docs/img/start-coach-take.png" alt="Start page: Coach's take after each session" width="700">
+</p>
+
+*The pictures use made-up data ([tools/demo](tools/demo)).*
+
+## What you see
+
+- **Did your last session go better?** ([docs/img/progress-step1.png](docs/img/progress-step1.png))  
+  Four plain tiles (good shots, on line, solid strikes, distance) compare today's session against your usual benchmarks and the session before.
+  <br><img src="docs/img/progress-step1.png" alt="Progress step 1" width="600">
+
+- **What should I work on, and is it working?** ([docs/img/progress-focus.png](docs/img/progress-focus.png))  
+  Keeps you on one focus at a time with its drill and swing thought, and tracks whether the move and its ball-flight results have changed across sessions.
+  <br><img src="docs/img/progress-focus.png" alt="Progress step 2" width="600">
+
+- **Where on the face?** ([docs/img/strike-map.png](docs/img/strike-map.png))  
+  A face-centred strike heat map showing your impact cluster and sweet-spot consistency for each club in the bag.
+  <br><img src="docs/img/strike-map.png" alt="Strike heat map" width="550">
+
+- **Get ready before hitting** ([docs/img/start-ready.png](docs/img/start-ready.png))  
+  Checks both camera phones, microphone strike triggers with sensitivity controls, launch monitor, and server at a glance before you swing.
+  <br><img src="docs/img/start-ready.png" alt="Start page get ready" width="550">
+
+- **The coach's take after each session** ([docs/img/start-coach-take.png](docs/img/start-coach-take.png))  
+  A grounded coaching take right after you stop: how it went, how your focus is progressing, and the one thing for next time.
+  <br><img src="docs/img/start-coach-take.png" alt="Start page coach's take" width="600">
+
+- **AI coach setup** ([docs/img/aicoach-setup.png](docs/img/aicoach-setup.png))  
+  Pick your preferred AI provider (Claude, OpenAI, Gemini, or local models). Your API key stays safe on your home server, and you can inspect the exact session brief sent out.
+  <br><img src="docs/img/aicoach-setup.png" alt="AI coach setup" width="550">
+
+- **In the bay on a phone** ([docs/img/progress-focus-mobile.png](docs/img/progress-focus-mobile.png))  
+  Responsive layout designed to be clean and readable on a phone mounted in the simulator bay or at the range.
+  <br><img src="docs/img/progress-focus-mobile.png" alt="Mobile focus view" width="320">
+
 ## Getting going (once)
 
 1. **Server** (the always-on Windows PC): clone this repo to `D:\SwingClips\app` and run
@@ -46,7 +84,7 @@ Full setup, build, deploy and network details are in **[HOME-SETUP.md](HOME-SETU
 ## The review page
 
 Tabs along the top (along the bottom on a phone): **Swings**, **Progress**, **Practice**,
-**Cameras** and **Tools**. On a phone, "Add to Home screen" installs it like an app. **?** lists
+**Cameras** (camera icon) and **Tools**. On a phone, "Add to Home screen" installs it like an app. **?** lists
 the keyboard shortcuts.
 
 The **Swings** tab opens on a coaching card for each swing (what happened, why, and what to try), with
@@ -61,15 +99,17 @@ and drill from `coach.js`. Keys `1`–`8` jump between key positions (setup, top
   Numbers that can't be trusted are greyed with a **~** (hover for why).
 - **Trends** (per session, in the list): opens with the session's story: how it went against earlier ones,
   its top fault, and body numbers against shot results.
-- **Progress**: the three steps across all clubs (how did the last session go, what should I work on, and
-  is it working), with **One club at a time** below: four story tiles (Good shots, On line, Solid strikes,
-  Distance), the club's top fault and trend, and all session numbers folded under "All numbers from this session".
+- **Progress**: the two steps across all clubs (how did the last session go, and what should I work on —
+  with whether it's working inside it), with **One club at a time** below: four story tiles (Good shots,
+  On line, Solid strikes, Distance), the club's top fault and trend, and all session numbers folded under
+  "All numbers from this session".
 - **Practice**: practise your #1 priority in one tap; play games (Combine, Wedge ladder, Driving, etc.) with
   a big target (readable from 2 m), shot count, running score in plain words, and post-game comparison; or pick a
   number and range yourself.
-- **Tools**: everyday tools first (Tripod setup, Labels, Calibrate, Update server), checks and diagnostics below.
+- **Tools**: everyday tools first (Start a session, Tripod setup, Week for coach, AI coach, Update server),
+  tracking and setup checks below (3D calibration, Labels, Club check, P4 check, Wrist check, Night report, Shutter test).
 
-**Capture app (0.9)**: the camera fills the screen with which angle and mode it is and whether
+**Capture app (0.12)**: the camera fills the screen with which angle and mode it is and whether
 it's recording; below it the status, the server, one big Start / Stop, and the strike trigger
 (level bar and sensitivity; also set from the Start page, recording or not, from 0.12). Everything
 else (angle, mode, shutter, server, voices, auto-start) is under **Settings**; the camera ones are
@@ -180,7 +220,7 @@ node --test tests/*.test.js     # PowerShell: node --test (Get-ChildItem tests\*
 | `relay/` | Sim laptop | `square-watcher.ps1` reads new shots from Square Golf's local shot database and posts them to the server, which pairs each with its swing by time; `Start golf.cmd` starts Square's app and the watcher. `Start golf (GSPro).cmd` uses `shot-listener.ps1` instead, which stands in for GSPro so Square's GSPro connector sends shots (optional; carry worked out by `server/ballflight.py`). |
 | `train/` | Gaming PC (GPU) | Trains the club keypoint model (YOLO-pose) from labeled frames. |
 | `docs/` | | The details per part: phones, review page, scorecard, performance, club model, 3D, relay, key positions. |
-| `tools/` | Dev PC | `devproxy.js` (a checkout's pages with the server's real data) and `browser-check.js` (click-test a page in headless Edge). |
+| `tools/` | Dev PC | `devproxy.js` (a checkout's pages with the server's real data), `browser-check.js` (click-test a page in headless Edge), and `tools/demo/` (demo server and data generator for screenshots). |
 | `public/` | Home server | The MediaPipe body model, and the downloaded ONNX models (`public/models`, not in git). |
 
 ## Credits and license
