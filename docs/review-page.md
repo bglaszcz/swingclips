@@ -98,20 +98,31 @@ What the server works out for each swing and what each part of the review page s
   and hurts another, also when the way one result wants is a fault, is a trade-off and left out. Shown:
   the irons' first ("Your #1 priority with your irons"), then the woods' first ("With the driver and
   woods") or the irons' second. A focus made from one tracks the group's most-hit club (button
-  tooltip); with a focus, one line when the numbers now point elsewhere.
-  Under step 2, folded by default: **Pick my own focus** (`static/focuspick.js`), letting the golfer
+  tooltip).
+  **One topic, in detail** (Oct 9, the owner: one thing visible, the rest available but not shown). The
+  card shows only the focus (or, without one, the #1 priority): **Why this** (that move's own strong and
+  worth-trying links in the latest numbers for its club group, `moveEvidence`, at most 3: what goes with
+  what, how much per unit, in how many sessions; "the opposite of this move goes with worse results" when
+  the aim is less, since a link describes more of the move; without links, what it was set for), **What
+  it is** (coach.js `how`), **What to do** (drill and swing thought), a one-thing-at-a-time line (faults
+  come in chains), the buttons, then **Is it working?** (below). Everything else waits in one closed fold,
+  **More** (`data-fold="focus-more"`): the move the numbers now point to, with its evidence and Switch
+  focus to this (named in the fold's title when it differs from the focus), other moves, earlier
+  focuses, the program / combine / drill-set lines, **All the evidence** and **Pick my own focus**.
+  Inside **More**: **Pick my own focus** (`static/focuspick.js`), letting the golfer
   pick any move from `coach.js` with a body number in `summary.js` (only sides without a fault, grouped
   by phase: Top of swing, Downswing, Impact, Tempo) for irons ("My irons", tracked with the most-hit iron),
   driver and woods, or any one club; previews the how, drill and thought before saving.
   Earlier focuses fold below it with **Go back to this**; the history stays clean (same-day slips are
   dropped, and reactivating an earlier focus removes its old history entry).
-  **3. Is it working?** One heading and what to do about it, from the focus's move and results since it
-  started (`SwingFocus.working`, focus.js): "It's working" (move and a result the right way), "You're
+  **Is it working?** (in the focus card since Oct 9; it was step 3) One heading and what to do about it,
+  from the focus's move and results since it started (`SwingFocus.working`, focus.js; the results are the
+  ones it was set for plus the ones its evidence names now): "It's working" (move and a result the right way), "You're
   making the move; the results haven't followed yet", "The results are moving the right way" (the move
   not clearly), "Not working yet after N sessions" (4+ sessions, nothing moved: slower drill, or the
-  coach), "Going the wrong way so far" (half speed), "Too early to tell". Then the "So far" line, a
-  camera-moved warning and the before / since numbers (moved here from step 2). Without a focus, a
-  pointer to step 2. The chart is folded under **See it on a chart** (opens itself when a tile or chip
+  coach), "Going the wrong way so far" (half speed), "Too early to tell". Then two lines, **Your swing** (the move itself,
+  from the video and 3D) and **Your results** (each with its verdict), a camera-moved warning and the
+  before / since numbers folded. Nothing without a focus. The chart is folded under **See it on a chart** (opens itself when a tile or chip
   picks a number); it pools every club (only numbers that mean the same with any club: body numbers,
   path, face, face to path); a one-club focus charts its own club.
   **One club at a time** (the club picker): the club's last session opens with the four story tiles
@@ -135,7 +146,7 @@ What the server works out for each swing and what each part of the review page s
   speed against that wedge's full-swing speed (the 90th percentile of its club speeds): full 92%+, 3/4 80-92%,
   half 65-80%; and the biggest carry hole between them (`static/wedges.js`).
   The page reads top to bottom as three steps (how did the last session go, what to work on, is it
-  working: the chart opens on the focus move; inside step 3, a short Drill sets block appears when
+  working: the chart opens on the focus move; inside the focus card's More fold, a short Drill sets block appears when
   drill sets exist, showing the latest set's pumps, drill swings' P6, and normal swings before (or "your usual": the last 15 same-club swings of earlier sessions, when the session starts with the drill) and
   after with a verdict on whether the rehearsal carried over against wobble, with older sets folded
   and tapping any set opening its first drill swing); step 1 also highlights the session's top faults under
@@ -594,12 +605,12 @@ toward the ball". The phones face away from you, so voice is the channel.
   A block ends when its reps are in or its streak is made, then the next starts (`requires`: skipped unless
   that block passed); the program ends after the last block, at its cap (every swing counts, taps too), or
   45 minutes idle, and is logged to `programs-log.jsonl`. **Program history and trends**
-  (`static/programhistory.js`, `SwingProgramHistory`, Start page "Coach program", Progress step 3): under the
+  (`static/programhistory.js`, `SwingProgramHistory`, Start page "Coach program", Progress step 2's More fold): under the
   program picker on the Start page, **Past runs** lists up to 5 finished runs (newest first: date, swings used
   out of cap, and for each block its passed / not passed / skipped tag and gate count) with a **Copy for coach**
   button per run (`/api/program/report?started=<run.started>`). Folded under `<details>` "Past runs" when more
   than 2 runs exist. For ball blocks with 2+ runs with read shots, trend lines show gate progression and launch
-  monitor medians moving toward the gate, away, or about the same; every check is covered in the gate's order (including 3D angles, timings, and camera distances), noting missing 3D swings when fewer than all had them. In Progress step 3 ("Is it working?"),
+  monitor medians moving toward the gate, away, or about the same; every check is covered in the gate's order (including 3D angles, timings, and camera distances), noting missing 3D swings when fewer than all had them. In Progress step 2's More fold,
   each program with 2+ runs gets a folded trend line. **Copy for coach** (`/api/program/report`): per
   block the gate result and medians (range) of attack angle, dynamic loft and face to path for shots 1-10
   and 11 on, the club order, every shot in order with its verdict and bring-back metrics (pelvis peak ms,

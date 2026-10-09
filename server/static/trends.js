@@ -890,7 +890,7 @@ function renderProgress() {
   renderPriority(helps, top);
   renderHelpsEvidence(null, helps.irons.subs, helps.irons);
   renderChips(focus, top[0]);
-  renderWorking(focus);
+  renderWorking(focus, helps);
   const chartTarget = focus ? (focus.scope || focus.club) : null;
   const chartSessions = chartTarget ? progressSessions(chartTarget).filter(s => s.start >= since) : all;
   if (foldOpen("working-chart")) drawOverTime(chartSessions, field(progressPick.metric), focus);
@@ -2256,53 +2256,106 @@ function focusButton(m, club, text) {
 }
 
 /**
- * Step 2: one thing to work on, every club at once. The focus when there is one (with how it's
- * going), else the first of SwingSessionScore.priorities; a second only when it's nearly as big.
- * The evidence stays folded under "Why this?".
+ * The links behind a move worked one way (focus or priority): [{l, c}] of the move's strong and
+ * worth-trying links whose coaching aims the same way, strongest first.
+ */
+function moveEvidence(h, move, aim, group, club) {
+  const links = (h[group] && h[group].a && h[group].a.links) || [];
+  const out = [];
+  for (const l of links) {
+    if (l.move !== move || (l.label !== "confirmed" && l.label !== "emerging")) continue;
+    const c = SwingCoach.coach(l, club);
+    if (c && c.aim === aim) out.push({ l, c });
+  }
+  return out.sort((a, b) => (a.l.label === "confirmed" ? 0 : 1) - (b.l.label === "confirmed" ? 0 : 1) || Math.abs(b.l.r || 0) - Math.abs(a.l.r || 0));
+}
+
+/** The evidence for a move, at most `max` links: what goes with what, in your swings, and how sure. Each
+ * link says what MORE of the move goes with (coach.js `when`); aim "less" works the other way, so it says so. */
+function evidenceLines(items, aim, max = 3) {
+  const plain = SwingShotStory.plain, out = [];
+  if (items.length) out.push(pEl("div", "muted", aim === "less"
+    ? "In your swings, the opposite of this move goes with worse results:" : "In your swings, more of this move goes with:"));
+  for (const { l, c } of items.slice(0, max)) {
+    const when = plain(c.when);
+    const row = pEl("div", "p-evid");
+    row.append(badge(l.label), " ", `${when[0].toUpperCase() + when.slice(1)} → ${c.then}`);
+    const sub = pEl("div", "muted", `${plain(SwingHelps.sentence(l))} · ${SwingHelps.support(l)}`);
+    sub.title = `r ${fmtR(l.r)}, q ${l.q < 0.001 ? "<0.001" : l.q.toFixed(3)}`;
+    out.push(row, sub);
+  }
+  if (items.length > max) out.push(pEl("div", "muted", `${items.length - max} more link${items.length - max === 1 ? "" : "s"} under All the evidence (More, below).`));
+  return out;
+}
+
+/** A section heading inside the focus card. */
+const focusSub = text => pEl("div", "p-why-sub", text);
+/** A row of buttons. */
+const buttonRow = (...buttons) => { const row = pEl("div", "t-filters"); row.append(...buttons); return row; };
+
+/** A move to work on, in full: its name, why (its evidence), what it is, the drill and the thought. */
+function priorityDetail(m, compact) {
+  const plain = SwingShotStory.plain, kids = [];
+  const nameEl = pEl("div", compact ? "p-alt-name" : "p-focus-name", `${compact ? "" : "Work on "}${plain(m.fix.name)}`);
+  if (!compact) nameEl.append(badge(m.label));
+  kids.push(nameEl, focusSub(`Why this (${groupWords(m)})`), ...evidenceLines(m.items, m.aim, compact ? 2 : 3));
+  if (!compact) {
+    kids.push(focusSub("What it is"), pEl("div", null, plain(m.fix.how)),
+      focusSub("What to do"), ...drillAndThought({ drill: plain(m.fix.drill), thought: plain(m.fix.thought) }));
+    if (m.label !== "confirmed") kids.push(pEl("div", "muted", "Not proven yet: try it for a session or two and see whether the numbers follow."));
+  } else {
+    kids.push(pEl("div", "muted", `Swing thought: “${plain(m.fix.thought)}”`));
+  }
+  return kids;
+}
+
+/**
+ * Step 2: ONE thing to work on (the owner, Oct 9: one topic, in more detail; the rest available but not
+ * shown). The focus when there is one: why (its own evidence), what to do, and whether it's working (the
+ * move itself from the video and 3D, and the results it's for: renderWorking). Without one, the #1 priority
+ * in full. Everything else (the numbers pointing elsewhere, with their evidence; other moves; earlier
+ * focuses; all the evidence; picking your own) is in the closed "More" fold.
  */
 function renderPriority(h, top) {
-  const box = document.getElementById("p-focus-body");
+  const box = document.getElementById("p-focus-body"), others = document.getElementById("p-focus-others");
+  const moreSum = document.getElementById("p-focus-more-sum");
   const plain = SwingShotStory.plain;
-  const f = journal.focus;
-  const kids = [];
+  const f = journal.focus && journal.focus.move ? journal.focus : null;
+  const kids = [], more = [];
+  let pointsElsewhere = null;
   if (f) {
     kids.push(...focusBlock(f, h));
-    // The numbers now point somewhere else: one line, to switch.
-    const next = top.find(m => m.move !== f.move || m.aim !== f.aim);
-    if (next && top[0] === next) {
-      const row = pEl("div", "p-alt p-second");
-      row.append(pEl("span", "muted", `The numbers now point most to ${plain(next.fix.name)} (${groupWords(next)}).`), focusButton(next, next.club, "Switch focus to this"));
-      kids.push(row);
+    const alts = top.filter(m => m.move !== f.move || m.aim !== f.aim);
+    if (alts.length && top[0] === alts[0]) pointsElsewhere = alts[0];
+    for (const m of alts) {
+      const card = pEl("div", "p-second");
+      card.append(focusSub(m === pointsElsewhere ? "The numbers now point most to" : "Also in the numbers"),
+        ...priorityDetail(m, true), buttonRow(focusButton(m, m.club, "Switch focus to this")));
+      more.push(card);
     }
   } else if (top.length) {
     const main = top[0];
-    const nameEl = pEl("div", "p-focus-name", `Work on ${plain(main.fix.name)}`);
-    nameEl.append(badge(main.label));
-    kids.push(pEl("div", "p-focus-kicker", `Your #1 priority ${groupWords(main)}`), nameEl,
-      pEl("div", null, (main.goals.length ? `For ${main.goals.map(plain).join("; ")}. ` : "") + plain(main.fix.how)),
-      ...drillAndThought({ drill: plain(main.fix.drill), thought: plain(main.fix.thought) }));
-    if (main.label !== "confirmed") kids.push(pEl("div", "muted", "Not proven yet: try it for a session or two and see whether the numbers follow."));
-    const buttons = pEl("div", "t-filters");
-    buttons.append(focusButton(main, main.club));
-    kids.push(buttons);
-    if (top[1]) {
-      const m = top[1], second = pEl("div", "p-second");
-      const row = pEl("div", "p-alt");
-      row.append(pEl("span", null, `${m.group === main.group ? "Also worth it" : "With the driver and woods"}: ${plain(m.fix.name)}`), badge(m.label), focusButton(m, m.club));
-      second.append(row, pEl("div", "muted", `Swing thought: “${plain(m.fix.thought)}”`));
-      kids.push(second);
+    kids.push(pEl("div", "p-focus-kicker", `Your #1 priority ${groupWords(main)}`), ...priorityDetail(main, false),
+      buttonRow(focusButton(main, main.club)));
+    for (const m of top.slice(1)) {
+      const card = pEl("div", "p-second");
+      card.append(focusSub(m.group === main.group ? "Also worth it" : "With the driver and woods"), ...priorityDetail(m, true),
+        buttonRow(focusButton(m, m.club)));
+      more.push(card);
     }
-    const before = pastFocuses(null);
-    if (before) kids.push(before);
   } else {
-    const before = pastFocuses(null);
-    if (before) kids.push(before);
     kids.push(pEl("div", "p-focus-name", "Nothing to work on yet"),
       pEl("div", "muted", h.irons.a.tested || h.woods.a.tested
         ? "No move stands out from chance yet. Keep hitting balls: it takes 5 to 10 sessions of 20+ swings to say much."
         : "Not enough swings with body numbers yet."));
   }
+  const before = pastFocuses(f);
+  if (before) more.push(before);
   box.replaceChildren(...kids);
+  others.replaceChildren(...more);
+  moreSum.textContent = pointsElsewhere
+    ? `More: the numbers now point to ${plain(pointsElsewhere.fix.name)} (why, and switching); all the evidence; picking your own`
+    : "More: other things the numbers show, all the evidence, picking your own focus";
   renderPickOwnFocus(h);
 }
 
@@ -2428,15 +2481,23 @@ function focusProgress(f, cmp) {
     so.textContent = `No sessions ${f.scope || f.club ? `with ${f.scope ? (f.scope === "woods" ? "the driver and woods" : "your irons") : `the ${fname}`} ` : ""}since it started yet: hit some balls with the drill, then look here.`;
     kids.push(so);
   } else {
-    so.append(pEl("b", null, `So far (${cmp.after} session${cmp.after === 1 ? "" : "s"}): `));
-    const parts = [cmp.move, ...cmp.results].map((x, i) => {
-      const span = pEl("span", null, `${i === 0 ? "the move itself" : lowerFirst(focusLabel(x.key))}: ${SwingFocus.verdict(x)}`);
+    // Two questions: is the swing changing (the move itself, from the video and 3D), and are the results
+    // following (Square's numbers it's for)?
+    const said = x => {
+      const span = pEl("span", null, SwingFocus.verdict(x));
       if ((x.level === "clear" || x.level === "maybe") && x.good != null) span.className = x.good ? "better" : "worse";
       return span;
-    });
-    parts.forEach((p, i) => so.append(...(i ? ["; ", p] : [p])));
-    so.append(".");
-    kids.push(so);
+    };
+    const swing = pEl("div");
+    swing.append(pEl("b", null, "Your swing: "), `${lowerFirst(focusLabel(cmp.move.key))} (the move itself, from the video): `, said(cmp.move), ".");
+    kids.push(swing);
+    if (cmp.results.length) {
+      const res = pEl("div");
+      res.append(pEl("b", null, "Your results: "));
+      cmp.results.forEach((x, i) => res.append(...(i ? ["; "] : []), `${lowerFirst(focusLabel(x.key))}: `, said(x)));
+      res.append(`, over ${cmp.after} session${cmp.after === 1 ? "" : "s"} since it started.`);
+      kids.push(res);
+    }
     if (cmp.cameraMoved) kids.push(pEl("div", "p-focus-warn", "A camera moved since it started: the move's numbers either side may not compare."));
     const table = pEl("table", "p-focus-table");
     const head = pEl("tr");
@@ -2460,37 +2521,50 @@ function focusProgress(f, cmp) {
   return kids;
 }
 
-/**
- * Step 3: is the focus working? One sentence with what to do about it (the move and its results since the
- * focus started, focus.js), then the "So far" line and the numbers. Without a focus, a pointer to step 2.
- */
-function renderWorking(f) {
+/** Is the focus working? Under the focus in step 2: one sentence with what to do about it, then the swing
+ * (the move) and the results, each with its verdict, and the numbers folded. The results are the ones
+ * it was set for and the ones its evidence names now ("Why this"), so the two parts of the card agree.
+ * Nothing without a focus. */
+function renderWorking(f, h) {
   const box = document.getElementById("p-working");
   if (!f || !f.move) {
-    box.replaceChildren(pEl("div", "p-work-head", "No focus yet"),
-      pEl("div", "muted", "Make your #1 priority your focus in step 2, and this says whether it's working: the move itself, and the results it's for."));
+    box.replaceChildren();
     return;
   }
-  const cmp = SwingFocus.compare(progressSessions(f.scope || f.club || "*"), f);
+  const group = f.scope || (f.club ? SwingGoodShots.groupOf(f.club) : "irons");
+  const now = h ? moveEvidence(h, f.move, f.aim, group, f.club || (h[group] && h[group].club)).map(x => x.l.result) : [];
+  const results = [...new Set([...(f.results || []), ...now])];
+  const cmp = SwingFocus.compare(progressSessions(f.scope || f.club || "*"), { ...f, results });
   const v = SwingFocus.working(cmp, key => lowerFirst(focusLabel(key)));
-  box.replaceChildren(pEl("div", `p-work-head ${v.cls}`, v.head), pEl("div", null, v.next), ...focusProgress(f, cmp));
+  box.replaceChildren(focusSub("Is it working?"), pEl("div", `p-work-head ${v.cls}`, v.head), pEl("div", null, v.next), ...focusProgress(f, cmp));
 }
 
-/** The focus: the move, its drill and thought, and what to do next (how it's going: step 3). */
+/** The focus: the move, why (its evidence in the latest numbers), what it is, what to do. How it's going
+ * comes next in the card (renderWorking). */
 function focusBlock(f, h) {
   const plain = SwingShotStory.plain;
   const mv = SwingCoach.MOVES[f.move], fix0 = mv && mv[f.aim];
   const fix = fix0 && { ...fix0, name: plain(fix0.name), how: plain(fix0.how), drill: plain(fix0.drill), thought: plain(fix0.thought) };
   const fname = f.scope ? (f.scope === "woods" ? "driver and woods" : "irons") : f.club ? clubWords(f.club) : "all clubs";
-  const kids = [pEl("div", "p-focus-kicker", `Your focus · ${fname} · since ${new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" })}`)];
-  const nameEl = pEl("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`);
-  const m = f.club || f.scope ? null : groupPriorities(h).find(x => x.move === f.move && x.aim === f.aim);
-  if (!f.club) nameEl.append(m ? badge(m.label) : badge("none", "Not in the latest numbers"));
-  kids.push(nameEl);
-  if (fix) kids.push(...drillAndThought(fix));
+  const sinceDay = new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const kids = [pEl("div", "p-focus-kicker", `Your focus · ${fname} · since ${sinceDay}`)];
+  kids.push(pEl("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`));
 
+  // Why: this move's own links in the latest numbers (its club group), else what it was set for.
+  const group = f.scope || (f.club ? SwingGoodShots.groupOf(f.club) : "irons");
+  const items = moveEvidence(h, f.move, f.aim, group, f.club || (h[group] && h[group].club));
+  kids.push(focusSub("Why this"));
+  if (items.length) kids.push(...evidenceLines(items, f.aim));
+  else {
+    const forWhat = (f.results || []).map(k => lowerFirst(focusLabel(k)));
+    kids.push(pEl("div", null, `${forWhat.length ? `You set it on ${sinceDay} for your ${forWhat.join(" and ")}. ` : ""}`
+      + "In the latest numbers this move doesn't stand out on its own any more: if it's working (below), that can be why."));
+  }
   const note = f.club ? goodShotsNote(f.club, f.move, f.aim) : null;
   if (note) kids.push(note);
+  if (fix) kids.push(focusSub("What it is"), pEl("div", null, fix.how), focusSub("What to do"), ...drillAndThought(fix));
+  kids.push(pEl("div", "muted", "One thing at a time: swing faults come in chains, and fixing one often moves the next. "
+    + "Give this one a few sessions before changing to another."));
 
   const buttons = pEl("div", "t-filters");
   const practiceBtn = pEl("button", "small", "Practice this");
@@ -2506,8 +2580,6 @@ function focusBlock(f, h) {
   end.onclick = () => { if (confirm("End this focus? It stays in the history.")) setFocus({ move: null }); };
   buttons.append(practiceBtn, end);
   kids.push(buttons);
-  const before = pastFocuses(f);
-  if (before) kids.push(before);
   return kids;
 }
 

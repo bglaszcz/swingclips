@@ -639,6 +639,10 @@
   .p-plan-name { font-weight: 600; color: var(--accent); }
   .p-links { display: flex; flex-direction: column; gap: 8px; }
   #p-focus-body { display: flex; flex-direction: column; gap: 6px; font-size: 13px; margin-top: 6px; }
+  #p-focus-body .p-why-sub, #p-working .p-why-sub, #p-focus-others .p-why-sub { margin-top: 6px; }
+  #p-focus .p-evid { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  #p-focus-others { display: flex; flex-direction: column; gap: 8px; font-size: 13px; margin: 6px 0; }
+  #p-focus-others .p-alt-name { font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   .p-focus-name { font-weight: 600; color: var(--accent); font-size: 15px; }
   .p-focus-table { border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
   .p-focus-table th, .p-focus-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: left; }
@@ -1647,47 +1651,12 @@
     </div>
 
     <div class="p-step"><span class="p-step-n">2</span>What should I work on?</div>
+    <!-- One thing at a time: the focus (or the #1 priority) with why, what to do and whether it's working.
+         Everything else (other moves, the full evidence, picking your own) waits in one closed fold. -->
     <div class="t-card" id="p-focus">
       <div id="p-focus-body"></div>
-      <details class="p-more" id="p-why" data-fold="why">
-        <summary>Why this? The evidence</summary>
-        <div class="p-why-sub">Moves that go with your results <span id="p-helps-status" class="note"></span></div>
-        <div id="p-helps-list"></div>
-        <div class="p-why-sub">What sets my good shots apart <span id="p-good-status" class="note"></span></div>
-        <div style="overflow-x: auto" id="p-good-sep"></div>
-        <details class="explain">
-          <summary>How it's worked out</summary>
-          <div class="note">Moves and results: each move against each result with this club, within sessions (every swing
-            against that session's own usual, so warm-up, tiredness and where the cameras stood cancel out), pooled over
-            the sessions in the period. With 20 moves and 16 results some links look strong by luck, so each one's chance
-            is corrected for how many were tested (q). <b>Strong evidence</b>: q under 0.05 and the same way in at least
-            3 sessions. <b>Worth trying</b>: q under 0.2, not yet proven. The aim: for carry, smash and distance offline
-            the way that helps; for path, face, curve, strike and attack angle, the way that brings your usual number
-            toward neutral (irons: attack -4°). It describes your swings; it doesn't prove the move causes the result.</div>
-          <div class="note">Good shots: the body numbers that differ most between this club's good shots and the rest.
-            <b>Strong</b> = the 95% confidence interval of the effect size (Hedges' g) leaves out 0; with 20 numbers about
-            one in twenty looks strong by chance. It may be the other way round (a good shot doesn't need the move).</div>
-          <div class="note">The focus's progress: since the day it started, each session's median against the 6 sessions
-            before, measured against how much it wobbles from session to session anyway: "clearly" = 2 wobbles or more,
-            "maybe" = 1.5 or more. "Practice this" turns on practice mode for the move, and the phone says the swing
-            thought after a swing out of range.</div>
-          <div class="note">The drills and thoughts are general instruction for a right-hander; a coach watching you trumps
-            them. Greyed ~ = mostly shaky numbers.</div>
-        </details>
-      </details>
-      <details class="p-more" id="p-pick-focus" data-fold="pick-focus">
-        <summary>Pick my own focus</summary>
-        <div id="p-pick-focus-body"></div>
-      </details>
-    </div>
-
-    <div class="p-step"><span class="p-step-n">3</span>Is it working?</div>
-    <div class="t-card" id="p-chart">
-      <!-- The verdict on the focus in a sentence, what to do about it, the numbers behind it folded. -->
+      <div id="p-chart">
       <div id="p-working"></div>
-      <div id="p-combine-line" class="note" style="margin-bottom: 8px;" hidden></div>
-      <div id="p-program-trends" class="note p-program-trends" style="margin-bottom: 8px;" hidden></div>
-      <div id="p-drill-sets" class="note p-drill-sets" style="margin-bottom: 8px;" hidden></div>
       <details class="p-more" data-fold="working-chart">
       <summary>See it on a chart</summary>
       <div class="p-chips" id="p-chips"></div>
@@ -1702,7 +1671,46 @@
           compare; "focus" marks the day your focus started. Tap a session to open its trends.</div>
       </details>
       </details>
+      </div>
+      <details class="p-more" id="p-focus-more" data-fold="focus-more">
+        <summary id="p-focus-more-sum">More: other things the numbers show, picking your own focus</summary>
+        <div id="p-focus-others"></div>
+        <div id="p-combine-line" class="note" style="margin-bottom: 8px;" hidden></div>
+        <div id="p-program-trends" class="note p-program-trends" style="margin-bottom: 8px;" hidden></div>
+        <div id="p-drill-sets" class="note p-drill-sets" style="margin-bottom: 8px;" hidden></div>
+        <details class="p-more" id="p-why" data-fold="why">
+          <summary>All the evidence</summary>
+          <div class="p-why-sub">Moves that go with your results <span id="p-helps-status" class="note"></span></div>
+          <div id="p-helps-list"></div>
+          <div class="p-why-sub">What sets my good shots apart <span id="p-good-status" class="note"></span></div>
+          <div style="overflow-x: auto" id="p-good-sep"></div>
+          <details class="explain">
+            <summary>How it's worked out</summary>
+            <div class="note">Moves and results: each move against each result with this club, within sessions (every swing
+              against that session's own usual, so warm-up, tiredness and where the cameras stood cancel out), pooled over
+              the sessions in the period. With 20 moves and 16 results some links look strong by luck, so each one's chance
+              is corrected for how many were tested (q). <b>Strong evidence</b>: q under 0.05 and the same way in at least
+              3 sessions. <b>Worth trying</b>: q under 0.2, not yet proven. The aim: for carry, smash and distance offline
+              the way that helps; for path, face, curve, strike and attack angle, the way that brings your usual number
+              toward neutral (irons: attack -4°). It describes your swings; it doesn't prove the move causes the result.</div>
+            <div class="note">Good shots: the body numbers that differ most between this club's good shots and the rest.
+              <b>Strong</b> = the 95% confidence interval of the effect size (Hedges' g) leaves out 0; with 20 numbers about
+              one in twenty looks strong by chance. It may be the other way round (a good shot doesn't need the move).</div>
+            <div class="note">The focus's progress: since the day it started, each session's median against the 6 sessions
+              before, measured against how much it wobbles from session to session anyway: "clearly" = 2 wobbles or more,
+              "maybe" = 1.5 or more. "Practice this" turns on practice mode for the move, and the phone says the swing
+              thought after a swing out of range.</div>
+            <div class="note">The drills and thoughts are general instruction for a right-hander; a coach watching you trumps
+              them. Greyed ~ = mostly shaky numbers.</div>
+          </details>
+        </details>
+        <details class="p-more" id="p-pick-focus" data-fold="pick-focus">
+          <summary>Pick my own focus</summary>
+          <div id="p-pick-focus-body"></div>
+        </details>
+      </details>
     </div>
+
 
     <div class="p-step p-step-more">One club at a time <label class="p-club-pick">Club <select id="p-club"></select></label></div>
     <details class="t-card p-fold" data-fold="today">
