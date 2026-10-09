@@ -98,9 +98,11 @@
       .sort((a, b) => b.started - a.started);
   }
 
-  function renderView() {
+  function renderView(date) {
     if (!window.SwingWeek) return;
-    if (!currentWeekStart) {
+    if (date) {
+      currentWeekStart = SwingWeek.weekStartOf(date);
+    } else if (!currentWeekStart) {
       currentWeekStart = SwingWeek.weekStartOf(new Date());
     }
 
@@ -364,6 +366,7 @@
       copyText(fullText, weekCopyBtn);
     } finally {
       if (weekCopyBtn) weekCopyBtn.textContent = orig;
+    }
   }
 
   function copyText(text, btn) {

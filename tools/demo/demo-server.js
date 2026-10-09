@@ -93,19 +93,41 @@ const server = http.createServer((req, res) => {
 
   // 2. Special read-only answer for POST /api/coach/ask in demo mode
   if (req.method === "POST" && pathname === "/api/coach/ask") {
-    const notesJson = readDataFile("coach-notes.json");
-    if (notesJson) {
-      try {
-        const notes = JSON.parse(notesJson);
-        const note = Array.isArray(notes) && notes.length ? notes[0] : null;
-        if (note) {
-          res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
-          return res.end(JSON.stringify({ text: note.text, model: note.model, t: note.t, kept: true, usage: note.usage }));
-        }
-      } catch {}
-    }
-    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
-    return res.end(JSON.stringify({ error: "The coach note is not available in demo." }));
+    let bodyData = "";
+    req.on("data", chunk => { bodyData += chunk; });
+    req.on("end", () => {
+      let body = {};
+      try { body = JSON.parse(bodyData); } catch {}
+      const notesJson = readDataFile("coach-notes.json");
+      if (notesJson) {
+        try {
+          const notes = JSON.parse(notesJson);
+          const reqKind = body.kind || "session";
+          let match = Array.isArray(notes)
+            ? notes.find(n => (n.kind || "session") === reqKind && (!body.session || String(n.session) === String(body.session)))
+            : notes;
+          if (!match && Array.isArray(notes)) {
+            match = notes.find(n => (n.kind || "session") === reqKind) || notes[0];
+          }
+          if (match) {
+            res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+            return res.end(JSON.stringify({
+              text: match.text,
+              model: match.model || "claude-opus-5-5",
+              provider: match.provider || "anthropic",
+              t: match.t || Math.floor(Date.now() / 1000),
+              kept: true,
+              kind: match.kind || "session",
+              question: match.question || body.question || null,
+              usage: match.usage || {},
+            }));
+          }
+        } catch {}
+      }
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+      return res.end(JSON.stringify({ error: "The coach note is not available in demo." }));
+    });
+    return;
   }
 
   // 3. Read-only guard: all other non-GET/HEAD methods are refused
@@ -122,15 +144,20 @@ const server = http.createServer((req, res) => {
 
   if (pathname === "/api/coach/notes") {
     const sessionQuery = parsedUrl.searchParams.get("session");
+    const kindQuery = parsedUrl.searchParams.get("kind");
     const notesJson = readDataFile("coach-notes.json");
     if (notesJson) {
       try {
-        const notes = JSON.parse(notesJson);
+        let notes = JSON.parse(notesJson);
         if (sessionQuery) {
-          // Single note lookup
-          const found = Array.isArray(notes) ? (notes.find(n => String(n.session) === sessionQuery) || notes[0]) : notes;
+          const found = Array.isArray(notes)
+            ? notes.find(n => String(n.session) === sessionQuery && (!kindQuery || (n.kind || "session") === kindQuery))
+            : notes;
           res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
           return res.end(JSON.stringify(found || null));
+        }
+        if (kindQuery && Array.isArray(notes)) {
+          notes = notes.filter(n => (n.kind || "session") === kindQuery);
         }
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
         return res.end(JSON.stringify(notes));

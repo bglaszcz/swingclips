@@ -129,7 +129,14 @@
   /** The setup card from /api/coach/status: providers (with whether each has a key), the model in use. */
   async function renderSetup() {
     try { st = await fetch("/api/coach/status").then(r => r.ok ? r.json() : null); } catch { st = null; }
-    if (!st) return;
+    if (!st) {
+      if (qSendBtn) qSendBtn.disabled = true;
+      if (qInput) {
+        qInput.disabled = true;
+        qInput.placeholder = "Configure an AI provider and model above first to ask questions.";
+      }
+      return;
+    }
     const sel = $id("aicoach-provider");
     sel.replaceChildren(...st.providers.map(p => Object.assign(document.createElement("option"),
       { value: p.id, textContent: p.name + (p.hasKey ? " (key saved)" : "") })));

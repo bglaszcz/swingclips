@@ -40,6 +40,10 @@ swing is tagged with the Square Omni's numbers for that shot.
   Pick an AI provider (Claude, OpenAI, Gemini, or any OpenAI-compatible service, local models included). Your API key stays safe on your home server, and you can inspect the exact session brief sent out.
   <br><img src="docs/img/aicoach-setup.png" alt="AI coach setup" width="550">
 
+- **Ask the coach a question**  
+  Ask about specific clubs, tendencies, or strike changes. Answers are grounded in your last 30 days of ball flight, delivery numbers, and focus progress.
+  <br><img src="docs/img/aicoach-question.png" alt="AI coach question and answer" width="550">
+
 - **On a phone**  
   Every page works at phone width, so the review page can sit on a phone in the bay.
   <br><img src="docs/img/progress-focus-mobile.png" alt="Mobile focus view" width="320">

@@ -1579,10 +1579,10 @@
       <div class="t-card" id="aicoach-question-card">
         <h3 style="margin-top: 0;">Ask the coach a question</h3>
         <div style="display: flex; flex-direction: column; gap: 8px;">
-          <textarea id="aicoach-question-input" maxlength="500" rows="3" placeholder="e.g. Why do my 7 irons go right? Is my driver strike getting better?" style="width: 100%; box-sizing: border-box; resize: vertical; font-family: inherit; font-size: 14px; padding: 8px; border-radius: 6px; border: 1px solid var(--border, #333); background: var(--bg-card, #1a1a1a); color: var(--text);"></textarea>
+          <textarea id="aicoach-question-input" maxlength="500" rows="3" disabled placeholder="Configure an AI provider and model above first to ask questions." style="width: 100%; box-sizing: border-box; resize: vertical; font-family: inherit; font-size: 14px; padding: 8px; border-radius: 6px; border: 1px solid var(--border, #333); background: var(--bg-card, #1a1a1a); color: var(--text);"></textarea>
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <span id="aicoach-question-chars" class="muted" style="font-size: 12px;">500 characters left</span>
-            <button id="aicoach-question-send" class="small" type="button">Send</button>
+            <button id="aicoach-question-send" class="small" type="button" disabled>Send</button>
           </div>
         </div>
         <div id="aicoach-question-status" class="muted" style="font-size: 13px; margin-top: 6px;" hidden></div>

@@ -638,14 +638,50 @@ def generate_demo_data() -> None:
         "Stick with the hip rotation. Work on the Hip-to-the-stick drill: alignment stick in the ground just outside your lead hip at address. From the top, bump the lead hip into the stick before the arms start down, then turn. Swing thought: Lead hip to the target first."
     )
 
+    coach_week_text = (
+        "**The week**\n"
+        "Three solid sessions this week with 84 total swings. Your good shot rate reached 78% (up from 65% last week), with 7 iron distance tight at 152 yards median and offline dispersion cut in half.\n\n"
+        "**Your focus**\n"
+        "The lead hip move in the downswing is clearly taking hold. You are averaging 4.3 inches of hip clearance toward the target, compared to 2.0 inches before starting the focus, and smash factor followed.\n\n"
+        "**Next week**\n"
+        "Stay the course with the hip rotation. Keep using the Hip-to-the-stick drill during warmups. Swing thought: Lead hip to the target first."
+    )
+
+    coach_question_text = (
+        "**Why they go right**\n"
+        "Your 30-day 7 iron data shows an average offline of +2.1 yards (push-fade tendency). While your club path is slightly in-to-out at +1.8°, your face to path averages +1.2° open at impact, which starts the ball right and curves it further right.\n\n"
+        "**What to do**\n"
+        "When your lead hip clears aggressively toward the target, ensure your chest doesn't lag behind leaving the face open. Focus on feeling the clubface square up earlier in the delivery. Use the Impact bag drill to feel a square face at delivery without rolling the forearms."
+    )
+
     coach_notes_obj = [
         {
+            "kind": "question",
+            "question": "Why do my 7 irons go right?",
+            "t": latest_sess_ts + 3600,
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "text": coach_question_text,
+            "usage": {"input_tokens": 1850, "output_tokens": 135},
+        },
+        {
+            "kind": "session",
             "session": latest_sess_ms,
             "t": latest_sess_ts + 2460,
             "model": "claude-opus-5-5",
+            "provider": "anthropic",
             "text": coach_note_text,
             "usage": {"input_tokens": 1240, "output_tokens": 108},
-        }
+        },
+        {
+            "kind": "week",
+            "session": "2031-03-24",
+            "t": latest_sess_ts + 1200,
+            "model": "claude-opus-5-5",
+            "provider": "anthropic",
+            "text": coach_week_text,
+            "usage": {"input_tokens": 1520, "output_tokens": 120},
+        },
     ]
     with open(DATA_DIR / "coach-notes.json", "w", encoding="utf-8") as f:
         json.dump(coach_notes_obj, f, indent=1)
