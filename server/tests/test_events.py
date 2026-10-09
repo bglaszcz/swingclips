@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -120,6 +121,27 @@ class Trim(unittest.TestCase):
             app.trim_events()
             kept = [json.loads(line)["n"] for line in app.EVENTS_FILE.read_text().splitlines()]
             self.assertEqual(kept, list(range(10, 20)))
+        finally:
+            app.EVENTS_FILE, app.EVENTS_MAX_BYTES = was_file, was_max
+
+    def test_trim_events_holds_lock_and_uses_atomic_replace(self):
+        was_file, was_max = app.EVENTS_FILE, app.EVENTS_MAX_BYTES
+        try:
+            app.EVENTS_FILE = Path(tempfile.mkdtemp(prefix="swingclips-events-")) / "events.jsonl"
+            app.EVENTS_MAX_BYTES = 50
+            for i in range(10):
+                app.log_event("say", n=i)
+            lock_held_during_write = []
+            orig_replace = os.replace
+
+            def tracked_replace(src, dst):
+                if str(dst) == str(app.EVENTS_FILE):
+                    lock_held_during_write.append(app.events_lock.locked())
+                return orig_replace(src, dst)
+
+            with mock.patch("os.replace", side_effect=tracked_replace):
+                app.trim_events()
+            self.assertEqual(lock_held_during_write, [True])
         finally:
             app.EVENTS_FILE, app.EVENTS_MAX_BYTES = was_file, was_max
 

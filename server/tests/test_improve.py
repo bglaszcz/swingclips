@@ -165,6 +165,22 @@ class StoreTest(unittest.TestCase):
         self.assertTrue(self.store.tried("s1"))
         self.assertFalse(self.store.tried("s2"))
 
+    def test_save_report_and_club_frames_write_atomically(self):
+        replaced = []
+        orig_replace = os.replace
+
+        def tracked_replace(src, dst):
+            if str(dst).endswith("report.json") or "club-frames" in str(dst):
+                replaced.append(str(dst))
+            return orig_replace(src, dst)
+
+        with mock.patch("os.replace", side_effect=tracked_replace):
+            self.store.save_report("atomic-cand", {"kind": "club", "made": "2026-10-09T09:00:00", "status": "better",
+                                                   "model": "club-deep@test"})
+            self.store.new_club_frames({"frame1", "frame2"}, "sig1")
+        self.assertTrue(any(f.endswith("report.json") for f in replaced))
+        self.assertTrue(any("club-frames" in f for f in replaced))
+
     def test_train_only_with_enough_new_club_frames(self):
         """Picks and body points don't count; new or moved club points do; MIN_NEW_FRAMES of them."""
         labels = self.dir / "labels"

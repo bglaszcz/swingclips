@@ -132,10 +132,13 @@ def log_event(kind: str, **fields) -> None:
 def trim_events() -> None:
     """Keeps the newer half of EVENTS_FILE once it's grown past EVENTS_MAX_BYTES."""
     try:
-        if EVENTS_FILE.stat().st_size <= EVENTS_MAX_BYTES:
-            return
-        lines = EVENTS_FILE.read_text(encoding="utf-8").splitlines()
-        EVENTS_FILE.write_text("\n".join(lines[len(lines) // 2:]) + "\n", encoding="utf-8")
+        with events_lock:
+            if not EVENTS_FILE.is_file() or EVENTS_FILE.stat().st_size <= EVENTS_MAX_BYTES:
+                return
+            lines = EVENTS_FILE.read_text(encoding="utf-8").splitlines()
+            tmp = EVENTS_FILE.with_suffix(".tmp")
+            tmp.write_text("\n".join(lines[len(lines) // 2:]) + "\n", encoding="utf-8")
+            tmp.replace(EVENTS_FILE)
     except OSError:
         pass
 
@@ -2171,17 +2174,23 @@ def save_tripod_spot(angle: str, body: TripodSpot):
     verdict = camera_setup.status().get(angle)
     if jpeg is None or not verdict:
         raise HTTPException(409, "No picture from that camera yet: open SwingClips on the phone (not recording)")
-    TRIPOD_DIR.mkdir(parents=True, exist_ok=True)
-    old = TRIPOD_DIR / f"{angle}.jpg"
-    if old.is_file():
-        (TRASH_DIR / "tripods").mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        for f in (old, TRIPOD_DIR / f"{angle}.json"):
-            if f.is_file():
-                f.replace(TRASH_DIR / "tripods" / f"{f.stem}_{stamp}{f.suffix}")
-    old.write_bytes(jpeg)
-    doc = {"angle": angle, "saved": time.time(), "lm": verdict.get("lm"), "note": body.note}
-    (TRIPOD_DIR / f"{angle}.json").write_text(json.dumps(doc), encoding="utf-8")
+    with files_lock:
+        TRIPOD_DIR.mkdir(parents=True, exist_ok=True)
+        old = TRIPOD_DIR / f"{angle}.jpg"
+        doc_path = TRIPOD_DIR / f"{angle}.json"
+        if old.is_file():
+            (TRASH_DIR / "tripods").mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            for f in (old, doc_path):
+                if f.is_file():
+                    f.replace(TRASH_DIR / "tripods" / f"{f.stem}_{stamp}{f.suffix}")
+        tmp_jpg = old.with_suffix(".tmp")
+        tmp_jpg.write_bytes(jpeg)
+        tmp_jpg.replace(old)
+        doc = {"angle": angle, "saved": time.time(), "lm": verdict.get("lm"), "note": body.note}
+        tmp_json = doc_path.with_suffix(".tmp")
+        tmp_json.write_text(json.dumps(doc), encoding="utf-8")
+        tmp_json.replace(doc_path)
     print(f"Tripods: saved the {angle} spot", flush=True)
     return tripod_spots()
 

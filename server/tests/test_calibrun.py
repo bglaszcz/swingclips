@@ -168,6 +168,32 @@ class TripodSpotApi(unittest.TestCase):
             app.camera_setup.latest.clear()
             app.camera_setup.latest.update(saved_latest)
 
+    def test_save_tripod_spot_holds_files_lock_and_replaces_atomically(self):
+        from fastapi.testclient import TestClient
+        from unittest import mock
+        import app
+        app.TRIPOD_DIR = TMP / "tripods_atomic"
+        client = TestClient(app.app)
+        saved_latest = dict(app.camera_setup.latest)
+        try:
+            app.camera_setup.latest["dtl"] = {"verdict": {"lm": [0.5] * 99, "ok": True, "time": time.time()},
+                                              "jpeg": b"small", "big": b"big one"}
+            lock_held_during_replace = []
+            orig_replace = os.replace
+
+            def tracked_replace(src, dst):
+                if str(dst).startswith(str(app.TRIPOD_DIR)):
+                    lock_held_during_replace.append(app.files_lock.locked())
+                return orig_replace(src, dst)
+
+            with mock.patch("os.replace", side_effect=tracked_replace):
+                client.post("/api/tripods/dtl", json={"note": "atomic test"})
+            self.assertGreaterEqual(len(lock_held_during_replace), 2)
+            self.assertTrue(all(lock_held_during_replace))
+        finally:
+            app.camera_setup.latest.clear()
+            app.camera_setup.latest.update(saved_latest)
+
 
 class KeepGoodLensTest(unittest.TestCase):
     def test_a_worse_try_never_replaces_a_good_lens(self):

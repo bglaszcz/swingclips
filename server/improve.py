@@ -223,7 +223,10 @@ class Store:
             raise ValueError("bad status")
         if report.get("status") in ("better", "not better"):
             self.note_scored((report.get("train") or {}).get("labelsSig"))
-        (d / "report.json").write_text(json.dumps(report, separators=(",", ":")), encoding="utf-8")
+        path = d / "report.json"
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(report, separators=(",", ":")), encoding="utf-8")
+        tmp.replace(path)
         return report
 
     def reports(self) -> list[dict]:
@@ -244,8 +247,13 @@ class Store:
         last = self.folder / "club-frames.json"
         if not last.is_file() and any(r.get("status") != "failed" for r in self.reports()):
             # Tried before this was kept (the first runs): count from now.
-            last.write_text(json.dumps(sorted(frames)), encoding="utf-8")
-        (self.folder / f"club-frames-{sig}.json").write_text(json.dumps(sorted(frames)), encoding="utf-8")
+            tmp = last.with_suffix(".tmp")
+            tmp.write_text(json.dumps(sorted(frames)), encoding="utf-8")
+            tmp.replace(last)
+        sig_file = self.folder / f"club-frames-{sig}.json"
+        tmp_sig = sig_file.with_suffix(".tmp")
+        tmp_sig.write_text(json.dumps(sorted(frames)), encoding="utf-8")
+        tmp_sig.replace(sig_file)
         if not last.is_file():
             return None
         return len(frames - set(json.loads(last.read_text(encoding="utf-8"))))

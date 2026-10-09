@@ -208,7 +208,9 @@ def main(argv=None) -> int:
             for f, rs in as_is.items():
                 for r in rs:
                     doc["errors"][f].setdefault(r["clip"], {})[r["event"]] = None if r["ms"] is None else round(r["ms"], 2)
-            BASELINE.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+            tmp = BASELINE.with_suffix(".tmp")
+            tmp.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+            tmp.replace(BASELINE)
             print(f"Saved {BASELINE}")
         if args.json:
             args.json.write_text(json.dumps({"asIs": as_is, "loso": rows, "tuning": whole, "picks": picks}, indent=1))
