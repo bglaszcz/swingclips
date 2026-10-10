@@ -635,3 +635,183 @@ test("more than SET_BREAK swings between them: two sets", () => {
   assert.strictEqual(sets.length, 2);
   assert.strictEqual(sets[1].after.count, DrillSets.SET_BREAK + 1);
 });
+
+// ---- Round 58: a set for every drill that trains a number (a focus's reps) ----
+
+/** Clips and records of one session: normal swings, then reps of `drill`, then normal swings again. */
+function repsSession({ drill, metric, before = [], reps = [], after = [], day = "2026-10-12", club = "I7", extra = {} }) {
+  const clips = [], records = {};
+  let min = 0;
+  const add = (name, v, d, more) => {
+    const mm = String(min++).padStart(2, "0");
+    clips.push(makeClip(name, `${day}T16:${mm}:00`, d, club, "face", null, more));
+    records[name] = { body: { [metric]: v }, drill: null, quality: { swingFound: true, p6Estimated: false, camera: { face: [], dtl: [] } } };
+  };
+  before.forEach((v, i) => add(`b${i}`, v, null));
+  reps.forEach((v, i) => add(`r${i}`, v, drill, { excluded: true, strike: 2.1, ...extra }));
+  after.forEach((v, i) => add(`a${i}`, v, null));
+  return { clips, records };
+}
+const around = m => [m - 1, m, m, m + 1];   // four swings, median m, sum of squares 2
+
+test("trained: the pump, a move either way, and nothing else", () => {
+  assert.deepStrictEqual(DrillSets.trained("pump"), { metric: "handsPlaneP6", aim: "less" });
+  assert.deepStrictEqual(DrillSets.trained("move:leadHipP6:more"), { metric: "leadHipP6", aim: "more" });
+  assert.deepStrictEqual(DrillSets.trained("move:hipSway:less"), { metric: "hipSway", aim: "less" });
+  assert.strictEqual(DrillSets.trained("move:nope:more"), null);          // not a move the coach knows
+  assert.strictEqual(DrillSets.trained("move:leadHipP6:sideways"), null); // not a way
+  assert.strictEqual(DrillSets.trained("flush"), null);                   // a coach program's block
+  assert.strictEqual(DrillSets.trained(null), null);
+});
+
+test("a reps set: its fields, the reps' own number, before and after on that number", () => {
+  const { clips, records } = repsSession({
+    drill: "move:leadHipP6:more", metric: "leadHipP6",
+    before: [1.8, 1.9, 2.0, 1.9, 1.9], reps: [2.5, 2.6, 2.7, 2.6, 2.6], after: [2.2, 2.3, 2.4, 2.3, 2.3] });
+  const [s] = DrillSets.sets(clips, records);
+  assert.strictEqual(s.drill, "move:leadHipP6:more");
+  assert.strictEqual(s.metric, "leadHipP6");
+  assert.strictEqual(s.aim, "more");
+  assert.strictEqual(s.count, 5);
+  assert.deepStrictEqual({ n: s.reps.count, m: s.reps.median }, { n: 5, m: 2.6 });
+  assert.deepStrictEqual({ n: s.before.count, m: s.before.median, earlier: s.before.earlier }, { n: 5, m: 1.9, earlier: false });
+  assert.deepStrictEqual({ n: s.after.count, m: s.after.median }, { n: 5, m: 2.3 });
+  // Reps are ordinary swings, whole in a 2 s video: never "short", and no pump fields.
+  assert.strictEqual(s.short, 0);
+  assert.strictEqual(s.pumps, undefined);
+  // Each group: deviations -0.1, 0, 0.1, 0, 0 -> sum of squares 0.02; pooled sqrt(0.06 / 12) = 0.0707.
+  // Wobble 1.25 * 0.0707 * sqrt(1/5 + 1/5) = 0.0559. Reps +0.7 (size 12.5), after +0.4 (size 7.2): both clear.
+  const v = DrillSets.verdict(s);
+  assert.strictEqual(v.basis, "reps");
+  assert.strictEqual(v.repsMoved, "clear");
+  assert.strictEqual(v.afterMoved, "clear");
+  assert.strictEqual(v.text, "clear carry-over into your swings");
+  assert.ok(Math.abs(v.afterWobble - 0.0559) < 0.0005);
+  assert.strictEqual(DrillSets.nameOf(s), "Reps: the lead hip getting to the target in the downswing");
+  assert.strictEqual(DrillSets.formatSet(s),
+    "Reps: the lead hip getting to the target in the downswing, Oct 12 (5 reps, 7 iron): reps 2.6 in, your swings after 2.3 in (before 1.9 in): clear carry-over into your swings.");
+  assert.strictEqual(DrillSets.thoughtFor(s), require("../static/coach.js").MOVES.leadHipP6.more.thought);
+});
+
+// Three groups of four with deviations -1, 0, 0, 1 (sum of squares 2 each): pooled sqrt(6 / 9) = 0.8165,
+// wobble 1.25 * 0.8165 * sqrt(1/4 + 1/4) = 0.7217. So a move of 2 is clear (size 2.77), 1.2 maybe (1.66),
+// 0.5 none (0.69). Aim "more": up is the aimed way.
+const repsVerdict = (o) => {
+  const { clips, records } = repsSession({ drill: "move:shoulderTop:more", metric: "shoulderTop", ...o });
+  const [s] = DrillSets.sets(clips, records);
+  return { s, v: DrillSets.verdict(s) };
+};
+
+test("reps verdicts, aim more: each wording", () => {
+  let r = repsVerdict({ before: around(90), reps: around(92), after: around(91.2) });
+  assert.deepStrictEqual([r.v.repsMoved, r.v.afterMoved, r.v.text], ["clear", "maybe", "maybe carrying over"]);
+  assert.strictEqual(DrillSets.formatSet(r.s),
+    "Reps: a fuller shoulder turn, Oct 12 (4 reps, 7 iron): reps 92.0°, your swings after 91.2° (before 90.0°): maybe carrying over.");
+
+  r = repsVerdict({ before: around(90), reps: around(92), after: around(90.5) });
+  assert.deepStrictEqual([r.v.repsMoved, r.v.afterMoved, r.v.text], ["clear", "none", "there in the reps, but no carry-over yet"]);
+
+  r = repsVerdict({ before: around(90), reps: around(91.2), after: around(90.5) });
+  assert.deepStrictEqual([r.v.repsMoved, r.v.afterMoved, r.v.text], ["maybe", "none", "there in the reps, but no carry-over yet"]);
+
+  r = repsVerdict({ before: around(90), reps: around(90.5), after: around(90.3) });
+  assert.deepStrictEqual([r.v.repsMoved, r.v.afterMoved, r.v.text], ["none", "none", "no change in the reps or after"]);
+
+  // The wrong way is no change, however far.
+  r = repsVerdict({ before: around(90), reps: around(86), after: around(87) });
+  assert.deepStrictEqual([r.v.repsMoved, r.v.afterMoved, r.v.text], ["none", "none", "no change in the reps or after"]);
+
+  // Two swings after ([90, 90], sum of squares 0): pooled sqrt(4 / 7) = 0.756, wobble for 4 against 4 = 0.668.
+  // Reps +2 = size 2.99 clear; +1.2 = size 1.80 maybe.
+  r = repsVerdict({ before: around(90), reps: around(92), after: [90, 90] });
+  assert.deepStrictEqual([r.v.repsMoved, r.v.afterMoved, r.v.text], ["clear", "few", "clearly there in the reps, too few swings after"]);
+  r = repsVerdict({ before: around(90), reps: around(91.2), after: [90, 90] });
+  assert.deepStrictEqual([r.v.repsMoved, r.v.afterMoved, r.v.text], ["maybe", "few", "maybe there in the reps, too few swings after"]);
+  r = repsVerdict({ before: around(90), reps: around(90.5), after: [90, 90] });
+  assert.strictEqual(r.v.text, "too few swings");
+
+  // Nothing to set them against: two swings before.
+  r = repsVerdict({ before: [90, 90], reps: around(92), after: around(92) });
+  assert.deepStrictEqual([r.v.repsMoved, r.v.afterMoved, r.v.text, r.v.level], ["few", "few", "too few swings", "few"]);
+});
+
+test("reps verdicts, aim less: down is the aimed way", () => {
+  const less = o => {
+    const { clips, records } = repsSession({ drill: "move:hipSway:less", metric: "hipSway", ...o });
+    const [s] = DrillSets.sets(clips, records);
+    return { s, v: DrillSets.verdict(s) };
+  };
+  // Same sizes as above with the sign turned: 10 -> 8 in the reps (clear), 8.8 after (1.2 less: maybe).
+  let r = less({ before: around(10), reps: around(8), after: around(8.8) });
+  assert.strictEqual(r.s.aim, "less");
+  assert.deepStrictEqual([r.v.repsMoved, r.v.afterMoved, r.v.text], ["clear", "maybe", "maybe carrying over"]);
+  assert.ok(r.v.repsDelta > 0 && r.v.afterDelta > 0);
+  assert.match(DrillSets.formatSet(r.s), /^Reps: less hip slide, more rotation, Oct 12 \(4 reps, 7 iron\): reps 8\.0 in, your swings after 8\.8 in \(before 10\.0 in\): maybe carrying over\.$/);
+  // More of it is the wrong way for "less".
+  r = less({ before: around(10), reps: around(12), after: around(11.2) });
+  assert.deepStrictEqual([r.v.repsMoved, r.v.afterMoved, r.v.text], ["none", "none", "no change in the reps or after"]);
+  assert.ok(r.v.repsDelta < 0);
+});
+
+test("reps at the start of a session are set against the usual of earlier sessions", () => {
+  const earlier = repsSession({ drill: "move:shoulderTop:more", metric: "shoulderTop", day: "2026-10-10", before: around(90) });
+  const today = repsSession({ drill: "move:shoulderTop:more", metric: "shoulderTop", reps: around(92), after: around(92) });
+  const clips = [...earlier.clips.map(c => ({ ...c, name: "e_" + c.name })), ...today.clips];
+  const records = { ...today.records };
+  for (const [k, v] of Object.entries(earlier.records)) records["e_" + k] = v;
+  const [s] = DrillSets.sets(clips, records);
+  assert.strictEqual(s.before.earlier, true);
+  assert.strictEqual(s.before.median, 90);
+  assert.match(DrillSets.formatSet(s), /your swings after 92\.0° \(your usual 90\.0°\): clear carry-over into your swings\.$/);
+});
+
+test("a swing left out by hand never counts before or after a reps set", () => {
+  const { clips, records } = repsSession({ drill: "move:shoulderTop:more", metric: "shoulderTop",
+    before: around(90), reps: around(92), after: [...around(92), 60] });
+  clips[clips.length - 1].excluded = true;   // someone else's swing
+  const [s] = DrillSets.sets(clips, records);
+  assert.strictEqual(s.after.count, 4);
+  assert.strictEqual(s.after.median, 92);
+});
+
+test("reps marked afterwards say so; a number with no reading is left out and counted", () => {
+  const { clips, records } = repsSession({ drill: "move:shoulderTop:more", metric: "shoulderTop",
+    before: around(90), reps: [...around(92), null], after: around(92), extra: { drillMarked: true } });
+  const [s] = DrillSets.sets(clips, records);
+  assert.strictEqual(s.count, 5);
+  assert.strictEqual(s.marked, 5);
+  assert.strictEqual(s.reps.count, 4);
+  assert.strictEqual(s.leftOut, 1);
+  assert.match(DrillSets.formatSet(s), /\(5 reps, 7 iron, marked afterwards\): reps 92\.0°.*\(1 left out\)$/);
+});
+
+test("values carry the number's own unit and decimals", () => {
+  assert.strictEqual(DrillSets.formatValue(91.23, "shoulderTop"), "91.2°");
+  assert.strictEqual(DrillSets.formatValue(2.64, "leadHipP6"), "2.6 in");
+  assert.strictEqual(DrillSets.formatValue(0.791, "backswing"), "0.79 s");
+  assert.strictEqual(DrillSets.formatValue(4.26, "notANumberWeKnow"), "4.3");
+  assert.strictEqual(DrillSets.formatValue(null, "leadHipP6"), "–");
+});
+
+test("the pump keeps its set as it was, with its number and way added", () => {
+  const clips = [], records = {};
+  for (let i = 0; i < 4; i++) { clips.push(makeClip(`b${i}`, `2026-09-30T09:0${i}:00`, null, "I7")); records[`b${i}`] = makeRecord(4.4); }
+  for (let i = 0; i < 4; i++) { clips.push(makeClip(`d${i}`, `2026-09-30T09:1${i}:00`, "pump", "I7")); records[`d${i}`] = makeRecord(3.0, [{ t: 3.5, handsPlane: -1.0, lag: 50 }]); }
+  const [s] = DrillSets.sets(clips, records);
+  assert.deepStrictEqual([s.metric, s.aim, s.reps], ["handsPlaneP6", "less", undefined]);
+  assert.strictEqual(s.drillP6, 3.0);
+  assert.strictEqual(s.pumps.handsPlane, -1.0);
+  assert.strictEqual(DrillSets.nameOf(s), "Pump drill");
+  assert.strictEqual(DrillSets.verdict(s).basis, "pumps");
+  assert.match(DrillSets.formatSet(s), /^Pump drill, Sep 30 \(4 swings, 7 iron\): pumps -1\.0 in, drill swings' hands in the downswing 3\.0 in/);
+});
+
+test("the two sets of a session, a pump set and a reps set, are told apart", () => {
+  const a = repsSession({ drill: "move:shoulderTop:more", metric: "shoulderTop", before: around(90), reps: around(92), after: around(92) });
+  const clips = [...a.clips], records = { ...a.records };
+  for (let i = 0; i < 3; i++) { clips.push(makeClip(`p${i}`, `2026-10-12T16:4${i}:00`, "pump", "I7")); records[`p${i}`] = makeRecord(3.0, [{ t: 3.5, handsPlane: -1.0, lag: 50 }]); }
+  const sets = DrillSets.sets(clips, records);
+  assert.deepStrictEqual(sets.map(s => s.drill), ["pump", "move:shoulderTop:more"]);
+  // The pump swings are drill swings: not among the reps set's "after".
+  assert.strictEqual(sets[1].after.count, 4);
+});
