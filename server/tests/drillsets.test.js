@@ -3,7 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert");
 const DrillSets = require("../static/drillsets.js");
 
-function makeClip(name, recorded, drill, club, angle = "face", partner = null) {
+function makeClip(name, recorded, drill, club, angle = "face", partner = null, extra = {}) {
   return {
     name,
     recorded,
@@ -14,7 +14,8 @@ function makeClip(name, recorded, drill, club, angle = "face", partner = null) {
     quality: {
       p6Estimated: false,
       camera: { face: [], dtl: [] }
-    }
+    },
+    ...extra
   };
 }
 
@@ -325,4 +326,276 @@ test("thoughtFor: retrieves thought for pump drill or focus move, edge cases", (
   assert.equal(DrillSets.thoughtFor(null, null), null);
   assert.equal(DrillSets.thoughtFor({}, {}), null);
 });
+
+test("SHORT_LEAD_S is exported and is 4", () => {
+  assert.strictEqual(DrillSets.SHORT_LEAD_S, 4);
+});
+
+test("isNormal and isMatchingClub skip clip.excluded swings", () => {
+  const clips = [];
+  const records = {};
+
+  // 4 normal swings before, but 2 are excluded
+  for (let i = 1; i <= 4; i++) {
+    const name = `b_${i}`;
+    const excluded = i <= 2;
+    clips.push(makeClip(name, `2026-10-09T10:0${i}:00`, null, "I7", "face", null, { excluded }));
+    records[name] = makeRecord(5.0);
+  }
+
+  // 3 pump drill swings (marked afterwards, short)
+  for (let i = 1; i <= 3; i++) {
+    const name = `d_${i}`;
+    clips.push(makeClip(name, `2026-10-09T10:1${i}:00`, "pump", "I7", "face", null, { strike: 2.0, drillMarked: true }));
+    records[name] = { body: { handsPlaneP6: null }, drill: { kind: "pump", pumps: [] } };
+  }
+
+  // 4 normal swings after, but 2 are excluded
+  for (let i = 1; i <= 4; i++) {
+    const name = `a_${i}`;
+    const excluded = i > 2;
+    clips.push(makeClip(name, `2026-10-09T10:2${i}:00`, null, "I7", "face", null, { excluded }));
+    records[name] = makeRecord(4.0);
+  }
+
+  const s = DrillSets.sets(clips, records)[0];
+  // Since 2 swings before and 2 swings after were excluded, only 2 normal swings remain before and after!
+  assert.strictEqual(s.before.count, 2);
+  assert.strictEqual(s.after.count, 2);
+});
+
+test("marked and short counts, leftOut leaves out short swings with no reading", () => {
+  const clips = [];
+  const records = {};
+
+  // 5 pump drill swings:
+  // 3 are short (strike: 1.9, drillMarked: true, no P6 reading)
+  // 1 is not short (strike: 4.0, drillMarked: false, valid P6 reading)
+  // 1 is not short (strike: 6.1, drillMarked: false, null P6 reading -> shaky/missing -> left out)
+  clips.push(makeClip("d1", "2026-10-09T10:11:00", "pump", "I7", "face", null, { strike: 1.9, drillMarked: true }));
+  records["d1"] = { body: { handsPlaneP6: null }, drill: { kind: "pump", pumps: [] } };
+
+  clips.push(makeClip("d2", "2026-10-09T10:12:00", "pump", "I7", "face", null, { strike: 1.9, drillMarked: true }));
+  records["d2"] = { body: { handsPlaneP6: null }, drill: { kind: "pump", pumps: [] } };
+
+  clips.push(makeClip("d3", "2026-10-09T10:13:00", "pump", "I7", "face", null, { strike: 1.9, drillMarked: true }));
+  records["d3"] = { body: { handsPlaneP6: null }, drill: { kind: "pump", pumps: [] } };
+
+  clips.push(makeClip("d4", "2026-10-09T10:14:00", "pump", "I7", "face", null, { strike: 4.0 }));
+  records["d4"] = makeRecord(4.5);
+
+  clips.push(makeClip("d5", "2026-10-09T10:15:00", "pump", "I7", "face", null, { strike: 6.1 }));
+  records["d5"] = makeRecord(null); // non-short missing P6 -> counted in drillLeftOut
+
+  const s = DrillSets.sets(clips, records)[0];
+  assert.strictEqual(s.count, 5);
+  assert.strictEqual(s.short, 3);
+  assert.strictEqual(s.marked, 3);
+  // Only d5 is left out; d1, d2, d3 are short so they are NOT in leftOut or leftOutDetail.drill
+  assert.strictEqual(s.leftOut, 1);
+  assert.strictEqual(s.leftOutDetail.drill, 1);
+});
+
+test("direction verdicts: clear, maybe, none, few with hand-calculated arithmetic", () => {
+  // Arithmetic derivation:
+  // Before group: 4 swings with values [4.0, 5.0, 5.0, 6.0].
+  //   Mean = 5.0, Median mBefore = 5.0.
+  //   SS_before = (4-5)^2 + (5-5)^2 + (5-5)^2 + (6-5)^2 = 1 + 0 + 0 + 1 = 2.
+  //   df_before = 4 - 1 = 3.
+  //
+  // After group: 4 swings with values [mAfter - 1, mAfter, mAfter, mAfter + 1].
+  //   Mean = mAfter, Median mAfter.
+  //   SS_after = (-1)^2 + 0^2 + 0^2 + 1^2 = 2.
+  //   df_after = 4 - 1 = 3.
+  //
+  // Pooled variance:
+  //   within = sqrt((SS_before + SS_after) / (df_before + df_after))
+  //          = sqrt((2 + 2) / (3 + 3)) = sqrt(4 / 6) = sqrt(2 / 3) approx 0.8164966.
+  // Wobble:
+  //   wobble = 1.25 * within * sqrt(1/4 + 1/4)
+  //          = 1.25 * sqrt(2/3) * sqrt(1/2) = 1.25 * sqrt(1/3) = 1.25 / sqrt(3) approx 0.7216878.
+  //
+  // 1) CLEAR (size >= 2.0):
+  //    Let mAfter = 3.0: values [2.0, 3.0, 3.0, 4.0].
+  //    delta = mBefore - mAfter = 5.0 - 3.0 = 2.0.
+  //    size = 2.0 / (1.25 / sqrt(3)) = 1.6 * sqrt(3) approx 2.77128 >= 2.0 -> "clear".
+  {
+    const setClear = {
+      short: 4,
+      pumps: { handsPlane: null },
+      before: { count: 4, median: 5.0, swings: [4.0, 5.0, 5.0, 6.0] },
+      after: { count: 4, median: 3.0, swings: [2.0, 3.0, 3.0, 4.0] }
+    };
+    const v = DrillSets.verdict(setClear);
+    assert.strictEqual(v.basis, "direction");
+    assert.strictEqual(v.level, "clear");
+    assert.strictEqual(v.text, "the hands came down clearly lower in your swings after the drill");
+    assert.ok(Math.abs(v.delta - 2.0) < 1e-6);
+    assert.ok(Math.abs(v.wobble - (1.25 / Math.sqrt(3))) < 1e-6);
+    assert.ok(Math.abs(v.size - (1.6 * Math.sqrt(3))) < 1e-6);
+  }
+
+  // 2) MAYBE (1.5 <= size < 2.0):
+  //    Let mAfter = 3.8: values [2.8, 3.8, 3.8, 4.8].
+  //    delta = 5.0 - 3.8 = 1.2.
+  //    size = 1.2 / (1.25 / sqrt(3)) = 0.96 * sqrt(3) approx 1.66277 -> "maybe".
+  {
+    const setMaybe = {
+      short: 4,
+      pumps: { handsPlane: null },
+      before: { count: 4, median: 5.0, swings: [4.0, 5.0, 5.0, 6.0] },
+      after: { count: 4, median: 3.8, swings: [2.8, 3.8, 3.8, 4.8] }
+    };
+    const v = DrillSets.verdict(setMaybe);
+    assert.strictEqual(v.basis, "direction");
+    assert.strictEqual(v.level, "maybe");
+    assert.strictEqual(v.text, "the hands maybe came down lower in your swings after the drill");
+    assert.ok(Math.abs(v.delta - 1.2) < 1e-6);
+    assert.ok(Math.abs(v.size - (0.96 * Math.sqrt(3))) < 1e-6);
+  }
+
+  // 3) NONE:
+  //    3a) size < 1.5:
+  //        Let mAfter = 4.5: values [3.5, 4.5, 4.5, 5.5].
+  //        delta = 5.0 - 4.5 = 0.5.
+  //        size = 0.5 / (1.25 / sqrt(3)) = 0.4 * sqrt(3) approx 0.6928 < 1.5 -> "none".
+  {
+    const setNone = {
+      short: 4,
+      pumps: { handsPlane: null },
+      before: { count: 4, median: 5.0, swings: [4.0, 5.0, 5.0, 6.0] },
+      after: { count: 4, median: 4.5, swings: [3.5, 4.5, 4.5, 5.5] }
+    };
+    const v = DrillSets.verdict(setNone);
+    assert.strictEqual(v.basis, "direction");
+    assert.strictEqual(v.level, "none");
+    assert.strictEqual(v.text, "no change in your swings after the drill");
+    assert.ok(Math.abs(v.delta - 0.5) < 1e-6);
+  }
+  //    3b) delta <= 0 (hands higher after):
+  {
+    const setHigher = {
+      short: 4,
+      pumps: { handsPlane: null },
+      before: { count: 4, median: 5.0, swings: [4.0, 5.0, 5.0, 6.0] },
+      after: { count: 4, median: 5.5, swings: [4.5, 5.5, 5.5, 6.5] }
+    };
+    const v = DrillSets.verdict(setHigher);
+    assert.strictEqual(v.basis, "direction");
+    assert.strictEqual(v.level, "none");
+    assert.strictEqual(v.text, "no change in your swings after the drill");
+    assert.ok(v.delta < 0);
+  }
+
+  // 4) FEW:
+  //    4a) fewer than MIN_SWINGS after:
+  {
+    const setFewAfter = {
+      short: 4,
+      pumps: { handsPlane: null },
+      before: { count: 4, median: 5.0, swings: [4.0, 5.0, 5.0, 6.0] },
+      after: { count: 2, median: 3.0, swings: [2.5, 3.5] }
+    };
+    const v = DrillSets.verdict(setFewAfter);
+    assert.strictEqual(v.basis, "direction");
+    assert.strictEqual(v.level, "few");
+    assert.strictEqual(v.text, "too few swings after the drill");
+  }
+  //    4b) fewer than MIN_SWINGS before:
+  {
+    const setFewBefore = {
+      short: 4,
+      pumps: { handsPlane: null },
+      before: { count: 2, median: 5.0, swings: [4.5, 5.5] },
+      after: { count: 4, median: 3.0, swings: [2.0, 3.0, 3.0, 4.0] }
+    };
+    const v = DrillSets.verdict(setFewBefore);
+    assert.strictEqual(v.basis, "direction");
+    assert.strictEqual(v.level, "few");
+    assert.strictEqual(v.text, "too few swings");
+  }
+
+  // 5) No pumps and no short swings stays too few swings as before
+  {
+    const setNoShort = {
+      short: 0,
+      pumps: { handsPlane: null },
+      before: { count: 4, median: 5.0, swings: [4.0, 5.0, 5.0, 6.0] },
+      after: { count: 4, median: 3.0, swings: [2.0, 3.0, 3.0, 4.0] }
+    };
+    const v = DrillSets.verdict(setNoShort);
+    assert.strictEqual(v.level, "few");
+    assert.strictEqual(v.text, "too few swings");
+    assert.strictEqual(v.basis, undefined);
+  }
+});
+
+test("formatSet for direction sets, marked afterwards, mixed sets, and standard sets", () => {
+  // Case 1: Direction set marked afterwards (all 12 swings marked and short, clear verdict)
+  const set1 = {
+    drill: "pump",
+    dateFormatted: "Oct 9",
+    count: 12,
+    marked: 12,
+    short: 12,
+    club: "I7",
+    clubName: "7 iron",
+    leftOut: 0,
+    pumps: { handsPlane: null },
+    drillP6: null,
+    before: { count: 15, median: 5.0, earlier: true },
+    after: { count: 14, median: 4.0 }
+  };
+  const verd1 = { basis: "direction", level: "clear", text: "the hands came down clearly lower in your swings after the drill" };
+  const line1 = DrillSets.formatSet(set1, verd1);
+  assert.strictEqual(
+    line1,
+    "Pump drill, Oct 9 (12 swings, 7 iron, marked afterwards): the videos start after the pumps, so no pump numbers. Your swings after 4.0 in (your usual 5.0 in): the hands came down clearly lower in your swings after the drill."
+  );
+
+  // Case 2: Mixed set (3 of 10 short, has pump numbers)
+  const set2 = {
+    drill: "pump",
+    dateFormatted: "Oct 9",
+    count: 10,
+    marked: 0,
+    short: 3,
+    club: "I7",
+    clubName: "7 iron",
+    leftOut: 0,
+    pumps: { handsPlane: -0.9 },
+    drillP6: 4.7,
+    before: { count: 7, median: 4.4, earlier: false },
+    after: { count: 10, median: 4.3 }
+  };
+  const verd2 = { basis: "pumps", level: "none", text: "no carry-over yet" };
+  const line2 = DrillSets.formatSet(set2, verd2);
+  assert.strictEqual(
+    line2,
+    "Pump drill, Oct 9 (10 swings, 7 iron): 3 of them start after the pumps. Pumps -0.9 in, drill swings' hands in the downswing 4.7 in, your swings after 4.3 in (before 4.4 in): no carry-over yet."
+  );
+
+  // Case 3: Direction set with too few swings after
+  const set3 = {
+    drill: "pump",
+    dateFormatted: "Oct 9",
+    count: 5,
+    marked: 5,
+    short: 5,
+    club: "I7",
+    clubName: "7 iron",
+    leftOut: 0,
+    pumps: { handsPlane: null },
+    drillP6: null,
+    before: { count: 5, median: 5.0, earlier: false },
+    after: { count: 2, median: 4.0 }
+  };
+  const verd3 = { basis: "direction", level: "few", text: "too few swings after the drill" };
+  const line3 = DrillSets.formatSet(set3, verd3);
+  assert.strictEqual(
+    line3,
+    "Pump drill, Oct 9 (5 swings, 7 iron, marked afterwards): the videos start after the pumps, so no pump numbers. Your swings after 4.0 in (before 5.0 in): too few swings after the drill."
+  );
+});
+
 
