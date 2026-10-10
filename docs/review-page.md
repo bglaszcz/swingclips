@@ -224,8 +224,21 @@ What the server works out for each swing and what each part of the review page s
     distance from the target are also numbers on the explorer ("Scoring" chip), Over time and One session.
   - **Every club**: each club in the period as a sortable table (shots, carry and its middle half, smash,
     offline spread, good shots, score, strokes per shot); tap a row to pick that club for the other views.
-  - **Ball flight** (`static/flightgrid.js`), **Spread** (`static/distro.js`) and **Swing checkpoints**
-    (`static/checkpoints.js`) show on the rail once their scripts are there.
+  - **Ball flight** (`static/flightgrid.js`): the nine ball flights from start line (left, straight, right beyond 2°)
+    against sideways curve (left, straight, right beyond 2.5% of carry). A plain sentence describes your usual flight
+    and how the latest session compared; a 3x3 grid of buttons displays each flight's name, share, count, and miniature
+    trajectory curve (tap any cell to pick its swings); a top-down view plots every shot as a curve bending to its landing spot
+    (latest session in accent, earlier sessions in faint grey, hover for details, tap to open the swing); and stacked bars
+    show start line and curve shares session by session. The top-down chart is at most 640 px wide: across is
+    stretched against up, and wider makes a spray of a tight pattern.
+  - **Spread** (`static/distro.js`): how spread out any launch monitor or body number is with this club, and whether the
+    latest session was tighter. A summary sentence reports the middle half (interquartile range) of the latest session versus
+    earlier sessions (tighter, wider, or same within 15%); a histogram compares the share of each group across rounded bins (8 to 16 over the middle 94% of the values; the
+    outer bars take everything beyond, so a topped shot doesn't set the scale),
+    with an optional good-shot range band and median ticks; and session-by-session box plots (newest on top) show the 10th-90th
+    percentile whiskers, middle-half box, and median tick on a shared scale. Tap a bin to pick its swings or tap a session row
+    to view that session.
+  - **Swing checkpoints** (`static/checkpoints.js`) shows on the rail once its script is there.
 - **Where on the face** (Analysis card, `data-fold="strike"`; `static/strikemap.js`):
   heat map of impact locations on the club face (from Square's `faceImpactH` and `faceImpactV`) for the chosen club and period.
   The picture (`SwingStrikeMap.faceSvg`, Oct 9, the owner's ask: like FlightScope's): a club face seen from the front, toe on the
