@@ -196,7 +196,17 @@
   .bay-story-fault { font-size: 15px; color: var(--text); line-height: 1.45; }
   .bay-story-thought { font-weight: 600; color: var(--text); }
   .bay-story-best { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
-  .bay-story-btn { font: inherit; font-size: 15px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; text-decoration: none; border: 1px solid var(--line); background: var(--accent); color: var(--accent-text); display: inline-block; }
+  .dn-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .dn-card[hidden] { display: none !important; }
+  .dn-title { font-size: 18px; font-weight: 700; margin: 0; color: var(--text); }
+  .dn-text { font-size: 15px; color: var(--text); line-height: 1.5; margin: 0; }
+  .dn-buttons { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+  .dn-buttons button { padding: 8px 16px; font-size: 14px; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); }
+  .dn-buttons button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  .dn-buttons button.secondary { background: var(--panel-2); color: var(--text); }
+  .dn-warn-msg { font-size: 13px; color: var(--warn); margin-top: 2px; }
+  .dn-active-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 15px; }
+  .dn-active-line button { padding: 4px 14px; font-size: 14px; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
   .focus-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
   .focus-card[hidden] { display: none; }
   .focus-head { display: flex; flex-direction: column; gap: 2px; }
@@ -251,6 +261,8 @@
 <script src="/static/sessionscore.js"></script>
 <script src="/static/sessionstory.js"></script>
 <script src="/static/swingrow.js"></script>
+<script src="/static/review.js"></script>
+<script src="/static/drillnudge.js"></script>
 <script src="/static/helps.js"></script>
 <script src="/static/focus.js"></script>
 <script src="/static/goal.js"></script>
@@ -376,6 +388,7 @@
   </section>
   <section id="sec-swings" hidden>
     <h2>Swings and Square shots</h2>
+    <div id="drill-nudge" class="dn-card" hidden></div>
     <div id="focus-card" class="focus-card" hidden></div>
     <div id="bay-card" class="bay-card" hidden></div>
     <p class="hint">Hit in Square's driving range as usual. Each swing gets its Square numbers 6-16 s after the strike.</p>
@@ -821,6 +834,191 @@ function renderLastSwingCard(latestClip) {
     if (card.still.drill) stillDiv.title = "Drill: " + card.still.drill;
     addRow("Still there", stillDiv);
   }
+}
+
+function dnClubName(code) {
+  if (!code) return "";
+  const names = { DR: "driver", PW: "PW", GW: "GW", SW: "SW", LW: "LW", PT: "putter" };
+  if (names[code]) return names[code];
+  const m = code.match(/^([WHI])(\d)$/);
+  return m ? `${m[2]}${{ W: " wood", H: " hybrid", I: " iron" }[m[1]]}` : code;
+}
+
+let dnMarkWarning = false;
+
+function renderDrillNudge() {
+  const card = $("drill-nudge");
+  if (!card) return;
+
+  const dState = window.drillState || drillState;
+  const isPumpDrillOn = Boolean(
+    dState && dState.current && dState.current.drill === "pump"
+  );
+  const isPlanOrProgram = Boolean(
+    (programState && programState.program) ||
+    (planStep && planStep.drill)
+  );
+
+  if (isPumpDrillOn && !isPlanOrProgram) {
+    card.hidden = false;
+    card.replaceChildren();
+
+    const line = document.createElement("div");
+    line.className = "dn-active-line";
+
+    const text = document.createElement("span");
+    text.textContent = "Pump drill on: the phones keep 6 s before the strike, and these swings stay out of your trends.";
+    line.append(text);
+
+    const offBtn = document.createElement("button");
+    offBtn.textContent = "Off";
+    offBtn.onclick = async () => {
+      offBtn.disabled = true;
+      try {
+        await fetch("/api/drill", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ drill: null })
+        });
+        if (dState && dState.current) dState.current = null;
+        if (drillState && drillState.current) drillState.current = null;
+        dnMarkWarning = false;
+        renderDrillNudge();
+      } catch (e) {
+        console.error("Failed to turn pump drill off", e);
+        offBtn.disabled = false;
+      }
+    };
+    line.append(offBtn);
+    card.append(line);
+
+    if (dnMarkWarning) {
+      const warn = document.createElement("div");
+      warn.className = "dn-warn-msg";
+      warn.textContent = "update the server to mark the earlier ones";
+      card.append(warn);
+    }
+    return;
+  }
+
+  if (isDrillOrProgramRunning() || typeof SwingDrillNudge === "undefined") {
+    card.hidden = true;
+    card.replaceChildren();
+    return;
+  }
+
+  const clipsList = window.allClips || allClips || recentClips || [];
+  const recMap = window.swingRecords || swingRecords || {};
+  const primary = clipsList.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face") && c.recorded);
+  const sorted = [...primary].sort((a, b) => new Date(a.recorded) - new Date(b.recorded));
+  const clipsMap = new Map(clipsList.map(c => [c.name, c]));
+
+  const rows = sorted.map(c => {
+    const row = (typeof SwingRow !== "undefined" && typeof SwingRow.row === "function")
+      ? SwingRow.row(c, recMap, clipsMap, noiseTable)
+      : {};
+    return {
+      name: c.name,
+      t: new Date(c.recorded).getTime(),
+      club: c.shot ? c.shot.club : null,
+      backswing: (row.shown && row.shown.backswing != null) ? row.shown.backswing : (row.backswing ?? null),
+      clubSpeed: row.clubSpeed ?? (c.shot && c.shot.clubSpeed) ?? null,
+      carry: row.carry ?? (c.shot && c.shot.carry) ?? null,
+      drill: c.drill || null,
+      excluded: Boolean(c.excluded),
+      reviewed: Boolean(c.reviewed)
+    };
+  });
+
+  const nudge = SwingDrillNudge.check(rows);
+  if (!nudge) {
+    card.hidden = true;
+    card.replaceChildren();
+    return;
+  }
+
+  card.hidden = false;
+  card.replaceChildren();
+
+  const title = document.createElement("div");
+  title.className = "dn-title";
+  title.textContent = "That looked like a drill";
+  card.append(title);
+
+  const cName = dnClubName(nudge.club);
+  const p = document.createElement("div");
+  p.className = "dn-text";
+  p.textContent = `The last ${nudge.names.length} swings took ${nudge.backswing.toFixed(1)} s to the top against your usual ${nudge.usual.toFixed(1)} with the ${cName}. With the pump drill switched on the phones keep 6 s before the strike, so the pumps are in the video.`;
+  card.append(p);
+
+  const warnEl = document.createElement("div");
+  warnEl.className = "dn-warn-msg";
+  warnEl.hidden = true;
+  card.append(warnEl);
+
+  const btns = document.createElement("div");
+  btns.className = "dn-buttons";
+
+  const onBtn = document.createElement("button");
+  onBtn.className = "primary";
+  onBtn.textContent = "Pump drill on";
+  onBtn.onclick = async () => {
+    onBtn.disabled = true;
+    try {
+      await fetch("/api/drill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ drill: "pump" })
+      });
+      const st = window.drillState || drillState || {};
+      st.current = { drill: "pump", from: Date.now() / 1000 };
+      if (!drillState) drillState = st;
+    } catch (e) {
+      console.error("Failed to turn pump drill on", e);
+    }
+
+    try {
+      const res = await fetch("/api/drill/mark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names: nudge.names, drill: "pump" })
+      });
+      if (!res.ok) {
+        dnMarkWarning = true;
+      }
+    } catch (e) {
+      dnMarkWarning = true;
+    }
+
+    renderDrillNudge();
+  };
+  btns.append(onBtn);
+
+  const noBtn = document.createElement("button");
+  noBtn.className = "secondary";
+  noBtn.textContent = "No, normal swings";
+  noBtn.onclick = async () => {
+    noBtn.disabled = true;
+    try {
+      await fetch("/api/reviewed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ names: nudge.names, reviewed: true })
+      });
+      for (const name of nudge.names) {
+        const c = clipsList.find(x => x.name === name);
+        if (c) c.reviewed = true;
+      }
+      card.hidden = true;
+      card.replaceChildren();
+    } catch (e) {
+      console.error("Failed to mark swings as reviewed", e);
+      noBtn.disabled = false;
+    }
+  };
+  btns.append(noBtn);
+
+  card.append(btns);
 }
 
 function renderFocusCard() {
@@ -2090,6 +2288,7 @@ function renderChoices() {
   $("n5").textContent = balls ? "4" : "3";
   renderReady();
   renderPelvisCard(recentClips);
+  renderDrillNudge();
 }
 
 // ---- 1. Get ready: open until both phones record (or for drills without a ball), then one line ----
@@ -2251,6 +2450,7 @@ async function pollProgram() {
   fillNotes(data);
   renderChoices();
   renderPelvisCard(recentClips);
+  renderDrillNudge();
   programTimer = setTimeout(pollProgram, document.hidden ? 20000 : 2000);
 }
 
@@ -2295,6 +2495,7 @@ async function pollSwings() {
     await checkEndOfSession();
   }
   renderFocusCard();
+  renderDrillNudge();
   if (!lastEndedSessionStory && !isDemoStop) {
     renderLastSwingCard(latestWithShot);
   }
@@ -2339,6 +2540,7 @@ pollSwings();
 pollGame();
 pollProgram();
 loadPlanData();
+renderDrillNudge();
 </script>
 </body>
 </html>
