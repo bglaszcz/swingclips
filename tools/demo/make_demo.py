@@ -77,40 +77,84 @@ def generate_demo_data() -> None:
         is_latest_sess = (sess_idx == len(session_schedule) - 1)
         curr_time = sess_start
 
+        # Special sessions:
+        # 1. ~10 days before the latest session: pump drill set in drill mode (8 swings, drill: "pump", strike ~ 6.1)
+        # 2. Session before latest: pump drill set marked afterwards (10 swings, drill: "pump", drillMarked: True, strike ~ 2.1, excluded: True)
+        #    followed by 12 normal swings with hands ~1 in lower than usual
+        # 3. Latest session: ends with 2 swings with 1.8 s backswing so Swings list has "2 to check" and Start page nudges
+        target_10d = session_schedule[-1].date() - datetime.timedelta(days=10)
+        sess_10d_idx = min(range(len(session_schedule)), key=lambda i: abs((session_schedule[i].date() - target_10d).days))
+        sess_before_last_idx = len(session_schedule) - 2
+
+        if sess_idx == sess_10d_idx:
+            swing_specs = (
+                [("PW", "normal")] * 3
+                + [("I9", "normal")] * 3
+                + [("I7", "i7_before_drill")] * 4
+                + [("I7", "pump_drill_live")] * 8
+                + [("I7", "i7_after_drill")] * 6
+                + [("DR", "normal")] * 8
+            )
+            num_normal_i7 = 10
+        elif sess_idx == sess_before_last_idx:
+            swing_specs = (
+                [("PW", "normal")] * 3
+                + [("I9", "normal")] * 3
+                + [("I7", "pump_drill_marked")] * 10
+                + [("I7", "i7_normal_lower")] * 12
+                + [("DR", "normal")] * 8
+            )
+            num_normal_i7 = 12
+        elif is_latest_sess:
+            swing_specs = (
+                [("PW", "normal")] * 3
+                + [("I9", "normal")] * 3
+                + [("DR", "normal")] * 8
+                + [("I7", "normal")] * 12
+                + [("I7", "i7_rehearsal_check")] * 2
+            )
+            num_normal_i7 = 14
+        else:
+            swing_specs = (
+                [("PW", "normal")] * 3
+                + [("I9", "normal")] * 3
+                + [("I7", "normal")] * 14
+                + [("DR", "normal")] * 8
+            )
+            num_normal_i7 = 14
+
         # Determine target share for I7 if after focus so bars climb from ~45% to ~75%
         focus_sess_idx = next(i for i, s in enumerate(session_schedule) if s.strftime("%Y-%m-%d") >= focus_start_date)
         num_since = len(session_schedule) - focus_sess_idx
         sess_since = sess_idx - focus_sess_idx
         if is_after_focus and num_since > 1:
             target_share = 0.44 + 0.32 * (sess_since / (num_since - 1))
-            num_in_target = int(round(14 * target_share))
-            i7_target_set = set(random.sample(range(14), num_in_target))
+            num_in_target = int(round(num_normal_i7 * target_share))
+            i7_target_set = set(random.sample(range(num_normal_i7), num_in_target))
         else:
             i7_target_set = set()
         i7_counter = 0
 
-        # 28 swings per session: PW, 9 iron, 7 iron, driver (both irons and woods >= 8)
-        club_sequence = (
-            ["PW"] * 3
-            + ["I9"] * 3
-            + ["I7"] * 14
-            + ["DR"] * 8
-        )
-
-        for swing_idx, club in enumerate(club_sequence):
+        for swing_idx, (club, role) in enumerate(swing_specs):
             shot_number += 1
             gap_seconds = random.randint(65, 85)
             curr_time += datetime.timedelta(seconds=gap_seconds)
             ts = int(curr_time.timestamp())
             iso_time = curr_time.isoformat()
-            duration_ms = random.randint(2100, 2250)
+            if role == "pump_drill_live":
+                duration_ms = random.randint(6400, 6600)
+            else:
+                duration_ms = random.randint(2100, 2250)
 
             face_name = f"swing_face_1920x1080_240fps_{ts}_{duration_ms}ms.mp4"
             dtl_name = f"swing_dtl_1920x1080_240fps_{ts}_{duration_ms - 10}ms.mp4"
 
             # 1. Within-session correlated hip motion (leads to confirmed link with smash & carry)
             if club == "I7":
-                if is_after_focus:
+                if role == "pump_drill_marked":
+                    delta_hip = random.normalvariate(0.0, 0.3)
+                    lead_hip_p6 = round(2.0 + delta_hip, 2)
+                elif is_after_focus:
                     in_target = (i7_counter in i7_target_set)
                     delta = random.uniform(0.06, 0.45)
                     if in_target:
@@ -295,9 +339,112 @@ def generate_demo_data() -> None:
                 "gap": 12.0,
             }
 
+            if role == "pump_drill_live":
+                strike_face = 6.12
+                strike_dtl = 6.11
+                is_drill = "pump"
+                is_marked = False
+                is_excluded = False
+                drill_rec = {
+                    "kind": "pump",
+                    "pumps": [
+                        {"t": 1.25, "handsPlane": -0.9, "shaftPlane": None, "lag": 68.0},
+                        {"t": 1.85, "handsPlane": -1.1, "shaftPlane": None, "lag": 70.5},
+                    ],
+                }
+                hands_plane_p6 = 4.6
+                backswing_val = round(random.normalvariate(0.78, 0.02), 3)
+                downswing_val = round(random.normalvariate(0.27, 0.01), 3)
+                tempo_val = round(backswing_val / downswing_val, 2)
+                frames_cnt = 1500
+                pos_obj = {"p1": 0.85, "p5": 6.08, "p6": 6.12, "p7": 6.17}
+            elif role == "pump_drill_marked":
+                strike_face = 2.14
+                strike_dtl = 2.13
+                is_drill = "pump"
+                is_marked = True
+                is_excluded = True
+                drill_rec = {
+                    "kind": "pump",
+                    "pumps": [
+                        {"t": 1.1, "handsPlane": None, "shaftPlane": None, "lag": None},
+                    ],
+                }
+                hands_plane_p6 = None
+                backswing_val = round(random.normalvariate(0.78, 0.02), 3)
+                downswing_val = round(random.normalvariate(0.27, 0.01), 3)
+                tempo_val = round(backswing_val / downswing_val, 2)
+                frames_cnt = 516
+                pos_obj = {"p1": 0.85, "p5": 2.14, "p6": 2.18, "p7": 2.23}
+            elif role == "i7_normal_lower":
+                strike_face = 2.15
+                strike_dtl = 2.14
+                is_drill = None
+                is_marked = False
+                is_excluded = False
+                drill_rec = None
+                hands_plane_p6 = round(random.normalvariate(3.2, 0.2), 1)
+                backswing_val = round(random.normalvariate(0.78, 0.02), 3)
+                downswing_val = round(random.normalvariate(0.27, 0.01), 3)
+                tempo_val = round(backswing_val / downswing_val, 2)
+                frames_cnt = 516
+                pos_obj = {"p1": 0.85, "p5": 2.14, "p6": 2.18, "p7": 2.23}
+            elif role == "i7_rehearsal_check":
+                strike_face = 2.15
+                strike_dtl = 2.14
+                is_drill = None
+                is_marked = False
+                is_excluded = False
+                drill_rec = None
+                hands_plane_p6 = round(random.normalvariate(4.2, 0.3), 1)
+                backswing_val = 1.8
+                downswing_val = 0.27
+                tempo_val = round(1.8 / 0.27, 2)
+                frames_cnt = 516
+                pos_obj = {"p1": 0.85, "p5": 2.14, "p6": 2.18, "p7": 2.23}
+            elif role == "i7_before_drill":
+                strike_face = 2.15
+                strike_dtl = 2.14
+                is_drill = None
+                is_marked = False
+                is_excluded = False
+                drill_rec = None
+                hands_plane_p6 = round(random.normalvariate(4.4, 0.2), 1)
+                backswing_val = round(random.normalvariate(0.78, 0.02), 3)
+                downswing_val = round(random.normalvariate(0.27, 0.01), 3)
+                tempo_val = round(backswing_val / downswing_val, 2)
+                frames_cnt = 516
+                pos_obj = {"p1": 0.85, "p5": 2.14, "p6": 2.18, "p7": 2.23}
+            elif role == "i7_after_drill":
+                strike_face = 2.15
+                strike_dtl = 2.14
+                is_drill = None
+                is_marked = False
+                is_excluded = False
+                drill_rec = None
+                hands_plane_p6 = round(random.normalvariate(4.2, 0.2), 1)
+                backswing_val = round(random.normalvariate(0.78, 0.02), 3)
+                downswing_val = round(random.normalvariate(0.27, 0.01), 3)
+                tempo_val = round(backswing_val / downswing_val, 2)
+                frames_cnt = 516
+                pos_obj = {"p1": 0.85, "p5": 2.14, "p6": 2.18, "p7": 2.23}
+            else:  # "normal"
+                strike_face = 2.15
+                strike_dtl = 2.14
+                is_drill = None
+                is_marked = False
+                is_excluded = False
+                drill_rec = None
+                hands_plane_p6 = round(random.normalvariate(4.2, 0.4), 1)
+                backswing_val = round(random.normalvariate(0.78, 0.02), 3)
+                downswing_val = round(random.normalvariate(0.27, 0.01), 3)
+                tempo_val = round(random.normalvariate(2.85, 0.08), 2)
+                frames_cnt = 516
+                pos_obj = {"p1": 0.85, "p5": 2.14, "p6": 2.18, "p7": 2.23}
+
             quality_obj = {
                 "version": 2,
-                "frames": 516,
+                "frames": frames_cnt,
                 "fps": 240,
                 "brightness": 108.5,
                 "background": 60.0,
@@ -312,38 +459,40 @@ def generate_demo_data() -> None:
                 "flickerLevel": "none",
                 "poseVersion": 6,
                 "poseModel": "rtmpose-m-256x192+ball4+deep+onset+hip1",
-                "positions": {"p1": 0.85, "p5": 2.14, "p6": 2.18, "p7": 2.23},
+                "positions": pos_obj,
             }
 
             face_clip = {
                 "name": face_name,
-                "size": 14200000,
+                "size": 14200000 if role != "pump_drill_live" else 42000000,
                 "recorded": iso_time,
                 "pose": "done",
                 "angle": "face",
-                "strike": 2.15,
+                "strike": strike_face,
                 "partner": dtl_name,
                 "camera": None,
                 "quality": quality_obj,
                 "calib": None,
-                "drill": None,
-                "excluded": False,
+                "drill": is_drill,
+                "drillMarked": is_marked,
+                "excluded": is_excluded,
                 "shot": shot_data,
             }
 
             dtl_clip = {
                 "name": dtl_name,
-                "size": 13900000,
+                "size": 13900000 if role != "pump_drill_live" else 41000000,
                 "recorded": iso_time,
                 "pose": "done",
                 "angle": "dtl",
-                "strike": 2.14,
+                "strike": strike_dtl,
                 "partner": face_name,
                 "camera": None,
                 "quality": quality_obj,
                 "calib": None,
-                "drill": None,
-                "excluded": False,
+                "drill": is_drill,
+                "drillMarked": is_marked,
+                "excluded": is_excluded,
                 "shot": None,
             }
 
@@ -352,9 +501,9 @@ def generate_demo_data() -> None:
 
             # Body record for face-on clip
             body_dict = {
-                "tempo": round(random.normalvariate(2.85, 0.08), 2),
-                "backswing": round(random.normalvariate(0.78, 0.02), 3),
-                "downswing": round(random.normalvariate(0.27, 0.01), 3),
+                "tempo": tempo_val,
+                "backswing": backswing_val,
+                "downswing": downswing_val,
                 "releaseArm": round(random.normalvariate(-28.0, 4.5), 1),
                 "shoulderTop": round(random.normalvariate(115.5, 2.5), 1),
                 "pelvisTop": round(random.normalvariate(46.2, 2.0), 1),
@@ -372,7 +521,7 @@ def generate_demo_data() -> None:
                 "earlyExt": round(random.normalvariate(2.2, 0.3), 1),
                 "bendLoss": round(random.normalvariate(-8.5, 0.8), 1),
                 "headToBall": round(random.normalvariate(-0.8, 0.2), 1),
-                "handsPlaneP6": round(random.normalvariate(4.2, 0.4), 1),
+                "handsPlaneP6": hands_plane_p6,
                 "shaftPlaneP6": None,
                 "handsPlaneTop": round(random.normalvariate(9.8, 0.6), 1),
                 "handHeightTop": round(random.normalvariate(10.5, 0.4), 1),
@@ -381,7 +530,7 @@ def generate_demo_data() -> None:
 
             swings_records[face_name] = {
                 "body": body_dict,
-                "drill": None,
+                "drill": drill_rec,
                 "quality": {"swingFound": True, "noSwing": None},
                 "setup": None,
                 "code": "demo",

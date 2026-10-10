@@ -1,5 +1,6 @@
 // Drill sets: groups drill swings (recorded in drill mode, app.py /api/drill)
-// into sets (same drill, same session, <= 20 min between swings) and answers:
+// into sets (same drill, same session, <= 20 min between swings; up to SET_BREAK other swings between
+// two drill swings don't end a set: a normal swing hit mid-drill) and answers:
 // does the drill carry over into normal swings?
 //
 // For each set:
@@ -31,6 +32,13 @@
   const MAX_NORMAL_SWINGS = 15;
   const MIN_SWINGS = 3;
   const P6_DRILLS = new Set(["pump"]);
+  const SHORT_LEAD_S = 4;
+  // Other swings allowed between two drill swings of one set (they count neither before nor after).
+  const SET_BREAK = 2;
+
+  function isShortClip(c) {
+    return Boolean(c && typeof c.strike === "number" && c.strike < SHORT_LEAD_S);
+  }
 
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
@@ -140,7 +148,7 @@
     sessions.push(currentSession);
 
     const outSets = [];
-    const isNormal = s => !s.c.drill && !(s.rec && s.rec.drill);
+    const isNormal = s => !s.c.excluded && !s.c.drill && !(s.rec && s.rec.drill);
 
     for (const [sessIdx, sess] of sessions.entries()) {
       // Find drill sets within this session
@@ -157,19 +165,23 @@
 
         // Start of a drill set
         const drillSwings = [item];
-        let j = i + 1;
+        let j = i + 1, last = i;
         while (j < sess.length) {
           const next = sess[j];
           const nextDrill = next.c.drill || (next.rec && next.rec.drill && next.rec.drill.kind) || null;
-          if (nextDrill !== drill) break; // interrupted by normal swing or different drill
-          if (next.t - sess[j - 1].t > setGap) break; // gap too large
-          drillSwings.push(next);
+          if (nextDrill === drill) {
+            if (next.t - sess[last].t > setGap) break; // gap too large
+            drillSwings.push(next);
+            last = j;
+          } else if (nextDrill || j - last > SET_BREAK) {
+            break; // another drill, or more than a swing or two that aren't the drill
+          }
           j++;
         }
 
         const setStartIdx = i;
-        const setEndIdx = j - 1;
-        i = j;
+        const setEndIdx = last;
+        i = last + 1;
 
         // Clubs used in drill swings
         const clubsUsed = [...new Set(drillSwings.map(s => s.c.shot && s.c.shot.club).filter(Boolean))];
@@ -189,16 +201,27 @@
         // Drill swings P6 trust evaluation
         const validDrillP6 = [];
         let drillLeftOut = 0;
+        let markedCount = 0;
+        let shortCount = 0;
         for (const s of drillSwings) {
+          const isShort = isShortClip(s.c);
+          if (isShort) shortCount++;
+          if (s.c.drillMarked) markedCount++;
+
           const tRes = checkP6Trust(s.rec, s.c, noise);
-          if (tRes.valid) validDrillP6.push(tRes.value);
-          else drillLeftOut++;
+          if (tRes.valid) {
+            validDrillP6.push(tRes.value);
+          } else {
+            if (!isShort) drillLeftOut++;
+          }
         }
 
         // Normal swings with matching club in this session
         const isMatchingClub = s => {
-          if (!primaryClub) return !s.c.drill && !(s.rec && s.rec.drill);
-          return (!s.c.drill && !(s.rec && s.rec.drill)) && (!s.c.shot || !s.c.shot.club || s.c.shot.club === primaryClub);
+          if (s.c.excluded) return false;
+          if (s.c.drill || (s.rec && s.rec.drill)) return false;
+          if (!primaryClub) return true;
+          return !s.c.shot || !s.c.shot.club || s.c.shot.club === primaryClub;
         };
 
         // Before set (closest up to maxNormal)
@@ -256,6 +279,8 @@
           clubs: clubsUsed.length ? clubsUsed : (primaryClub ? [primaryClub] : []),
           clubName: clubName(primaryClub),
           count: drillSwings.length,
+          marked: markedCount,
+          short: shortCount,
           firstClip: firstItem.c.name,
           lastClip: lastItem.c.name,
           clips: drillSwings.map(s => s.c.name),
@@ -310,7 +335,12 @@
     if (!set) return makeVerdict("too few swings", "few");
 
     const pumpT = set.pumps ? set.pumps.handsPlane : null;
-    if (pumpT == null) return makeVerdict("too few swings", "few");
+    if (pumpT == null) {
+      if (set && set.short > 0) {
+        return verdictDirection(set);
+      }
+      return makeVerdict("too few swings", "few");
+    }
 
     const nDrill = set.drillP6Count != null ? set.drillP6Count : (set.drillSwings ? set.drillSwings.length : 0);
     const mDrill = set.drillP6;
@@ -323,7 +353,7 @@
 
     // Minimum check
     if (nDrill < MIN_SWINGS || nBefore < MIN_SWINGS) {
-      return makeVerdict("too few swings", "few");
+      return makeVerdict("too few swings", "few", { basis: "pumps" });
     }
 
     // Pooled within-session variance
@@ -405,7 +435,55 @@
       }
     }
 
-    return makeVerdict(text, level, { drillCloser, afterMoved });
+    return makeVerdict(text, level, { drillCloser, afterMoved, basis: "pumps" });
+  }
+
+  function verdictDirection(set) {
+    const nBefore = set.before ? set.before.count : 0;
+    const mBefore = set.before ? set.before.median : null;
+    const nAfter = set.after ? set.after.count : 0;
+    const mAfter = set.after ? set.after.median : null;
+
+    if (nBefore < MIN_SWINGS) {
+      return makeVerdict("too few swings", "few", { basis: "direction" });
+    }
+    if (nAfter < MIN_SWINGS) {
+      return makeVerdict("too few swings after the drill", "few", { basis: "direction" });
+    }
+
+    const groups = [
+      (set.before && set.before.swings) || [],
+      (set.after && set.after.swings) || []
+    ].filter(g => g.length > 0);
+
+    let ss = 0, df = 0;
+    for (const g of groups) {
+      if (g.length < 2) continue;
+      const m = g.reduce((s, x) => s + x, 0) / g.length;
+      ss += g.reduce((s, x) => s + (x - m) ** 2, 0);
+      df += g.length - 1;
+    }
+    const within = df > 0 ? Math.sqrt(ss / df) : 1.0;
+
+    const delta = mBefore - mAfter;
+    const wobble = Math.max(1.25 * within * Math.sqrt(1 / nBefore + 1 / nAfter), 1e-9);
+    const size = delta / wobble;
+
+    let text = "";
+    let level = "none";
+
+    if (delta <= 0 || size < 1.5) {
+      text = "no change in your swings after the drill";
+      level = "none";
+    } else if (size >= 2.0) {
+      text = "the hands came down clearly lower in your swings after the drill";
+      level = "clear";
+    } else {
+      text = "the hands maybe came down lower in your swings after the drill";
+      level = "maybe";
+    }
+
+    return makeVerdict(text, level, { basis: "direction", delta, wobble, size, within });
   }
 
   function makeVerdict(text, level, details = {}) {
@@ -426,7 +504,10 @@
     const drillName = set.drill === "pump" ? "Pump drill" : (set.drill ? `${set.drill} drill` : "Drill");
     const dateStr = set.dateFormatted || formatDate(set.timestamp || set.date);
     const clubStr = set.clubName || clubName(set.club) || set.club || "";
-    const countStr = `${set.count} swing${set.count === 1 ? "" : "s"}${clubStr ? ", " + clubStr : ""}`;
+    let countStr = `${set.count} swing${set.count === 1 ? "" : "s"}${clubStr ? ", " + clubStr : ""}`;
+    if (set.marked && set.marked === set.count && set.count > 0) {
+      countStr += ", marked afterwards";
+    }
 
     const fmt = v => v == null ? "–" : `${v.toFixed(1)} in`;
 
@@ -447,12 +528,33 @@
       parts.push(`${set.before.earlier ? "your usual" : "your swings before"} ${fmt(set.before.median)}`);
     }
 
-    const numbersStr = parts.join(", ");
     const vObj = verd != null ? verd : verdict(set);
     const vText = typeof vObj === "string" ? vObj : (vObj && vObj.text) || "";
     const vSuffix = vText ? `: ${vText}.` : ".";
 
-    let line = `${drillName}, ${dateStr} (${countStr}): ${numbersStr}${vSuffix}`;
+    let prefixSentence = "";
+    if (set.short > 0) {
+      if (set.short === set.count) {
+        prefixSentence = "the videos start after the pumps, so no pump numbers.";
+      } else {
+        prefixSentence = `${set.short} of them start after the pumps.`;
+      }
+    }
+
+    let body = "";
+    if (prefixSentence) {
+      if (parts.length > 0) {
+        const capParts = [...parts];
+        capParts[0] = capParts[0].charAt(0).toUpperCase() + capParts[0].slice(1);
+        body = `${prefixSentence} ${capParts.join(", ")}${vSuffix}`;
+      } else {
+        body = `${prefixSentence.replace(/\.$/, "")}${vSuffix}`;
+      }
+    } else {
+      body = `${parts.join(", ")}${vSuffix}`;
+    }
+
+    let line = `${drillName}, ${dateStr} (${countStr}): ${body}`;
     if (set.leftOut > 0) {
       line += ` (${set.leftOut} left out)`;
     }
@@ -484,7 +586,9 @@
     SESSION_GAP_MS,
     SET_GAP_MS,
     MAX_NORMAL_SWINGS,
-    MIN_SWINGS
+    MIN_SWINGS,
+    SHORT_LEAD_S,
+    SET_BREAK
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
