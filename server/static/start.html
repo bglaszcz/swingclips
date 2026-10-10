@@ -209,6 +209,14 @@
   .dn-active-line button { padding: 4px 14px; font-size: 14px; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
   .focus-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
   .focus-card[hidden] { display: none; }
+  /* The focus's drill: a button with the drill's words; reps mode while it is on; the line after Done. */
+  .focus-drill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .focus-drill-row button, .focus-reps-line button { font: inherit; font-size: 15px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); flex: none; }
+  .focus-reps-line button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  .focus-drill-how { flex: 1 1 320px; font-size: 14px; color: var(--muted); line-height: 1.45; }
+  .focus-drill-how.big { flex: none; font-size: 18px; color: var(--text); }
+  .focus-reps-line { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 14px; font-size: 17px; font-weight: 600; }
+  .focus-after-reps { font-size: 16px; padding: 10px 14px; border-radius: 8px; background: var(--panel-2); }
   .focus-head { display: flex; flex-direction: column; gap: 2px; }
   .focus-kicker { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
   .focus-name { font-size: 20px; font-weight: 750; color: var(--text); }
@@ -860,8 +868,12 @@ function renderDrillNudge() {
   if (!card) return;
 
   const dState = window.drillState || drillState;
+  const curDrill = (dState && dState.current && dState.current.drill) || "";
+  // The focus's own drill is shown by the focus card (reps mode), the pump included.
+  const f = typeof journalData !== "undefined" && journalData && journalData.focus;
+  const ownDrill = f && typeof SwingCoach !== "undefined" && SwingCoach.drillId ? SwingCoach.drillId(f.move, f.aim) : null;
   const isPumpDrillOn = Boolean(
-    dState && dState.current && dState.current.drill === "pump"
+    (curDrill === "pump" || curDrill.startsWith("move:")) && curDrill !== ownDrill
   );
   const isPlanOrProgram = Boolean(
     (programState && programState.program) ||
@@ -869,13 +881,15 @@ function renderDrillNudge() {
   );
 
   if (isPumpDrillOn && !isPlanOrProgram) {
-    if (dnSame(card, `on|${dnMarkWarning}`)) return;
+    if (dnSame(card, `on|${curDrill}|${dnMarkWarning}`)) return;
 
     const line = document.createElement("div");
     line.className = "dn-active-line";
 
     const text = document.createElement("span");
-    text.textContent = "Pump drill on: the phones keep 6 s before the strike, and these swings stay out of your trends.";
+    text.textContent = curDrill === "pump"
+      ? "Pump drill on: the phones keep 6 s before the strike, and these swings stay out of your trends."
+      : "Drill reps on: these swings stay out of your trends.";
     line.append(text);
 
     const offBtn = document.createElement("button");
@@ -1025,12 +1039,38 @@ function renderDrillNudge() {
   card.append(btns);
 }
 
+// The focus card's reps (round 58): what the card last said (drawn again only when that changes: the polls
+// call it every few seconds), the reps while they are on, and after Done their count until FOCUS_AFTER
+// normal swings are in.
+const FOCUS_AFTER = 10;
+let focusCardSig = null, focusReps = null, focusRepsDone = null, focusDrillError = false, focusDrillSig = null;
+
+/** Switches the focus's drill on (its id) or off (null), then draws the cards again. */
+async function setFocusDrill(drill) {
+  let ok = false;
+  try {
+    const res = await fetch("/api/drill", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ drill }) });
+    ok = res.ok;
+    if (ok) {
+      const st = await res.json();
+      drillState = st && "current" in st ? st : { ...(drillState || {}), current: drill ? { drill, from: Date.now() / 1000 } : null };
+    }
+  } catch (e) { ok = false; }
+  focusDrillError = !ok && !!drill;
+  if (ok && !drill && focusReps && focusReps.n) focusRepsDone = { ...focusReps, at: Date.now() };
+  if (ok && !drill) focusReps = null;
+  focusCardSig = null;
+  renderFocusCard();
+  renderDrillNudge();
+}
+
 function renderFocusCard() {
   const box = $("focus-card");
   if (!box) return;
 
   const focus = journalData && journalData.focus;
   if (!focus) {
+    focusCardSig = null;
     box.hidden = false;
     box.replaceChildren();
     const noFoc = document.createElement("div");
@@ -1039,34 +1079,6 @@ function renderFocusCard() {
     box.appendChild(noFoc);
     return;
   }
-
-  box.hidden = false;
-  box.replaceChildren();
-
-  // 1. Focus header: plain words move name & club/club type
-  const head = document.createElement("div");
-  head.className = "focus-head";
-
-  const kicker = document.createElement("div");
-  kicker.className = "focus-kicker";
-  const CLUB_NAMES = {
-    DR: "Driver", W3: "3 wood", W5: "5 wood", H4: "4 hybrid",
-    I4: "4 iron", I5: "5 iron", I6: "6 iron", I7: "7 iron", I8: "8 iron", I9: "9 iron",
-    PW: "PW", GW: "GW", SW: "SW", LW: "LW",
-  };
-  const clubText = focus.scope
-    ? (focus.scope === "woods" ? "driver and woods" : "irons")
-    : (focus.club ? (CLUB_NAMES[focus.club] || focus.club) : "all clubs");
-  kicker.textContent = `Your focus · ${clubText}`;
-  head.appendChild(kicker);
-
-  const nameEl = document.createElement("div");
-  nameEl.className = "focus-name";
-  const mv = (typeof SwingCoach !== "undefined" && SwingCoach.MOVES && SwingCoach.MOVES[focus.move]) ? SwingCoach.MOVES[focus.move][focus.aim] : null;
-  const moveName = mv ? (typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(mv.name) : mv.name) : focus.move;
-  nameEl.textContent = mv ? `Work on ${moveName}` : `${focus.move}: ${focus.aim}`;
-  head.appendChild(nameEl);
-  box.appendChild(head);
 
   // 2. Build sessions for target
   const clipsList = (allClips && allClips.length) ? allClips : (recentClips || []);
@@ -1096,6 +1108,133 @@ function renderFocusCard() {
   const currentSessionClips = allSessions.length ? allSessions[0].clips : recentClips.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
   const todayRows = currentSessionClips.filter(c => !c.excluded).map(toRow).filter(matchClub);
   const todayScore = (typeof SwingGoal !== "undefined" && target) ? SwingGoal.score(todayRows, focus, target) : { n: 0, k: 0, rate: null };
+
+  // The focus's own drill (coach.js drillId): its reps are recorded as that drill, out of the trends.
+  const drillId = (typeof SwingCoach !== "undefined" && SwingCoach.drillId) ? SwingCoach.drillId(focus.move, focus.aim) : null;
+  const drillOn = (drillState && drillState.current) || null;
+  const inPlan = Boolean((programState && programState.program) || (planStep && planStep.drill));
+  const repsOn = !!drillId && !!drillOn && drillOn.drill === drillId && !inPlan;
+  // The reps since it was switched on, oldest first: drill swings, so not among the swings above.
+  const repRows = !repsOn ? [] : clipsList
+    .filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face") && c.recorded && c.drill === drillId
+      && new Date(c.recorded).getTime() >= drillOn.from * 1000 - 3000)
+    .sort((x, y) => new Date(x.recorded) - new Date(y.recorded)).map(toRow);
+  if (repsOn) focusReps = { n: repRows.length, k: target ? SwingGoal.score(repRows, focus, target).k : 0 };
+  // After Done: the normal swings since, up to FOCUS_AFTER of them.
+  const afterN = focusRepsDone ? currentSessionClips.filter(c => !c.excluded && new Date(c.recorded).getTime() >= focusRepsDone.at).length : 0;
+  if (focusRepsDone && (afterN >= FOCUS_AFTER || repsOn)) focusRepsDone = null;
+  const newestClip = recentClips.find(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+  const val = r => [r.name, r[focus.move] ?? null];
+  const sig = JSON.stringify([focus, drillOn, inPlan, isDrillOrProgramRunning(), focusRepsDone, afterN, target && target.bound,
+    todayRows.map(val), repRows.map(val), newestClip && [newestClip.name, newestClip.pose], focusDrillError]);
+  if (sig === focusCardSig && box.children.length) return;
+  focusCardSig = sig;
+
+  box.hidden = false;
+  box.replaceChildren();
+
+  // 1. Focus header: plain words move name & club/club type
+  const head = document.createElement("div");
+  head.className = "focus-head";
+
+  const kicker = document.createElement("div");
+  kicker.className = "focus-kicker";
+  const CLUB_NAMES = {
+    DR: "Driver", W3: "3 wood", W5: "5 wood", H4: "4 hybrid",
+    I4: "4 iron", I5: "5 iron", I6: "6 iron", I7: "7 iron", I8: "8 iron", I9: "9 iron",
+    PW: "PW", GW: "GW", SW: "SW", LW: "LW",
+  };
+  const clubText = focus.scope
+    ? (focus.scope === "woods" ? "driver and woods" : "irons")
+    : (focus.club ? (CLUB_NAMES[focus.club] || focus.club) : "all clubs");
+  kicker.textContent = `Your focus · ${clubText}`;
+  head.appendChild(kicker);
+
+  const nameEl = document.createElement("div");
+  nameEl.className = "focus-name";
+  const mv = (typeof SwingCoach !== "undefined" && SwingCoach.MOVES && SwingCoach.MOVES[focus.move]) ? SwingCoach.MOVES[focus.move][focus.aim] : null;
+  const moveName = mv ? (typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(mv.name) : mv.name) : focus.move;
+  nameEl.textContent = mv ? `Work on ${moveName}` : `${focus.move}: ${focus.aim}`;
+  head.appendChild(nameEl);
+  box.appendChild(head);
+
+  const plainOf = t => (typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(t) : t);
+  // The focus swing by swing (goal-live.js, as on Progress and Practice): the last one's number and where
+  // it sat, the count, and each as a dot against the target.
+  const drawLive = (rows, title, waiting) => {
+    const liveBox = document.createElement("div");
+    box.appendChild(liveBox);
+    const fldL = (typeof SwingSummary !== "undefined" && SwingSummary.BODY.find(b => b.key === focus.move)) || {};
+    const unitL = fldL.unit && fldL.unit !== ":1" ? (fldL.unit === "°" ? "°" : " " + fldL.unit) : "";
+    const labelL = (typeof SwingShotStory !== "undefined" && SwingShotStory.LABELS && SwingShotStory.LABELS[focus.move]) || fldL.label || focus.move;
+    const thoughtL = mv && mv.thought ? plainOf(mv.thought).replace(/^["“]|["”.]+$/g, "") : "";
+    SwingGoalLive.render(liveBox, { ...SwingGoal.live(rows, focus, target), target }, {
+      title, label: labelL.charAt(0).toLowerCase() + labelL.slice(1), fmt: v => v.toFixed(1) + unitL, thought: thoughtL, waiting,
+      onOpen: row => { location.href = "/#" + encodeURIComponent(row.name); },
+    });
+  };
+  const pending = c => !!c && c.pose !== "done" && c.pose !== "failed";
+  const canLive = !!target && typeof SwingGoalLive !== "undefined" && typeof SwingGoal.live === "function";
+
+  if (repsOn) {
+    // Reps mode: what the drill is, each rep against the target, Done.
+    const line = document.createElement("div");
+    line.className = "focus-reps-line";
+    const words = document.createElement("span");
+    words.textContent = drillId === "pump"
+      ? "Pump drill on: the phones keep 6 s before the strike, and these swings stay out of your trends"
+      : "Drill reps: these stay out of your trends";
+    const done = document.createElement("button");
+    done.className = "primary";
+    done.textContent = "Done";
+    done.onclick = () => { done.disabled = true; setFocusDrill(null); };
+    line.append(words, done);
+    box.appendChild(line);
+    if (mv && mv.drill) {
+      const how = document.createElement("div");
+      how.className = "focus-drill-how big";
+      how.textContent = plainOf(mv.drill);
+      box.appendChild(how);
+    }
+    if (canLive && repRows.length) {
+      drawLive(repRows, "Your reps", pending(newestClip) && newestClip.drill === drillId);
+    } else {
+      const note = document.createElement("div");
+      note.className = "focus-sub";
+      note.textContent = !target ? "No target yet: the first few normal swings set it."
+        : pending(newestClip) ? "Waiting for the first rep's numbers" : "Hit the first rep: each one shows here against your target.";
+      box.appendChild(note);
+    }
+    return;
+  }
+
+  if (drillId && mv && mv.drill && !isDrillOrProgramRunning()) {
+    const row = document.createElement("div");
+    row.className = "focus-drill-row";
+    const go = document.createElement("button");
+    go.textContent = "Do the drill";
+    go.title = "Record reps of this drill: each one shows against your target, and they stay out of your trends";
+    go.onclick = () => { go.disabled = true; setFocusDrill(drillId); };
+    const how = document.createElement("div");
+    how.className = "focus-drill-how";
+    how.textContent = plainOf(mv.drill);
+    row.append(go, how);
+    box.appendChild(row);
+    if (focusDrillError) {
+      const err = document.createElement("div");
+      err.className = "focus-sub";
+      err.textContent = "Couldn't switch the drill on: update the server, then try again.";
+      box.appendChild(err);
+    }
+  }
+  if (focusRepsDone) {
+    const after = document.createElement("div");
+    after.className = "focus-after-reps";
+    const n = focusRepsDone.n;
+    after.textContent = `${n} rep${n === 1 ? "" : "s"}, ${focusRepsDone.k} in your target. Now hit ${FOCUS_AFTER} normal swings: do they keep it? ${afterN} of ${FOCUS_AFTER}`;
+    box.appendChild(after);
+  }
+
 
   // 3. Score row: Progress score ring + text
   const scoreRow = document.createElement("div");
@@ -1160,22 +1299,10 @@ function renderFocusCard() {
   scoreRow.appendChild(scoreTextCol);
   box.appendChild(scoreRow);
 
-  // 4. The session swing by swing (goal-live.js, as on Progress and Practice): the last swing's number and
-  // where it sat, the count, and every swing as a dot against the target. The box below stands in without it.
-  if (target && typeof SwingGoalLive !== "undefined" && typeof SwingGoal.live === "function") {
-    const liveBox = document.createElement("div");
-    box.appendChild(liveBox);
-    const fldL = (typeof SwingSummary !== "undefined" && SwingSummary.BODY.find(b => b.key === focus.move)) || {};
-    const unitL = fldL.unit && fldL.unit !== ":1" ? (fldL.unit === "°" ? "°" : " " + fldL.unit) : "";
-    const labelL = (typeof SwingShotStory !== "undefined" && SwingShotStory.LABELS && SwingShotStory.LABELS[focus.move]) || fldL.label || focus.move;
-    const newest = recentClips.find(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
-    const thoughtL = mv && mv.thought ? (typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(mv.thought) : mv.thought).replace(/^["“]|["”.]+$/g, "") : "";
+  // 4. The session swing by swing; the box below stands in without goal-live.js.
+  if (canLive) {
     // The session's swings oldest first, as they were hit.
-    SwingGoalLive.render(liveBox, { ...SwingGoal.live([...todayRows].reverse(), focus, target), target }, {
-      label: labelL.charAt(0).toLowerCase() + labelL.slice(1), fmt: v => v.toFixed(1) + unitL, thought: thoughtL,
-      waiting: !!newest && sessionIsToday && newest.pose !== "done" && newest.pose !== "failed",
-      onOpen: row => { location.href = "/#" + encodeURIComponent(row.name); },
-    });
+    drawLive([...todayRows].reverse(), undefined, sessionIsToday && pending(newestClip));
     return;
   }
 
@@ -2455,6 +2582,8 @@ async function pollProgram() {
   renderChoices();
   renderPelvisCard(recentClips);
   renderDrillNudge();
+  const dsig = JSON.stringify(drillState && drillState.current);
+  if (dsig !== focusDrillSig) { focusDrillSig = dsig; renderFocusCard(); }
   programTimer = setTimeout(pollProgram, document.hidden ? 20000 : 2000);
 }
 
@@ -2482,6 +2611,13 @@ async function pollSwings() {
   clearTimeout(swingTimer);
   const clips = await getJson(`/api/clips?since=${Math.floor(Date.now() / 1000 - SWINGS_SINCE_S)}`);
   recentClips = clips || [];
+  // The full list is loaded once. The session's swings go into it here, newest first as it is: new
+  // ones, and earlier ones again as their analysis, shot or drill mark arrives. Without this the
+  // focus card and the nudge never saw a swing hit after the page was opened.
+  if (allClips && recentClips.length) {
+    const fresh = new Set(recentClips.map(c => c.name));
+    allClips = [...recentClips, ...allClips.filter(c => !fresh.has(c.name))];
+  }
   renderSwings(recentClips);
   const latest = recentClips.find(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
   const needsFetch = !swingRecords || (latest && latest.pose === "done" && (!swingRecords[latest.name] || (journalData && journalData.focus && (!swingRecords[latest.name].body || swingRecords[latest.name].body[journalData.focus.move] == null))));
