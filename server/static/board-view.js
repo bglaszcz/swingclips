@@ -456,7 +456,47 @@ function goalHead(f) {
       });
     });
   }
+  // The latest session swing by swing: which swings were in the target (goal-live.js).
+  const liveBox = pEl("div", "pb-goal-live");
+  head.append(liveBox);
+  requestAnimationFrame(() => renderFocusLive(liveBox, f));
   return head;
+}
+
+/**
+ * The focus's latest session swing by swing, into `box`: the last swing's number and where it sat, the
+ * count in the target, and each swing as a dot against it. Returns false when there is nothing to show.
+ */
+function renderFocusLive(box, f) {
+  const sessions = progressSessions(f.scope || f.club || "*"), t = SwingGoal.target(sessions, f);
+  const since = new Date(f.since + "T00:00:00").getTime(), latest = [...sessions].reverse().find(s => s.start >= since);
+  if (!t || !latest || typeof SwingGoalLive === "undefined") { box.replaceChildren(); return false; }
+  const model = { ...SwingGoal.live(latest.rows, f, t), target: t };
+  const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim], fld = field(f.move);
+  const today = new Date(latest.start).toDateString() === new Date().toDateString();
+  const newest = latest.rows[latest.rows.length - 1];
+  SwingGoalLive.render(box, model, {
+    title: `${today ? "Today" : dayOf(latest.start)}, swing by swing`,
+    label: lowerFirst(fld.label), fmt: v => aNum(fld, v),
+    thought: fix ? SwingShotStory.plain(fix.thought) : "",
+    waiting: !!newest && !newest.body && swingPending(newest.c),
+    onOpen: row => open(row.c.name),
+  });
+  return true;
+}
+
+/** Practice's card: the focus swing by swing, redrawn as each swing's numbers arrive. */
+function renderPracticeFocus() {
+  const box = document.getElementById("pr-focus-live"), f = pbFocus();
+  if (!box) return;
+  box.hidden = !f;
+  if (!f) return;
+  const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim];
+  const head = pEl("div", "pb-head"), body = pEl("div", "pb-goal-live");
+  head.append(pEl("strong", null, fix ? SwingShotStory.plain(fix.name).replace(/^./, c => c.toUpperCase()) : focusLabel(f.move)),
+    pEl("span", "note", `your focus · ${pbFocusClubs(f)}`));
+  box.replaceChildren(head, body);
+  if (!renderFocusLive(body, f)) body.append(pEl("div", "note", "No swings since you set this focus yet: the first few set the picture."));
 }
 
 /** The strip at the top of Progress: the focus and its score, one tap from practising it; or a way to pick one. */

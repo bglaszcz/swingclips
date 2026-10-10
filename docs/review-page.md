@@ -5,7 +5,7 @@ What the server works out for each swing and what each part of the review page s
 ## `server/` - the home server (Python, FastAPI)
 - `D:\SwingClips\clips` (videos), `pose` (pose per clip, gzipped JSON, and its quality record), `shots.jsonl` (launch
   monitor shots), `clubs.json` (clubs corrected on the review page), `swings.json` (each swing's
-  numbers), `noise.json` (the noise floor per number, for the trust rules), `journal.json` (handicap and session notes), `excluded.json` (swings left out),
+  numbers), `noise.json` (the noise floor per number, for the trust rules), `journal.json` (handicap and session notes), `excluded.json` (swings left out), `reviewed.json` (swings marked "check" that you said are fine),
   `practice.json` and `practice-log.jsonl` (practice mode's target and what was spoken), `goodshots.json`
   (which shots count as good, for your personal ranges), `trash` (deleted clips; emptied by hand, never automatically).
 - A background worker runs MediaPipe pose on every frame of each new clip (4 processes, split at
@@ -291,6 +291,18 @@ What the server works out for each swing and what each part of the review page s
   stood in the same places.
 - **Leave out**: a swing that isn't yours (a friend hitting while the phones listen) is left out of
   Trends and Progress with the swing's Leave out button (`excluded.json`).
+- **Swings to check, and leaving out many at once** (`static/review.js`; Oct 10, the owner: a drill hit
+  without the drill switched on skewed a whole session). A swing far from that club's own usual is marked
+  **check** on the list (hover for why): a backswing 1.5 times as long and at least 0.4 s longer (the pump
+  drill and a paused top read like this), club speed under 80% of the usual (not wedges: part swings are
+  their job) or over 112% (another club, or a misread), a carry over 125% of the usual (another club than
+  Square was set to). A short carry on its own is a mishit and a real swing: not marked. Nothing is thrown
+  out for you. A session with marked swings shows **N to check** under its name: one tap ticks them all;
+  then **Leave out** (out of the trends, progress and ranges; the clips stay; Undo on the toast), **Put
+  back**, or **Looks fine** (kept and no longer marked: `POST /api/reviewed`, `reviewed.json`). **Select**
+  works the same for any swings (a session's box ticks all of it), so leaving out is as bulk as deleting.
+  The open swing says why it is marked, with **Leave out** and **It's fine**. A club needs 10 swings before
+  anything is judged against its usual; swings already left out don't shift it.
 - **Wrong club?** When the club wasn't changed in Square's app, pick the right one on the swing's
   Club tile, or use "Change club…" in Trends for all the swings shown. The correction is kept per
   swing in `clubs.json` (Square's own club stays in `shots.jsonl` and shows as "(Square)" in the
@@ -564,6 +576,13 @@ On **Progress**, first card (`static/focus.js`, drawn by `renderFocus` in `trend
   don't compare. A strip at the top of Progress shows the same score with Practice this and View progress
   (or, with no focus, what the numbers point to and a way to pick one). "Is it working?" (session medians
   against the wobble, below) stays the judge of whether a change is real; the score is the count to follow.
+- **Swing by swing, live** (`static/goal-live.js`, numbers from `SwingGoal.live`): under the session bars
+  on the focus card, and as a card on **Practice** that redraws as each swing's numbers arrive (the page's
+  10 s refresh): the last swing's number big with where it sat ("in your target", "just outside": a miss
+  under a quarter of how much the move usually varies, "outside your target"), the swing thought after one
+  that wasn't in, the session's swings, the share in the target and the minutes so far, and every swing as
+  a dot against the target's band (tap a dot to open the swing). Only swings in the target count toward the
+  score; "just outside" is a color and a word, not a pass.
 - **Make this my focus** on a suggested priority or through **Pick my own focus** saves it in the journal
   (`journal.json` `focus`: move, which way, club, scope: "irons" | "woods" | null, the results it's for, the day it started;
   `POST /api/journal/focus`, with `{"move": null}` to end it; normal switches go to `focuses` with `until`).

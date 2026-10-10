@@ -460,6 +460,19 @@ class EndpointsTest(unittest.TestCase):
             # The handicap log and notes are untouched by it.
             self.assertEqual(j["handicap"], [])
 
+    def test_6c_reviewed(self):
+        """Swings said to be fine are kept in reviewed.json, taken back again, and a path is refused."""
+        from unittest import mock
+        d = Path(tempfile.mkdtemp(prefix="swingclips-reviewed-"))
+        with mock.patch.object(self.app, "REVIEWED_FILE", d / "reviewed.json"):
+            c = self.client
+            self.assertEqual(self.app.load_reviewed(), [])
+            r = c.post("/api/reviewed", json={"names": ["b.mp4", "a.mp4", "../x.mp4"], "reviewed": True})
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(self.app.load_reviewed(), ["a.mp4", "b.mp4"])
+            c.post("/api/reviewed", json={"names": ["a.mp4"], "reviewed": False})
+            self.assertEqual(self.app.load_reviewed(), ["b.mp4"])
+
     def test_6b_focus_history(self):
         """Focus history: slips replaced today are not kept, going back removes the old entry, normal switch keeps until."""
         from datetime import datetime

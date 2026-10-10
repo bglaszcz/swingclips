@@ -22,6 +22,7 @@ async function openPractice() {
   renderList();
   if (window.innerWidth < 900) practiceBox.scrollIntoView();
   await loadTrendData();   // the swings' body numbers, for the suggested range
+  if (typeof renderPracticeFocus === "function") renderPracticeFocus();
   pollPractice();
 }
 

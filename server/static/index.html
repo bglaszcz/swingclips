@@ -157,6 +157,17 @@
   .pb-pill b { color: var(--text); font-weight: 650; }
   .pb-pill em { font-style: normal; font-weight: 650; color: var(--text); }
   .pb-pill em.better { color: var(--accent); } .pb-pill em.worse { color: var(--warn); }
+  /* Swings to check (review.js): the mark on the list, the session's button, the open swing's banner. */
+  #listbar-row { flex-wrap: wrap; }
+  #listbar .sel-count { flex: 1 1 100%; }
+  #listbar button { white-space: nowrap; flex: none; }
+  .session li .pose.rv { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-soft); font-weight: 600; }
+  button.rv-btn { display: block; margin-top: 4px; padding: 2px 9px; font-size: 12px; font-weight: 600; color: var(--warn);
+                  border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-soft); white-space: nowrap; }
+  #rv-banner { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; padding: 8px 12px; border-radius: 8px; font-size: 13px;
+               background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); }
+  #rv-banner span { flex: 1 1 260px; }
+  .pb-goal-live { flex: 1 1 100%; min-width: 0; }
   /* The focus as a goal: the strip at the top of Progress and the head of the focus card. */
   #pb-goal { display: flex; flex-direction: row; gap: 14px; align-items: center; flex-wrap: wrap; }
   .pb-goal-warn { flex: 1 1 100%; color: var(--warn); font-size: 13px; }
@@ -1453,6 +1464,7 @@
   </aside>
   <section id="viewer" hidden>
     <button id="a-back" class="small" hidden>← Back to Analysis</button>
+    <div id="rv-banner" hidden></div>
     <div id="headrow"><div id="swinghead"></div><div id="camcheck" hidden></div></div>
     <div id="stages">
       <div class="stage">
@@ -1922,6 +1934,8 @@
       <div id="pr-state"></div>
       <div id="pr-quick-body"></div>
     </div>
+    <!-- The focus swing by swing, as the swings come in (goal-live.js). -->
+    <div class="t-card" id="pr-focus-live" hidden></div>
     <div class="t-card">
       <strong>Games</strong>
       <div class="t-filters">
@@ -2473,6 +2487,8 @@
 <script src="/static/explore.js"></script>
 <script src="/static/board.js"></script>
 <script src="/static/goal.js"></script>
+<script src="/static/goal-live.js"></script>
+<script src="/static/review.js"></script>
 <script src="/static/flightgrid.js"></script>
 <script src="/static/distro.js"></script>
 <script src="/static/checkpoints.js"></script>
@@ -4918,9 +4934,19 @@ function clubBadge(code) {
 
 function renderListbar() {
   if (selecting) {
-    listbar.innerHTML = `<span class="grow"></span><button class="small danger" id="del-sel">Delete</button>` +
-      `<button class="small" id="cancel-sel">Done</button>`;
-    listbar.querySelector(".grow").textContent = selected.size ? `${selected.size} selected` : "Tick clips to delete";
+    listbar.innerHTML = `<span class="grow sel-count"></span>` +
+      `<button class="small" id="out-sel" title="Leave the ticked swings out of the trends, progress and ranges (drill swings, someone else's, a misread). The clips stay.">Leave out</button>` +
+      `<button class="small" id="in-sel" title="Put the ticked swings back into the trends">Put back</button>` +
+      `<button class="small" id="ok-sel" title="The ticked swings marked 'check' are fine: stop marking them">Looks fine</button>` +
+      `<button class="small danger" id="del-sel">Delete</button><button class="small" id="cancel-sel">Done</button>`;
+    const picked = [...selected].map(n => clips.find(c => c.name === n)).filter(Boolean);
+    listbar.querySelector(".grow").textContent = selected.size ? `${selected.size} selected` : "Tick swings, or a session's box for all of it";
+    listbar.querySelector("#out-sel").disabled = !picked.some(c => !c.excluded);
+    listbar.querySelector("#in-sel").disabled = !picked.some(c => c.excluded && !c.drill && !c.calib);
+    listbar.querySelector("#ok-sel").disabled = !picked.some(c => typeof reviewWhy === "function" && reviewWhy(c));
+    listbar.querySelector("#out-sel").onclick = () => bulkExclude([...selected], true);
+    listbar.querySelector("#in-sel").onclick = () => bulkExclude([...selected], false);
+    listbar.querySelector("#ok-sel").onclick = () => bulkReviewed([...selected]);
     listbar.querySelector("#del-sel").disabled = !selected.size;
     listbar.querySelector("#del-sel").onclick = () => deleteClips([...selected]);
     listbar.querySelector("#cancel-sel").onclick = () => { selecting = false; selected.clear(); renderList(); };
@@ -5001,6 +5027,13 @@ function clipRow(c) {
   p.textContent = POSE_LABELS[state] || "";
   if (state === "processing" || state === "queued") p.prepend(Object.assign(document.createElement("span"), { className: "spin" }));
   p.classList.toggle("failed", state === "failed");
+  // Far from your usual with the club (review.js): worth a look before it counts.
+  const why = typeof reviewWhy === "function" ? reviewWhy(c) : null;
+  if (why) {
+    const flag = Object.assign(document.createElement("span"), { className: "pose rv", textContent: "check" });
+    flag.title = `Check this swing: ${why} Leave it out, or say it's fine.`;
+    p.before(flag);
+  }
   if (selecting) {
     const box = document.createElement("input");
     box.type = "checkbox";
@@ -5137,6 +5170,24 @@ function renderList() {
       };
       head.append(all);
     } else {
+      const toCheck = typeof reviewWhy === "function" ? s.clips.filter(c => reviewWhy(c)) : [];
+      if (toCheck.length) {
+        const rv = document.createElement("button");
+        rv.className = "small rv-btn";
+        rv.textContent = `${toCheck.length} to check`;
+        rv.title = "Swings far from your usual with the club (a drill without the drill switched on, a part swing, another club): tick them, then leave them out or say they're fine";
+        rv.onclick = e => {
+          e.stopPropagation();
+          selecting = true;
+          selected.clear();
+          for (const c of toCheck) selected.add(c.name);
+          openState[s.key] = true;
+          renderList();
+          document.querySelector("#list li input:checked")?.closest("li").scrollIntoView({ block: "center" });
+        };
+        // Under the session's own line: the head is narrow.
+        head.querySelector(".stitle").append(rv);
+      }
       const tr = document.createElement("button");
       tr.className = "small" + (s.key === trendsKey ? " on" : "");
       tr.textContent = "Trends";
@@ -5186,9 +5237,19 @@ function renderSwingHead() {
   if (!c) { box.replaceChildren(); return; }
   const order = filteredClips().map(x => x.name), i = order.indexOf(current);
   const s = c.shot, b = (s && s.ball) || {};
-  const sig = JSON.stringify([current, s, c.excluded, c.pose, c.partner, i, order.length]);
+  const why = typeof reviewWhy === "function" ? reviewWhy(c) : null;
+  const sig = JSON.stringify([current, s, c.excluded, c.pose, c.partner, i, order.length, why]);
   if (box.dataset.sig === sig) return;
   box.dataset.sig = sig;
+  const banner = document.getElementById("rv-banner");
+  banner.hidden = !why;
+  if (why) {
+    const out = Object.assign(document.createElement("button"), { className: "small", textContent: "Leave out" });
+    out.onclick = () => bulkExclude([c.name], true);
+    const fine = Object.assign(document.createElement("button"), { className: "small", textContent: "It's fine" });
+    fine.onclick = () => bulkReviewed([c.name]);
+    banner.replaceChildren(Object.assign(document.createElement("span"), { textContent: `Check this swing: ${why}` }), out, fine);
+  }
   const title = document.createElement("div");
   title.className = "sh-title";
   title.append(s ? clubName(s.club) : "Swing");
@@ -5336,6 +5397,35 @@ document.getElementById("exclude").onclick = async () => {
   await refresh();
   updateExcludeButton();
 };
+
+/** Leaves swings out of the trends (or puts them back), one or many; Undo on the toast. */
+async function bulkExclude(names, exclude, quiet) {
+  if (!names.length) return;
+  const res = await fetch("/api/exclude", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names, exclude }),
+  });
+  if (!res.ok) { showToast("Couldn't change that - is the server up to date?"); return; }
+  selecting = false;
+  selected.clear();
+  await refresh();
+  updateExcludeButton();
+  if (typeof loadTrendData === "function") { await loadTrendData(); renderList(); if (typeof renderTrendView === "function") renderTrendView(); }
+  if (!quiet) {
+    showToast(`${names.length} swing${names.length === 1 ? "" : "s"} ${exclude ? "left out of the trends" : "put back"}`, () => bulkExclude(names, !exclude, true));
+  }
+}
+
+/** The swings were looked at and are fine: no more "check" on them (the server keeps the list). */
+async function bulkReviewed(names) {
+  if (!names.length) return;
+  const res = await fetch("/api/reviewed", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names, reviewed: true }),
+  }).catch(() => null);
+  if (!res || !res.ok) { showToast("Couldn't save that: update the server (Tools), then try again"); return; }
+  selecting = false;
+  selected.clear();
+  await refresh();
+}
 
 document.getElementById("delete-clip").onclick = () => { if (current) deleteClips([current]); };
 

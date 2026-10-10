@@ -1157,12 +1157,14 @@ def listed_clips(with_shots: bool = True, since: float | None = None) -> list[di
     pair_angles(swing_clips)
     by_name = {c["name"]: c for c in clips}
     excluded = set(load_excluded())
+    reviewed = set(load_reviewed())
     for c in clips:
         # A drill swing (drills.py) is a rehearsal, not the usual swing: out of the trends too.
         # So is a clip of a calibration board (calibrun.py).
         c["calib"] = calib_runs.kind_at(c["_t"]) if SWING_NAME.match(c["name"]) else None
         c["drill"] = drills_state.drill_at(c["_t"]) if SWING_NAME.match(c["name"]) and not c["calib"] else None
         c["excluded"] = c["name"] in excluded or (c["partner"] or "") in excluded or bool(c["drill"] or c["calib"])
+        c["reviewed"] = c["name"] in reviewed or (c["partner"] or "") in reviewed
     if not with_shots:
         for c in clips:
             c.pop("_t")
@@ -1519,6 +1521,38 @@ def set_excluded(body: Exclusion):
         tmp = EXCLUDED_FILE.with_suffix(".tmp")
         tmp.write_text(json.dumps(sorted(names), indent=1), encoding="utf-8")
         tmp.replace(EXCLUDED_FILE)
+    return {"ok": True}
+
+
+# Swings the golfer looked at and kept: the review page marks swings far from the club's usual "check"
+# (static/review.js) until they are left out or said to be fine.
+REVIEWED_FILE = Path(os.environ.get("SWINGCLIPS_REVIEWED", CLIPS_DIR.parent / "reviewed.json"))
+
+
+def load_reviewed() -> list[str]:
+    try:
+        return json.loads(REVIEWED_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+class Reviewed(BaseModel):
+    names: list[str]
+    reviewed: bool
+
+
+@app.post("/api/reviewed")
+def set_reviewed(body: Reviewed):
+    """Marks these swings as looked at and fine (no more "check" on them), or takes that back."""
+    with files_lock:
+        names = set(load_reviewed())
+        for name in body.names:
+            if Path(name).name == name:
+                (names.add if body.reviewed else names.discard)(name)
+        REVIEWED_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = REVIEWED_FILE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(sorted(names), indent=1), encoding="utf-8")
+        tmp.replace(REVIEWED_FILE)
     return {"ok": True}
 
 

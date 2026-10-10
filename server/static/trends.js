@@ -260,8 +260,34 @@ function leaveTrendViews() {
 
 /** Called on each refresh of the clip list: keeps an open view up to date. */
 async function trendsTick() {
+  // Practice: the focus swing by swing, as each swing's numbers arrive (board-view.js).
+  if (!document.getElementById("practice").hidden && typeof renderPracticeFocus === "function") {
+    if (await loadTrendData()) renderPracticeFocus();
+    return;
+  }
   if (!trendsKey && !progressOpen) return;
   if (await loadTrendData()) renderTrendView();
+}
+
+let reviewCache = { data: null, sig: null, value: new Map() };
+/** The swings far from their club's usual (review.js): Map name -> [{code, text}], worked out once per data change. */
+function reviewFlags() {
+  if (!trendDataLoaded || typeof SwingReview === "undefined") return reviewCache.value;
+  const sig = `${clips.length}|${clips.filter(c => c.excluded).length}`;
+  if (reviewCache.data !== dataSig || reviewCache.sig !== sig) {
+    const rows = shownClips().filter(c => !c.excluded && c.shot).map(c => {
+      const r = swingRow(c);
+      return { name: r.name, club: r.club, backswing: r.shown ? r.shown.backswing : null, clubSpeed: r.clubSpeed, carry: r.carry };
+    });
+    reviewCache = { data: dataSig, sig, value: SwingReview.flags(rows) };
+  }
+  return reviewCache.value;
+}
+/** Why a listed swing is marked "check", or null (left out already, said to be fine, or nothing odd). */
+function reviewWhy(c) {
+  if (!c || c.excluded || c.reviewed) return null;
+  const f = reviewFlags().get(c.name);
+  return f ? f.map(x => x.text.replace(/^./, ch => ch.toUpperCase())).join(" ") : null;
 }
 
 function renderTrendView() {

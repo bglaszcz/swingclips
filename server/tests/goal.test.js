@@ -86,3 +86,30 @@ test("practiceRange: in range means in the target", () => {
   assert.equal(Goal.practiceRange({ bound: 5, side: "below" }, [1, 2]), null);
   assert.equal(Goal.practiceRange(null, recent), null);
 });
+
+test("target: how much the move usually varies comes with it, also with your own bound", () => {
+  near(Goal.target(SESSIONS, focus()).spread, 1.25);            // 3 4 5 5 5 6 6 7: 4.75 to 6
+  near(Goal.target(SESSIONS, focus({ target: 3.5 })).spread, 1.25);
+  assert.equal(Goal.target([sess("x", day(9, 2), [1, 2, 3])], focus({ target: 2 })).spread, null);
+});
+
+test("zone: in the target, just outside it, outside", () => {
+  const t = { bound: 5, side: "below", spread: 2 };              // just outside: a miss of 0.5 or less
+  assert.deepEqual([4, 5, 5.5, 5.6, null].map(v => Goal.zone(v, t)), ["in", "in", "near", "out", null]);
+  const up = { bound: 5, side: "above", spread: 2 };
+  assert.deepEqual([6, 4.5, 4.4].map(v => Goal.zone(v, up)), ["in", "near", "out"]);
+  assert.equal(Goal.zone(5.1, { bound: 5, side: "below", spread: null }), "out");
+  assert.equal(Goal.zone(4, null), null);
+});
+
+test("live: one session swing by swing, the count in the target and how long it ran", () => {
+  const t = { bound: 5, side: "below", spread: 2 };
+  const rows = [4, null, 5.4, 7, 3].map((v, i) => ({ handsPlaneP6: v, t: day(9, 9) + i * 60000, name: "s" + i }));
+  const l = Goal.live(rows, focus(), t);
+  assert.deepEqual(l.points.map(p => [p.i, p.v, p.zone]), [[1, 4, "in"], [2, 5.4, "near"], [3, 7, "out"], [4, 3, "in"]]);
+  assert.deepEqual([l.n, l.k, l.minutes], [4, 2, 4]);
+  near(l.rate, 0.5);
+  assert.equal(l.last.row.name, "s4");
+  const none = Goal.live([], focus(), t);
+  assert.deepEqual([none.n, none.rate, none.last, none.minutes], [0, null, null, 0]);
+});
