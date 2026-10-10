@@ -1044,31 +1044,35 @@ function formatSessionTopFault(latestRows, lastRows, when, lastWhen) {
     + (tf.thought ? `Swing thought: “${SwingShotStory.plain(tf.thought)}”` : "");
 }
 
-/** Progress, "Session by session": the last few sessions of the chosen club type, newest first. */
+/** Progress, "Session by session": the last few sessions of the chosen club type, newest first, on what carries over between clubs. */
 function renderSessionList(sessions) {
   const box = document.getElementById("p-sess-list");
   const recent = [...sessions].reverse().slice(0, 8);
   if (!recent.length) { box.textContent = "No sessions in this period."; return; }
-  const carry = field("carry"), spread = field("offlineSpread");
-  const rows = recent.map(s => {
-    const c = sessionValue(s.rows, carry), o = sessionValue(s.rows, spread);
-    return { s, c: c ? c.med : null, o: o ? o.med : null };
-  });
-  const maxC = Math.max(...rows.map(r => r.c || 0), 1);
-  const bestSpread = Math.min(...rows.filter(r => r.o != null).map(r => r.o));
-  const head = pEl("div", "p-sess-row p-sess-head");
-  for (const t of ["Session", "Swings", "Average carry", "Carry", "Spread"]) head.append(pEl("span", null, t));
-  box.replaceChildren(head, ...rows.map(r => {
-    const row = pEl("div", "p-sess-row" + (r.o != null && r.o === bestSpread && rows.length > 1 ? " best" : ""));
+  const data = goodShotData(), settings = goodSettings && goodSettings.settings;
+  const rows = recent.map(s => ({ s, sc: SwingSessionScore.score(s.rows, { clubs: data.clubs, name: r => r.c.name, settings }) }));
+  const good = rows.map(r => r.sc.goodRate).filter(v => v != null);
+  const bestGood = good.length > 1 ? Math.max(...good) : null;
+  const cell = rate => {
+    const c = pEl("span", "cell");
     const bar = pEl("span", "bar"), fill = document.createElement("i");
-    fill.style.width = `${r.c ? Math.round(r.c / maxC * 100) : 0}%`;
+    fill.style.width = `${rate == null ? 0 : Math.round(rate * 100)}%`;
     bar.append(fill);
-    row.append(pEl("span", null, dayOf(r.s.start)), pEl("span", null, `${r.s.rows.length}`), bar,
-      pEl("span", null, r.c == null ? "–" : `${Math.round(r.c)} yd`), pEl("span", null, r.o == null ? "–" : `${Math.round(r.o)} yd`));
+    c.append(pEl("b", null, rate == null ? "–" : `${Math.round(rate * 100)}%`), bar);
+    return c;
+  };
+  const head = pEl("div", "p-sess-row p-sess-head");
+  for (const t of ["Session", "Swings", "Good shots", "On line", "Solid strikes"]) head.append(pEl("span", null, t));
+  box.replaceChildren(head, ...rows.map(r => {
+    const row = pEl("div", "p-sess-row" + (bestGood != null && r.sc.goodRate === bestGood ? " best" : ""));
+    row.append(pEl("span", null, dayOf(r.s.start)), pEl("span", null, `${r.s.rows.length}`),
+      cell(r.sc.goodRate), cell(r.sc.onLineRate), cell(r.sc.solidRate));
     row.title = "Open this session's trends";
     row.onclick = () => openTrends(r.s.key);
     return row;
   }));
+  const note = document.getElementById("p-sess-note");
+  if (note) note.textContent = "Each shot is judged against that club's own usual, so wedges and long irons compare. Shaded: your best session for good shots.";
 }
 
 /** Step 1: the latest session against the last one, irons or woods (sessionscore.js). */

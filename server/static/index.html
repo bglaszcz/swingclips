@@ -49,19 +49,20 @@
   .icon-btn { width: 36px; height: 36px; min-width: 36px; padding: 0; display: inline-grid; place-items: center;
               border-radius: 50%; font-weight: 700; }
   main { display: grid; grid-template-columns: 1fr; }
-  /* The shot list belongs to Swings (and Analysis, to pick a shot); every other tab has the whole width. */
-  body:not([data-view="swing"]):not([data-view="trends"]):not([data-view="analysis"]) #side { display: none; }
+  /* The shot list belongs to Swings (and a session's Trends); every other tab has the whole width. */
+  body:not([data-view="swing"]):not([data-view="trends"]) #side { display: none; }
   @media (min-width: 900px) {
-    body:not([data-view="swing"]):not([data-view="trends"]):not([data-view="analysis"]) main { grid-template-columns: 1fr; }
+    body:not([data-view="swing"]):not([data-view="trends"]) main { grid-template-columns: 1fr; }
   }
   #progress > * { width: 100%; max-width: 820px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
   .p-seg { align-self: flex-start; }
-  .p-sess-row { display: grid; grid-template-columns: 90px 70px minmax(0, 1fr) 70px 70px; gap: 10px; align-items: center; padding: 9px 12px;
+  .p-sess-row { display: grid; grid-template-columns: 80px 56px repeat(3, minmax(0, 1fr)); gap: 10px; align-items: center; padding: 9px 12px;
                 border-radius: 8px; font-size: 14px; font-variant-numeric: tabular-nums; cursor: pointer; }
   .p-sess-row:hover { background: var(--panel-2); }
   .p-sess-row.best { background: var(--accent-soft); }
-  .p-sess-row .bar { height: 10px; border-radius: 5px; background: var(--line); }
-  .p-sess-row .bar i { display: block; height: 10px; border-radius: 5px; background: var(--accent); }
+  .p-sess-row .cell { display: flex; flex-direction: column; gap: 3px; }
+  .p-sess-row .bar { height: 6px; border-radius: 3px; background: var(--line); }
+  .p-sess-row .bar i { display: block; height: 6px; border-radius: 3px; background: var(--accent); }
   .p-sess-row.p-sess-head { color: var(--muted); font-size: 12px; cursor: default; }
   .p-sess-row.p-sess-head:hover { background: none; }
   .p-to-analysis { display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding: 0 22px; font-size: 16px; font-weight: 600; }
@@ -1827,12 +1828,13 @@
     <div class="t-card" id="p-sess-card">
       <strong>Session by session</strong>
       <div id="p-sess-list"></div>
+      <div class="note" id="p-sess-note"></div>
     </div>
     <a href="#" class="t-card p-to-analysis" id="p-to-analysis" style="color: var(--text); text-decoration: none;"><span>Want the full numbers? Open Analysis</span><span aria-hidden="true">→</span></a>
   </section>
   <section id="analysis" hidden>
     <div class="t-head">
-      <strong>Analysis</strong><span class="s-note">Pick a number on the left. One club at a time.</span>
+      <strong>Analysis</strong><span class="s-note">Pick a view on the left. One club at a time.</span>
       <button id="a-close" class="small">Close</button>
     </div>
     <div class="t-filters">
