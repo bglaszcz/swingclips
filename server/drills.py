@@ -7,6 +7,10 @@ swing isn't the golfer's usual swing.
 This file keeps the drill that's on and the stretches of time each drill was on (drills.json), so a
 clip is tagged by when it was recorded, whenever it's listed. A drill ends when turned off, or after
 IDLE_END_S without the phones recording (a drill left on after the session shouldn't tag the next one).
+
+The golfer can also say it after the fact, clip by clip (marks): these swings were the pump drill (it
+wasn't switched on), or these were no drill (it was left on). A mark beats the time. A swing marked
+afterwards was recorded with the usual lead-in, so a long drill may have started before its video does.
 """
 import json
 import threading
@@ -29,6 +33,8 @@ DRILLS = {
 # The phones' usual seconds before the strike (capture app MainActivity PRE_S).
 PRE_S = 2
 IDLE_END_S = 30 * 60
+# A mark saying a clip was no drill, though one was on when it was recorded.
+NOT_A_DRILL = "none"
 
 
 class Drills:
@@ -43,11 +49,16 @@ class Drills:
         cur = doc.get("current")
         self.current: dict | None = cur if isinstance(cur, dict) and cur.get("drill") in DRILLS else None
         self.periods: list[dict] = [p for p in doc.get("periods") or [] if isinstance(p, dict) and p.get("drill") in DRILLS]
+        marks = doc.get("marks")
+        # clip name -> drill id or NOT_A_DRILL, as said afterwards.
+        self.marks: dict[str, str] = {k: v for k, v in (marks if isinstance(marks, dict) else {}).items()
+                                      if v == NOT_A_DRILL or v in DRILLS}
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"current": self.current, "periods": self.periods}, indent=1), encoding="utf-8")
+        tmp.write_text(json.dumps({"current": self.current, "periods": self.periods, "marks": self.marks}, indent=1),
+                       encoding="utf-8")
         tmp.replace(self.path)
 
     def _end(self, until: float) -> None:
@@ -90,6 +101,29 @@ class Drills:
                 if p["from"] <= t <= p["until"]:
                     return p["drill"]
             return None
+
+    def mark(self, names: list[str], drill: str | None) -> dict[str, str | None]:
+        """Says afterwards which drill these clips were (an id), that they were no drill (NOT_A_DRILL),
+        or takes that back (None: by the time again). Returns what each was marked before, for an undo."""
+        if drill is not None and drill != NOT_A_DRILL and drill not in DRILLS:
+            raise ValueError("Unknown drill")
+        with self.lock:
+            before = {n: self.marks.get(n) for n in names}
+            for n in names:
+                if drill is None:
+                    self.marks.pop(n, None)
+                else:
+                    self.marks[n] = drill
+            self._save()
+            return before
+
+    def drill_of(self, name: str, partner: str | None, t: float) -> tuple[str | None, bool]:
+        """A clip's drill, and whether that was said afterwards (a mark on it or on its other angle)."""
+        with self.lock:
+            mark = self.marks.get(name) or (partner and self.marks.get(partner))
+        if mark:
+            return (None if mark == NOT_A_DRILL else mark), True
+        return self.drill_at(t), False
 
     def state(self) -> dict:
         with self.lock:

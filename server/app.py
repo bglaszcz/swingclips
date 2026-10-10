@@ -690,6 +690,16 @@ def measure_quality(clip: dict, other: dict | None, pool: ProcessPoolExecutor, s
     return record
 
 
+def swing_record_stale(old: dict | None, c: dict, other: dict | None, made_by: list) -> bool:
+    """Whether a swing's numbers must be worked out (again): there are none, the JavaScript, the partner
+    or either clip's body model changed, or the swing was since marked as a drill or as not one (the
+    pump drill's key positions are found differently: phases.js). A record from before drillAs was
+    kept was made with the drill of its time: stale only if the clip is marked."""
+    return not (old and old.get("code") == swings_code and old.get("partner") == (other and other["name"])
+                and old.get("poseModel", [models.DEFAULT, other and models.DEFAULT]) == made_by
+                and old.get("drillAs", "?" if c["drillMarked"] else c["drill"]) == c["drill"])
+
+
 def swing_worker(stop: threading.Event):
     """Forever: work out the numbers of each analyzed swing that has none, or old ones."""
     global swing_records, swings_code, noise_table
@@ -711,10 +721,8 @@ def swing_worker(stop: threading.Event):
                     continue  # wait for the other angle
                 other = other if other and other["pose"] == "done" else None
                 old = swing_records.get(c["name"])
-                # Worked out again when the JavaScript, the partner or either clip's body model changed.
                 made_by = [pose_made(c["name"]), other and pose_made(other["name"])]
-                if (old and old.get("code") == swings_code and old.get("partner") == (other and other["name"])
-                        and old.get("poseModel", [models.DEFAULT, other and models.DEFAULT]) == made_by):
+                if not swing_record_stale(old, c, other, made_by):
                     continue
                 try:
                     record = summarizer.summarize(swings.pose_input(c, pose_file(c["name"])),
@@ -723,7 +731,7 @@ def swing_worker(stop: threading.Event):
                     continue  # just deleted
                 except Exception:
                     record = {"error": traceback.format_exc(limit=2)}
-                record.update(code=swings_code, partner=other and other["name"], poseModel=made_by)
+                record.update(code=swings_code, partner=other and other["name"], poseModel=made_by, drillAs=c["drill"])
                 note_no_swing(c, other, record, again=old is not None)
                 with records_lock:
                     swing_records[c["name"]] = record
@@ -1162,7 +1170,10 @@ def listed_clips(with_shots: bool = True, since: float | None = None) -> list[di
         # A drill swing (drills.py) is a rehearsal, not the usual swing: out of the trends too.
         # So is a clip of a calibration board (calibrun.py).
         c["calib"] = calib_runs.kind_at(c["_t"]) if SWING_NAME.match(c["name"]) else None
-        c["drill"] = drills_state.drill_at(c["_t"]) if SWING_NAME.match(c["name"]) and not c["calib"] else None
+        # drillMarked: the golfer said so afterwards (a drill hit without the drill switched on, or not
+        # a drill though one was left on), rather than the time it was recorded.
+        c["drill"], c["drillMarked"] = (drills_state.drill_of(c["name"], c["partner"], c["_t"])
+                                        if SWING_NAME.match(c["name"]) and not c["calib"] else (None, False))
         c["excluded"] = c["name"] in excluded or (c["partner"] or "") in excluded or bool(c["drill"] or c["calib"])
         c["reviewed"] = c["name"] in reviewed or (c["partner"] or "") in reviewed
     if not with_shots:
@@ -1846,6 +1857,28 @@ def set_drill(body: DrillChoice):
     drills_tick()
     print(f"Drill: {drills.DRILLS[cur['drill']]['name'] if cur else 'off'}", flush=True)
     return drills_state.state()
+
+
+class DrillMark(BaseModel):
+    names: list[str]
+    drill: str | None = None
+
+
+@app.post("/api/drill/mark")
+def mark_drill(body: DrillMark):
+    """Says after the fact which drill these swings were ({drill: "pump"}: hit without the drill switched
+    on), that they were no drill ({drill: "none"}: it was left on), or takes that back ({drill: null}).
+    Drill swings stay out of the trends; the swing worker works their numbers out again as that drill.
+    Returns {before: {name: what it was marked}} for an undo."""
+    names = [n for n in body.names if Path(n).name == n and SWING_NAME.match(n)]
+    try:
+        before = drills_state.mark(names, body.drill)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if names:
+        what = "by the time again" if body.drill is None else "not a drill" if body.drill == drills.NOT_A_DRILL             else drills.DRILLS[body.drill]["name"]
+        print(f"Drill: {len(names)} swing(s) marked {what}", flush=True)
+    return {"ok": True, "before": before}
 
 
 # ---- Today's plan: the block being practiced (Start page, plan.js) ----

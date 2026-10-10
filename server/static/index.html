@@ -1545,6 +1545,7 @@
         <span class="menu-pop" hidden>
           <button id="hand" title="Which hand you swing with - sets the lead arm"></button>
           <button id="exclude" title="Leave this swing out of the trends and progress (someone else's swing, a practice waggle…)">Leave out</button>
+          <button id="drill-mark" title="A pump drill hit without the drill switched on: mark it, and it gets the drill's own numbers and goes under Drill sets. Or a normal swing recorded with a drill left on: not a drill."></button>
           <button id="delete-clip" class="danger" title="Move this clip to the trash">Delete swing</button>
         </span>
       </span>
@@ -4255,14 +4256,27 @@ function scEl(tag, cls, text) {
 function renderDrillCard(a, body, ranges) {
   const box = document.getElementById("drillcard");
   const d = SwingSummary.drillNumbers(a);
-  box.hidden = !d || !d.pumps.length;
+  const c = clips.find(c => c.name === current);
+  // Marked afterwards: recorded with the usual 2 s before the strike, where drill mode keeps 6.
+  const late = c && c.drill === "pump" && c.drillMarked;
+  box.hidden = !late && (!d || !d.pumps.length);
   if (box.hidden) return;
+  if (!d || !d.pumps.length) {
+    const head = document.createElement("div");
+    head.innerHTML = "<strong>Pump drill</strong> <span class=\"hint\">marked afterwards</span>";
+    const note = document.createElement("div");
+    note.className = "hint";
+    note.textContent = "The drill wasn't switched on, so the video starts about 2 s before the strike: the pumps came before that. "
+      + "Switch the drill on (Start page) and the phones keep 6 s, enough for the pumps and your address.";
+    box.replaceChildren(head, note);
+    return;
+  }
   const r = ranges && ranges.handsPlaneP6, unit = "in";
   const fmt = v => v == null ? "no reading" : `${v >= 0 ? "+" : ""}${v.toFixed(1)} in`;
   const where = v => {
     if (v == null) return "";
     const pl = SwingGoodShots.place(v, r, unit);
-    return pl.status === "in" ? "in your P6 range" : pl.status === "above" ? "above your P6 range" : pl.status === "below" ? "below your P6 range" : "";
+    return pl.status === "in" ? "where your good shots have them" : pl.status === "above" ? "higher than on your good shots" : pl.status === "below" ? "lower than on your good shots" : "";
   };
   const kids = [];
   const head = document.createElement("div");
@@ -4271,9 +4285,16 @@ function renderDrillCard(a, body, ranges) {
   const note = document.createElement("div");
   note.className = "hint";
   note.textContent = r && r.enough
-    ? `Your good shots' P6: ${SwingGoodShots.rangeText(r.q25, r.q75, unit)}. Each pump's bottom is the P6 you rehearse; the swing's P6 is the real one.`
-    : "Each pump's bottom is the P6 you rehearse; the swing's P6 is the real one.";
+    ? `On your good shots the hands come down at ${SwingGoodShots.rangeText(r.q25, r.q75, unit)}. Each pump's bottom rehearses that spot; the swing's own is the real one.`
+    : "Each pump's bottom rehearses where the hands come down; the swing's own is the real one.";
   kids.push(note);
+  if (late) {
+    const short = document.createElement("div");
+    short.className = "hint";
+    short.textContent = "Marked afterwards: the drill wasn't switched on, so the video starts about 2 s before the strike. Earlier pumps aren't in it, "
+      + "and without your address in the video there is no shaft line to measure the hands against.";
+    kids.push(short);
+  }
   d.pumps.forEach((p, i) => {
     const row = document.createElement("div");
     row.className = "drill-row";
@@ -4292,7 +4313,7 @@ function renderDrillCard(a, body, ranges) {
   const p6 = positions.find(q => q.key === "p6");
   const go = document.createElement("button");
   go.className = "small";
-  go.textContent = "Swing P6";
+  go.textContent = "The swing";
   go.onclick = () => p6 && jumpTo(p6.index);
   swing.append(go, `hands ${fmt(real)}`, Object.assign(document.createElement("span"), { className: "hint", textContent: where(real) }));
   kids.push(swing);
@@ -4303,7 +4324,7 @@ function renderDrillCard(a, body, ranges) {
     const sum = document.createElement("div");
     sum.className = "drill-sum";
     sum.textContent = Math.abs(gap) < 1
-      ? `The swing's P6 matched the pumps (within 1 in): the rehearsal carried into the swing.`
+      ? `In the swing the hands came down where the pumps had them (within 1 in): the rehearsal carried into the swing.`
       : `In the swing the hands came down ${Math.abs(gap).toFixed(1)} in ${gap > 0 ? "higher (more over the line)" : "lower (more under the line)"} than in the pumps: `
         + "the rehearsed position didn't carry into the swing yet." + (move ? ` Swing thought: “${move.thought}”` : "");
     kids.push(sum);
@@ -4981,6 +5002,8 @@ function renderListbar() {
       `<button class="small" id="out-sel" title="Leave the ticked swings out of the trends, progress and ranges (drill swings, someone else's, a misread). The clips stay.">Leave out</button>` +
       `<button class="small" id="in-sel" title="Put the ticked swings back into the trends">Put back</button>` +
       `<button class="small" id="ok-sel" title="The ticked swings marked 'check' are fine: stop marking them">Looks fine</button>` +
+      `<select id="drill-sel" aria-label="Mark the ticked swings as a drill" title="The ticked swings were a drill hit without the drill switched on (or no drill, with one left on): they get the drill's own numbers, go under Drill sets and stay out of the trends">` +
+      `<option value="">It was a drill…</option>${drillKinds.map(k => `<option value="${k.id}">${k.name}</option>`).join("")}<option value="none">Not a drill</option></select>` +
       `<button class="small danger" id="del-sel">Delete</button><button class="small" id="cancel-sel">Done</button>`;
     const picked = [...selected].map(n => clips.find(c => c.name === n)).filter(Boolean);
     listbar.querySelector(".grow").textContent = selected.size ? `${selected.size} selected` : "Tick swings, or a session's box for all of it";
@@ -4990,6 +5013,10 @@ function renderListbar() {
     listbar.querySelector("#out-sel").onclick = () => bulkExclude([...selected], true);
     listbar.querySelector("#in-sel").onclick = () => bulkExclude([...selected], false);
     listbar.querySelector("#ok-sel").onclick = () => bulkReviewed([...selected]);
+    const drillSel = listbar.querySelector("#drill-sel");
+    drillSel.disabled = !selected.size;
+    drillSel.querySelector('option[value="none"]').disabled = !picked.some(c => c.drill);
+    drillSel.onchange = () => { if (drillSel.value) markDrill([...selected], drillSel.value); };
     listbar.querySelector("#del-sel").disabled = !selected.size;
     listbar.querySelector("#del-sel").onclick = () => deleteClips([...selected]);
     listbar.querySelector("#cancel-sel").onclick = () => { selecting = false; selected.clear(); renderList(); };
@@ -5054,14 +5081,14 @@ function clipRow(c) {
     meta.replaceChildren();
     if (dotEl) meta.append(dotEl);
     meta.append(document.createTextNode(time));
-    const rest = [angles, leftOutText(c)].filter(Boolean);
+    const rest = [angles, leftOutText(c, true)].filter(Boolean);
     if (rest.length) meta.append(document.createTextNode(" · " + rest.join(" · ")));
   } else {
     const big = li.querySelector(".big");
     big.replaceChildren();
     if (dotEl) big.append(dotEl);
     big.append(document.createTextNode(time));
-    meta.textContent = [angles, leftOutText(c)].filter(Boolean).join(" · ");
+    meta.textContent = [angles, leftOutText(c, true)].filter(Boolean).join(" · ");
   }
   li.title = [modeOf(c.name), fmtSize(size)].filter(Boolean).join(" · ");
   // The swing's analysis is as far along as its slower angle.
@@ -5291,7 +5318,14 @@ function renderSwingHead() {
     out.onclick = () => bulkExclude([c.name], true);
     const fine = Object.assign(document.createElement("button"), { className: "small", textContent: "It's fine" });
     fine.onclick = () => bulkReviewed([c.name]);
-    banner.replaceChildren(Object.assign(document.createElement("span"), { textContent: `Check this swing: ${why}` }), out, fine);
+    const kids = [Object.assign(document.createElement("span"), { textContent: `Check this swing: ${why}` }), out, fine];
+    // A long backswing is most often the pump drill hit without the drill switched on.
+    if ((reviewFlags().get(c.name) || []).some(f => f.code === "rehearsal")) {
+      const pump = Object.assign(document.createElement("button"), { className: "small", textContent: "It was the pump drill" });
+      pump.onclick = () => markDrill([c.name], "pump");
+      kids.splice(1, 0, pump);
+    }
+    banner.replaceChildren(...kids);
   }
   const title = document.createElement("div");
   title.className = "sh-title";
@@ -5414,9 +5448,16 @@ function closeViewer() {
   history.replaceState(null, "", location.pathname);
 }
 
+// The drills there are (drills.py), for their names and for marking swings afterwards.
+let drillKinds = [{ id: "pump", name: "Pump drill" }];
+fetch("/api/drill").then(r => r.ok ? r.json() : null).then(d => { if (d && d.drills && d.drills.length) drillKinds = d.drills; }).catch(() => {});
+const drillName = id => (drillKinds.find(k => k.id === id) || { name: `${id} drill` }).name;
+
 /** Why a swing doesn't count in the trends: a drill swing (app.py /api/drill), or left out by hand. */
-function leftOutText(c) {
-  return c.drill ? `${c.drill} drill · left out of trends` : c.excluded ? "left out of trends" : "";
+function leftOutText(c, short) {
+  // The list's line is narrow: there a drill swing says its drill only (drill swings are always left out).
+  if (c.drill) return short ? drillName(c.drill) : `${drillName(c.drill)}${c.drillMarked ? ", marked afterwards" : ""} · left out of trends`;
+  return c.excluded ? "left out of trends" : "";
 }
 
 /** The Leave out button shows whether the open swing counts in the trends. */
@@ -5426,6 +5467,9 @@ function updateExcludeButton() {
   b.classList.toggle("on", !!(c && c.excluded));
   b.textContent = c && c.drill ? "Drill swing: left out of trends" : c && c.excluded ? "Left out of trends (put back)" : "Leave out";
   b.disabled = !!(c && c.drill);
+  const m = document.getElementById("drill-mark");
+  m.hidden = !c || !!c.calib;
+  m.textContent = c && c.drill ? "Not a drill" : "It was the pump drill";
   // It's in the ⋯ menu, so say it on the menu's button too.
   document.getElementById("more-btn").textContent = c && c.excluded ? "Left out ⋯" : "⋯";
 }
@@ -5456,6 +5500,44 @@ async function bulkExclude(names, exclude, quiet) {
   if (!quiet) {
     showToast(`${names.length} swing${names.length === 1 ? "" : "s"} ${exclude ? "left out of the trends" : "put back"}`, () => bulkExclude(names, !exclude, true));
   }
+}
+
+document.getElementById("drill-mark").onclick = () => {
+  const c = clips.find(c => c.name === current);
+  if (c) markDrill([c.name], c.drill ? "none" : "pump");
+};
+
+/**
+ * Says afterwards which drill these swings were (a drill's id), or that they were none ("none"), or
+ * takes that back (null); Undo on the toast. The server then works their numbers out again as that
+ * drill, which takes it a few seconds: the numbers are loaded once more after that.
+ */
+async function markDrill(names, drill, quiet) {
+  if (!names.length) return;
+  const res = await fetch("/api/drill/mark", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ names, drill }),
+  }).catch(() => null);
+  if (!res || !res.ok) { showToast("Couldn't save that: update the server (Tools), then try again"); return; }
+  const before = (await res.json()).before || {};
+  selecting = false;
+  selected.clear();
+  const reload = async () => {
+    await refresh();
+    updateExcludeButton();
+    if (typeof loadTrendData === "function") { await loadTrendData(); renderList(); if (typeof renderTrendView === "function") renderTrendView(); }
+  };
+  await reload();
+  // The open swing's key positions depend on it (a pump drill's top is the last one).
+  if (names.includes(current)) open(current);
+  setTimeout(reload, 12000);
+  if (quiet) return;
+  const n = `${names.length} swing${names.length === 1 ? "" : "s"}`;
+  showToast(drill === "none" ? `${n} marked as not a drill` : `${n} marked as ${drillName(drill)}: out of the trends, under Drill sets`, async () => {
+    // Back to what each was: usually no mark at all.
+    const was = new Map();
+    for (const name of names) { const v = before[name] ?? null; (was.get(v) || was.set(v, []).get(v)).push(name); }
+    for (const [v, list] of was) await markDrill(list, v, true);
+  });
 }
 
 /** The swings were looked at and are fine: no more "check" on them (the server keeps the list). */

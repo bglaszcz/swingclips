@@ -296,7 +296,8 @@ What the server works out for each swing and what each part of the review page s
   then **Leave out** (out of the trends, progress and ranges; the clips stay; Undo on the toast), **Put
   back**, or **Looks fine** (kept and no longer marked: `POST /api/reviewed`, `reviewed.json`). **Select**
   works the same for any swings (a session's box ticks all of it), so leaving out is as bulk as deleting.
-  The open swing says why it is marked, with **Leave out** and **It's fine**. A club needs 10 swings before
+  The open swing says why it is marked, with **Leave out** and **It's fine** (and **It was the pump
+  drill** for a long backswing: "Drill mode" below). A club needs 10 swings before
   anything is judged against its usual; swings already left out don't shift it.
 - **Wrong club?** When the club wasn't changed in Square's app, pick the right one on the swing's
   Club tile, or use "Change club…" in Trends for all the swings shown. The correction is kept per
@@ -775,11 +776,23 @@ toward the ball". The phones face away from you, so voice is the channel.
   pump drill's only. While it's on the phones (capture app 0.10) keep 6 s before the strike
   instead of 2, so the pumps are in the clip, and every swing recorded is tagged with the drill (by time,
   `drills.json`) and left out of the trends, good-shot ranges, noise table and labeling worklist: a
-  rehearsal isn't the usual swing. The swing list says "pump drill · left out of trends". It ends when
-  turned off, or 30 minutes after the phones stop recording. A pump-drill swing's key positions are found
+  rehearsal isn't the usual swing. The swing list says "Pump drill · left out of trends". It ends when
+  turned off, or 30 minutes after the phones stop recording.
+  **Marked afterwards** (`POST /api/drill/mark {names, drill}`, kept as `marks` in `drills.json`; a mark
+  beats the time, and goes for both angles): a drill hit without the drill switched on is marked from
+  **Select** ("It was a drill…", any drill), from the swing's **⋯** menu or from the "Check this swing"
+  line of a long backswing (**It was the pump drill**); **Not a drill** is the other way round, for
+  normal swings recorded with a drill left on (`drill: "none"`), and `drill: null` takes a mark back
+  (the toast's Undo). `/api/clips` says `drillMarked`, the open swing "Pump drill, marked afterwards". The swing worker
+  works a marked swing's numbers out again as that drill (`drillAs` in its record), so it goes under
+  Drill sets a few seconds later. What marking can't bring back: such a swing was recorded with 2 s
+  before the strike, so of a pump drill only the last pump (if any) is in the video, and with no address
+  in it there is no shaft line to measure the hands against (Oct 9's 20: one pump or none each, no
+  numbers). The Pump drill card says so. Switching the drill on is what records the whole of it.
+  A pump-drill swing's key positions are found
   as in docs/key-positions.md "Pump drill", and the swing page shows a **Pump drill** card: each pump's
-  bottom (the P6 the drill rehearses: hands to plane, wrist hinge) against the good-shot P6 range, the
-  real swing's P6 after the pumps, and whether the rehearsal carried into the swing (within 1 in), with
+  bottom (the downswing position the drill rehearses: hands to plane, wrist hinge) against where the
+  good shots have the hands there, the real swing's after the pumps, and whether the rehearsal carried into the swing (within 1 in), with
   the focus's swing thought. Each "Pump n" button jumps the video there. Tempo isn't given for these swings.
 - **Drill pelvis check** (Start page): while a drill or coach program is running, a card shows the latest swing's
   pelvis vs ball at impact (one large number in inches, + = ahead), colored green/amber/gray from the target zone

@@ -55,6 +55,50 @@ class DrillsTest(unittest.TestCase):
         self.assertEqual(self.d.drill_at(last - 60), "pump")
 
 
+class MarksTest(unittest.TestCase):
+    """Said afterwards, clip by clip: it was this drill (not switched on), or no drill (left on)."""
+
+    def setUp(self):
+        self.clock = Clock()
+        self.path = Path(tempfile.mkdtemp(prefix="swingclips-drills-")) / "drills.json"
+        self.d = drills.Drills(self.path, self.clock)
+
+    def test_a_mark_beats_the_time_and_survives_a_restart(self):
+        self.assertEqual(self.d.drill_of("a.mp4", None, T0 - 50), (None, False))
+        self.assertEqual(self.d.mark(["a.mp4"], "pump"), {"a.mp4": None})
+        self.assertEqual(self.d.drill_of("a.mp4", None, T0 - 50), ("pump", True))
+        again = drills.Drills(self.path, self.clock)
+        self.assertEqual(again.drill_of("a.mp4", None, T0 - 50), ("pump", True))
+        self.assertEqual(again.drill_of("b.mp4", None, T0 - 50), (None, False))
+
+    def test_the_other_angle_goes_with_it(self):
+        self.d.mark(["face.mp4"], "pump")
+        self.assertEqual(self.d.drill_of("dtl.mp4", "face.mp4", T0), ("pump", True))
+
+    def test_not_a_drill_with_one_left_on(self):
+        self.d.set("pump")
+        self.clock.t += 600
+        self.d.set(None)
+        self.assertEqual(self.d.drill_of("a.mp4", None, T0 + 300), ("pump", False))
+        self.d.mark(["a.mp4"], drills.NOT_A_DRILL)
+        self.assertEqual(self.d.drill_of("a.mp4", None, T0 + 300), (None, True))
+
+    def test_taken_back_it_goes_by_the_time_again(self):
+        self.d.mark(["a.mp4", "b.mp4"], "flush")
+        self.assertEqual(self.d.mark(["a.mp4"], None), {"a.mp4": "flush"})
+        self.assertEqual(self.d.drill_of("a.mp4", None, T0), (None, False))
+        self.assertEqual(self.d.drill_of("b.mp4", None, T0), ("flush", True))
+
+    def test_unknown_drill_refused(self):
+        with self.assertRaises(ValueError):
+            self.d.mark(["a.mp4"], "nope")
+        self.assertEqual(self.d.marks, {})
+
+    def test_a_bad_mark_in_the_file_is_dropped(self):
+        self.path.write_text('{"marks": {"a.mp4": "nope", "b.mp4": "pump", "c.mp4": "none"}}', encoding="utf-8")
+        self.assertEqual(drills.Drills(self.path, self.clock).marks, {"b.mp4": "pump", "c.mp4": "none"})
+
+
 class PreTest(unittest.TestCase):
     """The phones keep more video before the strike during a drill (capture app 0.10 and later)."""
 
@@ -116,6 +160,64 @@ class Api(unittest.TestCase):
         off = client.post("/api/drill", json={"drill": None}).json()
         self.assertIsNone(off["current"])
         self.assertEqual(app.session_status.pre_wanted, drills.PRE_S)
+
+
+class MarkApi(unittest.TestCase):
+    """/api/drill/mark: swings marked afterwards are tagged, left out, and worked out again."""
+
+    def test_marked_swings_are_drill_swings_until_taken_back(self):
+        from fastapi.testclient import TestClient
+        import app
+        saved = app.drills_state
+        app.drills_state = drills.Drills(TMP / "drills-mark.json")
+        client = TestClient(app.app)
+        app.CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+        face = app.CLIPS_DIR / "swing_face_1920x1080_240fps_1700000000_2100ms.mp4"
+        dtl = app.CLIPS_DIR / "swing_dtl_1920x1080_240fps_1700000000_2050ms.mp4"
+        for p in (face, dtl):
+            p.write_bytes(b"x")
+
+        def listed():
+            return {c["name"]: c for c in app.listed_clips(with_shots=False)}
+        try:
+            self.assertEqual(client.post("/api/drill/mark", json={"names": [face.name], "drill": "nope"}).status_code, 400)
+            was = listed()[face.name]
+            self.assertEqual((was["drill"], was["drillMarked"], was["excluded"]), (None, False, False))
+            out = client.post("/api/drill/mark", json={"names": [face.name, "../x.mp4", "notes.txt"], "drill": "pump"}).json()
+            self.assertEqual(out["before"], {face.name: None})
+            now = listed()
+            for name in (face.name, dtl.name):
+                self.assertEqual((now[name]["drill"], now[name]["drillMarked"], now[name]["excluded"]), ("pump", True, True))
+            out = client.post("/api/drill/mark", json={"names": [face.name], "drill": None}).json()
+            self.assertEqual(out["before"], {face.name: "pump"})
+            self.assertEqual((listed()[face.name]["drill"], listed()[face.name]["excluded"]), (None, False))
+        finally:
+            face.unlink()
+            dtl.unlink()
+            app.drills_state = saved
+
+    def test_a_marked_swing_is_worked_out_again(self):
+        import app
+        saved = app.swings_code
+        app.swings_code = "abc"
+        try:
+            made = [app.models.DEFAULT, None]
+            clip = {"name": "a.mp4", "drill": None, "drillMarked": False}
+            old = {"code": "abc", "partner": None, "poseModel": made}
+            self.assertTrue(app.swing_record_stale(None, clip, None, made))
+            self.assertFalse(app.swing_record_stale(old, clip, None, made))
+            # A record from before drillAs was kept, recorded in drill mode: as it was.
+            self.assertFalse(app.swing_record_stale(old, {**clip, "drill": "pump"}, None, made))
+            # Marked since: again, once.
+            marked = {**clip, "drill": "pump", "drillMarked": True}
+            self.assertTrue(app.swing_record_stale(old, marked, None, made))
+            self.assertFalse(app.swing_record_stale({**old, "drillAs": "pump"}, marked, None, made))
+            # The mark taken back, or "not a drill" on a swing recorded with one left on.
+            self.assertTrue(app.swing_record_stale({**old, "drillAs": "pump"}, clip, None, made))
+            self.assertTrue(app.swing_record_stale(old, {**clip, "drillMarked": True}, None, made))
+            self.assertTrue(app.swing_record_stale({**old, "code": "old"}, clip, None, made))
+        finally:
+            app.swings_code = saved
 
 
 class PlanStepApi(unittest.TestCase):
