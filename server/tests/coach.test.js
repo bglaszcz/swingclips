@@ -109,3 +109,11 @@ test("against a target other than neutral, your usual keeps its sign", () => {
   assert.equal(c.aim, "more");
   assert.match(c.goal, /yours runs shallower than that: -1\.9° against -4°/);
 });
+
+test("a move's drill has an id for the server: a named drill, or reps of the move", () => {
+  assert.equal(C.drillId("leadHipP6", "more"), "move:leadHipP6:more");
+  assert.equal(C.drillId("handsPlaneP6", "less"), "pump");       // its drill is the pump drill
+  assert.equal(C.drillId("handsPlaneP6", "more"), "move:handsPlaneP6:more");
+  assert.equal(C.drillId("nope", "more"), null);
+  assert.equal(C.drillId("leadHipP6", "sideways"), null);
+});

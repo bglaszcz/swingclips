@@ -485,17 +485,82 @@ function renderFocusLive(box, f) {
   return true;
 }
 
-/** Practice's card: the focus swing by swing, redrawn as each swing's numbers arrive. */
+// The drill that is on (app.py /api/drill): {drill, from} or null. Reps of the focus's own drill are
+// the drill SwingCoach.drillId gives ("move:<move>:<aim>", or the pump drill for the move it is the
+// drill of: drills.py): out of the trends, shown here rep by rep.
+let prDrill = null;
+const prRepsId = f => SwingCoach.drillId(f.move, f.aim);
+
+/** Loads the drill that's on; true when it changed (trendsTick redraws the card then). */
+async function loadPracticeDrill() {
+  const d = await fetch("/api/drill").then(r => r.ok ? r.json() : null).catch(() => null);
+  if (!d) return false;
+  const was = JSON.stringify(prDrill);
+  prDrill = d.current || null;
+  return JSON.stringify(prDrill) !== was;
+}
+
+async function setPracticeDrill(drill) {
+  const res = await fetch("/api/drill", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ drill }),
+  }).catch(() => null);
+  if (!res || !res.ok) { showToast("Couldn't switch that: update the server (Tools), then try again"); return; }
+  prDrill = (await res.json()).current || null;
+  renderPracticeFocus();
+}
+
+/** The reps of the focus's drill since it was switched on, oldest first, as swing rows. */
+function practiceReps(f) {
+  const from = prDrill.from * 1000 - 3000;
+  return shownClips().filter(c => c.drill === prRepsId(f) && new Date(c.recorded).getTime() >= from).reverse().map(swingRow);
+}
+
+/** Practice's card: the focus swing by swing, redrawn as each swing's numbers arrive; and its drill, rep by rep. */
 function renderPracticeFocus() {
   const box = document.getElementById("pr-focus-live"), f = pbFocus();
   if (!box) return;
   box.hidden = !f;
   if (!f) return;
-  const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim];
+  const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim], fld = field(f.move);
   const head = pEl("div", "pb-head"), body = pEl("div", "pb-goal-live");
   head.append(pEl("strong", null, fix ? SwingShotStory.plain(fix.name).replace(/^./, c => c.toUpperCase()) : focusLabel(f.move)),
     pEl("span", "note", `your focus · ${pbFocusClubs(f)}`));
-  box.replaceChildren(head, body);
+  const reps = !!prDrill && prDrill.drill === prRepsId(f);
+  const drill = pEl("div", "pb-drill" + (reps ? " on" : ""));
+  if (reps) {
+    // Reps mode: the drill's words, each rep against the target, Done.
+    const done = pEl("button", "small primary", "Done");
+    done.onclick = () => setPracticeDrill(null);
+    drill.append(pEl("div", "pb-drill-line", prDrill.drill === "pump"
+      ? "Pump drill on: the phones keep 6 s before the strike, and these swings stay out of your trends"
+      : "Drill reps: these stay out of your trends"), done);
+    if (fix) drill.append(pEl("div", "pb-drill-how", SwingShotStory.plain(fix.drill)));
+    box.replaceChildren(head, drill, body);
+    const rows = practiceReps(f), t = SwingGoal.target(progressSessions(f.scope || f.club || "*"), f);
+    const newest = rows[rows.length - 1];
+    if (!t || !rows.length) {
+      body.append(pEl("div", "note", t ? "Hit the first rep: each one shows here against your target." : "No target yet: the first few normal swings set it."));
+    } else {
+      SwingGoalLive.render(body, { ...SwingGoal.live(rows, f, t), target: t }, {
+        title: "Your reps", label: lowerFirst(fld.label), fmt: v => aNum(fld, v),
+        thought: fix ? SwingShotStory.plain(fix.thought) : "",
+        waiting: !!newest && !newest.body && swingPending(newest.c),
+        onOpen: row => open(row.c.name),
+      });
+    }
+    return;
+  }
+  if (prRepsId(f)) {
+    if (prDrill) {
+      drill.append(pEl("div", "note", `${typeof drillName === "function" ? drillName(prDrill.drill) : "A drill"} is on: its swings stay out of your trends.`));
+    } else {
+      const go = pEl("button", "small", "Do the drill");
+      go.title = "Record reps of this drill: each one shows against your target, and they stay out of your trends";
+      go.onclick = () => setPracticeDrill(prRepsId(f));
+      drill.append(go, pEl("div", "pb-drill-how", SwingShotStory.plain(fix.drill)));
+    }
+  }
+  box.replaceChildren(head, drill, body);
   if (!renderFocusLive(body, f)) body.append(pEl("div", "note", "No swings since you set this focus yet: the first few set the picture."));
 }
 

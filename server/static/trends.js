@@ -262,7 +262,9 @@ function leaveTrendViews() {
 async function trendsTick() {
   // Practice: the focus swing by swing, as each swing's numbers arrive (board-view.js).
   if (!document.getElementById("practice").hidden && typeof renderPracticeFocus === "function") {
-    if (await loadTrendData()) renderPracticeFocus();
+    // The drill that's on can change from the Start page or a phone's browser too.
+    const data = await loadTrendData(), drill = typeof loadPracticeDrill === "function" && await loadPracticeDrill();
+    if (data || drill) renderPracticeFocus();
     return;
   }
   if (!trendsKey && !progressOpen) return;

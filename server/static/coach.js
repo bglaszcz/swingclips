@@ -398,7 +398,22 @@
     return { what: mv.what, when: mv.more.name, then: way, aim, why, goal, fix: aim ? mv[aim] : null };
   }
 
-  const api = { MOVES, RESULTS, targetOf, aimOf, coach };
+  // Moves whose drill has its own recording mode on the server (drills.py DRILLS): the pump drill's
+  // pumps come seconds before the strike, so the phones keep more video and the pumps are measured.
+  const NAMED_DRILLS = { "handsPlaneP6:less": "pump" };
+
+  /**
+   * The server's id for the drill of a move worked on one way (app.py /api/drill): a named drill where
+   * the move's drill is one, else reps of the move itself, "move:<key>:<more|less>". Null for a move
+   * the coach has no drill for.
+   */
+  function drillId(move, aim) {
+    const side = MOVES[move] && MOVES[move][aim];
+    if (!side || !side.drill) return null;
+    return NAMED_DRILLS[`${move}:${aim}`] || `move:${move}:${aim}`;
+  }
+
+  const api = { MOVES, RESULTS, targetOf, aimOf, coach, drillId };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingCoach = api;
 })(typeof window !== "undefined" ? window : globalThis);

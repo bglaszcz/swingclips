@@ -191,6 +191,13 @@
   button.pb-link { border: 0; background: none; padding: 0; min-height: 0; color: var(--accent); font-size: 13px; font-weight: 600;
                    text-decoration: underline; text-underline-offset: 2px; }
   .pb-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  /* The focus's drill on Practice: a button and the drill's words; reps mode when it's on. */
+  .pb-drill { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+  .pb-drill:empty { display: none; }
+  .pb-drill.on { padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
+  .pb-drill-line { font-weight: 600; flex: 1 1 200px; }
+  .pb-drill-how { flex: 1 1 320px; font-size: 13px; color: var(--muted); }
+  .pb-drill.on .pb-drill-how { flex-basis: 100%; color: var(--text); font-size: 14px; }
   .pb-head strong { font-size: 15px; }
   .pb-head .note { flex: 1; }
   .pb-ico { width: 28px; height: 28px; border-radius: 8px; background: var(--accent-soft); display: inline-grid; place-items: center; flex: none; }
@@ -5003,7 +5010,7 @@ function renderListbar() {
       `<button class="small" id="in-sel" title="Put the ticked swings back into the trends">Put back</button>` +
       `<button class="small" id="ok-sel" title="The ticked swings marked 'check' are fine: stop marking them">Looks fine</button>` +
       `<select id="drill-sel" aria-label="Mark the ticked swings as a drill" title="The ticked swings were a drill hit without the drill switched on (or no drill, with one left on): they get the drill's own numbers, go under Drill sets and stay out of the trends">` +
-      `<option value="">It was a drill…</option>${focusDrill() ? `<option value="${focusDrill()}">Reps for my focus</option>` : ""}` +
+      `<option value="">It was a drill…</option>${(focusDrill() || "").startsWith("move:") ? `<option value="${focusDrill()}">Reps for my focus</option>` : ""}` +
       `${drillKinds.map(k => `<option value="${k.id}">${k.name}</option>`).join("")}<option value="none">Not a drill</option></select>` +
       `<button class="small danger" id="del-sel">Delete</button><button class="small" id="cancel-sel">Done</button>`;
     const picked = [...selected].map(n => clips.find(c => c.name === n)).filter(Boolean);
@@ -5464,7 +5471,7 @@ function drillName(id) {
 /** The id of reps for the focus on Progress, if there is one. */
 function focusDrill() {
   const f = typeof journal !== "undefined" && journal && journal.focus;
-  return f && f.move && f.aim ? `move:${f.move}:${f.aim}` : null;
+  return f && f.move && f.aim ? SwingCoach.drillId(f.move, f.aim) : null;
 }
 
 /** Why a swing doesn't count in the trends: a drill swing (app.py /api/drill), or left out by hand. */

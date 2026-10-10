@@ -782,7 +782,13 @@ toward the ball". The phones face away from you, so voice is the channel.
   `move:leadHipP6:more`). The reps are tagged and left out of the trends like any drill swing, with the
   usual 2 s before the strike; the page names them by the move ("Reps: the lead hip getting to the target
   in the downswing", "Drill reps" on the list). Unlike the pump drill they are swings at the move itself,
-  so the practice voice does say their result (`practice.py`).
+  so the practice voice does say their result (`practice.py`). `SwingCoach.drillId(move, aim)`
+  (`coach.js`) gives the id to send: `move:...` for most moves, a named drill where the move's drill is
+  one (hands to plane in the downswing, less -> `pump`: 6 s of video and the pumps measured).
+  **Practice** has it on the focus's card (`board-view.js renderPracticeFocus`): **Do the drill** with the
+  drill's words beside it; while it is on, the card shows the reps (the swings tagged with that drill
+  since it was switched on) one dot each against the focus's target, the last rep's number big, and
+  **Done**. The reps never count in the progress score: they are rehearsals.
   **Marked afterwards** (`POST /api/drill/mark {names, drill}`, kept as `marks` in `drills.json`; a mark
   beats the time, and goes for both angles): a drill hit without the drill switched on is marked from
   **Select** ("It was a drill…", any drill), from the swing's **⋯** menu or from the "Check this swing"
