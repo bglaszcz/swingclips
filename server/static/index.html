@@ -138,6 +138,25 @@
   #a-picked-head .grow { flex: 1; }
   #a-back { align-self: flex-start; margin-bottom: 6px; }
   /* Analysis: ball flight (flightgrid.js) */
+  .fg-sentence { font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
+  .fg-grid-wrap { margin-bottom: 24px; overflow-x: auto; }
+  .fg-grid { display: grid; grid-template-columns: 80px repeat(3, minmax(80px, 1fr)); gap: 6px; min-width: 320px; align-items: stretch; }
+  .fg-col-head, .fg-row-head { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .fg-col-head { text-align: center; padding: 4px 2px; }
+  .fg-row-head { display: flex; align-items: center; padding: 4px 6px; }
+  .fg-cell { display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+             padding: 8px 6px; border-radius: var(--radius-sm, 6px); border: 1px solid var(--line);
+             cursor: pointer; text-align: center; min-height: 84px; gap: 4px; font-family: inherit;
+             color: var(--text); background: var(--panel); transition: border-color 0.15s; }
+  .fg-cell:hover { border-color: var(--accent); }
+  .fg-name { font-size: 12px; font-weight: 600; line-height: 1.2; }
+  .fg-count { font-size: 11px; color: var(--text); opacity: 0.9; }
+  .fg-mini-flight { width: 40px; height: 32px; flex: none; }
+  .fg-chart { position: relative; margin-bottom: 24px; }
+  .fg-above-svg { display: block; width: 100%; }
+  .fg-sessions { margin-bottom: 24px; }
+  .fg-sess-chart { position: relative; overflow-x: auto; }
+  .fg-sess-svg { display: block; }
   /* Analysis: spread (distro.js) */
   @media (min-width: 900px) {
     body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
@@ -2174,6 +2193,7 @@
 <script src="/static/focuspick.js"></script>
 <script src="/static/strikemap.js"></script>
 <script src="/static/explore.js"></script>
+<script src="/static/flightgrid.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
