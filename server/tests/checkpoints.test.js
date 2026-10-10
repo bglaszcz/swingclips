@@ -212,3 +212,144 @@ test("status line reflects club, swing counts and items inside range", () => {
   const aNoRange = Checkpoints.analyze(sess, { fields, ranges: {} });
   assert.equal(aNoRange.status, "7 iron · 10 swings · no good-shot ranges yet");
 });
+
+test("render: builds sentence, chips, grid, detail panel on tap with actions", () => {
+  function makeMockDoc() {
+    function createEl(tag) {
+      return {
+        tagName: tag.toUpperCase(),
+        className: "",
+        dataset: {},
+        style: {},
+        children: [],
+        hidden: false,
+        appendChild(child) { this.children.push(child); return child; },
+        replaceChildren(...kids) { this.children = [...kids]; },
+        setAttribute(k, v) { this[k] = v; },
+        getAttribute(k) { return this[k]; },
+        querySelectorAll(sel) {
+          const results = [];
+          function walk(node) {
+            if (sel === ".in-tile" && node.className && node.className.includes("in-tile")) results.push(node);
+            for (const c of (node.children || [])) walk(c);
+          }
+          walk(this);
+          return results;
+        },
+        classList: {
+          toggle(cls, val) {
+            const has = this._el.className.includes(cls);
+            if (val === undefined) val = !has;
+            if (val && !has) this._el.className += " " + cls;
+            else if (!val && has) this._el.className = this._el.className.replace(new RegExp("\\b" + cls + "\\b", "g"), "").trim();
+          },
+          add(cls) { if (!this._el.className.includes(cls)) this._el.className += " " + cls; },
+          remove(cls) { this._el.className = this._el.className.replace(new RegExp("\\b" + cls + "\\b", "g"), "").trim(); },
+        },
+      };
+    }
+    const doc = {
+      createElement(tag) {
+        const el = createEl(tag);
+        el.classList._el = el;
+        return el;
+      },
+      createElementNS(_ns, tag) {
+        const el = createEl(tag);
+        el.classList._el = el;
+        return el;
+      },
+    };
+    return doc;
+  }
+
+  // Set global document for render
+  const originalDoc = globalThis.document;
+  globalThis.document = makeMockDoc();
+
+  const range = { enough: true, reliable: true, q10: 10, q25: 20, q50: 30, q75: 40, q90: 50 };
+  const fields = [
+    { key: "tempo", label: "Tempo", unit: ":1", dec: 1 },
+    { key: "shoulderTop", label: "Shoulder turn", unit: "°", dec: 1, pos: "p4" },
+    { key: "lagP5", label: "Wrist hinge", unit: "°", dec: 1, pos: "p5" },
+    { key: "hipSway", label: "Hip sway", unit: "in", dec: 1, pos: "p7" },
+  ];
+  const ranges = { tempo: range, shoulderTop: range, lagP5: range, hipSway: range };
+
+  // 10 swings: tempo = 25 (inside), shoulderTop = 45 (high -> aim less), lagP5 = 15 (low -> aim more), hipSway = 25 (inside)
+  const rows = Array.from({ length: 10 }, () => ({
+    tempo: 25,
+    shoulderTop: 45,
+    lagP5: 15,
+    hipSway: 25,
+  }));
+  const sess = [{ key: "s1", start: 1000, rows }];
+
+  const a = Checkpoints.analyze(sess, { fields, ranges });
+  const box = globalThis.document.createElement("div");
+
+  let pickedMetric = null;
+  let goalKey = null, goalAim = null;
+
+  Checkpoints.render(box, a, {
+    onMetric: k => { pickedMetric = k; },
+    onGoal: (k, aim) => { goalKey = k; goalAim = aim; },
+  });
+
+  // Verify structure: sentence, chips, grid, panel, fold
+  assert.equal(box.children.length, 5);
+  const sentence = box.children[0];
+  assert.match(sentence.textContent, /Last session 2 of 4 body numbers/);
+
+  const chips = box.children[1];
+  assert.equal(chips.className, "cp-chips");
+  const chipLabels = chips.children.map(c => c.textContent);
+  assert.ok(chipLabels.includes("Favorites"));
+  assert.ok(chipLabels.includes("All"));
+  assert.ok(chipLabels.includes("Rhythm"));
+  assert.ok(chipLabels.includes("Top of the swing"));
+  assert.ok(chipLabels.includes("Downswing"));
+  assert.ok(chipLabels.includes("Impact"));
+
+  const grid = box.children[2];
+  assert.equal(grid.className, "cp-grid");
+  assert.equal(grid.children.length, 4); // All 4 items
+
+  const panel = box.children[3];
+  assert.equal(panel.className, "cp-panel");
+  assert.equal(panel.hidden, true); // Hidden until tile tapped
+
+  // Tap shoulderTop tile (index 1) -> outside range high (45 > 40)
+  const shoulderTile = grid.children.find(c => c.dataset.key === "shoulderTop");
+  assert.ok(shoulderTile);
+  shoulderTile.onclick();
+
+  assert.equal(panel.hidden, false);
+  const actions = panel.children[1];
+  assert.equal(actions.className, "cp-panel-actions");
+
+  // "See it over time"
+  const overTimeBtn = actions.children[0];
+  assert.equal(overTimeBtn.textContent, "See it over time");
+  overTimeBtn.onclick();
+  assert.equal(pickedMetric, "shoulderTop");
+
+  // "Make this my focus" is present because 45 > 40 (high -> aim less)
+  const focusBtn = actions.children.find(c => c.className.includes("cp-btn-focus"));
+  assert.ok(focusBtn);
+  assert.equal(focusBtn.textContent, "Make this my focus");
+  focusBtn.onclick();
+  assert.equal(goalKey, "shoulderTop");
+  assert.equal(goalAim, "less");
+
+  // Tap tempo tile (index 0) -> inside range (25 in 20..40)
+  const tempoTile = grid.children.find(c => c.dataset.key === "tempo");
+  tempoTile.onclick();
+  const tempoActions = panel.children[1];
+  const tempoFocusBtn = tempoActions.children.find(c => c.className.includes("cp-btn-focus"));
+  assert.equal(tempoFocusBtn, undefined); // Inside range -> no focus button
+
+  // Restore global document
+  globalThis.document = originalDoc;
+});
+
