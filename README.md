@@ -17,16 +17,20 @@ swing is tagged with the Square Omni's numbers for that shot.
 *The pictures use made-up data ([tools/demo](tools/demo)).*
 
 - **Did your last session go better?**  
-  Four plain tiles (good shots, on line, solid strikes, distance) compare today's session against your usual benchmarks and the session before.
+  A session score ring (0 to 100) and four plain tiles (good shots, on line, solid strikes, distance) compare today's session against your usual benchmarks and the session before.
   <br><img src="docs/img/progress-step1.png" alt="Progress step 1" width="600">
+
+- **Your game at a glance**  
+  A five-skill radar against your usual benchmarks, with strokes gained against a tour player per session and per club.
+  <br><img src="docs/img/progress-skills.png" alt="Progress skills and strokes gained" width="600">
 
 - **What should I work on, and is it working?**  
   Keeps you on one focus at a time with its drill and swing thought, and tracks whether the move and its ball-flight results have changed across sessions.
   <br><img src="docs/img/progress-focus.png" alt="Progress step 2" width="600">
 
-- **Where on the face?**  
-  A strike heat map on the club face for each club: where your strikes land, your usual spot, and the latest session's shots.
-  <br><img src="docs/img/strike-map.png" alt="Strike heat map" width="550">
+- **Around the target**  
+  Where shots finished around your target distance on the target line, strokes gained per shot, and what sideways and distance misses cost.
+  <br><img src="docs/img/analysis-target.png" alt="Around the target dispersion" width="600">
 
 - **Ball flight**  
   The nine ball flights from start line against curve, your usual flight, every shot from above, and session-by-session trends.
@@ -35,6 +39,14 @@ swing is tagged with the Square Omni's numbers for that shot.
 - **What goes with what**  
   Chart any delivery or body move against any result over every session, against that day's usual, with thirds and ranked links.
   <br><img src="docs/img/analysis-explore.png" alt="What goes with what analysis" width="600">
+
+- **Where on the face?**  
+  A strike heat map on the club face for each club: where your strikes land, your usual spot, and the latest session's shots.
+  <br><img src="docs/img/strike-map.png" alt="Strike heat map" width="550">
+
+- **Swing checkpoints**  
+  Body numbers across rhythm, top of the swing, downswing, and impact compared with your good-shot ranges, showing which sat inside and what drifted furthest out.
+  <br><img src="docs/img/analysis-checkpoints.png" alt="Swing checkpoints" width="600">
 
 - **Get ready before hitting**  
   Checks both camera phones, microphone strike triggers with sensitivity controls, launch monitor, and server at a glance before you swing.
