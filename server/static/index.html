@@ -191,6 +191,12 @@
   button.pb-link { border: 0; background: none; padding: 0; min-height: 0; color: var(--accent); font-size: 13px; font-weight: 600;
                    text-decoration: underline; text-underline-offset: 2px; }
   .pb-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  /* Has the focus held (graduate.js): one line under the target, its mark explained in a fold. */
+  .pb-held { font-size: 13px; }
+  .pb-held.held { font-weight: 600; color: var(--accent); }
+  .pb-held.slipped { color: var(--warn); }
+  .pb-held-how { font-size: 12px; }
+  .pb-held-how summary { cursor: pointer; color: var(--muted); }
   /* The focus's drill on Practice: a button and the drill's words; reps mode when it's on. */
   .pb-drill { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
   .pb-drill:empty { display: none; }
@@ -2533,6 +2539,7 @@
 <script src="/static/explore.js"></script>
 <script src="/static/board.js"></script>
 <script src="/static/goal.js"></script>
+<script src="/static/graduate.js"></script>
 <script src="/static/goal-live.js"></script>
 <script src="/static/review.js"></script>
 <script src="/static/flightgrid.js"></script>

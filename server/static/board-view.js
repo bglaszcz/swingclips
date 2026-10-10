@@ -414,6 +414,19 @@ function goalHead(f) {
   own.onclick = () => pbSetTarget(f, t);
   tl.append(own);
   text.append(tl);
+  // Has it held (graduate.js)? The mark for calling this one learned and picking the next thing.
+  if (typeof SwingGraduate !== "undefined" && p.after.n) {
+    const g = SwingGraduate.check(p), held = pEl("div", `pb-held ${g.state}`, SwingGraduate.words(g) + " ");
+    if (g.state === "held") {
+      const next = Object.assign(document.createElement("button"), { className: "pb-link", type: "button", textContent: "Pick the next thing" });
+      next.onclick = () => focusPicker();
+      held.append(next, " ");
+    }
+    const how = document.createElement("details");
+    how.className = "pb-held-how";
+    how.append(pEl("summary", null, "How it's worked out"), pEl("div", "muted", SwingGraduate.HOW));
+    text.append(held, how);
+  }
 
   // One bar per session: the share of swings in the target, before (grey) and since.
   if (p.sessions.length > 1) {
