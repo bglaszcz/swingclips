@@ -49,6 +49,33 @@
   .icon-btn { width: 36px; height: 36px; min-width: 36px; padding: 0; display: inline-grid; place-items: center;
               border-radius: 50%; font-weight: 700; }
   main { display: grid; grid-template-columns: 1fr; }
+  /* The shot list belongs to Swings (and Analysis, to pick a shot); every other tab has the whole width. */
+  body:not([data-view="swing"]):not([data-view="trends"]):not([data-view="analysis"]) #side { display: none; }
+  @media (min-width: 900px) {
+    body:not([data-view="swing"]):not([data-view="trends"]):not([data-view="analysis"]) main { grid-template-columns: 1fr; }
+  }
+  #progress > * { width: 100%; max-width: 820px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+  .p-seg { align-self: flex-start; }
+  .p-sess-row { display: grid; grid-template-columns: 90px 70px minmax(0, 1fr) 70px 70px; gap: 10px; align-items: center; padding: 9px 12px;
+                border-radius: 8px; font-size: 14px; font-variant-numeric: tabular-nums; cursor: pointer; }
+  .p-sess-row:hover { background: var(--panel-2); }
+  .p-sess-row.best { background: var(--accent-soft); }
+  .p-sess-row .bar { height: 10px; border-radius: 5px; background: var(--line); }
+  .p-sess-row .bar i { display: block; height: 10px; border-radius: 5px; background: var(--accent); }
+  .p-sess-row.p-sess-head { color: var(--muted); font-size: 12px; cursor: default; }
+  .p-sess-row.p-sess-head:hover { background: none; }
+  .p-to-analysis { display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding: 0 22px; font-size: 16px; font-weight: 600; }
+  #analysis { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; overflow-y: auto; }
+  .a-body { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  #a-rail { flex: 0 0 210px; display: flex; flex-direction: column; gap: 2px; }
+  #a-rail button { text-align: left; border: 0; background: transparent; min-height: 44px; padding: 0 14px; border-radius: 8px; font-size: 15px; }
+  #a-rail button:hover { background: var(--panel-2); }
+  #a-rail button.on { background: var(--accent-soft); color: var(--accent-2); font-weight: 700; }
+  #a-rail .a-h { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 12px 14px 2px; }
+  #a-main { flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+  #a-main > details[hidden] { display: none; }
+  #a-main > details > summary { pointer-events: none; list-style: none; }
+  #a-main > details > summary::-webkit-details-marker { display: none; }
   @media (min-width: 900px) {
     body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
     main { grid-template-columns: 340px 1fr; flex: 1; min-height: 0; }
@@ -246,9 +273,12 @@
   .aicoach-setup { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
   .aicoach-setup label { display: flex; flex-direction: column; gap: 4px; }
   .aicoach-setup input, .aicoach-setup select { max-width: 420px; }
-  #seq-strip { display: flex; flex-direction: column; gap: 4px; }
+  .transport { position: relative; }
+  #seq-strip { display: flex; flex-direction: column; gap: 4px; position: absolute; z-index: 30; left: 12px; top: calc(100% + 6px);
+               width: min(460px, calc(100% - 24px)); padding: 12px 14px; background: var(--panel); border: 1px solid var(--line-strong);
+               border-radius: var(--radius); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22); }
   #seq-strip[hidden], #viewer.no-seq #seq-strip { display: none; }
-  #seq-strip .seq-strip-chart { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+  #seq-strip .seq-strip-chart { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
   #seq-strip svg { display: block; width: 100%; height: 110px; cursor: ew-resize; touch-action: none; }
   #seq-strip .impact { stroke: var(--muted); stroke-dasharray: 4 3; }
   #seq-strip .axis { fill: var(--muted); font-size: 11px; }
@@ -1027,7 +1057,6 @@
 
   /* ---- Phones and small tablets ---- */
   @media (max-width: 899px) {
-    body[data-view]:not([data-view="swing"]) #side { display: none; }
     #viewer { padding: 12px; }
     #swinghead .sh-title { font-size: 19px; }
   }
@@ -1142,12 +1171,13 @@
   <nav class="tabs" aria-label="Sections">
     <button id="swings-btn" class="tab on" title="Your swings, session by session"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg><span>Swings</span></button>
     <button id="progress-btn" class="tab" title="How your swing and results are changing across sessions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 20h18"/><path d="m4 15 5-5 4 4 7-8"/></svg><span>Progress</span></button>
+    <button id="analysis-btn" class="tab" title="Pick a number and see it: charts and tables, one club at a time"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-8"/><path d="M22 20H2"/></svg><span>Analysis</span></button>
     <button id="practice-btn" class="tab" title="Pick one number and a range; the phone says it after each swing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg><span>Practice</span></button>
-    <button id="setup-btn" class="tab" title="Check both cameras before you start: live pictures from the phones"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg><span>Cameras</span></button>
     <span class="menu">
       <button class="tab menu-btn" id="tools-btn" title="Tools for testing the setup and the tracking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>Tools</span></button>
       <span class="menu-pop right" hidden>
         <button class="small" data-page="/start" title="The session start page: checks, both cameras, Start / Stop recording, coach program, plan and games">Start a session</button>
+        <button id="setup-btn" class="small" title="Check both cameras before you start: live pictures from the phones">Check cameras</button>
         <button class="small" data-page="/tripods" title="Find the tripod spots: live pictures, framing meters, level and alignment-stick tools, saved spots">Tripod setup</button>
         <button id="week-btn" class="small" title="Week for coach: one page a week for the coach with practice, ball flight, focus move, faults, and games">Week for coach</button>
         <button id="aicoach-btn" class="small" title="The AI coach: status, how to add an API key, the brief sent for your latest session, and kept notes">AI coach</button>
@@ -1208,9 +1238,9 @@
           <button id="impact" title="Show pelvis vs ball at impact (face-on)">Impact</button>
           <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane <kbd>P</kbd></button>
           <button id="night" title="Show the night pass skeleton (RTMW-l on the gaming PC)">Night pass</button>
-          <button id="seq" title="The swing order under the video (3D swings): hips, chest, lead arm and club speed, following the frames">Swing order</button>
         </span>
       </span>
+      <button id="seq" title="Who moves first: hips, chest, lead arm and club speed, following the frames (3D swings)">Swing order</button>
       <button id="compare-btn" title="Compare this swing with another one, side by side (C)">Compare…</button>
       <button id="label-btn" title="Label this swing by hand, for the scorecard (L)">Label</button>
       <span class="menu">
@@ -1224,9 +1254,9 @@
       <span id="frame"></span>
       <button id="fs" class="icon" title="Full screen (F)" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
     </div>
-    </div>
-    <!-- Swing order (view3d.js): the four speeds under the video, its playhead following the frames. -->
+    <!-- Swing order (view3d.js): a flyout under the bar, opened by its button. -->
     <div id="seq-strip" hidden></div>
+    </div>
     <div id="labelpanel" hidden></div>
     <!-- The swing in plain words (shotstory.js): what the ball did, why, what to try. -->
     <div id="coachcard" class="card" hidden></div>
@@ -1708,6 +1738,7 @@
       <button id="p-close" class="small">Close</button>
     </div>
     <div class="t-filters">
+      <span class="seg p-seg" id="p-group" role="group" aria-label="Club type"><button data-group="irons" class="on">Irons</button><button data-group="woods">Woods</button></span>
       <label>Period <select id="p-period">
         <option value="30">Last 30 days</option><option value="90">Last 90 days</option>
         <option value="365">Last year</option><option value="0">All</option>
@@ -1793,7 +1824,41 @@
     </div>
 
 
-    <div class="p-step p-step-more">One club at a time <label class="p-club-pick">Club <select id="p-club"></select></label></div>
+    <div class="t-card" id="p-sess-card">
+      <strong>Session by session</strong>
+      <div id="p-sess-list"></div>
+    </div>
+    <a href="#" class="t-card p-to-analysis" id="p-to-analysis" style="color: var(--text); text-decoration: none;"><span>Want the full numbers? Open Analysis</span><span aria-hidden="true">→</span></a>
+  </section>
+  <section id="analysis" hidden>
+    <div class="t-head">
+      <strong>Analysis</strong><span class="s-note">Pick a number on the left. One club at a time.</span>
+      <button id="a-close" class="small">Close</button>
+    </div>
+    <div class="t-filters">
+      <label>Club <select id="p-club"></select></label>
+      <label>Period <select id="a-period">
+        <option value="30">Last 30 days</option><option value="90">Last 90 days</option>
+        <option value="365">Last year</option><option value="0">All</option>
+      </select></label>
+      <label title="Shaky numbers: tracking noise or the conditions could account for them. Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
+    </div>
+    <div class="a-body">
+      <nav id="a-rail" aria-label="Analysis views">
+        <div class="a-h">Results</div>
+        <button data-card="today">Last session</button>
+        <button data-card="pattern">Shot pattern</button>
+        <div class="a-h">Strike</div>
+        <button data-card="strike">Where on the face</button>
+        <div class="a-h">Sessions</div>
+        <button data-card="sessions">Every session</button>
+        <button data-card="good">Good-shot ranges</button>
+        <div class="a-h">Bag</div>
+        <button data-card="gapping">Gapping</button>
+        <button data-card="wedges">Wedge matrix</button>
+        <button data-card="hcp">Handicap</button>
+      </nav>
+      <div id="a-main">
     <details class="t-card p-fold" data-fold="today">
       <summary><strong id="p-today-title">Last session with this club</strong></summary>
       <div id="p-today">
@@ -1871,6 +1936,8 @@
       <div id="p-hcp-list"></div>
       <div class="note">Typed in from the GHIN app when it changes (GHIN has no way for this page to read it).</div>
     </details>
+      </div>
+    </div>
   </section>
 </main>
 <div id="toast" hidden role="status"><span id="toast-text"></span><button id="toast-undo" class="small">Undo</button></div>
@@ -1896,10 +1963,11 @@
       <dl class="where">
         <dt>Ready bar</dt><dd>Both phones, Square and the server at a glance. Start and stop both phones here.</dd>
         <dt>Swings</dt><dd>The coaching card: what happened, why, try this; Advanced data for the numbers; the dots on the list; a session's Trends opens with its story.</dd>
-        <dt>Progress</dt><dd>The three steps, all clubs; one club at a time below.</dd>
+        <dt>Progress</dt><dd>Did the last session go better, what to work on, and session by session; irons or woods.</dd>
+        <dt>Analysis</dt><dd>Pick a number on the left (pattern, strike, gapping, wedges...) and see it on the right, one club at a time.</dd>
         <dt>Practice</dt><dd>Practise my #1 priority in one tap; games; pick a number yourself.</dd>
         <dt>Start page</dt><dd>Last swing and end of session cards.</dd>
-        <dt>Tools</dt><dd>Everyday first, checks below.</dd>
+        <dt>Tools</dt><dd>Start a session, Check cameras, then the checks.</dd>
         <dt>Greyed ~</dt><dd>A shaky number: noise or the conditions could account for it. <b>--</b> = no reading. Hover for why.</dd>
       </dl>
     </div>
@@ -1988,10 +2056,11 @@ let speed = 1;
 let showSkeleton = true;
 try { showSkeleton = localStorage.getItem("skeleton") !== "off"; } catch {}
 // Extra overlays, each remembered like the skeleton.
-const overlays = { angles: true, handpath: false, headbox: false, impact: false, plane: true, night: false, seq: true };
+const overlays = { angles: true, handpath: false, headbox: false, impact: false, plane: true, night: false, seq: false };
 // The numbers drawn on the videos are Advanced data: only with it on (and Angles on).
 const anglesOn = () => overlays.angles && viewer.classList.contains("adv");
 for (const k in overlays) {
+  if (k === "seq") continue;   // the Swing order flyout starts shut on every page load
   try { const v = localStorage.getItem("overlay-" + k); if (v) overlays[k] = v === "on"; } catch {}
 }
 let cachedNightColor = "";

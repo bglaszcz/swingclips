@@ -9,10 +9,12 @@
 
 const trendsBox = document.getElementById("trends");
 const progressBox = document.getElementById("progress");
+const analysisBox = document.getElementById("analysis");
 const tipEl = document.getElementById("t-tip");
 const pTipEl = document.getElementById("p-tip");
 let trendsKey = null;     // the session shown in Trends, by its key (see sessionsOf)
-let progressOpen = false;
+let progressOpen = false;   // Progress or Analysis: both draw from renderProgress
+let analysisOpen = false;
 let swingRecords = {};    // /api/swings: listed clip name -> {body, quality, setup} (or {error})
 let journal = { handicap: [], notes: {} };
 let goodSettings = null;  // /api/goodshots: {settings, defaults}: which shots count as good (goodshots.js)
@@ -21,7 +23,7 @@ let trendDataLoaded = false, trendDataAt = 0;
 
 const trendPick = { x: "earlyExt", y: "path", club: null };
 try { Object.assign(trendPick, JSON.parse(localStorage.getItem("trends") || "{}"), { club: null }); } catch {}
-const progressPick = { club: null, period: "90", metric: "earlyExt" };
+const progressPick = { club: null, period: "90", metric: "earlyExt", group: "irons" };
 try { Object.assign(progressPick, JSON.parse(localStorage.getItem("progress") || "{}"), { club: null }); } catch {}
 let leaveOutShaky = false;   // Trends and Progress: shaky numbers left out, not just marked
 try { leaveOutShaky = localStorage.getItem("leave-shaky") === "on"; } catch {}
@@ -193,8 +195,8 @@ function showView(which) {
   if (window.Compare) Compare.close(true);
   trendsBox.hidden = which !== "trends";
   progressBox.hidden = which !== "progress";
+  analysisBox.hidden = which !== "analysis";
   document.getElementById("setup").hidden = which !== "setup";
-  document.getElementById("setup-btn").classList.toggle("on", which === "setup");
   document.getElementById("shutter").hidden = which !== "shutter";
   document.getElementById("shutter-btn").classList.toggle("on", which === "shutter");
   document.getElementById("practice").hidden = which !== "practice";
@@ -229,11 +231,13 @@ function showView(which) {
   tipEl.hidden = pTipEl.hidden = true;
   if (which !== "swing") video.pause();
   if (which !== "trends") trendsKey = null;
-  progressOpen = which === "progress";
-  document.getElementById("progress-btn").classList.toggle("on", progressOpen);
+  progressOpen = which === "progress" || which === "analysis";
+  analysisOpen = which === "analysis";
+  document.getElementById("progress-btn").classList.toggle("on", which === "progress");
+  document.getElementById("analysis-btn").classList.toggle("on", analysisOpen);
   // The tabs: a session's trends belong to Swings; Labels, Club check, P4 check, Night report, Week for coach, Wrist check, AI coach and the shutter test are under Tools.
   document.getElementById("swings-btn").classList.toggle("on", which === "swing" || which === "trends");
-  document.getElementById("tools-btn").classList.toggle("on", which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck" || which === "p4check" || which === "week" || which === "wristcheck" || which === "aicoach");
+  document.getElementById("tools-btn").classList.toggle("on", which === "setup" || which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck" || which === "p4check" || which === "week" || which === "wristcheck" || which === "aicoach");
   document.body.dataset.view = which;
 }
 
@@ -280,13 +284,50 @@ async function openProgress() {
   if (await loadTrendData()) renderProgress();
 }
 
+async function openAnalysis() {
+  showView("analysis");
+  renderList();
+  selectAnalysisCard(analysisCard);
+  analysisBox.scrollTop = 0;
+  if (window.innerWidth < 900) analysisBox.scrollIntoView();
+  if (await loadTrendData()) renderProgress();
+}
+
 function closeTrendView() {
   showView("swing");
   renderList();
 }
 document.getElementById("t-close").onclick = closeTrendView;
 document.getElementById("p-close").onclick = closeTrendView;
-document.getElementById("progress-btn").onclick = () => progressOpen ? closeTrendView() : openProgress();
+document.getElementById("progress-btn").onclick = () => progressOpen && !analysisOpen ? closeTrendView() : openProgress();
+document.getElementById("analysis-btn").onclick = () => analysisOpen ? closeTrendView() : openAnalysis();
+document.getElementById("a-close").onclick = closeTrendView;
+document.getElementById("p-to-analysis").onclick = e => { e.preventDefault(); openAnalysis(); };
+
+// Analysis: the left rail picks one card (one of Progress's old folded cards); the card shows on the right.
+let analysisCard = "today";
+try { analysisCard = localStorage.getItem("analysis-card") || "today"; } catch {}
+const analysisCards = () => [...document.querySelectorAll("#a-main > details[data-fold]")];
+function selectAnalysisCard(name) {
+  if (!analysisCards().some(d => d.dataset.fold === name)) name = "today";
+  analysisCard = name;
+  try { localStorage.setItem("analysis-card", name); } catch {}
+  for (const d of analysisCards()) {
+    d.hidden = d.dataset.fold !== name;
+    d.open = d.dataset.fold === name;
+  }
+  for (const b of document.querySelectorAll("#a-rail button")) b.classList.toggle("on", b.dataset.card === name);
+  if (progressOpen) renderProgress();
+}
+for (const b of document.querySelectorAll("#a-rail button")) b.onclick = () => selectAnalysisCard(b.dataset.card);
+
+// Progress: irons or woods for the session score and the session list.
+function syncGroupButtons() {
+  for (const b of document.querySelectorAll("#p-group button")) b.classList.toggle("on", b.dataset.group === progressPick.group);
+}
+for (const b of document.querySelectorAll("#p-group button")) {
+  b.onclick = () => { progressPick.group = b.dataset.group; savePicks(); renderProgress(); };
+}
 
 // The folded cards in Trends: open or shut as last left, per browser.
 for (const d of trendsBox.querySelectorAll("details[data-fold]")) {
@@ -372,7 +413,7 @@ const byGroup = names => names.map(g => [g, FIELDS.filter(f => f.group === g)]);
 function savePicks() {
   try {
     localStorage.setItem("trends", JSON.stringify({ x: trendPick.x, y: trendPick.y }));
-    localStorage.setItem("progress", JSON.stringify({ period: progressPick.period, metric: progressPick.metric }));
+    localStorage.setItem("progress", JSON.stringify({ period: progressPick.period, metric: progressPick.metric, group: progressPick.group }));
   } catch {}
 }
 
@@ -864,6 +905,8 @@ function renderProgress() {
   const allRows = shownClips().filter(c => !c.excluded).map(swingRow);
   const clubs = clubOptions(document.getElementById("p-club"), allRows, progressPick, null);
   document.getElementById("p-period").value = progressPick.period;
+  document.getElementById("a-period").value = progressPick.period;
+  syncGroupButtons();
   const club = progressPick.club;
   const days = Number(progressPick.period);
   const since = days ? Date.now() - days * 86400000 : -Infinity;
@@ -876,7 +919,7 @@ function renderProgress() {
   const caveats = [unseenNote(all.flatMap(s => s.rows)),
     pending ? `${pending} swing${pending === 1 ? "" : "s"} still being worked out on the server` : ""].filter(Boolean);
   status.textContent = !clubs.length ? "No swings with launch monitor numbers yet."
-    : `${all.length} session${all.length === 1 ? "" : "s"} · ${swings} swings, all clubs` + (caveats.length ? " ⓘ" : "");
+    : `${all.length} session${all.length === 1 ? "" : "s"} · ${swings} swings` + (caveats.length ? " ⓘ" : "");
   status.title = caveats.join("\n");
 
   // Steps 2 and 3: every club at once, each swing against its own session-and-club usual.
@@ -891,7 +934,9 @@ function renderProgress() {
   fillSelect(metricSel, [["Club path and face", pooled], ...byGroup(["Face-on", "Down the line"])], progressPick.metric);
   if (metricSel.value !== progressPick.metric) { progressPick.metric = lead || "earlyExt"; metricSel.value = progressPick.metric; }
 
-  renderOverall(all);
+  const groupAll = progressSessions(progressPick.group === "woods" ? "woods" : "irons").filter(s => s.start >= since);
+  renderOverall(groupAll);
+  renderSessionList(groupAll);
   renderPriority(helps, top);
   renderHelpsEvidence(null, helps.irons.subs, helps.irons);
   renderChips(focus, top[0]);
@@ -999,7 +1044,34 @@ function formatSessionTopFault(latestRows, lastRows, when, lastWhen) {
     + (tf.thought ? `Swing thought: “${SwingShotStory.plain(tf.thought)}”` : "");
 }
 
-/** Step 1: the latest session against the last one, every club (sessionscore.js). */
+/** Progress, "Session by session": the last few sessions of the chosen club type, newest first. */
+function renderSessionList(sessions) {
+  const box = document.getElementById("p-sess-list");
+  const recent = [...sessions].reverse().slice(0, 8);
+  if (!recent.length) { box.textContent = "No sessions in this period."; return; }
+  const carry = field("carry"), spread = field("offlineSpread");
+  const rows = recent.map(s => {
+    const c = sessionValue(s.rows, carry), o = sessionValue(s.rows, spread);
+    return { s, c: c ? c.med : null, o: o ? o.med : null };
+  });
+  const maxC = Math.max(...rows.map(r => r.c || 0), 1);
+  const bestSpread = Math.min(...rows.filter(r => r.o != null).map(r => r.o));
+  const head = pEl("div", "p-sess-row p-sess-head");
+  for (const t of ["Session", "Swings", "Average carry", "Carry", "Spread"]) head.append(pEl("span", null, t));
+  box.replaceChildren(head, ...rows.map(r => {
+    const row = pEl("div", "p-sess-row" + (r.o != null && r.o === bestSpread && rows.length > 1 ? " best" : ""));
+    const bar = pEl("span", "bar"), fill = document.createElement("i");
+    fill.style.width = `${r.c ? Math.round(r.c / maxC * 100) : 0}%`;
+    bar.append(fill);
+    row.append(pEl("span", null, dayOf(r.s.start)), pEl("span", null, `${r.s.rows.length}`), bar,
+      pEl("span", null, r.c == null ? "–" : `${Math.round(r.c)} yd`), pEl("span", null, r.o == null ? "–" : `${Math.round(r.o)} yd`));
+    row.title = "Open this session's trends";
+    row.onclick = () => openTrends(r.s.key);
+    return row;
+  }));
+}
+
+/** Step 1: the latest session against the last one, irons or woods (sessionscore.js). */
 function renderOverall(all) {
   const head = document.getElementById("p-ov-head"), tiles = document.getElementById("p-ov-tiles");
   const faultEl = document.getElementById("p-ov-fault"), note = document.getElementById("p-ov-note");
@@ -1310,7 +1382,7 @@ async function renderProgressCombine() {
 let progressMetricPicked = false;
 function pickMetric(key) {
   // Picking a number opens the chart that shows it.
-  const chart = progressBox.querySelector('details[data-fold="working-chart"]');
+  const chart = document.querySelector('#progress details[data-fold="working-chart"]');
   if (chart) chart.open = true;
   progressPick.metric = key;
   progressMetricPicked = true;
@@ -1318,7 +1390,7 @@ function pickMetric(key) {
   renderProgress();
 }
 
-for (const [id, key] of [["p-club", "club"], ["p-period", "period"], ["p-metric", "metric"]]) {
+for (const [id, key] of [["p-club", "club"], ["p-period", "period"], ["a-period", "period"], ["p-metric", "metric"]]) {
   document.getElementById(id).onchange = e => {
     if (key === "metric") return pickMetric(e.target.value);
     progressPick[key] = e.target.value;
@@ -1328,8 +1400,8 @@ for (const [id, key] of [["p-club", "club"], ["p-period", "period"], ["p-metric"
 }
 
 // The folded cards (and "All numbers"): open or shut as last left, per browser.
-const foldOpen = name => progressBox.querySelector(`details[data-fold="${name}"]`)?.open;
-for (const d of progressBox.querySelectorAll("details[data-fold]")) {
+const foldOpen = name => document.querySelector(`#progress details[data-fold="${name}"], #analysis details[data-fold="${name}"]`)?.open;
+for (const d of document.querySelectorAll("#progress details[data-fold], #analysis details[data-fold]")) {
   try { d.open = localStorage.getItem("fold-" + d.dataset.fold) === "open"; } catch {}
   d.addEventListener("toggle", () => {
     try { localStorage.setItem("fold-" + d.dataset.fold, d.open ? "open" : "shut"); } catch {}
@@ -1456,7 +1528,7 @@ function renderTiles(sessions, club) {
     }
     tile.append(label, value, delta, sparkline(series));
     if (!shaky) tile.title = `${fieldName(f)}${f.spread ? " (standard deviation of the session's shots)" : " (session median)"}. Click to chart it.`;
-    tile.onclick = () => { pickMetric(key); document.getElementById("p-chart").scrollIntoView({ block: "nearest" }); };
+    tile.onclick = () => { if (analysisOpen) openProgress(); pickMetric(key); document.getElementById("p-chart").scrollIntoView({ block: "nearest" }); };
     return tile;
   }
 }
@@ -2710,6 +2782,6 @@ function renderWedges() {
 // Charts are drawn to their width.
 let viewWidth = 0;
 new ResizeObserver(() => {
-  const w = (trendsKey ? trendsBox : progressBox).clientWidth;
+  const w = (trendsKey ? trendsBox : analysisOpen ? analysisBox : progressBox).clientWidth;
   if ((trendsKey || progressOpen) && w !== viewWidth) { viewWidth = w; renderTrendView(); }
 }).observe(document.querySelector("main"));
