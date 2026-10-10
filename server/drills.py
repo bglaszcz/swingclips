@@ -11,8 +11,13 @@ IDLE_END_S without the phones recording (a drill left on after the session shoul
 The golfer can also say it after the fact, clip by clip (marks): these swings were the pump drill (it
 wasn't switched on), or these were no drill (it was left on). A mark beats the time. A swing marked
 afterwards was recorded with the usual lead-in, so a long drill may have started before its video does.
+
+Besides the drills named here, any move the coach has a drill for can be rehearsed (reps for a focus):
+its id is "move:<key>:<more|less>" (static/coach.js MOVES, e.g. "move:leadHipP6:more"). The page has
+the words for it; here its reps are rehearsals like the rest: tagged, out of the trends, usual lead-in.
 """
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -35,6 +40,17 @@ PRE_S = 2
 IDLE_END_S = 30 * 60
 # A mark saying a clip was no drill, though one was on when it was recorded.
 NOT_A_DRILL = "none"
+# Reps of a move's own drill: "move:<key>:<more|less>".
+MOVE_DRILL = re.compile(r"^move:[A-Za-z][A-Za-z0-9]{1,30}:(more|less)$")
+
+
+def known(drill) -> bool:
+    return isinstance(drill, str) and (drill in DRILLS or bool(MOVE_DRILL.match(drill)))
+
+
+def info(drill: str) -> dict:
+    """A drill's name and the seconds the phones keep before the strike while it's on."""
+    return DRILLS.get(drill) or {"name": "Drill reps", "pre": PRE_S}
 
 
 class Drills:
@@ -47,12 +63,12 @@ class Drills:
         except (OSError, ValueError):
             doc = {}
         cur = doc.get("current")
-        self.current: dict | None = cur if isinstance(cur, dict) and cur.get("drill") in DRILLS else None
-        self.periods: list[dict] = [p for p in doc.get("periods") or [] if isinstance(p, dict) and p.get("drill") in DRILLS]
+        self.current: dict | None = cur if isinstance(cur, dict) and known(cur.get("drill")) else None
+        self.periods: list[dict] = [p for p in doc.get("periods") or [] if isinstance(p, dict) and known(p.get("drill"))]
         marks = doc.get("marks")
         # clip name -> drill id or NOT_A_DRILL, as said afterwards.
         self.marks: dict[str, str] = {k: v for k, v in (marks if isinstance(marks, dict) else {}).items()
-                                      if v == NOT_A_DRILL or v in DRILLS}
+                                      if v == NOT_A_DRILL or known(v)}
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -75,7 +91,7 @@ class Drills:
 
     def set(self, drill: str | None) -> dict | None:
         """Turns a drill on (ending any other) or off (None). Returns the drill now on."""
-        if drill is not None and drill not in DRILLS:
+        if drill is not None and not known(drill):
             raise ValueError("Unknown drill")
         with self.lock:
             now = self.clock()
@@ -90,7 +106,7 @@ class Drills:
     def pre(self) -> int:
         """Seconds the phones should keep before the strike now."""
         with self.lock:
-            return DRILLS[self.current["drill"]]["pre"] if self.current else PRE_S
+            return info(self.current["drill"])["pre"] if self.current else PRE_S
 
     def drill_at(self, t: float) -> str | None:
         """The drill that was on at time t (s), or None."""
@@ -105,7 +121,7 @@ class Drills:
     def mark(self, names: list[str], drill: str | None) -> dict[str, str | None]:
         """Says afterwards which drill these clips were (an id), that they were no drill (NOT_A_DRILL),
         or takes that back (None: by the time again). Returns what each was marked before, for an undo."""
-        if drill is not None and drill != NOT_A_DRILL and drill not in DRILLS:
+        if drill is not None and drill != NOT_A_DRILL and not known(drill):
             raise ValueError("Unknown drill")
         with self.lock:
             before = {n: self.marks.get(n) for n in names}

@@ -285,6 +285,12 @@ class PracticeTest(unittest.TestCase):
         self.clock.t = T0 + 12
         self.assertEqual(self.p.step([swing(1, T0, drill="pump")], {"swing_face_1.mp4": record()}), [])
 
+    def test_reps_of_a_moves_own_drill_do(self):
+        self.turn_on()
+        self.clock.t = T0 + 12
+        [e] = self.p.step([swing(1, T0, drill="move:tempo:less")], {"swing_face_1.mp4": record()})
+        self.assertEqual(e["text"], "Tempo 3.2, in range")
+
     def test_voice_check_speaks_even_when_off(self):
         last = self.p.latest(None)["last"]
         self.p.voice_check()

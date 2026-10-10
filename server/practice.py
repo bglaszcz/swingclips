@@ -288,8 +288,10 @@ class Practice:
                 t, age = s["t"], now - s["t"]
                 if t < c["since"] or s["name"] in done_names or age > STALE_S:
                     continue
-                if s.get("drill"):
-                    continue  # a drill rehearsal (drills.py): not the move as it's swung
+                if s.get("drill") and not str(s["drill"]).startswith("move:"):
+                    # A drill rehearsal (drills.py): not the move as it's swung. Reps of a move's own
+                    # drill ("move:...") are swings at that move: they do get their result said.
+                    continue
                 if any(abs(t - d) <= PAIR_SLACK_S for d in done_times):
                     continue  # the other clip of a swing that's had its say
                 rec = records.get(s["name"])

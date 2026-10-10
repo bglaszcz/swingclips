@@ -41,6 +41,22 @@ class DrillsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.d.set("nope")
 
+    def test_reps_of_a_moves_own_drill(self):
+        """Any move the coach has a drill for (coach.js MOVES): tagged like a named drill, usual lead-in."""
+        self.d.set("move:leadHipP6:more")
+        self.assertEqual(self.d.pre(), drills.PRE_S)
+        self.clock.t += 300
+        self.d.set(None)
+        again = drills.Drills(self.path, self.clock)
+        self.assertEqual(again.drill_at(T0 + 100), "move:leadHipP6:more")
+        self.assertEqual(again.mark(["a.mp4"], "move:handsAhead:less"), {"a.mp4": None})
+        self.assertEqual(again.drill_of("a.mp4", None, T0 - 9), ("move:handsAhead:less", True))
+        self.assertEqual(drills.info("move:leadHipP6:more"), {"name": "Drill reps", "pre": drills.PRE_S})
+        for bad in ("move:leadHipP6", "move:leadHipP6:up", "move::more", "move:lead hip:more", "moves:x:more", 5):
+            self.assertFalse(drills.known(bad), bad)
+        with self.assertRaises(ValueError):
+            self.d.set("move:leadHipP6:sideways")
+
     def test_left_on_after_the_session_it_ends_where_recording_stopped(self):
         self.d.set("pump")
         self.clock.t += 300
@@ -145,6 +161,9 @@ class Api(unittest.TestCase):
         app.drills_state = drills.Drills(TMP / "drills-api.json")
         client = TestClient(app.app)
         self.assertEqual(client.post("/api/drill", json={"drill": "nope"}).status_code, 400)
+        reps = client.post("/api/drill", json={"drill": "move:leadHipP6:more"}).json()
+        self.assertEqual(reps["current"]["drill"], "move:leadHipP6:more")
+        self.assertEqual(app.session_status.pre_wanted, drills.PRE_S)
         on = client.post("/api/drill", json={"drill": "pump"}).json()
         self.assertEqual(on["current"]["drill"], "pump")
         self.assertEqual(app.session_status.pre_wanted, drills.DRILLS["pump"]["pre"])

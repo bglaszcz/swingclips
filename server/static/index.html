@@ -5003,7 +5003,8 @@ function renderListbar() {
       `<button class="small" id="in-sel" title="Put the ticked swings back into the trends">Put back</button>` +
       `<button class="small" id="ok-sel" title="The ticked swings marked 'check' are fine: stop marking them">Looks fine</button>` +
       `<select id="drill-sel" aria-label="Mark the ticked swings as a drill" title="The ticked swings were a drill hit without the drill switched on (or no drill, with one left on): they get the drill's own numbers, go under Drill sets and stay out of the trends">` +
-      `<option value="">It was a drill…</option>${drillKinds.map(k => `<option value="${k.id}">${k.name}</option>`).join("")}<option value="none">Not a drill</option></select>` +
+      `<option value="">It was a drill…</option>${focusDrill() ? `<option value="${focusDrill()}">Reps for my focus</option>` : ""}` +
+      `${drillKinds.map(k => `<option value="${k.id}">${k.name}</option>`).join("")}<option value="none">Not a drill</option></select>` +
       `<button class="small danger" id="del-sel">Delete</button><button class="small" id="cancel-sel">Done</button>`;
     const picked = [...selected].map(n => clips.find(c => c.name === n)).filter(Boolean);
     listbar.querySelector(".grow").textContent = selected.size ? `${selected.size} selected` : "Tick swings, or a session's box for all of it";
@@ -5451,12 +5452,25 @@ function closeViewer() {
 // The drills there are (drills.py), for their names and for marking swings afterwards.
 let drillKinds = [{ id: "pump", name: "Pump drill" }];
 fetch("/api/drill").then(r => r.ok ? r.json() : null).then(d => { if (d && d.drills && d.drills.length) drillKinds = d.drills; }).catch(() => {});
-const drillName = id => (drillKinds.find(k => k.id === id) || { name: `${id} drill` }).name;
+/** A drill's name; reps of a move's own drill ("move:<key>:<more|less>", drills.py) are named by the move. */
+function drillName(id) {
+  const m = /^move:(\w+):(more|less)$/.exec(id || "");
+  if (m) {
+    const side = SwingCoach.MOVES[m[1]] && SwingCoach.MOVES[m[1]][m[2]];
+    return side ? `Reps: ${SwingShotStory.plain(side.name)}` : "Drill reps";
+  }
+  return (drillKinds.find(k => k.id === id) || { name: `${id} drill` }).name;
+}
+/** The id of reps for the focus on Progress, if there is one. */
+function focusDrill() {
+  const f = typeof journal !== "undefined" && journal && journal.focus;
+  return f && f.move && f.aim ? `move:${f.move}:${f.aim}` : null;
+}
 
 /** Why a swing doesn't count in the trends: a drill swing (app.py /api/drill), or left out by hand. */
 function leftOutText(c, short) {
   // The list's line is narrow: there a drill swing says its drill only (drill swings are always left out).
-  if (c.drill) return short ? drillName(c.drill) : `${drillName(c.drill)}${c.drillMarked ? ", marked afterwards" : ""} · left out of trends`;
+  if (c.drill) return short ? (c.drill.startsWith("move:") ? "Drill reps" : drillName(c.drill)) : `${drillName(c.drill)}${c.drillMarked ? ", marked afterwards" : ""} · left out of trends`;
   return c.excluded ? "left out of trends" : "";
 }
 

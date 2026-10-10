@@ -1849,13 +1849,14 @@ class DrillChoice(BaseModel):
 
 @app.post("/api/drill")
 def set_drill(body: DrillChoice):
-    """Turns a drill on ({drill: "pump"}) or off ({drill: null})."""
+    """Turns a drill on ({drill: "pump"}, or reps of a move's own drill: {drill: "move:leadHipP6:more"})
+    or off ({drill: null})."""
     try:
         cur = drills_state.set(body.drill)
     except ValueError as e:
         raise HTTPException(400, str(e))
     drills_tick()
-    print(f"Drill: {drills.DRILLS[cur['drill']]['name'] if cur else 'off'}", flush=True)
+    print(f"Drill: {drills.info(cur['drill'])['name'] + ' (' + cur['drill'] + ')' if cur else 'off'}", flush=True)
     return drills_state.state()
 
 
@@ -1876,7 +1877,8 @@ def mark_drill(body: DrillMark):
     except ValueError as e:
         raise HTTPException(400, str(e))
     if names:
-        what = "by the time again" if body.drill is None else "not a drill" if body.drill == drills.NOT_A_DRILL             else drills.DRILLS[body.drill]["name"]
+        what = ("by the time again" if body.drill is None else "not a drill" if body.drill == drills.NOT_A_DRILL
+                else drills.info(body.drill)["name"])
         print(f"Drill: {len(names)} swing(s) marked {what}", flush=True)
     return {"ok": True, "before": before}
 
@@ -1919,7 +1921,7 @@ def get_plan_step():
 def set_plan_step(body: PlanStep):
     """Starts a plan block (or ends the plan with block null): practice voice off, the block's drill on
     (any other off), its game started (any other stopped)."""
-    if body.drill is not None and body.drill not in drills.DRILLS:
+    if body.drill is not None and not drills.known(body.drill):
         raise HTTPException(400, "Unknown drill")
     if body.game is not None and body.game not in {g["id"] for g in games_state.catalog()}:
         raise HTTPException(400, "Unknown game")

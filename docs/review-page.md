@@ -777,6 +777,12 @@ toward the ball". The phones face away from you, so voice is the channel.
   `drills.json`) and left out of the trends, good-shot ranges, noise table and labeling worklist: a
   rehearsal isn't the usual swing. The swing list says "Pump drill · left out of trends". It ends when
   turned off, or 30 minutes after the phones stop recording.
+  **Reps for a focus** (Oct 10): besides the named drills, any move the coach has a drill for can be
+  rehearsed: `POST /api/drill {drill: "move:<key>:<more|less>"}` (`static/coach.js` MOVES, e.g.
+  `move:leadHipP6:more`). The reps are tagged and left out of the trends like any drill swing, with the
+  usual 2 s before the strike; the page names them by the move ("Reps: the lead hip getting to the target
+  in the downswing", "Drill reps" on the list). Unlike the pump drill they are swings at the move itself,
+  so the practice voice does say their result (`practice.py`).
   **Marked afterwards** (`POST /api/drill/mark {names, drill}`, kept as `marks` in `drills.json`; a mark
   beats the time, and goes for both angles): a drill hit without the drill switched on is marked from
   **Select** ("It was a drill…", any drill), from the swing's **⋯** menu or from the "Check this swing"
