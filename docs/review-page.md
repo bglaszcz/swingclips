@@ -179,7 +179,7 @@ What the server works out for each swing and what each part of the review page s
   The page reads top to bottom as three steps (how did the last session go, what to work on, is it
   working: the chart opens on the focus move; inside the focus card's More fold, a short Drill sets block appears when
   drill sets exist, showing the latest set's pumps, drill swings' downswing position, and normal swings before (or "your usual": the last 15 same-club swings of earlier sessions, when the session starts with the drill) and
-  after with a verdict on whether the rehearsal carried over against wobble (`basis: "pumps"`). Sets marked afterwards with short clips (`strike < 4` seconds before strike, so videos start mid-drill with no pump numbers) are judged by direction (`basis: "direction"`), comparing whether the hands came down lower in swings after the drill against wobble ("the hands came down clearly lower in your swings after the drill", "maybe", "no change", or "too few swings"); short clips without a downswing reading are not counted as left-out shaky readings since the clip simply began mid-rehearsal. Up to two swings that aren't the drill between two drill swings don't end a set (`SET_BREAK`: one normal swing mid-drill split Oct 9's 20 into 12 and 8); they count neither before nor after. The latest two sets are shown directly on the card, with older sets folded behind "Earlier drill sets" and tapping any set opening its first drill swing); step 1 also highlights the session's top faults under
+  after with a verdict on whether the rehearsal carried over against wobble (`basis: "pumps"`). Sets marked afterwards with short clips (`strike < 4` seconds before strike, so videos start mid-drill with no pump numbers) are judged by direction (`basis: "direction"`), comparing whether the hands came down lower in swings after the drill against wobble ("the hands came down clearly lower in your swings after the drill", "maybe", "no change", or "too few swings"); short clips without a downswing reading are not counted as left-out shaky readings since the clip simply began mid-rehearsal. Up to two swings that aren't the drill between two drill swings don't end a set (`SET_BREAK`: one normal swing mid-drill split Oct 9's 20 into 12 and 8); they count neither before nor after. **Every drill that trains a number makes sets** (Oct 10, `SwingDrillSets.trained`): the pump (hands to plane in the downswing, less) and a focus's reps (`move:<key>:<aim>`: that move's number, that way). A reps set has `metric`, `aim`, `reps: {count, median, swings}` and `before` / `after` on that number; its verdict (`basis: "reps"`) asks two things in the aim's direction against the wobble: did the number move in the reps (`repsMoved`), and in the swings after (`afterMoved`): "clear carry-over into your swings", "maybe carrying over", "there in the reps, but no carry-over yet", "no change in the reps or after", "clearly there in the reps, too few swings after", "too few swings". The line names the move ("Reps: the lead hip getting to the target in the downswing, Oct 5 (10 reps, 7 iron): reps 2.6 in, your swings after 2.4 in (before 2.0 in): clear carry-over into your swings.") with the number's own unit (`indicators.js KNOWN_FIELDS`). Reps are whole in a 2 s video, so "short" is the pump's alone. With a focus set, the latest set of its own drill comes first. The latest two sets are shown directly on the card, with older sets folded behind "Earlier drill sets" and tapping any set opening its first drill swing); step 1 also highlights the session's top faults under
   the headline sentence, along with any strong links between them (e.g. casting and early extension)
   tested within clubs using Cochran-Mantel-Haenszel odds ratios and Benjamini-Hochberg correction (`static/faultlinks.js`);
   shot pattern, where on the face (strike heat map), sessions, good-shot rules, gapping,
@@ -785,6 +785,14 @@ toward the ball". The phones face away from you, so voice is the channel.
   so the practice voice does say their result (`practice.py`). `SwingCoach.drillId(move, aim)`
   (`coach.js`) gives the id to send: `move:...` for most moves, a named drill where the move's drill is
   one (hands to plane in the downswing, less -> `pump`: 6 s of video and the pumps measured).
+  **Has it held?** (`static/graduate.js`, on Progress's focus card under the target): the mark for
+  calling a focus learned. A session counts once it has 5 swings with a reading of the move; **held** =
+  the last three such sessions each had 70% of their swings in the target, on at least two different
+  days ("Held for three sessions in a row (72%, 75% and 79% of swings in your target). This one looks
+  learned." with **Pick the next thing**); **close** = two in a row, or three all on one day; **slipped**
+  = it held earlier and the latest session is under 50%; otherwise where the latest session stands
+  against the mark. A camera that moved inside the run is said. The mark is the app's own (the target is
+  the usual before the focus began, so 50% is where it started), explained in the fold under the line.
   **Practice** has it on the focus's card (`board-view.js renderPracticeFocus`): **Do the drill** with the
   drill's words beside it; while it is on, the card shows the reps (the swings tagged with that drill
   since it was switched on) one dot each against the focus's target, the last rep's number big, and
@@ -835,3 +843,13 @@ toward the ball". The phones face away from you, so voice is the channel.
   - **Last swing feedback**: the latest swing's number on the move, an "in target" or "out of target" badge in plain words and calm colors, and the focus's swing thought when out of target. Says "waiting for the swing's numbers" while processing.
   - **Target in words**: target value and baseline source (e.g. "Target: over 2.0 in, your usual before you started") and the share in target before you started.
   - When no focus is set: a quiet line "No focus set: pick one on Progress" linking to `/`.
+  - **Do the drill** (Oct 10; the same on Practice): under the head, with the drill's words beside it. It
+    switches on the focus's own drill (`SwingCoach.drillId`: reps of the move, or the pump drill where
+    that is the move's drill). The card is then in **reps mode**: "Drill reps: these stay out of your
+    trends", the drill's words in large type, and the reps since it was switched on as dots against the
+    target ("Your reps", `goal-live.js`), with **Done**. After Done, until 10 normal swings are in: "12
+    reps, 9 in your target. Now hit 10 normal swings: do they keep it? 3 of 10". The nudge card leaves the
+    focus's own drill to this card; reps that are not the focus's get its line and **Off** there.
+  - The card is drawn only when what it says changes (`focusCardSig`). The page's full swing list
+    (`allClips`) is loaded once; each poll of the last 3 hours' swings is merged into it, or a swing hit
+    after the page was opened would never reach this card or the nudge (it didn't, before Oct 10).

@@ -82,9 +82,13 @@ def generate_demo_data() -> None:
         # 2. Session before latest: pump drill set marked afterwards (10 swings, drill: "pump", drillMarked: True, strike ~ 2.1, excluded: True)
         #    followed by 12 normal swings with hands ~1 in lower than usual
         # 3. Latest session: ends with 2 swings with 1.8 s backswing so Swings list has "2 to check" and Start page nudges
+        # 4. Two sessions before the latest: reps of the focus's own drill (10 swings, drill "move:leadHipP6:more",
+        #    excluded, the lead hip ~0.6 in further than usual), 8 normal swings before them and 10 after that keep
+        #    about half of it (~0.3 in), so Drill sets has a reps line with carry-over
         target_10d = session_schedule[-1].date() - datetime.timedelta(days=10)
         sess_10d_idx = min(range(len(session_schedule)), key=lambda i: abs((session_schedule[i].date() - target_10d).days))
         sess_before_last_idx = len(session_schedule) - 2
+        sess_reps_idx = len(session_schedule) - 3
 
         if sess_idx == sess_10d_idx:
             swing_specs = (
@@ -105,6 +109,16 @@ def generate_demo_data() -> None:
                 + [("DR", "normal")] * 8
             )
             num_normal_i7 = 12
+        elif sess_idx == sess_reps_idx:
+            swing_specs = (
+                [("PW", "normal")] * 3
+                + [("I9", "normal")] * 3
+                + [("I7", "i7_before_reps")] * 8
+                + [("I7", "focus_reps")] * 10
+                + [("I7", "i7_after_reps")] * 10
+                + [("DR", "normal")] * 8
+            )
+            num_normal_i7 = 0
         elif is_latest_sess:
             swing_specs = (
                 [("PW", "normal")] * 3
@@ -153,6 +167,10 @@ def generate_demo_data() -> None:
             if club == "I7":
                 if role == "pump_drill_marked":
                     delta_hip = random.normalvariate(0.0, 0.3)
+                    lead_hip_p6 = round(2.0 + delta_hip, 2)
+                elif role in ("i7_before_reps", "focus_reps", "i7_after_reps"):
+                    # Around the usual before the reps, well past it in them, about half of that kept after.
+                    delta_hip = {"i7_before_reps": 0.0, "focus_reps": 0.6, "i7_after_reps": 0.3}[role] + random.normalvariate(0.0, 0.12)
                     lead_hip_p6 = round(2.0 + delta_hip, 2)
                 elif is_after_focus:
                     in_target = (i7_counter in i7_target_set)
@@ -371,6 +389,19 @@ def generate_demo_data() -> None:
                     ],
                 }
                 hands_plane_p6 = None
+                backswing_val = round(random.normalvariate(0.78, 0.02), 3)
+                downswing_val = round(random.normalvariate(0.27, 0.01), 3)
+                tempo_val = round(backswing_val / downswing_val, 2)
+                frames_cnt = 516
+                pos_obj = {"p1": 0.85, "p5": 2.14, "p6": 2.18, "p7": 2.23}
+            elif role == "focus_reps":
+                strike_face = 2.15
+                strike_dtl = 2.14
+                is_drill = "move:leadHipP6:more"
+                is_marked = False
+                is_excluded = True
+                drill_rec = None
+                hands_plane_p6 = round(random.normalvariate(4.2, 0.4), 1)
                 backswing_val = round(random.normalvariate(0.78, 0.02), 3)
                 downswing_val = round(random.normalvariate(0.27, 0.01), 3)
                 tempo_val = round(backswing_val / downswing_val, 2)

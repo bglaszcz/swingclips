@@ -1341,6 +1341,10 @@ function renderProgressDrillSets(club) {
   const allSets = SwingDrillSets.sets(clips, swingRecords, { noiseTable });
   const sets = allSets.filter(s => !club || s.club === club || (s.clubs && s.clubs.includes(club)));
   if (!sets.length) return;
+  // With a focus, the latest set of its own drill comes first.
+  const own = journal && journal.focus && journal.focus.move ? SwingCoach.drillId(journal.focus.move, journal.focus.aim) : null;
+  const ownAt = own ? sets.findIndex(s => s.drill === own) : -1;
+  if (ownAt > 0) sets.unshift(...sets.splice(ownAt, 1));
 
   const latest = sets[0];
   const verd = SwingDrillSets.verdict(latest);

@@ -25,11 +25,11 @@ swing is tagged with the Square Omni's numbers for that shot.
   <br><img src="docs/img/progress-skills.png" alt="Progress skills and strokes gained" width="600">
 
 - **What should I work on, and is it working?**  
-  Keeps you on one focus at a time with its drill and swing thought, and tracks whether the move and its ball-flight results have changed across sessions.
+  Keeps you on one focus at a time with its drill and swing thought, and tracks whether the move and its ball-flight results have changed across sessions. It says when the focus has held (three sessions in a row with 70% of swings in your target), so you know when to pick the next thing.
   <br><img src="docs/img/progress-focus.png" alt="Progress step 2" width="600">
 
 - **Did your drill carry into the swing?**  
-  Progress compares swings after a drill set against your usual, reporting whether the rehearsal carried over into your normal swings even when drills are marked after the fact.
+  Progress compares swings after a drill set against your usual, reporting whether the rehearsal carried over into your normal swings even when drills are marked after the fact. Every focus's drill counts, not only the pump drill: the reps' own number, and whether your swings after kept it.
   <br><img src="docs/img/drill-sets.png" alt="Progress drill sets comparison" width="600">
 
 - **Focus swing by swing**  
@@ -67,6 +67,10 @@ swing is tagged with the Square Omni's numbers for that shot.
 - **Get ready before hitting**  
   Checks both camera phones, microphone strike triggers with sensitivity controls, launch monitor, and server at a glance before you swing.
   <br><img src="docs/img/start-ready.png" alt="Start page get ready" width="550">
+
+- **Do the drill, rep by rep**  
+  The focus card on the Start page (and on Practice) has **Do the drill**: each rep shows as a dot against your target while you hit, the reps stay out of your trends, and **Done** hands over to normal swings to see whether they keep it.
+  <br><img src="docs/img/start-reps.png" alt="Start page focus card in reps mode" width="600">
 
 - **Notice drills while they happen**  
   The Start page notices consecutive rehearsal swings with a long backswing and offers to turn the pump drill on so the phones record the full 6-second video.

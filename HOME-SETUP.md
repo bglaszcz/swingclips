@@ -41,6 +41,7 @@ end).
 | Drills, no ball | The program only (no phones, no Square) | A no-ball program is picked; **Start program**, do the block's reps, then tap **All N passed** (or how many passed) once. |
 
 Doing the pump drill outside Today's plan: switch it on from the card, or mark the swings afterwards on the review page.
+Working on your focus: **Do the drill** on the focus card records your reps as drill reps (each one shows against your target, and they stay out of your trends); **Done** when you've had enough, then hit 10 normal swings and see whether they keep it.
 
 **After**
 
