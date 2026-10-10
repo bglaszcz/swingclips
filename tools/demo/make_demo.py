@@ -54,8 +54,9 @@ def make_session_schedule() -> tuple[list[datetime.datetime], str]:
 
     sessions.sort()
 
-    # Focus started around session 10 (halfway through the 10 weeks)
-    focus_idx = 10
+    # Focus started about 4 weeks before the latest session
+    target_date = sessions[-1].date() - datetime.timedelta(days=28)
+    focus_idx = min(range(len(sessions)), key=lambda i: abs((sessions[i].date() - target_date).days))
     focus_start_date = sessions[focus_idx].strftime("%Y-%m-%d")
 
     return sessions, focus_start_date
@@ -75,6 +76,18 @@ def generate_demo_data() -> None:
         is_after_focus = sess_start.strftime("%Y-%m-%d") >= focus_start_date
         is_latest_sess = (sess_idx == len(session_schedule) - 1)
         curr_time = sess_start
+
+        # Determine target share for I7 if after focus so bars climb from ~45% to ~75%
+        focus_sess_idx = next(i for i, s in enumerate(session_schedule) if s.strftime("%Y-%m-%d") >= focus_start_date)
+        num_since = len(session_schedule) - focus_sess_idx
+        sess_since = sess_idx - focus_sess_idx
+        if is_after_focus and num_since > 1:
+            target_share = 0.44 + 0.32 * (sess_since / (num_since - 1))
+            num_in_target = int(round(14 * target_share))
+            i7_target_set = set(random.sample(range(14), num_in_target))
+        else:
+            i7_target_set = set()
+        i7_counter = 0
 
         # 28 swings per session: PW, 9 iron, 7 iron, driver (both irons and woods >= 8)
         club_sequence = (
@@ -96,26 +109,42 @@ def generate_demo_data() -> None:
             dtl_name = f"swing_dtl_1920x1080_240fps_{ts}_{duration_ms - 10}ms.mp4"
 
             # 1. Within-session correlated hip motion (leads to confirmed link with smash & carry)
-            delta_hip = random.normalvariate(0.0, 0.4)
             if club == "I7":
-                base_hip = 4.25 if is_after_focus else 2.0
+                if is_after_focus:
+                    in_target = (i7_counter in i7_target_set)
+                    delta = random.uniform(0.06, 0.45)
+                    if in_target:
+                        lead_hip_p6 = round(2.0 + delta, 2)
+                        delta_hip = delta
+                    else:
+                        lead_hip_p6 = round(2.0 - delta, 2)
+                        delta_hip = -delta
+                    i7_counter += 1
+                else:
+                    delta_hip = random.normalvariate(0.0, 0.3)
+                    lead_hip_p6 = round(2.0 + delta_hip, 2)
             elif club == "DR":
+                delta_hip = random.normalvariate(0.0, 0.4)
                 base_hip = 4.0 if is_after_focus else 2.5
+                lead_hip_p6 = round(base_hip + delta_hip, 2)
             elif club == "PW":
+                delta_hip = random.normalvariate(0.0, 0.4)
                 base_hip = 3.5 if is_after_focus else 2.2
+                lead_hip_p6 = round(base_hip + delta_hip, 2)
             else:  # I9
+                delta_hip = random.normalvariate(0.0, 0.4)
                 base_hip = 3.8 if is_after_focus else 2.1
-            lead_hip_p6 = round(base_hip + delta_hip, 2)
+                lead_hip_p6 = round(base_hip + delta_hip, 2)
 
             # 2. Launch monitor metrics per club
             if club == "I7":
-                club_speed = round(random.normalvariate(86.5 if is_after_focus else 84.5, 0.8), 2)
-                base_smash = 1.35 if is_after_focus else 1.30
-                # Strong correlation with leadHipP6
+                progress_ratio = sess_since / (num_since - 1) if (is_after_focus and num_since > 1) else 0.0
+                club_speed = round(random.normalvariate(84.5 + 2.0 * progress_ratio, 0.8), 2)
+                base_smash = 1.30 + 0.05 * progress_ratio
                 smash = round(base_smash + 0.04 * delta_hip + random.normalvariate(0, 0.003), 2)
                 ball_speed = round(club_speed * smash, 2)
-                base_carry = 153.5 if is_after_focus else 146.0
-                carry = round(base_carry + 6.0 * delta_hip + random.normalvariate(0, 0.8), 1)
+                base_carry = 146.0 + 7.5 * progress_ratio
+                carry = round(base_carry + 5.0 * delta_hip + random.normalvariate(0, 0.8), 1)
                 total = round(carry + 2.8, 1)
                 attack = round(random.normalvariate(-3.8 if is_after_focus else -3.2, 0.35), 2)
                 loft = round(random.normalvariate(28.0, 0.5), 2)
@@ -685,7 +714,7 @@ def generate_demo_data() -> None:
         "**How it went**\n"
         "A solid session: 82% good shots, better than your usual 64%. The 7 iron was crisp and on line, carrying 153 yards with consistent flush contact.\n\n"
         "**Your focus**\n"
-        "Your focus on clearing the lead hip in the downswing is clearly taking hold. You moved the lead hip 4.3 inches forward toward the target, and smash and carry followed over the last 6 sessions.\n\n"
+        "Your focus on clearing the lead hip in the downswing is clearly taking hold. You hit your target on 11 of 14 swings (79%), and smash and carry followed over the last 10 sessions.\n\n"
         "**Next session**\n"
         "Stick with the hip rotation. Work on the Hip-to-the-stick drill: alignment stick in the ground just outside your lead hip at address. From the top, bump the lead hip into the stick before the arms start down, then turn. Swing thought: Lead hip to the target first."
     )
