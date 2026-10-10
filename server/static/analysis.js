@@ -939,6 +939,8 @@ function renderCheckpoints() {
   SwingCheckpoints.render(document.getElementById("a-checkpoints"), a, {
     club, clubWords: club ? clubWords(club) : "club", dayOf, fmt: (field, v, delta) => aNum(field, v, delta),
     onMetric: key => { aPick.ot = key; aSave(); selectAnalysisCard("overtime"); },
+    // From a number to a focus on it: Progress's own picker, which knows the moves a coach would give.
+    onGoal: async (key, aim) => { await openProgress(); focusPicker(key, aim); },
     onPick: (rows, title, key) => aShowPicked(rows, title, key ? [key] : []),
   });
 }

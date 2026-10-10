@@ -334,3 +334,164 @@ function renderBoardActivity() {
   legend.lastChild.append("more");
   legend.append(pEl("span", null, `${a.total.swings} swings in ${a.total.sessions} sessions so far`));
 }
+
+// ---- The focus as a goal: a target and a progress score (goal.js) ----
+
+const pbFocus = () => journal.focus && journal.focus.move ? journal.focus : null;
+const pbFocusClubs = f => f.scope ? (f.scope === "woods" ? "driver and woods" : "irons") : f.club ? clubName(f.club) : "every club";
+/** "under 3.2 in" / "over 42°": the target in the move's own number. */
+const pbTargetWords = (f, t) => `${t.side === "below" ? "under" : "over"} ${aNum(field(f.move), t.bound)}`;
+const PB_TARGET_FROM = { own: "your own target", before: "your usual before you started", first: "your first session with it" };
+
+function pbGoal(f) {
+  const sessions = progressSessions(f.scope || f.club || "*"), p = SwingGoal.progress(sessions, f);
+  if (!p) return null;
+  // Sessions since the focus began where the camera that measures the move had moved: the move's
+  // numbers either side don't compare, and neither do their scores.
+  const cam = cameraOf(field(f.move)), moved = new Set(cam ? sessions.filter(s => s.moved[cam]).map(s => s.key) : []);
+  for (const s of p.sessions) s.moved = s.since && moved.has(s.key);
+  p.cameraMoved = p.sessions.some(s => s.moved);
+  return p;
+}
+
+/** A score ring (0 to 1): `size` "mid" or "mini". */
+function pbRing(rate, size, label) {
+  const box = pEl("div", `pb-ring ${size}`);
+  const svg = svgEl("svg", { viewBox: "0 0 120 120", role: "img", "aria-label": `${label}: ${rate == null ? "no swings yet" : Math.round(rate * 100) + "%"}` }, box);
+  svgEl("circle", { class: "pb-ring-track", cx: 60, cy: 60, r: 50 }, svg);
+  const arc = svgEl("circle", { class: "pb-ring-arc", cx: 60, cy: 60, r: 50, transform: "rotate(-90 60 60)" }, svg);
+  arc.style.strokeDasharray = `${(rate || 0) * PB_RING} ${PB_RING}`;
+  const num = pEl("div", "pb-ring-num");
+  num.append(pEl("b", null, rate == null ? "–" : `${Math.round(rate * 100)}%`), pEl("span", null, label));
+  box.append(num);
+  return box;
+}
+
+/** Your own target for the focus, typed in; empty goes back to the usual before you started. */
+async function pbSetTarget(f, t) {
+  const fld = field(f.move), unit = fld.unit && fld.unit !== ":1" ? ` (${fld.unit})` : "";
+  const text = prompt(`Your own target for ${lowerFirst(fld.label)}${unit}.\nA swing counts when it is ${f.aim === "more" ? "at or over" : "at or under"} this number. `
+    + "Leave it empty to go back to your usual before you started.", t && t.from === "own" ? String(t.bound) : "");
+  if (text === null) return;
+  const v = text.trim() === "" ? null : Number(text.replace(",", "."));
+  if (v !== null && !Number.isFinite(v)) { alert("That isn't a number."); return; }
+  const body = { move: f.move, aim: f.aim, club: f.club || null, results: f.results || [], since: f.since };
+  if (f.scope) body.scope = f.scope;
+  if (v !== null) body.target = v;
+  await setFocus(body);
+  if (v !== null && (!journal.focus || journal.focus.target !== v)) alert("The server didn't keep the target: update the server (Tools), then set it again.");
+}
+
+/** The focus card's head: the progress score, what it counts, each session as a bar. */
+function goalHead(f) {
+  const head = pEl("div", "pb-goal-head"), p = pbGoal(f), text = pEl("div", "pb-goal-text");
+  if (!p) {
+    head.append(pbRing(null, "mid", "Progress score"), text);
+    text.append(pEl("div", null, "No progress score yet: it takes 5 swings with a reading of this move to set the target."));
+    return head;
+  }
+  const t = p.target, latest = p.latest;
+  head.append(pbRing(latest ? latest.rate : null, "mid", "Progress score"), text);
+  const first = pEl("div");
+  if (latest) {
+    first.append(pEl("b", null, `${latest.k} of ${latest.n} swings`), ` on ${dayOf(latest.start)} were in your target: ${lowerFirst(field(f.move).label)} ${pbTargetWords(f, t)}.`);
+    if (latest.n < SwingGoal.MIN_SESSION) first.append(" Too few swings to read much into.");
+  } else first.append("No swings since you set it: hit some with the drill, then look here.");
+  text.append(first);
+  if (p.after.n) {
+    const bits = [];
+    if (p.before.n) bits.push(`Before you started: ${pbPct(p.before.rate)}`);
+    bits.push(`since ${dayOf(new Date(f.since + "T12:00"))}: ${pbPct(p.after.rate)} of ${p.after.n} swings in ${p.after.sessions} session${p.after.sessions === 1 ? "" : "s"}`);
+    if (p.best && p.after.sessions > 1) bits.push(`best session ${pbPct(p.best.rate)} (${dayOf(p.best.start)})`);
+    text.append(pEl("div", "muted", bits.join(" · ").replace(/^s/, "S") + "."));
+  }
+  if (p.cameraMoved) {
+    text.append(pEl("div", "pb-goal-warn", "A camera moved since you started (marked on the chart): the move reads differently from a new spot, "
+      + "so scores either side of a move may not compare. Recalibrate after moving a tripod and set the focus's start again if it jumps."));
+  }
+  const tl = pEl("div", "muted", `Target: ${pbTargetWords(f, t)}, ${PB_TARGET_FROM[t.from]}. `);
+  const own = Object.assign(document.createElement("button"), { className: "pb-link", type: "button", textContent: t.from === "own" ? "Change it" : "Set my own" });
+  own.onclick = () => pbSetTarget(f, t);
+  tl.append(own);
+  text.append(tl);
+
+  // One bar per session: the share of swings in the target, before (grey) and since.
+  if (p.sessions.length > 1) {
+    const box = pEl("div", "a-chart pb-goal-chart"), svg = svgEl("svg", { role: "img" }, box), tip = pEl("div", "tip");
+    tip.hidden = true;
+    box.append(tip);
+    head.append(box);
+    // Drawn once it is in the page: it needs its width.
+    requestAnimationFrame(() => {
+      const shown = p.sessions.slice(-18);
+      const W = Math.max(240, svg.clientWidth || 520), H = 120, m = { l: 34, r: 8, t: 8, b: 20 };
+      svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+      svg.setAttribute("aria-label", "The share of swings in your target, one bar per session");
+      const sy = v => H - m.b - v * (H - m.t - m.b);
+      for (const v of [0, 0.5, 1]) {
+        svgEl("line", { x1: m.l, x2: W - m.r, y1: sy(v), y2: sy(v), class: "t-grid" }, svg);
+        svgEl("text", { x: m.l - 6, y: sy(v) + 4, "text-anchor": "end", class: "t-axis" }, svg).textContent = `${v * 100}%`;
+      }
+      if (p.before.rate != null) svgEl("line", { x1: m.l, x2: W - m.r, y1: sy(p.before.rate), y2: sy(p.before.rate), class: "pb-goal-line" }, svg);
+      const step = (W - m.l - m.r) / shown.length, bw = Math.min(26, step * 0.62);
+      const every = Math.ceil(shown.length / Math.max(1, Math.floor((W - m.l - m.r) / 48)));
+      shown.forEach((s, i) => {
+        const x = m.l + step * (i + 0.5), y = sy(s.rate), last = s === latest;
+        if (s.moved) svgEl("line", { x1: x - step / 2, x2: x - step / 2, y1: m.t, y2: H - m.b, class: "p-break" }, svg);
+        svgEl("rect", { x: x - bw / 2, y, width: bw, height: Math.max(2, sy(0) - y), rx: 3,
+          class: "pb-bar " + (last ? "latest" : s.since ? "since" : "before") + (s.n < SwingGoal.MIN_SESSION ? " thin" : "") }, svg);
+        if (i % every === 0 || last) svgEl("text", { x, y: H - 5, "text-anchor": "middle", class: "t-axis" }, svg).textContent = dayOf(s.start);
+        const hit = svgEl("rect", { x: x - step / 2, y: m.t, width: step, height: H - m.t - m.b, class: "t-hit", tabindex: 0, role: "button" }, svg);
+        hit.setAttribute("aria-label", `${dayOf(s.start)}: ${s.k} of ${s.n} swings in the target`);
+        const show = () => {
+          const r = svg.getBoundingClientRect(), c = box.getBoundingClientRect();
+          placeTip(tip, [[pbPct(s.rate), "in your target"], [`${s.k} of ${s.n}`, "swings"]],
+            `${dayOf(s.start)} · ${s.since ? "since you started" : "before you started"}${s.moved ? " · a camera had moved" : ""}`,
+            box, r.left - c.left + x * r.width / W, r.top - c.top + y * r.height / H);
+        };
+        const hide = () => { tip.hidden = true; };
+        hit.addEventListener("pointerenter", show); hit.addEventListener("focus", show);
+        hit.addEventListener("pointerleave", hide); hit.addEventListener("blur", hide);
+        hit.addEventListener("click", () => openTrends(s.key));
+      });
+    });
+  }
+  return head;
+}
+
+/** The strip at the top of Progress: the focus and its score, one tap from practising it; or a way to pick one. */
+function renderGoalStrip(top) {
+  const box = document.getElementById("pb-goal"), f = pbFocus(), text = pEl("div", "pb-goal-text"), actions = pEl("div", "pb-goal-actions");
+  const toFocus = () => document.getElementById("p-focus").scrollIntoView({ block: "start", behavior: "smooth" });
+  if (!f) {
+    const main = top && top[0];
+    text.append(pEl("div", "p-focus-kicker", "No focus yet"),
+      pEl("div", "p-focus-name", main ? `The numbers point to ${SwingShotStory.plain(main.fix.name)}` : "Pick one thing to work on"),
+      pEl("div", "muted", "Set a focus and this shows how many of your swings hit its target, session by session."));
+    const see = pEl("button", "small primary", main ? "See why" : "Pick a focus");
+    see.onclick = () => main ? toFocus() : focusPicker();
+    const pick = pEl("button", "small", "Pick my own");
+    pick.onclick = () => focusPicker();
+    actions.append(see, ...(main ? [pick] : []));
+    box.replaceChildren(pbRing(null, "mini", "Progress score"), text, actions);
+    return;
+  }
+  const mv = SwingCoach.MOVES[f.move], fix = mv && mv[f.aim], p = pbGoal(f), latest = p && p.latest;
+  text.append(pEl("div", "p-focus-kicker", `Your focus · ${pbFocusClubs(f)} · since ${dayOf(new Date(f.since + "T12:00"))}`),
+    pEl("div", "p-focus-name", fix ? lowerFirst(SwingShotStory.plain(fix.name)).replace(/^./, c => c.toUpperCase()) : focusLabel(f.move)));
+  text.append(pEl("div", "muted", !p ? "No progress score yet: it takes 5 swings with a reading of this move."
+    : !latest ? "No swings since you set it yet."
+    : `${latest.k} of ${latest.n} swings in your target on ${dayOf(latest.start)}`
+      + (p.before.n ? ` · ${pbPct(p.before.rate)} before you started` : "") + ` · ${p.after.n} swings in ${p.after.sessions} session${p.after.sessions === 1 ? "" : "s"} since`));
+  const practise = pEl("button", "small primary", "Practice this"), range = focusPracticeRange(f);
+  practise.disabled = !range;
+  practise.title = range ? "The phone says the number after each swing, and the swing thought after one out of the target" : "Not enough recent swings with this move to set a range";
+  practise.onclick = async () => {
+    const ok = await practiceFromFocus({ metric: f.move, club: f.club, min: range.min, max: range.max, cue: fix ? SwingShotStory.plain(fix.thought) : "" });
+    if (!ok) alert("Practice mode can't speak this move (the face-on turns aren't reliable enough one swing at a time).");
+  };
+  const view = pEl("button", "small", "View progress");
+  view.onclick = toFocus;
+  actions.append(practise, view);
+  box.replaceChildren(pbRing(latest ? latest.rate : null, "mini", "Progress score"), text, actions);
+}

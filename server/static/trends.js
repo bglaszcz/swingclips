@@ -952,6 +952,7 @@ function renderProgress() {
   renderSessionList(groupAll);
   if (!analysisOpen && typeof renderBoard === "function") renderBoard(groupAll, progressPick.group === "woods" ? "woods" : "irons");
   renderPriority(helps, top);
+  if (!analysisOpen && typeof renderGoalStrip === "function") renderGoalStrip(top);
   renderHelpsEvidence(null, helps.irons.subs, helps.irons);
   renderChips(focus, top[0]);
   renderWorking(focus, helps);
@@ -2325,11 +2326,15 @@ function topPriority() {
 }
 
 function focusPracticeRange(f) {
-  const vals = progressSessions(f.scope || f.club || "*").flatMap(s => s.rows).reverse().map(r => r[f.move]).filter(v => v != null).slice(0, PR_SUGGEST_N);
+  const sessions = progressSessions(f.scope || f.club || "*");
+  const vals = sessions.flatMap(s => s.rows).reverse().map(r => r[f.move]).filter(v => v != null).slice(0, PR_SUGGEST_N);
   if (vals.length < 5) return null;
   vals.sort((a, b) => a - b);
   const med = quantile(vals, 0.5), spread = quantile(vals, 0.9) - quantile(vals, 0.1);
   const dec = DECIMALS[field(f.move).unit] ?? 1, round = v => Number(v.toFixed(dec));
+  // In range = in the focus's target (goal.js), so practice and the progress score count the same swings.
+  const goal = typeof SwingGoal !== "undefined" ? SwingGoal.practiceRange(SwingGoal.target(sessions, f), vals) : null;
+  if (goal) return { min: round(goal.min), max: round(goal.max) };
   return f.aim === "more" ? { min: round(med), max: round(med + 2 * spread) } : { min: round(med - 2 * spread), max: round(med) };
 }
 
@@ -2476,6 +2481,19 @@ function renderPriority(h, top) {
     ? `More: the numbers now point to ${plain(pointsElsewhere.fix.name)} (why, and switching); all the evidence; picking your own`
     : "More: other things the numbers show, all the evidence, picking your own focus";
   renderPickOwnFocus(h);
+}
+
+/** Opens "Pick my own focus" (inside More) and scrolls to it; `move` and `aim` preselect one when the picker has it. */
+function focusPicker(move, aim) {
+  document.getElementById("p-focus-more").open = true;
+  const pick = document.getElementById("p-pick-focus");
+  pick.open = true;
+  const sel = document.getElementById("p-pick-move");
+  if (move && sel && [...sel.options].some(o => o.value === `${move}:${aim}`)) {
+    sel.value = `${move}:${aim}`;
+    sel.dispatchEvent(new Event("change"));
+  }
+  pick.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 
 /** Fold "Pick my own focus": pick any move from coach.js MOVES with a BODY number, non-fault only. */
@@ -2655,7 +2673,9 @@ function coachFocusInput() {
   const results = [...new Set([...(f.results || []), ...items.map(x => x.l.result)])];
   const focusCmp = SwingFocus.compare(progressSessions(f.scope || f.club || "*"), { ...f, results });
   const focusWorking = SwingFocus.working(focusCmp, key => lowerFirst(focusLabel(key)));
-  return { focus: { ...f, evidence }, focusCmp, focusWorking };
+  // The progress score against the focus's target (goal.js), for the brief.
+  const focusGoal = typeof pbGoal === "function" ? pbGoal(f) : null;
+  return { focus: { ...f, evidence }, focusCmp, focusWorking, focusGoal };
 }
 
 /** A coach program run's report for the brief, only when the run started the day of the session. */
@@ -2697,6 +2717,9 @@ function focusBlock(f, h) {
   const sinceDay = new Date(f.since + "T00:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const kids = [pEl("div", "p-focus-kicker", `Your focus · ${fname} · since ${sinceDay}`)];
   kids.push(pEl("div", "p-focus-name", fix ? `Work on ${fix.name}` : `${focusLabel(f.move)}: ${f.aim}`));
+  // How it's going as a count (board-view.js goalHead), and what to do next, before the why and the how.
+  const buttons = pEl("div", "t-filters");
+  if (typeof goalHead === "function") kids.push(goalHead(f), buttons);
 
   // Why: this move's own links in the latest numbers (its club group), else what it was set for.
   const group = f.scope || (f.club ? SwingGoodShots.groupOf(f.club) : "irons");
@@ -2714,11 +2737,10 @@ function focusBlock(f, h) {
   kids.push(pEl("div", "muted", "One thing at a time: swing faults come in chains, and fixing one often moves the next. "
     + "Give this one a few sessions before changing to another."));
 
-  const buttons = pEl("div", "t-filters");
-  const practiceBtn = pEl("button", "small", "Practice this");
+  const practiceBtn = pEl("button", "small primary", "Practice this");
   const range = focusPracticeRange(f);
   practiceBtn.disabled = !range;
-  practiceBtn.title = range ? `In range = ${f.aim === "more" ? "more" : "less"} than your usual (${range.min} to ${range.max}); the phone says the swing thought after a swing out of range`
+  practiceBtn.title = range ? `In range = in your target (${range.min} to ${range.max}); the phone says the swing thought after a swing out of range`
     : "Not enough recent swings with this move to set a range";
   practiceBtn.onclick = async () => {
     const ok = await practiceFromFocus({ metric: f.move, club: f.club, min: range.min, max: range.max, cue: fix ? fix.thought : "" });
@@ -2726,8 +2748,11 @@ function focusBlock(f, h) {
   };
   const end = pEl("button", "small", "End this focus");
   end.onclick = () => { if (confirm("End this focus? It stays in the history.")) setFocus({ move: null }); };
-  buttons.append(practiceBtn, end);
-  kids.push(buttons);
+  const change = pEl("button", "small", "Change focus");
+  change.title = "Pick another move to work on (this one stays in the history)";
+  change.onclick = () => focusPicker();
+  buttons.append(practiceBtn, change, end);
+  if (typeof goalHead !== "function") kids.push(buttons);
   return kids;
 }
 

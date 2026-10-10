@@ -157,6 +157,28 @@
   .pb-pill b { color: var(--text); font-weight: 650; }
   .pb-pill em { font-style: normal; font-weight: 650; color: var(--text); }
   .pb-pill em.better { color: var(--accent); } .pb-pill em.worse { color: var(--warn); }
+  /* The focus as a goal: the strip at the top of Progress and the head of the focus card. */
+  #pb-goal { display: flex; flex-direction: row; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .pb-goal-warn { flex: 1 1 100%; color: var(--warn); font-size: 13px; }
+  .pb-ring.mid { width: 104px; height: 104px; }
+  .pb-ring.mid .pb-ring-num b { font-size: 28px; }
+  .pb-ring.mid .pb-ring-num span { font-size: 10px; margin-top: 2px; }
+  .pb-ring.mini { width: 68px; height: 68px; }
+  .pb-ring.mini .pb-ring-num b { font-size: 19px; }
+  .pb-ring.mini .pb-ring-num span { display: none; }
+  .pb-goal-text { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .pb-goal-text .p-focus-name { font-size: 16px; }
+  .pb-goal-text .muted { color: var(--muted); font-size: 13px; }
+  .pb-goal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pb-goal-head { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 10px 0 4px; padding: 12px;
+                  border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+  .pb-goal-chart { flex: 1 1 100%; }
+  .pb-goal-chart svg { height: 120px; }
+  .pb-bar.before { fill: var(--muted); fill-opacity: 0.35; }
+  .pb-bar.since { fill: var(--accent); fill-opacity: 0.55; }
+  .pb-goal-line { stroke: var(--text); stroke-width: 1; stroke-dasharray: 4 3; stroke-opacity: 0.6; }
+  button.pb-link { border: 0; background: none; padding: 0; min-height: 0; color: var(--accent); font-size: 13px; font-weight: 600;
+                   text-decoration: underline; text-underline-offset: 2px; }
   .pb-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
   .pb-head strong { font-size: 15px; }
   .pb-head .note { flex: 1; }
@@ -1972,6 +1994,8 @@
       <label title="Shaky numbers: tracking noise or the conditions could account for them. Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
     </div>
 
+    <!-- The focus as a goal: its progress score, one tap from practising it (goal.js, board-view.js). -->
+    <div class="t-card" id="pb-goal"></div>
     <!-- Steps 1-3: every club at once (sessionscore.js); one club at a time further down. -->
     <div class="p-step"><span class="p-step-n">1</span><span id="p-ov-title">Did your last session go better than the one before?</span></div>
     <div class="t-card" id="p-overall">
@@ -2448,6 +2472,7 @@
 <script src="/static/strikemap.js"></script>
 <script src="/static/explore.js"></script>
 <script src="/static/board.js"></script>
+<script src="/static/goal.js"></script>
 <script src="/static/flightgrid.js"></script>
 <script src="/static/distro.js"></script>
 <script src="/static/checkpoints.js"></script>

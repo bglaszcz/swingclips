@@ -26,6 +26,7 @@ import gzip
 import json
 import collections
 import logging
+import math
 import multiprocessing
 import os
 import re
@@ -1585,13 +1586,16 @@ def set_note(body: SessionNote):
 
 class Focus(BaseModel):
     """What I'm working on (Progress, "My focus"): a body move (summary.js BODY key) and which way
-    (coach.js), with a club, the results it's for, and the day it started. move None ends it."""
+    (coach.js), with a club, the results it's for, and the day it started. move None ends it.
+    target: what "better" looks like in the move's own number (goal.js: the bound a swing has to be
+    on the aim's side of); without one the page uses the usual from before the focus started."""
     move: str | None = None
     aim: str | None = None       # "more" | "less"
     club: str | None = None
     scope: str | None = None     # "irons" | "woods" | None
     results: list[str] = []
     since: str | None = None     # YYYY-MM-DD; default today
+    target: float | None = None
 
 
 @app.post("/api/journal/focus")
@@ -1607,6 +1611,8 @@ def set_focus(body: Focus):
             raise HTTPException(400, "Unknown scope")
         if len(body.results) > 8 or not all(key.match(r) for r in body.results):
             raise HTTPException(400, "Bad results")
+        if body.target is not None and not math.isfinite(body.target):
+            raise HTTPException(400, "The target is a number")
         since = body.since or today
         try:
             datetime.strptime(since, "%Y-%m-%d")
@@ -1643,6 +1649,8 @@ def set_focus(body: Focus):
             }
             if body.scope is not None:
                 focus_dict["scope"] = body.scope
+            if body.target is not None:
+                focus_dict["target"] = body.target
             j["focus"] = focus_dict
         save_journal(j)
     return {"ok": True, "focus": j["focus"]}

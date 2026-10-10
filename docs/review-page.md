@@ -548,6 +548,22 @@ drawn by `renderHelps` in `trends.js`):
 
 ## My focus
 On **Progress**, first card (`static/focus.js`, drawn by `renderFocus` in `trends.js`):
+- **The focus as a goal: target and progress score** (`static/goal.js`, drawn by `goalHead` and
+  `renderGoalStrip` in `board-view.js`; Oct 10, the owner: pick the focus, then see progress on it, as
+  Sportsbox does). The **target** is what "better" looks like in the move's own number: your own bound
+  (`focus.target`, **Set my own** on the card), else your usual before you started (the middle value of the
+  move over the swings of the up-to-6 sessions before the focus began, on the side you aim for; with nothing
+  before, the first session since). The **progress score** is the share of a session's swings with a reading
+  on the right side of the target (the bound counts). Against your old usual it is 50% before you start by
+  construction, so over 50% means more swings than not now beat it. The focus card opens with the score ring
+  (the latest session since), what it counts, before / since / best in one line, and one bar per session
+  (before grey, since green, a dashed line at the before share; tap a bar for the session), then **Practice
+  this** (in range = in the target, so the phone's voice and the score count the same swings), **Change
+  focus** (opens Pick my own focus) and **End this focus**. A camera that moved since the focus began is
+  marked on the bars with a warning: the move reads differently from a new spot, so scores either side
+  don't compare. A strip at the top of Progress shows the same score with Practice this and View progress
+  (or, with no focus, what the numbers point to and a way to pick one). "Is it working?" (session medians
+  against the wobble, below) stays the judge of whether a change is real; the score is the count to follow.
 - **Make this my focus** on a suggested priority or through **Pick my own focus** saves it in the journal
   (`journal.json` `focus`: move, which way, club, scope: "irons" | "woods" | null, the results it's for, the day it started;
   `POST /api/journal/focus`, with `{"move": null}` to end it; normal switches go to `focuses` with `until`).

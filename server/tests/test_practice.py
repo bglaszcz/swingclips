@@ -494,6 +494,17 @@ class EndpointsTest(unittest.TestCase):
             self.assertEqual(j["focus"]["since"], "2026-09-15")
             self.assertEqual([x["move"] for x in j["focuses"]], ["handsAhead"], "hipSway returned to active focus, removed from history")
 
+            # 3b. A target of your own: kept with the focus, changed without adding to the history,
+            # dropped again when it is left out.
+            n = len(c.get("/api/journal").json()["focuses"])
+            c.post("/api/journal/focus", json={**older, "target": 3.5})
+            j = c.get("/api/journal").json()
+            self.assertEqual(j["focus"]["target"], 3.5)
+            self.assertEqual(len(j["focuses"]), n, "setting a target is not a new focus")
+            c.post("/api/journal/focus", json=older)
+            self.assertNotIn("target", c.get("/api/journal").json()["focus"])
+            self.assertEqual(c.post("/api/journal/focus", json={**older, "target": "soon"}).status_code, 422)
+
             # 4. Scope handling: accepts 'irons' and 'woods', rejects invalid scope
             c.post("/api/journal/focus", json={"move": "leadHipP6", "aim": "more", "club": "I7", "scope": "irons"})
             self.assertEqual(c.get("/api/journal").json()["focus"]["scope"], "irons")
