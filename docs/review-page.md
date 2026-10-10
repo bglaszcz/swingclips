@@ -154,7 +154,40 @@ What the server works out for each swing and what each part of the review page s
   tested within clubs using Cochran-Mantel-Haenszel odds ratios and Benjamini-Hochberg correction (`static/faultlinks.js`);
   shot pattern, where on the face (strike heat map), sessions, good-shot rules, gapping,
   the wedge matrix and handicap are folded cards underneath.
-- **Where on the face** (Progress card, folded under **Where on the face**, `data-fold="strike"`; `static/strikemap.js`):
+- **Analysis** (tab; `static/analysis.js`, numbers in `static/explore.js`): the full numbers, one club at a
+  time. A rail on the left picks one view; the club, the period and "Leave out shaky" are at the top. The
+  one-club cards that used to be folded under Progress live here (last session, shot pattern, where on the
+  face, every session, good-shot ranges, gapping, wedge matrix, handicap), plus:
+  - **What goes with what**: any number against any other, one dot per swing over every session in the
+    period; tap a dot to open the swing. Chips pick the result you want (distance, solid strikes, straighter,
+    shot shape, middle of the face); quick looks pick classic pairs (club speed into ball speed with smash
+    lines, face against path with the no-curve line, strike and smash). Dots are colored by good shot or by
+    newest session; hollow = a shaky number. Two ways to take the numbers: **as measured**, or **against that
+    day's usual** (each swing less the average of its own session and club, which cancels warm-up, tiredness
+    and where the cameras stood; one degree of freedom is spent per session). Both r values are shown, with a
+    warning when a link seen as measured fades inside sessions (it comes from days differing, not the swing).
+    "All irons and wedges" (or "Driver, woods and hybrids") pools the club type, always against each
+    session-and-club usual; irons and woods are never pooled together. Under the chart: the result in the
+    lowest, middle and highest third of the bottom number (median, middle half, share of good shots; tap a
+    row to list its swings), and every number on the other side ranked by how closely it goes with the
+    result inside sessions (tap one to chart it). A few far-off swings don't set the scale: it comes from
+    the middle 96% and a margin, and the rest are drawn at the edge.
+  - **Links at a glance**: every body move against 11 results as a grid (`SwingHelps.analyze`, the same
+    within-session test and labels as Progress's evidence). Deeper color = closer link; green ▲ = more of
+    the move went with a better result, amber ▼ = a worse one, grey + / - = a link with no better or worse
+    way; outlined = strong evidence; no number = could be chance. Tap a square to see its swings on the
+    explorer. The three clearest links are written out underneath.
+  - **Over time**: any number per session with this club (median and middle half, a spread, or the session's
+    good shots / on line / solid strikes); tap a session to open it.
+  - **One session** (from Over time or Every session): the session's tiles against the usual of the other
+    sessions in the period (a verdict from 8 swings), where its shots finished, one number shot by shot with
+    the middle of the last 7 swings as a line (warming up, tiring, a change that took), and every swing in a
+    sortable table. Older / Newer step through the club's sessions; **Session story** opens the session's
+    Trends. Tapping a swing anywhere in Analysis opens it with **Back to Analysis** above the video, which
+    returns to the same view.
+  - **Ball flight** (`static/flightgrid.js`) and **Spread** (`static/distro.js`) show on the rail once their
+    scripts are there.
+- **Where on the face** (Analysis card, `data-fold="strike"`; `static/strikemap.js`):
   heat map of impact locations on the club face (from Square's `faceImpactH` and `faceImpactV`) for the chosen club and period.
   The picture (`SwingStrikeMap.faceSvg`, Oct 9, the owner's ask: like FlightScope's): a club face seen from the front, toe on the
   left and the hosel on the right (an iron with grooves, or a wood face for the driver, woods and hybrids), an inch grid (half-inch

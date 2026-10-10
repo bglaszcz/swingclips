@@ -77,6 +77,68 @@
   #a-main > details[hidden] { display: none; }
   #a-main > details > summary { pointer-events: none; list-style: none; }
   #a-main > details > summary::-webkit-details-marker { display: none; }
+  @media (max-width: 760px) {
+    #a-rail { flex: 1 1 100%; flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+    #a-rail .a-h { display: none; }
+    #a-rail button { flex: none; white-space: nowrap; }
+  }
+  #analysis .t-filters label { max-width: 100%; min-width: 0; }
+  #analysis .t-filters select, #a-sess-metric { min-width: 0; max-width: 100%; }
+  /* Analysis charts (analysis.js): the explorer, the links grid, over time, one session. */
+  .a-chart { position: relative; }
+  .a-chart svg { display: block; width: 100%; height: 340px; overflow: visible; }
+  .a-chart.a-small svg { height: 240px; }
+  .a-row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+  .a-lab { font-size: 13px; color: var(--muted); }
+  .a-good { fill: var(--dot); stroke: var(--panel); stroke-width: 1.5; pointer-events: none; }
+  .a-miss { fill: var(--muted); fill-opacity: 0.55; stroke: var(--panel); stroke-width: 1.5; pointer-events: none; }
+  .a-good.hollow { fill: var(--panel); stroke: var(--dot); stroke-width: 1.5; }
+  .a-miss.hollow { fill: var(--panel); fill-opacity: 1; stroke: var(--muted); stroke-width: 1.5; }
+  .a-dim { opacity: 0.18; }
+  .a-ref { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 4; }
+  .a-ref-label { fill: var(--muted); font-size: 10px; }
+  .a-band { fill: var(--dot); fill-opacity: 0.08; }
+  .a-roll { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; stroke-opacity: 0.75; }
+  .p-key.a-key-miss { background: var(--muted); opacity: 0.6; }
+  .p-key.a-key-hollow { background: var(--panel); border: 1.5px solid var(--muted); }
+  .a-stat { font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+  .a-stat .muted { color: var(--muted); font-size: 12px; }
+  .a-table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; width: 100%; }
+  .a-table th, .a-table td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  .a-table th { color: var(--muted); font-weight: 600; vertical-align: bottom; }
+  .a-table th:first-child, .a-table td:first-child, .a-table .l { text-align: left; }
+  .a-table tbody tr { cursor: pointer; }
+  .a-table tbody tr:hover, .a-table tbody tr.on { background: var(--sel); }
+  .a-table th.sort { cursor: pointer; }
+  .a-table th.sort:hover { color: var(--text); }
+  .a-table th.sorted { color: var(--text); }
+  .a-table td.good { color: var(--accent); font-weight: 600; }
+  .a-table td .a-barcell { display: inline-block; vertical-align: middle; width: 70px; height: 8px; margin-right: 8px;
+                           border-radius: 4px; background: var(--line); position: relative; }
+  .a-table td .a-barcell i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: var(--dot); opacity: 0.45; }
+  .a-table td .a-barcell s { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text); }
+  .p-key.a-key-band { border-radius: 2px; background: var(--dot); opacity: 0.25; }
+  #a-links-legend b { color: var(--text); font-weight: 600; }
+  #a-links-grid { overflow-x: auto; }
+  #a-links-grid svg { display: block; width: auto; height: auto; }
+  .a-cell { stroke: var(--panel); stroke-width: 2; cursor: pointer; }
+  .a-cell.helps { fill: var(--accent); }
+  .a-cell.hurts { fill: var(--warn); }
+  .a-cell.link { fill: var(--muted); }
+  .a-cell.none { fill: var(--line); fill-opacity: 0.5; cursor: default; }
+  .a-cell-text { fill: var(--text); font-size: 10px; pointer-events: none; font-variant-numeric: tabular-nums; }
+  .a-cell-sure { fill: none; stroke: var(--text); stroke-width: 1.5; pointer-events: none; }
+  .a-col-label, .a-row-label { fill: var(--text); font-size: 11px; }
+  .a-row-label.sel, .a-col-label.sel { font-weight: 700; }
+  .a-crumb { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .a-crumb strong { font-size: 15px; }
+  .a-crumb .grow { flex: 1; }
+  .a-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  #a-picked-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  #a-picked-head .grow { flex: 1; }
+  #a-back { align-self: flex-start; margin-bottom: 6px; }
+  /* Analysis: ball flight (flightgrid.js) */
+  /* Analysis: spread (distro.js) */
   @media (min-width: 900px) {
     body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
     main { grid-template-columns: 340px 1fr; flex: 1; min-height: 0; }
@@ -1206,6 +1268,7 @@
     <div id="list"><div class="empty"><span class="spin"></span> Loading swings…</div></div>
   </aside>
   <section id="viewer" hidden>
+    <button id="a-back" class="small" hidden>← Back to Analysis</button>
     <div id="headrow"><div id="swinghead"></div><div id="camcheck" hidden></div></div>
     <div id="stages">
       <div class="stage">
@@ -1850,6 +1913,12 @@
         <div class="a-h">Results</div>
         <button data-card="today">Last session</button>
         <button data-card="pattern">Shot pattern</button>
+        <button data-card="flight" hidden>Ball flight</button>
+        <div class="a-h">Explore</div>
+        <button data-card="explore">What goes with what</button>
+        <button data-card="links">Links at a glance</button>
+        <button data-card="overtime">Over time</button>
+        <button data-card="spread" hidden>Spread</button>
         <div class="a-h">Strike</div>
         <button data-card="strike">Where on the face</button>
         <div class="a-h">Sessions</div>
@@ -1882,7 +1951,97 @@
       <svg id="p-pattern" role="img" aria-label="Where shots finished: carry against offline"></svg>
       <div class="p-legend" id="p-pattern-legend"><span><i class="p-key p-latest"></i>Latest session</span>
         <span><i class="p-key p-before"></i>Sessions before it</span></div>
-      <div class="note">The rings hold about two shots in three: a smaller ring is a tighter pattern.</div>
+      <div class="note">The rings hold about two shots in three: a smaller ring is a tighter pattern. Tap a shot to open its swing.</div>
+    </details>
+    <details class="t-card p-fold" data-fold="flight">
+      <summary><strong>Ball flight</strong> <span id="a-flight-status" class="note"></span></summary>
+      <div id="a-flight"></div>
+    </details>
+    <details class="t-card p-fold" data-fold="explore">
+      <summary><strong>What goes with what</strong> <span id="a-ex-status" class="note"></span></summary>
+      <div class="a-row"><span class="a-lab">I want</span><div class="p-chips" id="a-ex-outcomes"></div></div>
+      <div class="t-filters">
+        <label>Result <select id="a-ex-y"></select></label>
+        <label>against <select id="a-ex-x"></select></label>
+      </div>
+      <div class="t-filters">
+        <span class="seg" id="a-ex-scope" role="group" aria-label="Which swings"></span>
+        <span class="seg" id="a-ex-mode" role="group" aria-label="How the numbers are taken"><button data-mode="raw"
+          title="Each swing's numbers as they were measured">As measured</button><button data-mode="day"
+          title="Each swing against that session's own usual with the club: takes out warm-up, tiredness and where the cameras stood">Against that day's usual</button></span>
+        <span class="seg" id="a-ex-color" role="group" aria-label="What the colors show"><button data-color="good">Good shots</button><button data-color="latest">Newest session</button></span>
+      </div>
+      <div class="a-chart" id="a-ex-chart"><svg role="img"></svg><div class="tip" hidden></div></div>
+      <div class="p-legend" id="a-ex-legend"></div>
+      <div class="a-stat" id="a-ex-r"></div>
+      <div class="p-why-sub" id="a-ex-bins-title"></div>
+      <div style="overflow-x: auto"><table class="a-table" id="a-ex-bins"></table></div>
+      <div class="p-why-sub" id="a-ex-rank-title"></div>
+      <div id="a-ex-rank"></div>
+      <div class="a-row"><span class="a-lab">Quick looks</span><div class="p-chips" id="a-ex-looks"></div></div>
+      <details class="explain">
+        <summary>How to read it</summary>
+        <div class="note">One dot per swing in the period; tap one to open it. Green dots passed your good-shot rules,
+          grey ones didn't; hollow = a shaky number on either axis. The line is the straight-line fit. r runs from -1
+          to +1: how closely the two go up and down together (0 = no link). "Stands out from chance" means a link
+          this big would be unlikely by luck with this many swings; it still describes your swings and doesn't prove
+          one causes the other.</div>
+        <div class="note">"Against that day's usual" takes each swing against that session's own average with the
+          same club, which cancels what changes from day to day (warm-up, tiredness, where the cameras stood). It is
+          the fairer test, and the only way to put several clubs on one chart. The thirds table splits the swings into
+          the lowest, middle and highest third of the bottom number and shows the result in each; tap a row to list
+          its swings. Launch monitor: left is -, right is + (path + = in-to-out, face + = open, for a right-hander).</div>
+      </details>
+    </details>
+    <details class="t-card p-fold" data-fold="links">
+      <summary><strong>Links at a glance</strong> <span id="a-links-status" class="note"></span></summary>
+      <div class="a-chart" id="a-links-wrap"><div id="a-links-grid"></div><div class="tip" hidden></div></div>
+      <div class="p-legend" id="a-links-legend"></div>
+      <div class="note" id="a-links-note"></div>
+      <details class="explain">
+        <summary>How it's worked out</summary>
+        <div class="note">Each square is one body move against one result with this club, within sessions (every
+          swing against that session's own usual), pooled over the sessions in the period. The deeper the color, the
+          closer the two go together. Green ▲: more of the move went with a better result (longer, more solid, closer
+          to the line, less curve); amber ▼: with a worse one; grey: a link with no better or worse way (+ they rise
+          together, - one rises as the other falls). A dark outline = strong evidence (unlikely to be luck even after
+          testing every square, and the same way in at least 3 sessions); no number = could be chance. Tap a square
+          to see its swings. A link describes your swings; it doesn't prove the move causes the result, and a move
+          that helps one result can hurt another: check the whole row before changing anything.</div>
+      </details>
+    </details>
+    <details class="t-card p-fold" data-fold="overtime">
+      <summary><strong>Over time</strong> <span id="a-ot-status" class="note"></span></summary>
+      <div class="p-chips" id="a-ot-chips"></div>
+      <div class="t-filters"><label>Any number <select id="a-ot-metric" aria-label="Number to chart"></select></label></div>
+      <div class="a-chart" id="a-ot-chart"><svg role="img"></svg><div class="tip" hidden></div></div>
+      <div class="note">One column per session with this club. Faint dots are single swings; the colored dot is the
+        session's median, the bar its middle half. "Camera moved" marks where a phone was moved, so body numbers
+        either side don't compare. Tap a session to see its swings.</div>
+    </details>
+    <details class="t-card p-fold" data-fold="spread">
+      <summary><strong>Spread</strong> <span id="a-spread-status" class="note"></span></summary>
+      <div class="t-filters"><label>Number <select id="a-spread-metric" aria-label="Number to show"></select></label></div>
+      <div id="a-spread"></div>
+    </details>
+    <details class="t-card p-fold" data-fold="session">
+      <summary><strong>One session</strong></summary>
+      <div class="a-crumb" id="a-sess-crumb"></div>
+      <div id="a-sess-tiles" class="p-ov-tiles"></div>
+      <div class="a-two">
+        <div>
+          <div class="p-why-sub">Where the shots finished</div>
+          <div class="a-chart a-small" id="a-sess-pattern"><svg role="img"></svg><div class="tip" hidden></div></div>
+        </div>
+        <div>
+          <div class="p-why-sub a-row"><span>Shot by shot</span>
+            <select id="a-sess-metric" aria-label="Number to follow through the session"></select></div>
+          <div class="a-chart a-small" id="a-sess-seq"><svg role="img"></svg><div class="tip" hidden></div></div>
+        </div>
+      </div>
+      <div class="p-legend" id="a-sess-legend"></div>
+      <div class="p-why-sub">Every swing <span class="note">tap a column to sort, a row to open the swing</span></div>
+      <div style="overflow-x: auto"><table class="a-table" id="a-sess-table"></table></div>
     </details>
     <details class="t-card p-fold" data-fold="strike">
       <summary><strong>Where on the face</strong></summary>
@@ -1909,7 +2068,6 @@
       </details>
     </details>
 
-    <div class="p-step p-step-more">My bag &amp; game <span class="note">all clubs</span></div>
     <details class="t-card p-fold" id="p-gapping" data-fold="gapping">
       <summary><strong>Gapping</strong> <span id="p-gapping-status" class="note"></span></summary>
       <div style="overflow-x: auto" id="p-gapping-chart"></div>
@@ -1938,6 +2096,12 @@
       <div id="p-hcp-list"></div>
       <div class="note">Typed in from the GHIN app when it changes (GHIN has no way for this page to read it).</div>
     </details>
+    <!-- The swings behind a part of a chart (a third, a square, a bar): tap one to open it. -->
+    <div class="t-card" id="a-picked" hidden>
+      <div id="a-picked-head"><strong id="a-picked-title"></strong><span class="note grow" id="a-picked-note"></span>
+        <button class="small" id="a-picked-close">Close</button></div>
+      <div style="overflow-x: auto"><table class="a-table" id="a-picked-table"></table></div>
+    </div>
       </div>
     </div>
   </section>
@@ -2009,6 +2173,7 @@
 <script src="/static/programhistory.js"></script>
 <script src="/static/focuspick.js"></script>
 <script src="/static/strikemap.js"></script>
+<script src="/static/explore.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
@@ -4979,6 +5144,7 @@ setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 </script>
 <script src="/static/menus.js"></script>
 <script src="/static/trends.js"></script>
+<script src="/static/analysis.js"></script>
 <script src="/static/setup.js"></script>
 <script src="/static/shutter.js"></script>
 <script src="/static/practice.js"></script>

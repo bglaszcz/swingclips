@@ -15,6 +15,7 @@ const pTipEl = document.getElementById("p-tip");
 let trendsKey = null;     // the session shown in Trends, by its key (see sessionsOf)
 let progressOpen = false;   // Progress or Analysis: both draw from renderProgress
 let analysisOpen = false;
+let analysisReturn = null;  // set when a swing was opened from Analysis: the way back (analysis.js)
 let swingRecords = {};    // /api/swings: listed clip name -> {body, quality, setup} (or {error})
 let journal = { handicap: [], notes: {} };
 let goodSettings = null;  // /api/goodshots: {settings, defaults}: which shots count as good (goodshots.js)
@@ -228,6 +229,8 @@ function showView(which) {
   const coachBtn = document.getElementById("aicoach-btn");
   if (coachBtn) coachBtn.classList.toggle("on", which === "aicoach");
   viewer.hidden = which !== "swing" || !current;
+  if (which !== "swing") analysisReturn = null;
+  document.getElementById("a-back").hidden = !analysisReturn;
   tipEl.hidden = pTipEl.hidden = true;
   if (which !== "swing") video.pause();
   if (which !== "trends") trendsKey = null;
@@ -309,16 +312,25 @@ let analysisCard = "today";
 try { analysisCard = localStorage.getItem("analysis-card") || "today"; } catch {}
 const analysisCards = () => [...document.querySelectorAll("#a-main > details[data-fold]")];
 function selectAnalysisCard(name) {
-  if (!analysisCards().some(d => d.dataset.fold === name)) name = "today";
+  // A card with no button on the rail yet (its script isn't there), or one session with none picked.
+  const shown = n => n === "session" ? !!analysisSession
+    : !document.querySelector(`#a-rail button[data-card="${n}"]`)?.hidden;
+  if (!analysisCards().some(d => d.dataset.fold === name) || !shown(name)) name = "today";
   analysisCard = name;
-  try { localStorage.setItem("analysis-card", name); } catch {}
+  try { localStorage.setItem("analysis-card", name === "session" ? analysisSession.from : name); } catch {}
   for (const d of analysisCards()) {
     d.hidden = d.dataset.fold !== name;
     d.open = d.dataset.fold === name;
   }
-  for (const b of document.querySelectorAll("#a-rail button")) b.classList.toggle("on", b.dataset.card === name);
+  // One session has no button of its own: the view it was opened from stays lit.
+  const lit = name === "session" ? analysisSession.from : name;
+  for (const b of document.querySelectorAll("#a-rail button")) b.classList.toggle("on", b.dataset.card === lit);
+  // On a phone the rail is one scrolling row: keep the lit view in sight.
+  document.querySelector("#a-rail button.on")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  document.getElementById("a-picked").hidden = true;
   if (progressOpen) renderProgress();
 }
+let analysisSession = null;   // {key, from}: the session shown in Analysis's "One session", and the card it came from
 for (const b of document.querySelectorAll("#a-rail button")) b.onclick = () => selectAnalysisCard(b.dataset.card);
 
 // Progress: irons or woods for the session score and the session list.
@@ -381,6 +393,7 @@ function sd(values, min = 5) {
 
 /** One number per session for field f: the median of its swings, or their spread for a consistency field. */
 function sessionValue(rows, f) {
+  if (f.session) return f.session(rows);
   if (f.spread) {
     const s = sd(rows.map(r => r[f.of]));
     return s == null ? null : { med: s, n: rows.filter(r => r[f.of] != null).length };
@@ -957,6 +970,7 @@ function renderProgress() {
   renderProgressCombine();
   renderProgressPrograms();
   renderProgressDrillSets(focus && focus.club ? focus.club : null);
+  if (analysisOpen && typeof renderAnalysis === "function") renderAnalysis(sessions, club);
   const latestHcp = journal.handicap[journal.handicap.length - 1];
   document.getElementById("p-hcp-now").textContent = latestHcp ? `${latestHcp.index.toFixed(1)} on ${dayOf(new Date(latestHcp.date + "T12:00"))}` : "";
 }
@@ -1552,7 +1566,7 @@ function tileShaky(f, rows) {
   return { level: "shaky", codes: [], why: top, text: `${shaky.length} of ${used.length} swings: ${top.join("; ")}` };
 }
 
-const fmtTile = (f, v) => f.unit === ":1" ? `${v.toFixed(1)} : 1`
+const fmtTile = (f, v) => f.unit === ":1" ? `${v.toFixed(1)} : 1` : f.unit === "%" ? `${v.toFixed(f.dec)}%`
   : `${v.toFixed(f.dec)}${f.unit === "°" ? "°" : f.unit ? " " + f.unit : ""}`;
 
 function sparkline(series) {
@@ -1568,16 +1582,22 @@ function sparkline(series) {
   return svg;
 }
 
-/** One column per session: its swings as faint dots, the median (and middle half) in color, joined up; and where the focus started. */
-function drawOverTime(sessions, f, focus) {
-  const svg = document.querySelector("#p-chart svg");
+/**
+ * One column per session: its swings as faint dots, the median (and middle half) in color, joined up; and where the focus started.
+ * o: {svg, tip, onPick(session key)} for a chart other than Progress's (Analysis's Over time).
+ */
+function drawOverTime(sessions, f, focus, o = {}) {
+  const svg = o.svg || document.querySelector("#p-chart svg");
+  const pTipEl = o.tip || document.getElementById("p-tip");
+  const pick = o.onPick || openTrends;
+  const whole = f.spread || f.session;   // one number for the whole session: no single swings, no middle half
   const W = Math.max(280, svg.clientWidth || 600), H = 300, m = { l: 52, r: 16, t: 24, b: 44 };
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.setAttribute("aria-label", `${fieldName(f)} per session over time`);
   svg.replaceChildren();
   pTipEl.hidden = true;
   const cols = sessions.map(s => ({ s, v: sessionValue(s.rows, f),
-    swings: f.spread ? [] : s.rows.filter(r => r[f.key] != null).map(r => ({ v: r[f.key], shaky: isShaky(r, f) })) }));
+    swings: whole ? [] : s.rows.filter(r => r[f.key] != null).map(r => ({ v: r[f.key], shaky: isShaky(r, f) })) }));
   const ys = cols.flatMap(c => [...c.swings.map(x => x.v), ...(c.v ? [c.v.med] : [])]);
   const Y = niceTicks(...padded(ys));
   const n = Math.max(1, sessions.length);
@@ -1586,7 +1606,7 @@ function drawOverTime(sessions, f, focus) {
   const sy = v => H - m.b - (v - Y.lo) / (Y.hi - Y.lo) * (H - m.t - m.b);
   axes(svg, W, H, m, null, Y, null, sy, null);
   svgEl("text", { x: m.l, y: 12, class: "t-title" }, svg).textContent =
-    fieldName(f) + (f.spread ? ", per session" : ", per session (median and middle half)");
+    fieldName(f) + (whole ? ", per session" : ", per session (median and middle half)");
   // Date labels, thinned to fit.
   const every = Math.ceil(n / Math.max(1, Math.floor((W - m.l - m.r) / 56)));
   cols.forEach((c, i) => {
@@ -1616,7 +1636,7 @@ function drawOverTime(sessions, f, focus) {
   cols.forEach((c, i) => c.swings.forEach((x, k) =>
     svgEl("circle", { cx: sx(i) + jitter(k), cy: sy(x.v), r: 2.5, class: x.shaky ? "p-swing hollow" : "p-swing" }, svg)));
   const withV = cols.map((c, i) => [c, i]).filter(([c]) => c.v);
-  if (!f.spread) for (const [c, i] of withV) svgEl("line", { x1: sx(i), x2: sx(i), y1: sy(c.v.q1), y2: sy(c.v.q3), class: "p-iqr" }, svg);
+  if (!whole) for (const [c, i] of withV) svgEl("line", { x1: sx(i), x2: sx(i), y1: sy(c.v.q1), y2: sy(c.v.q3), class: "p-iqr" }, svg);
   if (withV.length > 1) svgEl("polyline", { points: withV.map(([c, i]) => `${sx(i)},${sy(c.v.med)}`).join(" "), class: "p-line" }, svg);
   for (const [c, i] of withV) svgEl("circle", { cx: sx(i), cy: sy(c.v.med), r: 5, class: "t-dot" }, svg);
 
@@ -1626,8 +1646,8 @@ function drawOverTime(sessions, f, focus) {
     const label = `${dayOf(c.s.start)}: ${c.v ? fmtTile(f, c.v.med) : "not enough swings"}`;
     hit.setAttribute("aria-label", label);
     const show = () => {
-      const lines = c.v ? [[fmtTile(f, c.v.med), f.spread ? "spread" : "median"]] : [["–", "not enough swings"]];
-      if (c.v && !f.spread) lines.push([`${fmtTile(f, c.v.q1)} – ${fmtTile(f, c.v.q3)}`, "middle half"]);
+      const lines = c.v ? [[fmtTile(f, c.v.med), f.session ? f.label.toLowerCase() : f.spread ? "spread" : "median"]] : [["–", "not enough swings"]];
+      if (c.v && !whole) lines.push([`${fmtTile(f, c.v.q1)} – ${fmtTile(f, c.v.q3)}`, "middle half"]);
       if (c.v) { ring.setAttribute("cx", sx(i)); ring.setAttribute("cy", sy(c.v.med)); ring.setAttribute("visibility", "visible"); }
       const note = journal.notes[c.s.key];
       const box = svg.getBoundingClientRect(), card = svg.parentElement.getBoundingClientRect(), k = box.width / W;
@@ -1639,8 +1659,8 @@ function drawOverTime(sessions, f, focus) {
     hit.addEventListener("focus", show);
     hit.addEventListener("pointerleave", hide);
     hit.addEventListener("blur", hide);
-    hit.addEventListener("click", () => openTrends(c.s.key));
-    hit.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openTrends(c.s.key); } });
+    hit.addEventListener("click", () => pick(c.s.key));
+    hit.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(c.s.key); } });
   });
 }
 
@@ -1676,6 +1696,16 @@ function drawPattern(sessions) {
       svgEl("polygon", { points: pts.join(" "), class: cls + "-ring" }, svg);
     }
     for (const r of rows) svgEl("circle", { cx: sx(r.offline), cy: sy(r.carry), r: cls === "p-latest" ? 4 : 3, class: cls }, svg);
+  }
+  // A tap on a shot opens its swing (the latest session's on top).
+  for (const r of [...before, ...latest]) {
+    const hit = svgEl("circle", { cx: sx(r.offline), cy: sy(r.carry), r: 9, class: "t-hit", tabindex: 0, role: "button" }, svg);
+    const words = `${dayOf(r.t)} · carry ${r.carry.toFixed(0)} yd · ${Math.abs(r.offline).toFixed(0)} yd ${r.offline < 0 ? "left" : "right"}`;
+    hit.setAttribute("aria-label", words);
+    svgEl("title", {}, hit).textContent = words;
+    const go = () => typeof openFromAnalysis === "function" ? openFromAnalysis(r.c.name) : open(r.c.name);
+    hit.addEventListener("click", go);
+    hit.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
   }
 }
 
@@ -1952,8 +1982,8 @@ function renderSessionTable(sessions) {
     };
     td.append(Object.assign(document.createElement("span"), { textContent: note }), edit);
     tr.append(td);
-    tr.onclick = () => openTrends(s.key);
-    tr.title = "Open this session's trends";
+    tr.onclick = () => typeof openAnalysisSession === "function" ? openAnalysisSession(s.key, "sessions") : openTrends(s.key);
+    tr.title = "See this session's swings";
     return tr;
   });
   const thead = document.createElement("thead"), tbody = document.createElement("tbody");

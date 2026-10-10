@@ -138,7 +138,9 @@
     ["ballSpeed", "Ball speed", "mph", s => s.ball.speed], ["clubSpeed", "Club speed", "mph", s => s.clubData.speed],
     ["smash", "Smash", "", s => s.clubData.smash],
     ["path", "Club path", "°", s => s.clubData.path], ["face", "Face to target", "°", s => s.clubData.faceToTarget],
-    ["faceToPath", "Face to path", "°", s => s.clubData.faceToTarget - s.clubData.path],
+    // No club data (Square read only the ball): no face to path, not 0.
+    ["faceToPath", "Face to path", "°", s => s.clubData.faceToTarget == null || s.clubData.path == null ? null
+      : s.clubData.faceToTarget - s.clubData.path],
     ["attack", "Attack angle", "°", s => s.clubData.angleOfAttack], ["loft", "Dynamic loft", "°", s => s.clubData.loft],
     ["launch", "Launch", "°", s => s.ball.vla], ["direction", "Direction", "°", s => s.ball.hla],
     ["spinAxis", "Spin axis", "°", s => s.ball.spinAxis], ["spin", "Spin", "rpm", s => s.ball.totalSpin],
