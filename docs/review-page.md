@@ -185,8 +185,18 @@ What the server works out for each swing and what each part of the review page s
     sortable table. Older / Newer step through the club's sessions; **Session story** opens the session's
     Trends. Tapping a swing anywhere in Analysis opens it with **Back to Analysis** above the video, which
     returns to the same view.
-  - **Ball flight** (`static/flightgrid.js`) and **Spread** (`static/distro.js`) show on the rail once their
-    scripts are there.
+  - **Ball flight** (`static/flightgrid.js`): the nine ball flights from start line (left, straight, right beyond 2°)
+    against sideways curve (left, straight, right beyond 2.5% of carry). A plain sentence describes your usual flight
+    and how the latest session compared; a 3x3 grid of buttons displays each flight's name, share, count, and miniature
+    trajectory curve (tap any cell to pick its swings); a top-down view plots every shot as a curve bending to its landing spot
+    (latest session in accent, earlier sessions in faint grey, hover for details, tap to open the swing); and stacked bars
+    show start line and curve shares session by session.
+  - **Spread** (`static/distro.js`): how spread out any launch monitor or body number is with this club, and whether the
+    latest session was tighter. A summary sentence reports the middle half (interquartile range) of the latest session versus
+    earlier sessions (tighter, wider, or same within 15%); a histogram compares the share of each group across rounded bins,
+    with an optional good-shot range band and median ticks; and session-by-session box plots (newest on top) show the 10th-90th
+    percentile whiskers, middle-half box, and median tick on a shared scale. Tap a bin to pick its swings or tap a session row
+    to view that session.
 - **Where on the face** (Analysis card, `data-fold="strike"`; `static/strikemap.js`):
   heat map of impact locations on the club face (from Square's `faceImpactH` and `faceImpactV`) for the chosen club and period.
   The picture (`SwingStrikeMap.faceSvg`, Oct 9, the owner's ask: like FlightScope's): a club face seen from the front, toe on the

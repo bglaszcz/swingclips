@@ -28,6 +28,14 @@ swing is tagged with the Square Omni's numbers for that shot.
   A strike heat map on the club face for each club: where your strikes land, your usual spot, and the latest session's shots.
   <br><img src="docs/img/strike-map.png" alt="Strike heat map" width="550">
 
+- **Ball flight**  
+  The nine ball flights from start line against curve, your usual flight, every shot from above, and session-by-session trends.
+  <br><img src="docs/img/analysis-flight.png" alt="Ball flight grid and shot curves" width="600">
+
+- **What goes with what**  
+  Chart any delivery or body move against any result over every session, against that day's usual, with thirds and ranked links.
+  <br><img src="docs/img/analysis-explore.png" alt="What goes with what analysis" width="600">
+
 - **Get ready before hitting**  
   Checks both camera phones, microphone strike triggers with sensitivity controls, launch monitor, and server at a glance before you swing.
   <br><img src="docs/img/start-ready.png" alt="Start page get ready" width="550">
