@@ -197,6 +197,31 @@
   .bay-story-thought { font-weight: 600; color: var(--text); }
   .bay-story-best { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
   .bay-story-btn { font: inherit; font-size: 15px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; text-decoration: none; border: 1px solid var(--line); background: var(--accent); color: var(--accent-text); display: inline-block; }
+  .focus-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .focus-card[hidden] { display: none; }
+  .focus-head { display: flex; flex-direction: column; gap: 2px; }
+  .focus-kicker { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .focus-name { font-size: 20px; font-weight: 750; color: var(--text); }
+  .focus-score-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 4px 0; }
+  .focus-ring { position: relative; width: 84px; height: 84px; flex: none; }
+  .focus-ring svg { width: 100%; height: 100%; display: block; }
+  .focus-ring-track { fill: none; stroke: var(--line); stroke-width: 9; }
+  .focus-ring-arc { fill: none; stroke: var(--accent); stroke-width: 9; stroke-linecap: round; transition: stroke-dasharray 0.7s ease; }
+  .focus-ring-num { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .focus-ring-num b { font-size: 22px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .focus-ring-num span { font-size: 9px; color: var(--muted); margin-top: 2px; }
+  .focus-score-text { font-size: 16px; font-weight: 600; color: var(--text); }
+  .focus-sub { font-size: 13px; color: var(--muted); line-height: 1.4; }
+  .focus-last { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
+  .focus-last-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .focus-last-val { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .focus-tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+  .focus-tag.in { background: var(--accent-soft); color: var(--accent); }
+  .focus-tag.out { background: var(--warn-soft); color: var(--warn); }
+  .focus-tag.wait { background: var(--panel); color: var(--muted); border: 1px solid var(--line); font-weight: 600; text-transform: none; }
+  .focus-thought { font-size: 13px; color: var(--text); font-style: italic; margin-top: 2px; }
+  .focus-no-focus { font-size: 13px; color: var(--muted); }
+  .focus-no-focus a { color: var(--accent); text-decoration: underline; }
   @media (max-width: 600px) {
     main { padding: 12px; } section { padding: 12px; } .hide-sm { display: none; } .target-huge { font-size: 48px; }
     .prog-shot-verdict { font-size: 32px; } .prog-shot-row { font-size: 22px; gap: 8px; } .prog-shot-want { font-size: 13px; } .prog-shot-extra { font-size: 13px; }
@@ -228,6 +253,7 @@
 <script src="/static/swingrow.js"></script>
 <script src="/static/helps.js"></script>
 <script src="/static/focus.js"></script>
+<script src="/static/goal.js"></script>
 <script src="/static/aicoach.js"></script>
 </head>
 <body>
@@ -349,6 +375,7 @@
   </section>
   <section id="sec-swings" hidden>
     <h2>Swings and Square shots</h2>
+    <div id="focus-card" class="focus-card" hidden></div>
     <div id="bay-card" class="bay-card" hidden></div>
     <p class="hint">Hit in Square's driving range as usual. Each swing gets its Square numbers 6-16 s after the strike.</p>
     <div class="sum" id="sum"></div>
@@ -793,6 +820,210 @@ function renderLastSwingCard(latestClip) {
     if (card.still.drill) stillDiv.title = "Drill: " + card.still.drill;
     addRow("Still there", stillDiv);
   }
+}
+
+function renderFocusCard() {
+  const box = $("focus-card");
+  if (!box) return;
+
+  const focus = journalData && journalData.focus;
+  if (!focus) {
+    box.hidden = false;
+    box.replaceChildren();
+    const noFoc = document.createElement("div");
+    noFoc.className = "focus-no-focus";
+    noFoc.innerHTML = 'No focus set: pick one on <a href="/">Progress</a>';
+    box.appendChild(noFoc);
+    return;
+  }
+
+  box.hidden = false;
+  box.replaceChildren();
+
+  // 1. Focus header: plain words move name & club/club type
+  const head = document.createElement("div");
+  head.className = "focus-head";
+
+  const kicker = document.createElement("div");
+  kicker.className = "focus-kicker";
+  const CLUB_NAMES = {
+    DR: "Driver", W3: "3 wood", W5: "5 wood", H4: "4 hybrid",
+    I4: "4 iron", I5: "5 iron", I6: "6 iron", I7: "7 iron", I8: "8 iron", I9: "9 iron",
+    PW: "PW", GW: "GW", SW: "SW", LW: "LW",
+  };
+  const clubText = focus.scope
+    ? (focus.scope === "woods" ? "driver and woods" : "irons")
+    : (focus.club ? (CLUB_NAMES[focus.club] || focus.club) : "all clubs");
+  kicker.textContent = `Your focus · ${clubText}`;
+  head.appendChild(kicker);
+
+  const nameEl = document.createElement("div");
+  nameEl.className = "focus-name";
+  const mv = (typeof SwingCoach !== "undefined" && SwingCoach.MOVES && SwingCoach.MOVES[focus.move]) ? SwingCoach.MOVES[focus.move][focus.aim] : null;
+  const moveName = mv ? (typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(mv.name) : mv.name) : focus.move;
+  nameEl.textContent = mv ? `Work on ${moveName}` : `${focus.move}: ${focus.aim}`;
+  head.appendChild(nameEl);
+  box.appendChild(head);
+
+  // 2. Build sessions for target
+  const clipsList = (allClips && allClips.length) ? allClips : (recentClips || []);
+  const primary = clipsList.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face") && !c.excluded && c.recorded);
+  const allSessions = (typeof SwingRow !== "undefined" && typeof SwingRow.sessionsOf === "function") ? SwingRow.sessionsOf(primary) : [];
+
+  const clipsMap = new Map(clipsList.map(c => [c.name, c]));
+  const toRow = c => (typeof SwingRow !== "undefined" && typeof SwingRow.row === "function") ? SwingRow.row(c, swingRecords, clipsMap, noiseTable) : {};
+
+  const filterClub = focus.scope || focus.club || "*";
+  const matchClub = r => filterClub === "*"
+    ? !!(typeof SwingGoodShots !== "undefined" && SwingGoodShots.groupOf(r.club))
+    : (filterClub === "irons" || filterClub === "woods"
+        ? (typeof SwingGoodShots !== "undefined" && SwingGoodShots.groupOf(r.club) === filterClub)
+        : r.club === filterClub);
+
+  // Sessions oldest first for SwingGoal.target
+  const sessions = [...allSessions].reverse().map(s => ({
+    key: s.key,
+    start: s.start,
+    rows: [...s.clips].reverse().filter(c => !c.excluded).map(toRow).filter(matchClub),
+  })).filter(s => s.rows.length > 0);
+
+  const target = (typeof SwingGoal !== "undefined") ? SwingGoal.target(sessions, focus) : null;
+
+  // Swings of current session (allSessions[0] is current session)
+  const currentSessionClips = allSessions.length ? allSessions[0].clips : recentClips.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+  const todayRows = currentSessionClips.filter(c => !c.excluded).map(toRow).filter(matchClub);
+  const todayScore = (typeof SwingGoal !== "undefined" && target) ? SwingGoal.score(todayRows, focus, target) : { n: 0, k: 0, rate: null };
+
+  // 3. Score row: Progress score ring + text
+  const scoreRow = document.createElement("div");
+  scoreRow.className = "focus-score-row";
+
+  // SVG Ring
+  const ringBox = document.createElement("div");
+  ringBox.className = "focus-ring";
+  const rate = todayScore.rate;
+  const pctText = rate != null ? `${Math.round(rate * 100)}%` : "–";
+  const C = 314.16; // 2 * PI * 50
+  const dash = rate != null ? (rate * C) : 0;
+
+  ringBox.innerHTML = `
+    <svg viewBox="0 0 120 120" role="img" aria-label="Progress score: ${pctText}">
+      <circle class="focus-ring-track" cx="60" cy="60" r="50"></circle>
+      <circle class="focus-ring-arc" cx="60" cy="60" r="50" transform="rotate(-90 60 60)" style="stroke-dasharray: ${dash} ${C};"></circle>
+    </svg>
+    <div class="focus-ring-num">
+      <b>${pctText}</b>
+      <span>Progress</span>
+    </div>
+  `;
+  scoreRow.appendChild(ringBox);
+
+  const scoreTextCol = document.createElement("div");
+  scoreTextCol.style.display = "flex";
+  scoreTextCol.style.flexDirection = "column";
+  scoreTextCol.style.gap = "4px";
+
+  const scoreTitle = document.createElement("div");
+  scoreTitle.className = "focus-score-text";
+  scoreTitle.textContent = `${todayScore.k} of ${todayScore.n} swings in your target today`;
+  scoreTextCol.appendChild(scoreTitle);
+
+  // Target in words + share before started
+  const subText = document.createElement("div");
+  subText.className = "focus-sub";
+
+  if (target) {
+    const fld = (typeof SwingSummary !== "undefined" && SwingSummary.BODY) ? SwingSummary.BODY.find(b => b.key === focus.move) : null;
+    const unit = fld && fld.unit ? fld.unit : "";
+    const dec = fld && fld.dec != null ? fld.dec : 1;
+    const boundStr = `${target.bound.toFixed(dec)}${unit ? (unit === "°" || unit === "%" ? "" : " ") + unit : ""}`;
+    const targetDir = target.side === "below" ? "under" : "over";
+    const PB_TARGET_FROM = { own: "your own target", before: "your usual before you started", first: "your first session with it" };
+    const fromStr = PB_TARGET_FROM[target.from] || "your usual before you started";
+
+    const sinceTime = new Date(focus.since + "T00:00:00").getTime();
+    const beforeRows = sessions.filter(s => s.start < sinceTime).flatMap(s => s.rows);
+    const beforeScore = (typeof SwingGoal !== "undefined") ? SwingGoal.score(beforeRows, focus, target) : null;
+    const beforeShareText = (beforeScore && beforeScore.n) ? `${Math.round(beforeScore.rate * 100)}% before you started` : null;
+
+    let targetDesc = `Target: ${targetDir} ${boundStr}, ${fromStr}`;
+    if (beforeShareText) targetDesc += ` · ${beforeShareText}`;
+    subText.textContent = targetDesc;
+  } else {
+    subText.textContent = "Setting target from your swings...";
+  }
+  scoreTextCol.appendChild(subText);
+  scoreRow.appendChild(scoreTextCol);
+  box.appendChild(scoreRow);
+
+  // 4. Last swing row
+  const lastBox = document.createElement("div");
+  lastBox.className = "focus-last";
+
+  const lastHead = document.createElement("div");
+  lastHead.className = "focus-last-head";
+
+  const lastTitle = document.createElement("b");
+  lastTitle.textContent = "Last swing";
+  lastHead.appendChild(lastTitle);
+
+  // Find latest swing
+  const latestSwing = recentClips.find(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+  if (!latestSwing) {
+    const waitSpan = document.createElement("span");
+    waitSpan.className = "focus-tag wait";
+    waitSpan.textContent = "No swings yet today";
+    lastHead.appendChild(waitSpan);
+    lastBox.appendChild(lastHead);
+  } else {
+    const isPoseDone = latestSwing.pose === "done";
+    const rec = swingRecords && swingRecords[latestSwing.name];
+    const lastVal = rec && rec.body ? rec.body[focus.move] : null;
+
+    if (!isPoseDone || (rec && !rec.body) || (lastVal == null && latestSwing.pose !== "done")) {
+      const waitSpan = document.createElement("span");
+      waitSpan.className = "focus-tag wait";
+      waitSpan.textContent = "waiting for the swing's numbers";
+      lastHead.appendChild(waitSpan);
+      lastBox.appendChild(lastHead);
+    } else if (lastVal == null) {
+      const noReadSpan = document.createElement("span");
+      noReadSpan.className = "focus-tag wait";
+      noReadSpan.textContent = "no reading on this move";
+      lastHead.appendChild(noReadSpan);
+      lastBox.appendChild(lastHead);
+    } else {
+      const fld = (typeof SwingSummary !== "undefined" && SwingSummary.BODY) ? SwingSummary.BODY.find(b => b.key === focus.move) : null;
+      const unit = fld && fld.unit ? fld.unit : "";
+      const dec = fld && fld.dec != null ? fld.dec : 1;
+      const valStr = `${lastVal.toFixed(dec)}${unit ? (unit === "°" || unit === "%" ? "" : " ") + unit : ""}`;
+
+      const isIn = (typeof SwingGoal !== "undefined" && target) ? SwingGoal.inTarget(lastVal, target) : false;
+
+      const tagSpan = document.createElement("span");
+      tagSpan.className = `focus-tag ${isIn ? "in" : "out"}`;
+      tagSpan.textContent = isIn ? "in target" : "out of target";
+      lastHead.appendChild(tagSpan);
+      lastBox.appendChild(lastHead);
+
+      const valDiv = document.createElement("div");
+      valDiv.className = "focus-last-val";
+      valDiv.textContent = valStr;
+      valDiv.style.color = isIn ? "var(--good)" : "var(--warn)";
+      lastBox.appendChild(valDiv);
+
+      if (!isIn) {
+        const thought = mv && mv.thought ? (typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(mv.thought) : mv.thought) : "";
+        if (thought) {
+          const thoughtDiv = document.createElement("div");
+          thoughtDiv.className = "focus-thought";
+          thoughtDiv.textContent = `Swing thought: “${thought.replace(/^["“]|["”]$/g, "")}”`;
+          lastBox.appendChild(thoughtDiv);
+        }
+      }
+    }
+  }
+  box.appendChild(lastBox);
 }
 
 function renderEndOfSessionCard(st, session, earlier, ctx) {
@@ -1292,6 +1523,7 @@ async function loadPlanData() {
   if (pr) practiceConfig = pr.config;
   if (s) swingRecords = s.swings;
   renderPlan();
+  renderFocusCard();
   renderPelvisCard(recentClips);
 }
 
@@ -2026,14 +2258,12 @@ async function pollSwings() {
   const clips = await getJson(`/api/clips?since=${Math.floor(Date.now() / 1000 - SWINGS_SINCE_S)}`);
   recentClips = clips || [];
   renderSwings(recentClips);
-  if (isDrillOrProgramRunning()) {
-    const latest = recentClips.find(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
-    const needsFetch = !swingRecords || (latest && latest.pose === "done" && (!swingRecords[latest.name] || swingRecords[latest.name].body?.pelvisBall == null));
-    if (needsFetch) {
-      const sData = await getJson("/api/swings");
-      if (sData && sData.swings) swingRecords = sData.swings;
-      if (!allClips) allClips = await getJson("/api/clips");
-    }
+  const latest = recentClips.find(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+  const needsFetch = !swingRecords || (latest && latest.pose === "done" && (!swingRecords[latest.name] || (journalData && journalData.focus && (!swingRecords[latest.name].body || swingRecords[latest.name].body[journalData.focus.move] == null))));
+  if (needsFetch || isDrillOrProgramRunning()) {
+    const sData = await getJson("/api/swings");
+    if (sData && sData.swings) swingRecords = sData.swings;
+    if (!allClips) allClips = await getJson("/api/clips");
   }
   renderPelvisCard(recentClips);
   await maybeFetchBayData();
@@ -2043,6 +2273,7 @@ async function pollSwings() {
   if (isDemoStop && !lastEndedSessionStory) {
     await checkEndOfSession();
   }
+  renderFocusCard();
   if (!lastEndedSessionStory && !isDemoStop) {
     renderLastSwingCard(latestWithShot);
   }
