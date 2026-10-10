@@ -238,7 +238,16 @@ What the server works out for each swing and what each part of the review page s
     with an optional good-shot range band and median ticks; and session-by-session box plots (newest on top) show the 10th-90th
     percentile whiskers, middle-half box, and median tick on a shared scale. Tap a bin to pick its swings or tap a session row
     to view that session.
-  - **Swing checkpoints** (`static/checkpoints.js`) shows on the rail once its script is there.
+  - **Swing checkpoints** (`static/checkpoints.js`): body numbers across four positions (Rhythm, Top of the
+    swing, Downswing, Impact) compared with the club's good-shot ranges (the middle 50% and 80% on this club's
+    good shots, Analysis > Good-shot ranges). A summary sentence reports how many of the latest session's body
+    numbers sat inside their ranges and names up to three that drifted furthest outside (latest session median
+    against the range). Each position groups its rows; each row displays the metric label, an SVG range bar
+    (middle 50% solid-faint, 10th–90th percentile faint, period range line, and latest session median dot colored
+    accent when inside or amber when outside), verbal status ("inside", "low", "high", or "no range yet"), latest
+    median value with unit, percentage of period swings in range, and a "~" with tooltip when most swings are shaky.
+    Tap a row to open that metric in Over time; tap "swings outside" to pick all swings outside the good-shot range.
+    A fold explains how ranges describe your own good shots (not a tour model), shaky tracking, and camera shifts.
 - **Where on the face** (Analysis card, `data-fold="strike"`; `static/strikemap.js`):
   heat map of impact locations on the club face (from Square's `faceImpactH` and `faceImpactV`) for the chosen club and period.
   The picture (`SwingStrikeMap.faceSvg`, Oct 9, the owner's ask: like FlightScope's): a club face seen from the front, toe on the
