@@ -75,6 +75,37 @@ What the server works out for each swing and what each part of the review page s
   picture, in `swings.json` (`/api/swings`); plus, for the noise table only, every number at P1, P4,
   P6 and P7 and each camera's noise floor at address (not sent to the page). The records carry a fingerprint of that JavaScript: after an update that
   changes it, every swing is worked out again (~0.2 s each). Right-handed only, for now.
+- **Progress's scoreboard** (`static/board.js`, `static/strokes.js`, drawn by `static/board-view.js`;
+  Oct 9, the owner: strong measurements, packaged like a finished app). Irons or woods, as the switch at
+  the top says; never the two together.
+  - **Session score** (the ring in step 1, 0 to 100): the average of four pass rates, each one of the
+    good-shot rules on its own and each against that club's own usual: **on line** (offline within the
+    club's allowance), **distance control** (carry inside your usual window), **solid strike** (smash at or above
+    your usual: about half pass by definition, so over 50% is a better day than usual) and **middle of the
+    face** (within the strike allowance of your usual spot). A good shot passes all four at once. The tick
+    on the ring is your usual (the middle of up to 6 earlier sessions with 15 judged shots); the pills say
+    last time, usual and best. The session list has the score as a column (from 8 judged shots).
+  - **Your game at a glance**: those four skills plus **swing match** (from the video: the share of the
+    body numbers the cameras could read that sat inside the 10th-90th percentile of your good shots; it
+    stays out of the score) as a radar (the latest session filled, your usual dashed) and as rows with the
+    gap to usual in points. A gap is called out from 10 points with 8 shots behind it; one sentence names
+    the skill down most and up most. Tap a skill to see its swings in Analysis.
+  - **Against a tour player**: strokes gained per shot (`SwingStrokes`, on games.js's tour tables). A range
+    shot has no flag, so each shot's target is the club's own usual carry on the target line; irons, wedges
+    and hybrids are approach shots, the driver and fairway woods tee shots on a 400 yd par 4 (30 yd
+    fairway). One bar per session (tap for the session), the latest against the usual ("better" / "worse"
+    from 0.05 a shot), the same number per 10 shots in words, how far the middle shot finished from its
+    target, what the period's misses cost (left-or-right against long-or-short: what each shot would have
+    lost with that miss alone) and how the shots missed (beyond 5% of the distance), then club by club with
+    the one furthest behind marked (tap a club for its swings). A net has no roll and the target is your own
+    usual: a practice number to follow session to session, not a round's strokes gained.
+  - **Personal bests** (all time): best session score, best session against a tour player, most good shots
+    in a row, the longest carry that finished on line (the most-hit club; the driver with the woods), the
+    fastest swing with the woods (a club speed whose smash is far under your usual is a misread, not a
+    record), and the handicap index. "New" marks one set in the latest session. Tap for the swing or
+    session; every club's carry and speed under **Every club**.
+  - **Practice**: sessions and swings this week against a usual week (the middle of the 4 before), weeks
+    in a row with a session, and a 12-week calendar (a day's color deepens with its swings; tap a day).
 - **Progress, steps 1-3: every club at once** (`static/sessionscore.js`, 2026-10-07). No club to pick
   up top; the period and Leave out shaky stay.
   **1. Did <latest> go better than <last>?** One sentence on good shots (your good-shot rules, per
@@ -185,8 +216,16 @@ What the server works out for each swing and what each part of the review page s
     sortable table. Older / Newer step through the club's sessions; **Session story** opens the session's
     Trends. Tapping a swing anywhere in Analysis opens it with **Back to Analysis** above the video, which
     returns to the same view.
-  - **Ball flight** (`static/flightgrid.js`) and **Spread** (`static/distro.js`) show on the rail once their
-    scripts are there.
+  - **Around the target** (`static/strokes.js`): where each shot finished around its target (the club's
+    usual carry, on the line), the same yards both ways, with a 15 yd circle (about a green); strokes per
+    shot against a tour player, the middle shot's distance from the target, on target / short / long /
+    left / right, and what the misses cost (direction against distance). The driver and fairway woods show
+    carry against offline with the 30 yd fairway and the rough either side instead. Strokes gained and
+    distance from the target are also numbers on the explorer ("Scoring" chip), Over time and One session.
+  - **Every club**: each club in the period as a sortable table (shots, carry and its middle half, smash,
+    offline spread, good shots, score, strokes per shot); tap a row to pick that club for the other views.
+  - **Ball flight** (`static/flightgrid.js`), **Spread** (`static/distro.js`) and **Swing checkpoints**
+    (`static/checkpoints.js`) show on the rail once their scripts are there.
 - **Where on the face** (Analysis card, `data-fold="strike"`; `static/strikemap.js`):
   heat map of impact locations on the club face (from Square's `faceImpactH` and `faceImpactV`) for the chosen club and period.
   The picture (`SwingStrikeMap.faceSvg`, Oct 9, the owner's ask: like FlightScope's): a club face seen from the front, toe on the

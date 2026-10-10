@@ -950,6 +950,7 @@ function renderProgress() {
   const groupAll = progressSessions(progressPick.group === "woods" ? "woods" : "irons").filter(s => s.start >= since);
   renderOverall(groupAll);
   renderSessionList(groupAll);
+  if (!analysisOpen && typeof renderBoard === "function") renderBoard(groupAll, progressPick.group === "woods" ? "woods" : "irons");
   renderPriority(helps, top);
   renderHelpsEvidence(null, helps.irons.subs, helps.irons);
   renderChips(focus, top[0]);
@@ -1064,7 +1065,8 @@ function renderSessionList(sessions) {
   const recent = [...sessions].reverse().slice(0, 8);
   if (!recent.length) { box.textContent = "No sessions in this period."; return; }
   const data = goodShotData(), settings = goodSettings && goodSettings.settings;
-  const rows = recent.map(s => ({ s, sc: SwingSessionScore.score(s.rows, { clubs: data.clubs, name: r => r.c.name, settings }) }));
+  const rows = recent.map(s => ({ s, sc: SwingSessionScore.score(s.rows, { clubs: data.clubs, name: r => r.c.name, settings }),
+    board: typeof SwingBoard !== "undefined" ? SwingBoard.session(s.rows, { clubs: data.clubs, settings }) : null }));
   const good = rows.map(r => r.sc.goodRate).filter(v => v != null);
   const bestGood = good.length > 1 ? Math.max(...good) : null;
   const cell = rate => {
@@ -1076,10 +1078,12 @@ function renderSessionList(sessions) {
     return c;
   };
   const head = pEl("div", "p-sess-row p-sess-head");
-  for (const t of ["Session", "Swings", "Good shots", "On line", "Solid strikes"]) head.append(pEl("span", null, t));
+  for (const t of ["Session", "Swings", "Score", "Good shots", "On line", "Solid strikes"]) head.append(pEl("span", null, t));
   box.replaceChildren(head, ...rows.map(r => {
     const row = pEl("div", "p-sess-row" + (bestGood != null && r.sc.goodRate === bestGood ? " best" : ""));
-    row.append(pEl("span", null, dayOf(r.s.start)), pEl("span", null, `${r.s.rows.length}`),
+    // The score (board.js) needs enough shots to mean something.
+    const score = r.board && r.board.score != null && r.board.n >= SwingBoard.MIN_SHOTS ? `${Math.round(r.board.score)}` : "–";
+    row.append(pEl("span", null, dayOf(r.s.start)), pEl("span", null, `${r.s.rows.length}`), pEl("span", "score", score),
       cell(r.sc.goodRate), cell(r.sc.onLineRate), cell(r.sc.solidRate));
     row.title = "Open this session's trends";
     row.onclick = () => openTrends(r.s.key);

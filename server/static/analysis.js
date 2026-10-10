@@ -6,13 +6,16 @@
 // One club at a time, or one club type (irons with irons, woods with woods: never the two together).
 
 const aPick = { x: "handsPlaneP6", y: "carry", mode: "raw", color: "good", scope: "club", ot: "carry", seq: "carry",
-                spread: "carry", sort: "order", dir: 1 };
+                spread: "carry", sort: "order", dir: 1, bagSort: "bag", bagDir: 1 };
 try { Object.assign(aPick, JSON.parse(localStorage.getItem("analysis") || "{}")); } catch {}
 const aSave = () => { try { localStorage.setItem("analysis", JSON.stringify(aPick)); } catch {} };
 
 // Numbers worked out from Square's (explore.js), and a session's scores (sessionscore.js), as fields.
-const A_EXTRA = SwingExplore.EXTRA.map(f => ({ key: f.key, label: f.label, unit: f.unit, group: "Launch monitor", shot: true,
-                                               dec: DECIMALS[f.unit] ?? 1 }));
+const A_EXTRA = [
+  // Each shot against a tour player, and how far it finished from its target (strokes.js).
+  { key: "sg", label: "Strokes gained", unit: "" }, { key: "prox", label: "Distance from the target", unit: "yd" },
+  ...SwingExplore.EXTRA,
+].map(f => ({ key: f.key, label: f.label, unit: f.unit, group: "Launch monitor", shot: true, dec: DECIMALS[f.unit] ?? 1 }));
 const A_RATES = [["goodRate", "Good shots"], ["onLineRate", "On line"], ["solidRate", "Solid strikes"]]
   .map(([key, label]) => ({ key, label, unit: "%", dec: 0, shot: true, group: "Session score",
     session: rows => { const v = aScore(rows)[key]; return v == null ? null : { med: v * 100, n: rows.length }; } }));
@@ -41,7 +44,11 @@ function aDecorate(sessions) {
   for (const s of sessions) {
     s.rows.forEach((r, i) => {
       Object.assign(r, SwingExplore.derive(r));
-      const v = data.clubs[r.club] && data.clubs[r.club].verdicts[r.name];
+      const c = data.clubs[r.club];
+      const stroke = c && typeof SwingStrokes !== "undefined" ? SwingStrokes.shot(r, c.baseline) : null;
+      r.sg = stroke ? stroke.sg : null;
+      r.prox = stroke && stroke.kind === "approach" ? stroke.dist : null;
+      const v = c && c.verdicts[r.name];
       r.good = v ? v.good : null;
       r.fails = v && !v.good ? v.fails : null;
       r.sKey = s.key;
@@ -68,13 +75,21 @@ function renderAnalysis(sessions, club) {
 function aRenderCard() {
   if (!analysisOpen) return;
   const draw = { explore: renderExplore, links: renderLinks, overtime: renderOverTimeCard, session: renderSessionCard,
-                 flight: renderFlight, spread: renderSpread }[analysisCard];
+                 flight: renderFlight, spread: renderSpread, target: renderTarget, bag: renderBag,
+                 checkpoints: renderCheckpoints }[analysisCard];
   if (draw) draw();
 }
 
-// Ball flight and Spread show on the rail once their scripts are there.
+// Ball flight, Spread and Swing checkpoints show on the rail once their scripts are there; a heading with
+// nothing under it yet is hidden too.
 document.querySelector('#a-rail button[data-card="flight"]').hidden = typeof SwingFlightGrid === "undefined";
 document.querySelector('#a-rail button[data-card="spread"]').hidden = typeof SwingDistro === "undefined";
+document.querySelector('#a-rail button[data-card="checkpoints"]').hidden = typeof SwingCheckpoints === "undefined";
+for (const h of document.querySelectorAll("#a-rail .a-h")) {
+  let any = false;
+  for (let el = h.nextElementSibling; el && !el.classList.contains("a-h"); el = el.nextElementSibling) any = any || !el.hidden;
+  h.hidden = !any;
+}
 
 // ---- From Analysis to a swing, and back ----
 
@@ -292,7 +307,8 @@ function renderExplore() {
   fillSelect(document.getElementById("a-ex-y"), [["Launch monitor", aShotFields()], ...bodyGroups], fy.key);
   fillSelect(document.getElementById("a-ex-x"), [...bodyGroups, ["Launch monitor", aShotFields()]], fx.key);
   aChips(document.getElementById("a-ex-outcomes"),
-    SwingExplore.OUTCOMES.map(o => ({ ...o, on: o.key === fy.key, title: fieldName(aField(o.key)) })), o => aSetExplore({ y: o.key }));
+    [{ key: "sg", name: "Scoring" }, ...SwingExplore.OUTCOMES]
+      .map(o => ({ ...o, on: o.key === fy.key, title: fieldName(aField(o.key)) })), o => aSetExplore({ y: o.key }));
   aChips(document.getElementById("a-ex-looks"),
     A_LOOKS.map(l => ({ ...l, on: l.x === fx.key && l.y === fy.key })), l => aSetExplore({ x: l.x, y: l.y }));
   const scope = document.getElementById("a-ex-scope");
@@ -592,7 +608,7 @@ function aSetExploreFromLink(l) {
 
 // ---- Over time ----
 
-const A_OT_CHIPS = ["goodRate", "carry", "smash", "offlineSpread", "faceToPathSpread", "strikeSpread", "clubSpeed"];
+const A_OT_CHIPS = ["goodRate", "sg", "carry", "smash", "offlineSpread", "faceToPathSpread", "strikeSpread", "clubSpeed"];
 document.getElementById("a-ot-metric").onchange = e => { aPick.ot = e.target.value; aSave(); renderOverTimeCard(); };
 
 function renderOverTimeCard() {
@@ -771,5 +787,158 @@ function renderSpread() {
     onPick: (rows, title) => aShowPicked(rows, title, [f.key]),
     onOpen: openFromAnalysis,
     onSession: key => openAnalysisSession(key, "spread"),
+  });
+}
+
+// ---- Around the target (strokes.js) ----
+
+function renderTarget() {
+  const { sessions, club } = aCtx;
+  const rows = sessions.flatMap(s => s.rows);
+  const x = SwingStrokes.session(rows, pbCtx());
+  const say = document.getElementById("a-tg-say"), tiles = document.getElementById("a-tg-tiles"), split = document.getElementById("a-tg-split");
+  const box = document.getElementById("a-tg-chart"), legend = document.getElementById("a-tg-legend");
+  say.replaceChildren(); tiles.replaceChildren(); split.replaceChildren(); legend.replaceChildren();
+  document.getElementById("a-tg-status").textContent = [club ? clubName(club) : "", `${x.n} shot${x.n === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
+  if (!x.n) {
+    box.querySelector("svg").replaceChildren();
+    say.textContent = `No shots to score with the ${club ? clubWords(club) : "club"} in this period yet (it takes 5 before its usual carry is known).`;
+    return;
+  }
+  const tee = x.shots[0].kind === "tee";
+  const tile = (label, value, sub) => {
+    const t = pEl("div", "p-tile");
+    t.style.cursor = "default";
+    t.append(pEl("span", "p-label", label), pEl("b", null, value), pEl("span", "p-delta", sub || ""));
+    return t;
+  };
+  const share = (k, n) => n ? `${Math.round(k / n * 100)}%` : "–";
+  const latestKey = sessions.length ? sessions[sessions.length - 1].key : null;
+  const lit = r => aPick.color === "latest" ? r.sKey === latestKey : r.good === true;
+  const foot = p => aSwingFoot(p.row, false);
+  if (tee) {
+    // Tee shots: how far, and whether it found a 30 yd fairway.
+    const fair = x.shots.filter(s => Math.abs(s.side) <= 15).length, rough = x.shots.filter(s => Math.abs(s.side) > 15 && Math.abs(s.side) <= 30).length;
+    const left = x.shots.filter(s => s.side < -15).length, right = x.shots.filter(s => s.side > 15).length;
+    say.append(`With the ${clubWords(club)} `, pEl("b", null, `${share(fair, x.n)} of your tee shots found the fairway`),
+      ` (30 yd wide): ${SwingStrokes.words(x.sg)} a tour player per shot on a 400 yd par 4.`);
+    tiles.append(tile("Strokes per shot", pbSigned(x.sg), "against a tour player"), tile("Fairway", share(fair, x.n), `${fair} of ${x.n}`),
+      tile("Rough", share(rough, x.n), "within 15 yd of the fairway"), tile("Missed left", share(left, x.n), `${left} shots`),
+      tile("Missed right", share(right, x.n), `${right} shots`));
+    const pts = x.shots.map(s => ({ x: s.row.offline, y: s.row.carry, row: s.row, cls: lit(s.row) ? "a-good" : "a-miss" }));
+    const half = Math.max(45, ...pts.map(p => Math.abs(p.x))) * 1.1;
+    const fOff = aField("offline"), fC = aField("carry");
+    aScatter(box, pts, {
+      fx: fOff, fy: fC, height: 380, xRange: [-half, half], robust: true, onOpen: r => openFromAnalysis(r.c.name),
+      xTick: v => v === 0 ? "0" : `${Math.abs(v)} ${v < 0 ? "L" : "R"}`,
+      under: ({ g, sx, sy, Y }) => {
+        svgEl("rect", { x: sx(-30), y: sy(Y.hi), width: sx(30) - sx(-30), height: sy(Y.lo) - sy(Y.hi), class: "a-rough" }, g);
+        svgEl("rect", { x: sx(-15), y: sy(Y.hi), width: sx(15) - sx(-15), height: sy(Y.lo) - sy(Y.hi), class: "a-fairway" }, g);
+        svgEl("text", { x: sx(0), y: sy(Y.hi) + 12, "text-anchor": "middle", class: "a-ref-label" }, g).textContent = "fairway";
+      },
+      tip: p => ({ lines: [[aNum(fC, p.y), "carry"], [`${aNum(fOff, Math.abs(p.x))} ${p.x < 0 ? "left" : "right"}`, "offline"],
+                           [pbSigned(p.row.sg), "strokes against a tour player"]], foot: foot(p) }),
+    });
+  } else {
+    const k = x.miss, target = x.shots[0].target;
+    say.append(`With the ${clubWords(club)} your middle shot finishes `, pEl("b", null, `${x.prox.toFixed(0)} yd from its target`),
+      ` (your usual carry, ${target.toFixed(0)} yd, on the line): ${SwingStrokes.words(x.sg)} a tour player per shot.`);
+    tiles.append(tile("Strokes per shot", pbSigned(x.sg), "against a tour player"),
+      tile("From the target", `${x.prox.toFixed(0)} yd`, `the middle shot · ${x.proxPct.toFixed(0)}% of the distance`),
+      tile("On target", share(k.on, k.n), `${k.on} of ${k.n}`), tile("Short / long", `${share(k.short, k.n)} / ${share(k.long, k.n)}`, "of all shots"),
+      tile("Left / right", `${share(k.left, k.n)} / ${share(k.right, k.n)}`, "of all shots"));
+    // The target in the middle, the same yards both ways: the plot is wider than tall, so it shows more to the sides.
+    const svg = box.querySelector("svg"), w = Math.max(280, svg.clientWidth || 600) - 68, h = 380 - 68;
+    const far = x.shots.map(s => Math.max(Math.abs(s.along), Math.abs(s.side) * h / w)).sort((a, b) => a - b);
+    const halfY = Math.max(20, quantile(far, 0.97) * 1.1), halfX = halfY * w / h;
+    const pts = x.shots.map(s => ({ x: s.side, y: s.along, row: s.row, cls: lit(s.row) ? "a-good" : "a-miss" }));
+    const fS = { label: "Left / right of the target", unit: "yd", dec: 0 }, fA = { label: "Short / long of the target", unit: "yd", dec: 0 };
+    const off = aScatter(box, pts, {
+      fx: fS, fy: fA, height: 380, xRange: [-halfX, halfX], yRange: [-halfY, halfY], onOpen: r => openFromAnalysis(r.c.name),
+      xTick: v => v === 0 ? "0" : `${Math.abs(v)} ${v < 0 ? "L" : "R"}`,
+      under: ({ g, sx, sy }) => {
+        const ring = (r, cls) => svgEl("ellipse", { cx: sx(0), cy: sy(0), rx: Math.abs(sx(r) - sx(0)), ry: Math.abs(sy(r) - sy(0)), class: cls }, g);
+        ring(15, "a-green");
+        for (const r of [30, 45]) if (r < halfY) ring(r, "a-ring");
+        svgEl("text", { x: sx(0), y: sy(15) - 4, "text-anchor": "middle", class: "a-ref-label" }, g).textContent = "15 yd: about a green";
+      },
+      tip: p => ({ lines: [[`${Math.abs(p.y).toFixed(0)} yd ${p.y < 0 ? "short" : "long"}`, `of ${target.toFixed(0)} yd`],
+                           [`${Math.abs(p.x).toFixed(0)} yd ${p.x < 0 ? "left" : "right"}`, ""], [pbSigned(p.row.sg), "strokes against a tour player"]], foot: foot(p) }),
+    });
+    if (off) legend.append(pEl("span", null, `${off} far-off shot${off === 1 ? "" : "s"} drawn at the edge`));
+    if (x.loss && x.loss.dirShare != null) {
+      const dir = Math.round(x.loss.dirShare * 100);
+      const bar = pEl("div", "pb-split"), a = pEl("i", "dir"), c = pEl("i", "len");
+      a.style.width = `${dir}%`; c.style.width = `${100 - dir}%`;
+      bar.append(a, c);
+      const head = pEl("div", "pb-sub", "What your misses cost"), keys = pEl("div", "p-legend");
+      for (const [cls, text] of [["pb-key-dir", `Left or right: ${dir}%`], ["pb-key-len", `Long or short: ${100 - dir}%`]]) {
+        const sp = document.createElement("span");
+        sp.append(Object.assign(document.createElement("i"), { className: "p-key " + cls }), text);
+        keys.append(sp);
+      }
+      split.append(head, bar, keys);
+    }
+  }
+  legend.prepend(...[["p-latest", aPick.color === "latest" ? "Newest session" : "Good shots"], ["a-key-miss", aPick.color === "latest" ? "Earlier sessions" : "The rest"]]
+    .map(([cls, text]) => { const sp = document.createElement("span"); sp.append(Object.assign(document.createElement("i"), { className: "p-key " + cls }), text); return sp; }));
+}
+
+// ---- Every club ----
+
+const A_BAG_COLS = [["bag", "Club"], ["n", "Shots"], ["carry", "Carry (yd)"], ["half", "Middle half"], ["smash", "Smash"],
+  ["spread", "Offline spread (yd)"], ["good", "Good shots"], ["score", "Score"], ["sg", "Strokes per shot"]];
+
+function renderBag() {
+  const since = aSince(), ctx = pbCtx(), by = {};
+  for (const s of progressSessions("*")) if (s.start >= since) for (const r of s.rows) (by[r.club] = by[r.club] || []).push(r);
+  const order = SwingGapping.sortClubs(Object.keys(by));
+  const clubs = order.map((club, i) => {
+    const rows = by[club], carry = spreadOf(rows.map(r => r.carry > 0 ? r.carry : null)), b = SwingBoard.session(rows, ctx), x = SwingStrokes.session(rows, ctx);
+    const enough = rows.length >= SwingStrokes.MIN_SHOTS;
+    return { club, bag: i, n: rows.length, enough, carry: enough && carry ? carry.med : null, q1: carry && carry.q1, q3: carry && carry.q3,
+      smash: enough ? spreadOf(rows.map(r => r.smash))?.med ?? null : null, spread: enough ? sd(rows.map(r => r.offline)) : null,
+      good: enough ? b.goodRate : null, score: enough ? b.score : null, sg: enough ? x.sg : null };
+  });
+  const key = aPick.bagSort, dir = aPick.bagDir;
+  const val = c => key === "half" ? (c.q3 != null && c.enough ? c.q3 - c.q1 : null) : c[key];
+  clubs.sort((a, b) => { const va = val(a), vb = val(b); return va == null || vb == null ? (va == null) - (vb == null) : (va - vb) * dir; });
+  document.getElementById("a-bag-status").textContent = `${clubs.length} club${clubs.length === 1 ? "" : "s"} · ${clubs.reduce((n, c) => n + c.n, 0)} shots in the period`;
+  const head = document.createElement("tr");
+  for (const [k, text] of A_BAG_COLS) {
+    const th = pEl("th", "sort" + (k === key ? " sorted" : ""), text + (k === key ? (dir > 0 ? " ↑" : " ↓") : ""));
+    th.onclick = () => { aPick.bagDir = k === aPick.bagSort ? -aPick.bagDir : (k === "bag" || k === "spread" || k === "half" ? 1 : -1); aPick.bagSort = k; aSave(); renderBag(); };
+    head.append(th);
+  }
+  const fmt = (v, d) => v == null ? "–" : v.toFixed(d);
+  const body = clubs.map(c => {
+    const tr = document.createElement("tr");
+    tr.classList.toggle("sel", c.club === aCtx.club);
+    tr.append(pEl("td", null, clubName(c.club)), pEl("td", c.enough ? null : "dim", `${c.n}`), pEl("td", null, fmt(c.carry, 0)),
+      pEl("td", null, c.carry == null ? "–" : `${c.q1.toFixed(0)} to ${c.q3.toFixed(0)}`), pEl("td", null, fmt(c.smash, 2)), pEl("td", null, fmt(c.spread, 1)),
+      pEl("td", null, c.good == null ? "–" : `${Math.round(c.good * 100)}%`), pEl("td", null, c.score == null ? "–" : `${Math.round(c.score)}`),
+      pEl("td", null, c.sg == null ? "–" : pbSigned(c.sg)));
+    tr.title = `Pick the ${clubWords(c.club)} for the other views`;
+    tr.onclick = () => { progressPick.club = c.club; savePicks(); renderProgress(); };
+    return tr;
+  });
+  const thead = document.createElement("thead"), tbody = document.createElement("tbody");
+  thead.append(head);
+  tbody.append(...body);
+  document.getElementById("a-bag").replaceChildren(thead, tbody);
+}
+
+// ---- Swing checkpoints (checkpoints.js) ----
+
+function renderCheckpoints() {
+  if (typeof SwingCheckpoints === "undefined") return;
+  const { sessions, club } = aCtx;
+  const c = club ? goodShotData().clubs[club] : null;
+  const a = SwingCheckpoints.analyze(sessions, { fields: aBodyFields(), ranges: c ? c.ranges : null, isShaky });
+  document.getElementById("a-cp-status").textContent = a.status || "";
+  SwingCheckpoints.render(document.getElementById("a-checkpoints"), a, {
+    club, clubWords: club ? clubWords(club) : "club", dayOf, fmt: (field, v, delta) => aNum(field, v, delta),
+    onMetric: key => { aPick.ot = key; aSave(); selectAnalysisCard("overtime"); },
+    onPick: (rows, title, key) => aShowPicked(rows, title, key ? [key] : []),
   });
 }
