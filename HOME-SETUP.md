@@ -40,6 +40,8 @@ end).
 | Play a game | Record, the game | Pick it, **Start game**; the phone says each target. |
 | Drills, no ball | The program only (no phones, no Square) | A no-ball program is picked; **Start program**, do the block's reps, then tap **All N passed** (or how many passed) once. |
 
+Doing the pump drill outside Today's plan: switch it on from the card, or mark the swings afterwards on the review page.
+
 **After**
 
 1. **Coach program**: **Copy for coach**, paste into the coach chat (save the

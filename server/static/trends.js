@@ -1365,6 +1365,22 @@ function renderProgressDrillSets(club) {
   lineEl.textContent = SwingDrillSets.formatSet(latest, verd);
   block.append(lineEl);
 
+  if (sets.length > 1) {
+    const second = sets[1];
+    const sVerd = SwingDrillSets.verdict(second);
+    const row = document.createElement("div");
+    row.className = "drill-set-line";
+    row.tabIndex = 0;
+    row.role = "button";
+    row.style.cursor = "pointer";
+    row.style.marginTop = "4px";
+    row.title = "Tap to open this set's first drill swing";
+    row.onclick = () => second.firstClip && open(second.firstClip);
+    row.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); second.firstClip && open(second.firstClip); } };
+    row.textContent = SwingDrillSets.formatSet(second, sVerd);
+    block.append(row);
+  }
+
   if (thought) {
     const thoughtEl = document.createElement("div");
     thoughtEl.className = "drill-set-thought";
@@ -1375,8 +1391,8 @@ function renderProgressDrillSets(club) {
     block.append(thoughtEl);
   }
 
-  if (sets.length > 1) {
-    const older = sets.slice(1);
+  if (sets.length > 2) {
+    const older = sets.slice(2);
     const fold = document.createElement("details");
     fold.className = "older-drill-sets";
     fold.style.marginTop = "6px";

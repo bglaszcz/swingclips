@@ -178,9 +178,8 @@ What the server works out for each swing and what each part of the review page s
   half 65-80%; and the biggest carry hole between them (`static/wedges.js`).
   The page reads top to bottom as three steps (how did the last session go, what to work on, is it
   working: the chart opens on the focus move; inside the focus card's More fold, a short Drill sets block appears when
-  drill sets exist, showing the latest set's pumps, drill swings' P6, and normal swings before (or "your usual": the last 15 same-club swings of earlier sessions, when the session starts with the drill) and
-  after with a verdict on whether the rehearsal carried over against wobble, with older sets folded
-  and tapping any set opening its first drill swing); step 1 also highlights the session's top faults under
+  drill sets exist, showing the latest set's pumps, drill swings' downswing position, and normal swings before (or "your usual": the last 15 same-club swings of earlier sessions, when the session starts with the drill) and
+  after with a verdict on whether the rehearsal carried over against wobble (`basis: "pumps"`). Sets marked afterwards with short clips (`strike < 4` seconds before strike, so videos start mid-drill with no pump numbers) are judged by direction (`basis: "direction"`), comparing whether the hands came down lower in swings after the drill against wobble ("the hands came down clearly lower in your swings after the drill", "maybe", "no change", or "too few swings"); short clips without a downswing reading are not counted as left-out shaky readings since the clip simply began mid-rehearsal. The latest two sets are shown directly on the card, with older sets folded behind "Earlier drill sets" and tapping any set opening its first drill swing); step 1 also highlights the session's top faults under
   the headline sentence, along with any strong links between them (e.g. casting and early extension)
   tested within clubs using Cochran-Mantel-Haenszel odds ratios and Benjamini-Hochberg correction (`static/faultlinks.js`);
   shot pattern, where on the face (strike heat map), sessions, good-shot rules, gapping,
@@ -794,6 +793,14 @@ toward the ball". The phones face away from you, so voice is the channel.
   bottom (the downswing position the drill rehearses: hands to plane, wrist hinge) against where the
   good shots have the hands there, the real swing's after the pumps, and whether the rehearsal carried into the swing (within 1 in), with
   the focus's swing thought. Each "Pump n" button jumps the video there. Tempo isn't given for these swings.
+  **Start page drill nudge and switch** (`drillnudge.js`, `#drill-nudge` on `start.html`): when the golfer
+  hits 2 or more consecutive rehearsal swings (flags from long backswing, e.g. 1.8 s vs usual 0.9 s)
+  in the current session without a drill or plan running, the Start page notices ("That looked like a drill")
+  and offers two buttons: **Pump drill on** (switches pump drill on and retroactively marks those nudge swings
+  as pump drill) and **No, normal swings** (marks them reviewed, clearing the card and review flag). While the pump drill
+  is switched on outside Today's plan or a coach program, an indicator stays at the top of the swings area
+  ("Pump drill on: the phones keep 6 s before the strike, and these swings stay out of your trends") with an **Off**
+  button (`POST /api/drill {drill: null}`).
 - **Drill pelvis check** (Start page): while a drill or coach program is running, a card shows the latest swing's
   pelvis vs ball at impact (one large number in inches, + = ahead), colored green/amber/gray from the target zone
   calibration (`static/pelviszone.js`, never red), with the one-line position and target sentence below. Shows

@@ -28,6 +28,14 @@ swing is tagged with the Square Omni's numbers for that shot.
   Keeps you on one focus at a time with its drill and swing thought, and tracks whether the move and its ball-flight results have changed across sessions.
   <br><img src="docs/img/progress-focus.png" alt="Progress step 2" width="600">
 
+- **Did your drill carry into the swing?**  
+  Progress compares swings after a drill set against your usual, reporting whether the rehearsal carried over into your normal swings even when drills are marked after the fact.
+  <br><img src="docs/img/drill-sets.png" alt="Progress drill sets comparison" width="600">
+
+- **Focus swing by swing**  
+  Live card during your session tracking each shot against your active focus target, showing how many swings hit the goal and the latest swing's number.
+  <br><img src="docs/img/focus-live.png" alt="Focus swing by swing card" width="600">
+
 - **Around the target**  
   Where shots finished around your target distance on the target line, strokes gained per shot, and what sideways and distance misses cost.
   <br><img src="docs/img/analysis-target.png" alt="Around the target dispersion" width="600">
@@ -52,9 +60,17 @@ swing is tagged with the Square Omni's numbers for that shot.
   A strip of your favorite indicator tiles right under the video for the swing on screen, showing this swing's numbers against the club's good-shot range and jumping to their key moments.
   <br><img src="docs/img/swing-indicators.png" alt="This swing indicator strip" width="600">
 
+- **Swings to check and marking drills**  
+  The Swings list flags rehearsal swings to check, letting you mark them as a drill afterwards or confirm them as normal swings with one tap.
+  <br><img src="docs/img/swings-to-check.png" alt="Swings to check and drill selection" width="340">
+
 - **Get ready before hitting**  
   Checks both camera phones, microphone strike triggers with sensitivity controls, launch monitor, and server at a glance before you swing.
   <br><img src="docs/img/start-ready.png" alt="Start page get ready" width="550">
+
+- **Notice drills while they happen**  
+  The Start page notices consecutive rehearsal swings with a long backswing and offers to turn the pump drill on so the phones record the full 6-second video.
+  <br><img src="docs/img/start-drill-nudge.png" alt="Start page drill nudge" width="600">
 
 - **The coach's take after each session**  
   A grounded coaching take right after you stop: how it went, how your focus is progressing, and the one thing for next time.
