@@ -242,7 +242,39 @@
   #a-tg-chart svg { height: 380px; }
   /* Analysis: swing checkpoints (checkpoints.js) */
   /* Analysis: ball flight (flightgrid.js) */
+  .fg-sentence { font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
+  .fg-grid-wrap { margin-bottom: 24px; overflow-x: auto; }
+  .fg-grid { display: grid; grid-template-columns: 80px repeat(3, minmax(80px, 1fr)); gap: 6px; min-width: 320px; align-items: stretch; }
+  .fg-col-head, .fg-row-head { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .fg-col-head { text-align: center; padding: 4px 2px; }
+  .fg-row-head { display: flex; align-items: center; padding: 4px 6px; }
+  .fg-cell { display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+             padding: 8px 6px; border-radius: var(--radius-sm, 6px); border: 1px solid var(--line);
+             cursor: pointer; text-align: center; min-height: 84px; gap: 4px; font-family: inherit;
+             color: var(--text); background: var(--panel); transition: border-color 0.15s; }
+  .fg-cell:hover { border-color: var(--accent); }
+  .fg-name { font-size: 12px; font-weight: 600; line-height: 1.2; }
+  .fg-count { font-size: 11px; color: var(--text); opacity: 0.9; }
+  .fg-mini-flight { width: 40px; height: 32px; flex: none; }
+  .fg-chart { position: relative; margin-bottom: 24px; }
+  .fg-above-svg { display: block; width: 100%; }
+  .fg-sessions { margin-bottom: 24px; }
+  .fg-sess-chart { position: relative; overflow-x: auto; }
+  .fg-sess-svg { display: block; }
+  /* These charts keep their own shape (.a-chart svg sets a height for the explorer's). */
+  .a-chart svg.fg-above-svg, .a-chart svg.fg-sess-svg, .a-chart svg.ds-hist-svg { height: auto; }
+  .fg-chart, .fg-sess-chart { max-width: 640px; }
   /* Analysis: spread (distro.js) */
+  .ds-sentence { font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
+  .ds-hist-chart { position: relative; margin-bottom: 24px; }
+  .ds-hist-svg { display: block; overflow: hidden; }
+  .ds-sessions { margin-bottom: 24px; }
+  .ds-sess-list { display: flex; flex-direction: column; gap: 4px; }
+  .ds-sess-row { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-radius: var(--radius-sm, 6px);
+                 cursor: pointer; transition: background 0.15s; }
+  .ds-sess-row:hover { background: var(--sel); }
+  .ds-sess-meta { width: 140px; flex: none; font-size: 12px; }
+  .ds-boxplot-svg { flex: 1; min-width: 120px; display: block; }
   @media (min-width: 900px) {
     body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
     main { grid-template-columns: 340px 1fr; flex: 1; min-height: 0; }
@@ -2390,6 +2422,8 @@
 <script src="/static/strikemap.js"></script>
 <script src="/static/explore.js"></script>
 <script src="/static/board.js"></script>
+<script src="/static/flightgrid.js"></script>
+<script src="/static/distro.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
