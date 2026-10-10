@@ -45,8 +45,12 @@ swing is tagged with the Square Omni's numbers for that shot.
   <br><img src="docs/img/strike-map.png" alt="Strike heat map" width="550">
 
 - **Swing checkpoints**  
-  Body numbers across rhythm, top of the swing, downswing, and impact compared with your good-shot ranges, showing which sat inside and what drifted furthest out.
-  <br><img src="docs/img/analysis-checkpoints.png" alt="Swing checkpoints" width="600">
+  Indicator tiles for every body number against its good-shot range: moment tags (Rhythm, Top, Downswing, Impact), big colored values with status in words, and a range track. Filter chips across the top, favorite stars, and a detail panel with range bars, Over time, Swings outside, and Make this my focus.
+  <br><img src="docs/img/indicators.png" alt="Swing checkpoints indicator tiles" width="600">
+
+- **This swing under the video**  
+  A strip of your favorite indicator tiles right under the video for the swing on screen, showing this swing's numbers against the club's good-shot range and jumping to their key moments.
+  <br><img src="docs/img/swing-indicators.png" alt="This swing indicator strip" width="600">
 
 - **Get ready before hitting**  
   Checks both camera phones, microphone strike triggers with sensitivity controls, launch monitor, and server at a glance before you swing.

@@ -238,16 +238,11 @@ What the server works out for each swing and what each part of the review page s
     with an optional good-shot range band and median ticks; and session-by-session box plots (newest on top) show the 10th-90th
     percentile whiskers, middle-half box, and median tick on a shared scale. Tap a bin to pick its swings or tap a session row
     to view that session.
-  - **Swing checkpoints** (`static/checkpoints.js`): body numbers across four positions (Rhythm, Top of the
-    swing, Downswing, Impact) compared with the club's good-shot ranges (the middle 50% and 80% on this club's
-    good shots, Analysis > Good-shot ranges). A summary sentence reports how many of the latest session's body
-    numbers sat inside their ranges and names up to three that drifted furthest outside (latest session median
-    against the range). Each position groups its rows; each row displays the metric label, an SVG range bar
-    (middle 50% solid-faint, 10th–90th percentile faint, period range line, and latest session median dot colored
-    accent when inside or amber when outside), verbal status ("inside", "low", "high", or "no range yet"), latest
-    median value with unit, percentage of period swings in range, and a "~" with tooltip when most swings are shaky.
-    Tap a row to open that metric in Over time; tap "swings outside" to pick all swings outside the good-shot range.
-    A fold explains how ranges describe your own good shots (not a tour model), shaky tracking, and camera shifts.
+  - **Swing checkpoints** (`static/checkpoints.js`, `static/indicators.js`): every body number against its own good-shot range as an interactive tile board.
+    - **Filter chips**: Favorites (shown when any favorites are saved), All, Rhythm, Top of the swing, Downswing, Impact (remembered in `localStorage["checkpoint-filter"]`).
+    - **Indicator tiles**: auto-fill grid of tiles. Each tile shows its plain name, moment tag (Rhythm, Top, Downswing, Impact), value big and colored (accent for in-range, amber for near/wobble, red for out), verbal status ("in range", "a little low", "high": color is never the only cue), a track with q10..q90 span faint, q25..q75 solid, middle-half ends labeled with numbers, a marker clamped with arrows when off the track, and a favorite star.
+    - **Detail panel**: tap any tile to open a panel below the grid showing that number's row with SVG range bar, share in range, and three actions: **See it over time** (opens Analysis Over time for that metric), **Swings outside** (picks swings outside the good-shot range), and **Make this my focus** (opens Progress's focus picker on that move when the latest median is outside the middle half).
+    - **How it's worked out**: expandable fold explaining how ranges describe your own good shots (not a tour model), shaky tracking, and camera shifts.
 - **Where on the face** (Analysis card, `data-fold="strike"`; `static/strikemap.js`):
   heat map of impact locations on the club face (from Square's `faceImpactH` and `faceImpactV`) for the chosen club and period.
   The picture (`SwingStrikeMap.faceSvg`, Oct 9, the owner's ask: like FlightScope's): a club face seen from the front, toe on the
@@ -449,6 +444,8 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   swing", "Downswing", "Impact", with P-tags kept only as small secondary hints or tooltips. Metric labels,
   the scorecard summary sentence, row labels and fault locations ("in the downswing", "at impact")
   use plain English from `SwingShotStory`.
+- **This swing under the video** (`#indicators`, `static/indicators.js`):
+  Sitting right under the video above the scorecard, a summary card titled "This swing" displays your favorite indicator tiles for the swing on screen against the club's good-shot range. Tapping any tile seeks the video directly to that number's key moment. A "Choose" link opens Analysis on Swing checkpoints to manage favorites or explore other numbers. Hidden when the swing has no body numbers; not hidden behind Advanced data.
 - **Swing page**: a column **vs my good shots (club)** in the numbers table, and a faint band on the
   number itself: green inside the middle 50%, amber outside ("outside: 4° more than usual", and
   "inside the 80% range" when it's between the two). The tempo line gets the same under it. Numbers
@@ -779,3 +776,10 @@ toward the ball". The phones face away from you, so voice is the channel.
 - **Start page bay feedback ("Last swing" and "End of session")** (`start.html`, `static/swingrow.js`, `static/shotstory.js`, `static/sessionstory.js`):
   At the top of the swings area during normal recording (any mode except running a coach program), the bay screen shows a golfer-friendly "Last swing" card (`#bay-card`) built from the coach's findings: verdict chip (Good shot / Playable / Miss), What happened (flight in plain English), Why (why it worked on a good shot, or the top body fault), Try this (the coach's swing thought in large type and drill in smaller type), and Still there when another fault showed up. Font sizes are kept large for viewing across the bay (>= 22 px desktop, >= 18 px at 390 px) and a link opens the swing on the review page (`/#<name>`). Swings and good-shot data are rate-limited to at most every 20 seconds.
   When the owner presses Stop and the session had 10+ swings with a shot, an end-of-session card appears at the top of the swings area with `SwingSessionStory.story`: headline comparing good shots against previous sessions, best and worst clubs, the session's top fault with its swing thought, and a "Watch my best swing" link (`/#<name>`). The card stays visible until the next Start. Plain words only, calm colors, never red.
+- **Start page focus card** (`start.html`, `static/goal.js`, `#focus-card`):
+  Positioned near the top of the hitting screen (above `#bay-card`), the focus card keeps your current goal in view while hitting:
+  - Focus move name and club or club group in plain words (e.g. "Work on the lead hip getting to the target in the downswing · 7 iron").
+  - **Today's progress score**: `k of n swings in your target today` with a miniature SVG score ring, calculated from the session's swings via `SwingGoal.score(todayRows, focus, target)`.
+  - **Last swing feedback**: the latest swing's number on the move, an "in target" or "out of target" badge in plain words and calm colors, and the focus's swing thought when out of target. Says "waiting for the swing's numbers" while processing.
+  - **Target in words**: target value and baseline source (e.g. "Target: over 2.0 in, your usual before you started") and the share in target before you started.
+  - When no focus is set: a quiet line "No focus set: pick one on Progress" linking to `/`.

@@ -34,7 +34,7 @@ end).
 
 | You picked... | What shows | What you do |
 |---|---|---|
-| Just hit balls | Record, swings | Hit. Everything is recorded and analyzed. |
+| Just hit balls | Record, focus card, swings | Hit. Everything is recorded and analyzed. The focus card tracks today's progress score against your goal and gives swing-by-swing feedback. |
 | Today's plan | Record, the plan | **Start** on the first block, hit its balls, **Next**. |
 | Coach program | Record, the program | Pick it, **Start program**. Follow the block on screen: no-ball reps, tap **Pass / Miss**; ball shots, listen for the verdict (flush line: tap where the mark started). Blocks move on by themselves. |
 | Play a game | Record, the game | Pick it, **Start game**; the phone says each target. |

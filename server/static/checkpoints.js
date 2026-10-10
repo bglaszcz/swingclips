@@ -5,9 +5,9 @@
 
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
-  const Indicators = typeof SwingIndicators !== "undefined"
+  const getIndicators = () => (typeof SwingIndicators !== "undefined"
     ? SwingIndicators
-    : (typeof require === "function" ? require("./indicators.js") : null);
+    : (typeof root !== "undefined" && root.SwingIndicators ? root.SwingIndicators : (typeof require === "function" ? (function() { try { return require("./indicators.js"); } catch(e) { return null; } })() : null)));
 
   function quantile(sorted, q) {
     if (!sorted || !sorted.length) return null;
@@ -205,6 +205,7 @@
     const onMetric = typeof opts.onMetric === "function" ? opts.onMetric : () => {};
     const onPick = typeof opts.onPick === "function" ? opts.onPick : () => {};
     const onGoal = typeof opts.onGoal === "function" ? opts.onGoal : () => {};
+    const Indicators = getIndicators();
 
     // 1. One sentence
     const sentenceDiv = document.createElement("div");
