@@ -243,3 +243,59 @@ describe("SwingAICoach.questionBrief", () => {
     assert.match(emptyBrief, /No shots recorded in the last 30 days/);
   });
 });
+
+describe("SwingAICoach.brief with focusGoal", () => {
+  it("includes target in words, latest session score, share before/since, best session, and camera notice", () => {
+    const input = {
+      session: { rows: [{ club: "I7" }] },
+      focus: {
+        move: "hipSway",
+        aim: "less",
+        club: "I7",
+        since: "2026-09-10",
+      },
+      focusGoal: {
+        target: { bound: 3.2, side: "below", from: "before", n: 12 },
+        before: { n: 12, k: 6, rate: 0.5 },
+        after: { n: 24, k: 18, rate: 0.75, sessions: 3, days: 30 },
+        latest: { n: 8, k: 6, rate: 0.75 },
+        best: { n: 8, k: 6, rate: 0.75 },
+        cameraMoved: true,
+      },
+    };
+
+    const brief = AICoach.brief(input);
+    assert.match(brief, /# Current Focus/);
+    assert.match(brief, /Target: under 3\.2 in, your usual before you started/);
+    assert.match(brief, /Latest session score: 6 of 8 swings in target/);
+    assert.match(brief, /Share in target: 50% before, 75% since/);
+    assert.match(brief, /Best session: 6 of 8 \(75%\)/);
+    assert.match(brief, /A camera moved since it started: scores either side may not compare/);
+  });
+
+  it("omits camera moved notice when camera did not move", () => {
+    const input = {
+      session: { rows: [{ club: "I7" }] },
+      focus: {
+        move: "shoulderTop",
+        aim: "more",
+        club: "I7",
+        since: "2026-09-10",
+      },
+      focusGoal: {
+        target: { bound: 90, side: "above", from: "own", n: 0 },
+        before: { n: 0, k: 0, rate: null },
+        after: { n: 10, k: 7, rate: 0.7, sessions: 1, days: 5 },
+        latest: { n: 10, k: 7, rate: 0.7 },
+        best: { n: 10, k: 7, rate: 0.7 },
+        cameraMoved: false,
+      },
+    };
+
+    const brief = AICoach.brief(input);
+    assert.match(brief, /Target: over 90\.0°, your own target/);
+    assert.match(brief, /Latest session score: 7 of 10 swings in target/);
+    assert.match(brief, /Share in target: 70% since/);
+    assert.doesNotMatch(brief, /camera moved/);
+  });
+});
