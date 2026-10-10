@@ -353,7 +353,7 @@
     }
 
     for (const d of drillSetsThisWeek) {
-      const dName = d.drill === "pump" ? "Pump drill" : (d.drill ? `${d.drill} drill` : "Drill");
+      const dName = (DrillSets && typeof DrillSets.nameOf === "function") ? DrillSets.nameOf(d) : (d.drill === "pump" ? "Pump drill" : (d.drill ? `${d.drill} drill` : "Drill"));
       const cStr = d.club ? ` (${clubName(d.club)})` : "";
       let verdText = "";
       if (d.verdictText) verdText = d.verdictText;
