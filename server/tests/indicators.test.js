@@ -160,3 +160,89 @@ test("tile: basic DOM structure with mock document", () => {
   assert.match(btn.className, /in-zone-out/); // 4.2 is < q10 (10)
   assert.equal(btn.dataset.key, "leadHipP6");
 });
+
+test("renderThisSwing: hides without body numbers, renders strip with favorites and seeks", () => {
+  function makeMockDoc() {
+    function createEl(tag) {
+      return {
+        tagName: tag.toUpperCase(),
+        className: "",
+        dataset: {},
+        style: {},
+        children: [],
+        hidden: false,
+        appendChild(child) { this.children.push(child); return child; },
+        replaceChildren(...kids) { this.children = [...kids]; },
+        setAttribute(k, v) { this[k] = v; },
+        getAttribute(k) { return this[k]; },
+      };
+    }
+    return {
+      createElement: createEl,
+      createElementNS: (_ns, tag) => createEl(tag),
+    };
+  }
+
+  const doc = makeMockDoc();
+  const box = doc.createElement("div");
+
+  // 1. Without body numbers -> hidden
+  indicators.renderThisSwing(box, { body: null, document: doc });
+  assert.equal(box.hidden, true);
+
+  indicators.renderThisSwing(box, { body: { tempo: null, hipSway: undefined }, document: doc });
+  assert.equal(box.hidden, true);
+
+  // 2. With body numbers -> visible, contains "This swing" title and "Choose" button
+  let jumpedIndex = null;
+  let chose = false;
+  const positions = [
+    { key: "p4", index: 42, tag: "P4" },
+    { key: "p7", index: 88, tag: "P7" },
+  ];
+  const body = {
+    tempo: 3.1,
+    hipSway: 3.8,
+    earlyExt: 2.5,
+    handsAhead: 4.0,
+  };
+  const store = { "indicator-favs": JSON.stringify(["tempo", "hipSway"]) };
+
+  indicators.renderThisSwing(box, {
+    body,
+    ranges: { tempo: GOOD_RANGE, hipSway: GOOD_RANGE },
+    positions,
+    storage: store,
+    document: doc,
+    jumpTo: idx => { jumpedIndex = idx; },
+    onChoose: () => { chose = true; },
+  });
+
+  assert.equal(box.hidden, false);
+  assert.equal(box.children.length, 2); // head and strip
+
+  const head = box.children[0];
+  const title = head.children.find(c => c.tagName === "STRONG");
+  assert.equal(title.textContent, "This swing");
+
+  const chooseBtn = head.children.find(c => c.className.includes("in-choose-btn"));
+  assert.ok(chooseBtn);
+  chooseBtn.onclick();
+  assert.equal(chose, true);
+
+  const strip = box.children[1];
+  assert.equal(strip.children.length, 2); // 2 favorites: tempo, hipSway
+
+  // Tap tempo tile -> seeks to P4 (42)
+  const tempoTile = strip.children[0];
+  assert.equal(tempoTile.dataset.key, "tempo");
+  tempoTile.onclick();
+  assert.equal(jumpedIndex, 42);
+
+  // Tap hipSway tile -> seeks to P7 (88)
+  const hipTile = strip.children[1];
+  assert.equal(hipTile.dataset.key, "hipSway");
+  hipTile.onclick();
+  assert.equal(jumpedIndex, 88);
+});
+

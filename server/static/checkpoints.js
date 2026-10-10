@@ -5,6 +5,10 @@
 
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
+  const Indicators = typeof SwingIndicators !== "undefined"
+    ? SwingIndicators
+    : (typeof require === "function" ? require("./indicators.js") : null);
+
   function quantile(sorted, q) {
     if (!sorted || !sorted.length) return null;
     const i = (sorted.length - 1) * q, lo = Math.floor(i), hi = Math.ceil(i);
@@ -200,6 +204,7 @@
       : ((f, v) => (v != null ? Number(v).toFixed(f.dec ?? 1) + (f.unit ? " " + f.unit : "") : "–"));
     const onMetric = typeof opts.onMetric === "function" ? opts.onMetric : () => {};
     const onPick = typeof opts.onPick === "function" ? opts.onPick : () => {};
+    const onGoal = typeof opts.onGoal === "function" ? opts.onGoal : () => {};
 
     // 1. One sentence
     const sentenceDiv = document.createElement("div");
@@ -229,220 +234,352 @@
 
     box.appendChild(sentenceDiv);
 
-    if (!analysis.groups || !analysis.groups.length) return;
+    if (!analysis.allItems || !analysis.allItems.length) return;
 
-    // 2. Groups and rows
-    const container = document.createElement("div");
-    container.className = "cp-groups-wrap";
+    // Filter chips setup
+    const FILTER_KEY = "checkpoint-filter";
+    let activeFilter = "all";
+    try {
+      if (typeof localStorage !== "undefined") {
+        const saved = localStorage.getItem(FILTER_KEY);
+        if (saved) activeFilter = saved;
+      }
+    } catch {}
 
-    for (const group of analysis.groups) {
-      if (!group.items || !group.items.length) continue;
+    const chipsContainer = document.createElement("div");
+    chipsContainer.className = "cp-chips";
 
-      const groupDiv = document.createElement("div");
-      groupDiv.className = "cp-group";
+    const gridContainer = document.createElement("div");
+    gridContainer.className = "cp-grid";
 
-      const titleEl = document.createElement("div");
-      titleEl.className = "cp-group-title";
-      titleEl.textContent = group.name;
-      groupDiv.appendChild(titleEl);
+    const panelContainer = document.createElement("div");
+    panelContainer.className = "cp-panel";
+    panelContainer.hidden = true;
 
-      const listEl = document.createElement("div");
-      listEl.className = "cp-group-list";
+    let selectedKey = null;
 
-      for (const item of group.items) {
-        const rowEl = document.createElement("div");
-        rowEl.className = "cp-row";
-        rowEl.onclick = () => onMetric(item.key);
+    function renderRangeBarSvg(item) {
+      const barW = 160;
+      const barH = 20;
+      const svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("viewBox", `0 0 ${barW} ${barH}`);
+      svg.setAttribute("class", "cp-bar-svg");
 
-        // Column 1: Label and shaky marker
-        const labCol = document.createElement("div");
-        labCol.className = "cp-col-label";
-        const labSpan = document.createElement("span");
-        labSpan.className = "cp-label-text";
-        labSpan.textContent = item.field.label;
-        labCol.appendChild(labSpan);
+      if (item.range) {
+        const pts = [item.range.q10, item.range.q90, item.range.q25, item.range.q75];
+        if (item.q1 != null) pts.push(item.q1);
+        if (item.q3 != null) pts.push(item.q3);
+        if (item.latest.med != null) pts.push(item.latest.med);
 
-        if (item.shakyShare > 0.5) {
-          const shakySpan = document.createElement("span");
-          shakySpan.className = "cp-shaky";
-          shakySpan.textContent = " ~";
-          shakySpan.title = "Most swings had shaky camera tracking on this number";
-          labCol.appendChild(shakySpan);
-        }
-        rowEl.appendChild(labCol);
+        const vMin = Math.min(...pts);
+        const vMax = Math.max(...pts);
+        const span = vMax - vMin || 1;
+        const pad = span * 0.12;
+        const minX = vMin - pad;
+        const maxX = vMax + pad;
+        const scale = v => ((v - minX) / (maxX - minX)) * barW;
 
-        // Column 2: Range Bar SVG
-        const barCol = document.createElement("div");
-        barCol.className = "cp-col-bar";
+        svgEl("rect", {
+          x: 0, y: 8, width: barW, height: 4,
+          rx: 2, ry: 2, fill: "var(--line)",
+        }, svg);
 
-        const barW = 160;
-        const barH = 20;
-        const svg = document.createElementNS(NS, "svg");
-        svg.setAttribute("viewBox", `0 0 ${barW} ${barH}`);
-        svg.setAttribute("class", "cp-bar-svg");
+        const rx10 = Math.max(0, Math.min(barW, scale(item.range.q10)));
+        const rx90 = Math.max(0, Math.min(barW, scale(item.range.q90)));
+        const rw90 = Math.max(2, rx90 - rx10);
+        svgEl("rect", {
+          x: rx10, y: 5, width: rw90, height: 10,
+          rx: 3, ry: 3, fill: "var(--dot)", opacity: 0.18,
+        }, svg);
 
-        if (item.range) {
-          // Determine scale domain
-          const pts = [item.range.q10, item.range.q90, item.range.q25, item.range.q75];
-          if (item.q1 != null) pts.push(item.q1);
-          if (item.q3 != null) pts.push(item.q3);
-          if (item.latest.med != null) pts.push(item.latest.med);
+        const rx25 = Math.max(0, Math.min(barW, scale(item.range.q25)));
+        const rx75 = Math.max(0, Math.min(barW, scale(item.range.q75)));
+        const rw75 = Math.max(2, rx75 - rx25);
+        svgEl("rect", {
+          x: rx25, y: 5, width: rw75, height: 10,
+          rx: 3, ry: 3, fill: "var(--dot)", opacity: 0.38,
+        }, svg);
 
-          const vMin = Math.min(...pts);
-          const vMax = Math.max(...pts);
-          const span = vMax - vMin || 1;
-          const pad = span * 0.12;
-          const minX = vMin - pad;
-          const maxX = vMax + pad;
-          const scale = v => ((v - minX) / (maxX - minX)) * barW;
-
-          // Background track
-          svgEl("rect", {
-            x: 0, y: 8, width: barW, height: 4,
-            rx: 2, ry: 2, fill: "var(--line)",
-          }, svg);
-
-          // Good-shot range: q10..q90 (fainter)
-          const rx10 = Math.max(0, Math.min(barW, scale(item.range.q10)));
-          const rx90 = Math.max(0, Math.min(barW, scale(item.range.q90)));
-          const rw90 = Math.max(2, rx90 - rx10);
-          svgEl("rect", {
-            x: rx10, y: 5, width: rw90, height: 10,
-            rx: 3, ry: 3, fill: "var(--dot)", opacity: 0.18,
-          }, svg);
-
-          // Good-shot range: q25..q75 (solid-faint)
-          const rx25 = Math.max(0, Math.min(barW, scale(item.range.q25)));
-          const rx75 = Math.max(0, Math.min(barW, scale(item.range.q75)));
-          const rw75 = Math.max(2, rx75 - rx25);
-          svgEl("rect", {
-            x: rx25, y: 5, width: rw75, height: 10,
-            rx: 3, ry: 3, fill: "var(--dot)", opacity: 0.38,
-          }, svg);
-
-          // Period middle half: thin line q1..q3
-          if (item.q1 != null && item.q3 != null) {
-            const lx1 = Math.max(0, Math.min(barW, scale(item.q1)));
-            const lx3 = Math.max(0, Math.min(barW, scale(item.q3)));
-            svgEl("line", {
-              x1: lx1, y1: 10, x2: lx3, y2: 10,
-              stroke: "var(--text)", "stroke-width": 2, opacity: 0.85,
-            }, svg);
-          }
-
-          // Latest session median dot
-          if (item.latest.med != null) {
-            const cx = Math.max(4, Math.min(barW - 4, scale(item.latest.med)));
-            const isInside = item.gap === 0;
-            const dotCol = isInside ? "var(--dot)" : "var(--warn)";
-            svgEl("circle", {
-              cx, cy: 10, r: 4.5,
-              fill: dotCol, stroke: "var(--panel)", "stroke-width": 1.5,
-            }, svg);
-          }
-        } else if (item.q1 != null && item.q3 != null) {
-          // No range yet, show period's middle half
-          const pts = [item.q1, item.q3];
-          if (item.latest.med != null) pts.push(item.latest.med);
-          const vMin = Math.min(...pts);
-          const vMax = Math.max(...pts);
-          const span = vMax - vMin || 1;
-          const pad = span * 0.12;
-          const minX = vMin - pad;
-          const maxX = vMax + pad;
-          const scale = v => ((v - minX) / (maxX - minX)) * barW;
-
-          // Background track
-          svgEl("rect", {
-            x: 0, y: 8, width: barW, height: 4,
-            rx: 2, ry: 2, fill: "var(--line)",
-          }, svg);
-
+        if (item.q1 != null && item.q3 != null) {
           const lx1 = Math.max(0, Math.min(barW, scale(item.q1)));
           const lx3 = Math.max(0, Math.min(barW, scale(item.q3)));
           svgEl("line", {
             x1: lx1, y1: 10, x2: lx3, y2: 10,
-            stroke: "var(--text)", "stroke-width": 2, opacity: 0.7,
+            stroke: "var(--text)", "stroke-width": 2, opacity: 0.85,
           }, svg);
-
-          if (item.latest.med != null) {
-            const cx = Math.max(4, Math.min(barW - 4, scale(item.latest.med)));
-            svgEl("circle", {
-              cx, cy: 10, r: 4.5,
-              fill: "var(--muted)", stroke: "var(--panel)", "stroke-width": 1.5,
-            }, svg);
-          }
         }
 
-        barCol.appendChild(svg);
-        rowEl.appendChild(barCol);
-
-        // Column 3: Value and position word
-        const valCol = document.createElement("div");
-        valCol.className = "cp-col-val";
-
-        const valSpan = document.createElement("span");
-        valSpan.className = "cp-val-num";
-        valSpan.textContent = fmt(item.field, item.latest.med);
-        valCol.appendChild(valSpan);
-
-        const posSpan = document.createElement("span");
-        posSpan.className = "cp-val-pos";
-        if (item.range) {
-          if (item.latest.med != null) {
-            if (item.latest.med < item.range.q25) {
-              posSpan.textContent = "low";
-              posSpan.style.color = "var(--warn)";
-            } else if (item.latest.med > item.range.q75) {
-              posSpan.textContent = "high";
-              posSpan.style.color = "var(--warn)";
-            } else {
-              posSpan.textContent = "inside";
-              posSpan.style.color = "var(--dot)";
-            }
-          } else {
-            posSpan.textContent = "–";
-          }
-        } else {
-          posSpan.textContent = "no range yet";
-          posSpan.style.color = "var(--muted)";
+        if (item.latest.med != null) {
+          const cx = Math.max(4, Math.min(barW - 4, scale(item.latest.med)));
+          const isInside = item.gap === 0;
+          const dotCol = isInside ? "var(--dot)" : "var(--warn)";
+          svgEl("circle", {
+            cx, cy: 10, r: 4.5,
+            fill: dotCol, stroke: "var(--panel)", "stroke-width": 1.5,
+          }, svg);
         }
-        valCol.appendChild(posSpan);
-        rowEl.appendChild(valCol);
+      } else if (item.q1 != null && item.q3 != null) {
+        const pts = [item.q1, item.q3];
+        if (item.latest.med != null) pts.push(item.latest.med);
+        const vMin = Math.min(...pts);
+        const vMax = Math.max(...pts);
+        const span = vMax - vMin || 1;
+        const pad = span * 0.12;
+        const minX = vMin - pad;
+        const maxX = vMax + pad;
+        const scale = v => ((v - minX) / (maxX - minX)) * barW;
 
-        // Column 4: Share in range & outside swings link
-        const metaCol = document.createElement("div");
-        metaCol.className = "cp-col-meta";
+        svgEl("rect", {
+          x: 0, y: 8, width: barW, height: 4,
+          rx: 2, ry: 2, fill: "var(--line)",
+        }, svg);
 
-        if (item.inRange != null) {
-          const inRangeSpan = document.createElement("span");
-          inRangeSpan.className = "cp-in-range";
-          inRangeSpan.textContent = `${Math.round(item.inRange * 100)}% in range`;
-          metaCol.appendChild(inRangeSpan);
+        const lx1 = Math.max(0, Math.min(barW, scale(item.q1)));
+        const lx3 = Math.max(0, Math.min(barW, scale(item.q3)));
+        svgEl("line", {
+          x1: lx1, y1: 10, x2: lx3, y2: 10,
+          stroke: "var(--text)", "stroke-width": 2, opacity: 0.7,
+        }, svg);
+
+        if (item.latest.med != null) {
+          const cx = Math.max(4, Math.min(barW - 4, scale(item.latest.med)));
+          svgEl("circle", {
+            cx, cy: 10, r: 4.5,
+            fill: "var(--muted)", stroke: "var(--panel)", "stroke-width": 1.5,
+          }, svg);
         }
-
-        if (item.outRows && item.outRows.length > 0) {
-          const outBtn = document.createElement("button");
-          outBtn.className = "cp-outside-btn";
-          outBtn.type = "button";
-          outBtn.textContent = "swings outside";
-          outBtn.title = `Show ${item.outRows.length} swing${item.outRows.length === 1 ? "" : "s"} outside your good-shot range`;
-          outBtn.onclick = e => {
-            e.stopPropagation();
-            onPick(item.outRows, `${item.field.label}: outside your good-shot range`, item.key);
-          };
-          metaCol.appendChild(outBtn);
-        }
-
-        rowEl.appendChild(metaCol);
-        listEl.appendChild(rowEl);
       }
-
-      groupDiv.appendChild(listEl);
-      container.appendChild(groupDiv);
+      return svg;
     }
 
-    box.appendChild(container);
+    function updatePanel() {
+      if (!selectedKey) {
+        panelContainer.hidden = true;
+        panelContainer.replaceChildren();
+        return;
+      }
+      const item = analysis.allItems.find(i => i.key === selectedKey);
+      if (!item) {
+        panelContainer.hidden = true;
+        panelContainer.replaceChildren();
+        return;
+      }
+      panelContainer.hidden = false;
+      panelContainer.replaceChildren();
+
+      // Row representation
+      const rowEl = document.createElement("div");
+      rowEl.className = "cp-row cp-panel-row";
+
+      // Col 1: Label and shaky
+      const labCol = document.createElement("div");
+      labCol.className = "cp-col-label";
+      const labSpan = document.createElement("span");
+      labSpan.className = "cp-label-text";
+      labSpan.textContent = item.field.label;
+      labCol.appendChild(labSpan);
+      if (item.shakyShare > 0.5) {
+        const shakySpan = document.createElement("span");
+        shakySpan.className = "cp-shaky";
+        shakySpan.textContent = " ~";
+        shakySpan.title = "Most swings had shaky camera tracking on this number";
+        labCol.appendChild(shakySpan);
+      }
+      rowEl.appendChild(labCol);
+
+      // Col 2: Bar SVG
+      const barCol = document.createElement("div");
+      barCol.className = "cp-col-bar";
+      barCol.appendChild(renderRangeBarSvg(item));
+      rowEl.appendChild(barCol);
+
+      // Col 3: Value and position word
+      const valCol = document.createElement("div");
+      valCol.className = "cp-col-val";
+      const valSpan = document.createElement("span");
+      valSpan.className = "cp-val-num";
+      valSpan.textContent = fmt(item.field, item.latest.med);
+      valCol.appendChild(valSpan);
+
+      const posSpan = document.createElement("span");
+      posSpan.className = "cp-val-pos";
+      if (item.range) {
+        if (item.latest.med != null) {
+          if (item.latest.med < item.range.q25) {
+            posSpan.textContent = "low";
+            posSpan.style.color = "var(--warn)";
+          } else if (item.latest.med > item.range.q75) {
+            posSpan.textContent = "high";
+            posSpan.style.color = "var(--warn)";
+          } else {
+            posSpan.textContent = "inside";
+            posSpan.style.color = "var(--dot)";
+          }
+        } else {
+          posSpan.textContent = "–";
+        }
+      } else {
+        posSpan.textContent = "no range yet";
+        posSpan.style.color = "var(--muted)";
+      }
+      valCol.appendChild(posSpan);
+      rowEl.appendChild(valCol);
+
+      // Col 4: Share in range
+      const metaCol = document.createElement("div");
+      metaCol.className = "cp-col-meta";
+      if (item.inRange != null) {
+        const inRangeSpan = document.createElement("span");
+        inRangeSpan.className = "cp-in-range";
+        inRangeSpan.textContent = `${Math.round(item.inRange * 100)}% in range`;
+        metaCol.appendChild(inRangeSpan);
+      }
+      rowEl.appendChild(metaCol);
+      panelContainer.appendChild(rowEl);
+
+      // Actions row: See it over time, Swings outside, Make this my focus
+      const actionsEl = document.createElement("div");
+      actionsEl.className = "cp-panel-actions";
+
+      // 1. See it over time
+      const overTimeBtn = document.createElement("button");
+      overTimeBtn.type = "button";
+      overTimeBtn.className = "cp-action-btn";
+      overTimeBtn.textContent = "See it over time";
+      overTimeBtn.onclick = () => onMetric(item.key);
+      actionsEl.appendChild(overTimeBtn);
+
+      // 2. Swings outside
+      const outsideBtn = document.createElement("button");
+      outsideBtn.type = "button";
+      outsideBtn.className = "cp-action-btn";
+      if (item.outRows && item.outRows.length > 0) {
+        outsideBtn.textContent = `Swings outside (${item.outRows.length})`;
+        outsideBtn.onclick = () => onPick(item.outRows, `${item.field.label}: outside your good-shot range`, item.key);
+      } else {
+        outsideBtn.textContent = "Swings outside";
+        outsideBtn.disabled = true;
+      }
+      actionsEl.appendChild(outsideBtn);
+
+      // 3. Make this my focus (when outside middle half)
+      let s = null;
+      if (Indicators && item.range && item.latest.med != null) {
+        s = Indicators.side(item.latest.med, item.range);
+      } else if (item.range && item.latest.med != null) {
+        if (item.latest.med < item.range.q25) s = "low";
+        else if (item.latest.med > item.range.q75) s = "high";
+      }
+
+      if (s) {
+        const aim = s === "high" ? "less" : "more";
+        const focusBtn = document.createElement("button");
+        focusBtn.type = "button";
+        focusBtn.className = "cp-action-btn cp-btn-focus";
+        focusBtn.textContent = "Make this my focus";
+        focusBtn.title = `Focus on ${item.field.label.toLowerCase()} (${aim})`;
+        focusBtn.onclick = () => onGoal(item.key, aim);
+        actionsEl.appendChild(focusBtn);
+      }
+
+      panelContainer.appendChild(actionsEl);
+    }
+
+    function selectTile(k) {
+      selectedKey = k;
+      gridContainer.querySelectorAll(".in-tile").forEach(t => {
+        t.classList.toggle("selected", t.dataset.key === k);
+      });
+      updatePanel();
+    }
+
+    function refresh() {
+      const favList = Indicators ? Indicators.favs() : [];
+      const hasFavs = favList.length > 0;
+
+      // Build chips
+      chipsContainer.replaceChildren();
+      const chipDefs = [];
+      if (hasFavs) {
+        chipDefs.push({ id: "favs", label: "Favorites" });
+      }
+      chipDefs.push(
+        { id: "all", label: "All" },
+        { id: "rhythm", label: "Rhythm" },
+        { id: "top", label: "Top of the swing" },
+        { id: "downswing", label: "Downswing" },
+        { id: "impact", label: "Impact" }
+      );
+
+      if (!chipDefs.some(c => c.id === activeFilter)) {
+        activeFilter = "all";
+      }
+
+      for (const chip of chipDefs) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `cp-chip${chip.id === activeFilter ? " active" : ""}`;
+        btn.textContent = chip.label;
+        btn.onclick = () => {
+          activeFilter = chip.id;
+          try {
+            if (typeof localStorage !== "undefined") localStorage.setItem(FILTER_KEY, activeFilter);
+          } catch {}
+          refresh();
+        };
+        chipsContainer.appendChild(btn);
+      }
+
+      // Filter items
+      let filtered = analysis.allItems;
+      if (activeFilter === "favs") {
+        filtered = analysis.allItems.filter(i => favList.includes(i.key));
+      } else if (activeFilter === "rhythm") {
+        filtered = analysis.allItems.filter(i => !i.field.pos);
+      } else if (activeFilter === "top") {
+        filtered = analysis.allItems.filter(i => i.field.pos === "p4");
+      } else if (activeFilter === "downswing") {
+        filtered = analysis.allItems.filter(i => i.field.pos === "p5" || i.field.pos === "p6");
+      } else if (activeFilter === "impact") {
+        filtered = analysis.allItems.filter(i => i.field.pos === "p7");
+      }
+
+      // Populate grid
+      gridContainer.replaceChildren();
+      for (const item of filtered) {
+        const tileItem = {
+          key: item.key,
+          field: item.field,
+          value: item.latest.med,
+          range: item.range,
+          shaky: item.shakyShare > 0.5,
+        };
+
+        if (Indicators && typeof Indicators.tile === "function") {
+          const tileEl = Indicators.tile(tileItem, {
+            fav: favList.includes(item.key),
+            fmt: opts.fmt ? (v => opts.fmt(item.field, v)) : undefined,
+            onFav: k => {
+              if (Indicators && typeof Indicators.toggleFav === "function") {
+                Indicators.toggleFav(k);
+              }
+              refresh();
+            },
+            onTap: k => selectTile(k),
+          });
+          if (selectedKey === item.key) tileEl.classList.add("selected");
+          gridContainer.appendChild(tileEl);
+        }
+      }
+
+      updatePanel();
+    }
+
+    refresh();
+
+    box.appendChild(chipsContainer);
+    box.appendChild(gridContainer);
+    box.appendChild(panelContainer);
 
     // 3. Fold "How it's worked out"
     const fold = document.createElement("details");

@@ -124,7 +124,12 @@
     const z = zone(val, range);
     const s = side(val, range);
     const m = moment(field);
-    const fmt = opts.fmt || (v => defaultFmt(field, v));
+    const fmt = opts.fmt
+      ? (v => {
+          if (typeof opts.fmt !== "function") return defaultFmt(field, v);
+          return opts.fmt.length >= 2 ? opts.fmt(field, v) : opts.fmt(v);
+        })
+      : (v => defaultFmt(field, v));
 
     const btn = doc.createElement("button");
     btn.className = `in-tile${z ? ` in-zone-${z}` : " in-zone-none"}${opts.fav ? " is-fav" : ""}`;
@@ -187,9 +192,13 @@
 
     // 4. Verbal state under value
     let stateText = "no range yet";
-    if (z === "in") stateText = "in range";
-    else if (z === "near") stateText = s === "low" ? "a little low" : (s === "high" ? "a little high" : "near range");
-    else if (z === "out") stateText = s === "low" ? "low" : (s === "high" ? "high" : "out of range");
+    if (finite(val)) {
+      if (z === "in") stateText = "in range";
+      else if (z === "near") stateText = s === "low" ? "a little low" : (s === "high" ? "a little high" : "near range");
+      else if (z === "out") stateText = s === "low" ? "low" : (s === "high" ? "high" : "out of range");
+    } else if (isUsableRange(range)) {
+      stateText = "no reading";
+    }
 
     const stateEl = doc.createElement("div");
     stateEl.className = `in-state in-state-${z || "none"}`;
@@ -302,10 +311,141 @@
     return btn;
   }
 
+  const KNOWN_FIELDS = {
+    tempo: { key: "tempo", label: "Tempo", unit: ":1", dec: 1 },
+    backswing: { key: "backswing", label: "Backswing time", unit: "s", dec: 2 },
+    downswing: { key: "downswing", label: "Downswing time", unit: "s", dec: 2 },
+    shoulderTop: { key: "shoulderTop", label: "Shoulder turn at top", unit: "°", dec: 1, pos: "p4" },
+    pelvisTop: { key: "pelvisTop", label: "Pelvis turn at top", unit: "°", dec: 1, pos: "p4" },
+    xFactor: { key: "xFactor", label: "X-factor at top", unit: "°", dec: 1, pos: "p4" },
+    hipSway: { key: "hipSway", label: "Hip sway at impact", unit: "in", dec: 1, pos: "p7" },
+    leadHipP6: { key: "leadHipP6", label: "Lead hip at P6", unit: "in", dec: 1, pos: "p6" },
+    trailHipTop: { key: "trailHipTop", label: "Trail hip at top", unit: "in", dec: 1, pos: "p4" },
+    handsAhead: { key: "handsAhead", label: "Hands ahead of ball at impact", unit: "in", dec: 1, pos: "p7" },
+    pelvisBall: { key: "pelvisBall", label: "Pelvis vs ball at impact", unit: "in", dec: 1, pos: "p7" },
+    chestBall: { key: "chestBall", label: "Chest vs ball at impact", unit: "in", dec: 1, pos: "p7" },
+    headSway: { key: "headSway", label: "Head sway at impact", unit: "in", dec: 1, pos: "p7" },
+    headRise: { key: "headRise", label: "Head rise at impact", unit: "in", dec: 1, pos: "p7" },
+    spineTiltImpact: { key: "spineTiltImpact", label: "Spine tilt at impact", unit: "°", dec: 1, pos: "p7" },
+    lagP5: { key: "lagP5", label: "Wrist hinge at P5", unit: "°", dec: 1, pos: "p5" },
+    releaseArm: { key: "releaseArm", label: "Release point", unit: "°", dec: 1 },
+    earlyExt: { key: "earlyExt", label: "Hips to ball at impact", unit: "in", dec: 1, pos: "p7" },
+    bendLoss: { key: "bendLoss", label: "Bend vs address at impact", unit: "°", dec: 1, pos: "p7" },
+    headToBall: { key: "headToBall", label: "Head to ball at impact", unit: "in", dec: 1, pos: "p7" },
+    handsPlaneP6: { key: "handsPlaneP6", label: "Hands to plane at P6", unit: "in", dec: 1, pos: "p6" },
+    shaftPlaneP6: { key: "shaftPlaneP6", label: "Shaft to plane at P6", unit: "°", dec: 1, pos: "p6" },
+    handsPlaneTop: { key: "handsPlaneTop", label: "Hands to plane at top", unit: "in", dec: 1, pos: "p4" },
+    handHeightTop: { key: "handHeightTop", label: "Hand height at top", unit: "in", dec: 1, pos: "p4" },
+    handDepthTop: { key: "handDepthTop", label: "Hand depth at top", unit: "in", dec: 1, pos: "p4" },
+  };
+
+  function resolveField(key) {
+    if (typeof root !== "undefined") {
+      if (root.FIELDS && Array.isArray(root.FIELDS)) {
+        const found = root.FIELDS.find(f => f.key === key);
+        if (found) return found;
+      }
+      if (root.SwingSummary && Array.isArray(root.SwingSummary.BODY)) {
+        const found = root.SwingSummary.BODY.find(b => b.key === key);
+        if (found) {
+          const lbl = (root.SwingShotStory && root.SwingShotStory.LABELS && root.SwingShotStory.LABELS[key]) || found.label;
+          return { dec: 1, ...found, label: lbl };
+        }
+      }
+    }
+    return KNOWN_FIELDS[key] || { key, label: key, unit: "", dec: 1 };
+  }
+
+  /**
+   * Render the strip of indicator tiles under the video (#indicators).
+   * @param box Container element
+   * @param opts { body, trust, ranges, positions, jumpTo, onChoose, storage, document }
+   */
+  function renderThisSwing(box, opts) {
+    if (!box) return;
+    opts = opts || {};
+    const body = opts.body;
+    const trust = opts.trust || {};
+    const ranges = opts.ranges || {};
+    const positions = opts.positions || [];
+    const jumpTo = opts.jumpTo;
+    const onChoose = opts.onChoose;
+    const doc = opts.document || (typeof document !== "undefined" ? document : null);
+    if (!doc) return;
+
+    // Hidden when the swing has no body numbers
+    const hasBody = body && Object.keys(body).some(k => finite(body[k]));
+    if (!hasBody) {
+      box.hidden = true;
+      box.replaceChildren();
+      return;
+    }
+    box.hidden = false;
+    box.replaceChildren();
+
+    // 1. Header: "This swing" + "Choose" link
+    const head = doc.createElement("div");
+    head.className = "in-card-head";
+
+    const titleEl = doc.createElement("strong");
+    titleEl.textContent = "This swing";
+    head.appendChild(titleEl);
+
+    const chooseBtn = doc.createElement("button");
+    chooseBtn.type = "button";
+    chooseBtn.className = "link-btn in-choose-btn";
+    chooseBtn.textContent = "Choose";
+    chooseBtn.onclick = () => {
+      if (typeof onChoose === "function") onChoose();
+    };
+    head.appendChild(chooseBtn);
+    box.appendChild(head);
+
+    // 2. Strip of favorite tiles
+    const strip = doc.createElement("div");
+    strip.className = "in-strip";
+
+    const currentFavs = favs(opts.storage);
+    for (const key of currentFavs) {
+      const field = resolveField(key);
+      const val = body[key];
+      const range = ranges[key];
+      const isShaky = !!(trust[key] && trust[key].level === "shaky");
+
+      const item = {
+        key,
+        field,
+        value: val,
+        range,
+        shaky: isShaky,
+      };
+
+      const tileEl = tile(item, {
+        document: doc,
+        fav: true,
+        fmt: opts.fmt,
+        onFav: k => {
+          toggleFav(k, opts.storage);
+          renderThisSwing(box, opts);
+        },
+        onTap: () => {
+          const posKey = field.pos || (field.key === "releaseArm" ? "p6" : "p4");
+          const pos = positions.find(p => p.key === posKey);
+          if (pos && typeof jumpTo === "function") jumpTo(pos.index);
+        },
+      });
+
+      strip.appendChild(tileEl);
+    }
+
+    box.appendChild(strip);
+  }
+
   const api = {
     MOMENTS,
     DEFAULT_FAVS,
     MAX_FAVS,
+    KNOWN_FIELDS,
     moment,
     isUsableRange,
     zone,
@@ -313,6 +453,8 @@
     favs,
     toggleFav,
     tile,
+    resolveField,
+    renderThisSwing,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
