@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import math
 from pathlib import Path
 import random
 
@@ -18,50 +19,69 @@ SEED = 42
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
-# 12 sessions across 4 weeks in March 2031
-# Focus starts on 2031-03-16: 6 sessions before, 6 sessions after.
-SESSION_SCHEDULE = [
-    # Week 1
-    datetime.datetime(2031, 3, 3, 10, 0, 0),
-    datetime.datetime(2031, 3, 5, 11, 30, 0),
-    datetime.datetime(2031, 3, 7, 9, 15, 0),
-    # Week 2
-    datetime.datetime(2031, 3, 10, 14, 0, 0),
-    datetime.datetime(2031, 3, 12, 10, 30, 0),
-    datetime.datetime(2031, 3, 14, 16, 0, 0),
-    # --- Focus started: 2031-03-16 ---
-    # Week 3
-    datetime.datetime(2031, 3, 17, 11, 0, 0),
-    datetime.datetime(2031, 3, 19, 15, 30, 0),
-    datetime.datetime(2031, 3, 21, 10, 0, 0),
-    # Week 4
-    datetime.datetime(2031, 3, 24, 14, 30, 0),
-    datetime.datetime(2031, 3, 26, 11, 0, 0),
-    datetime.datetime(2031, 3, 28, 10, 15, 0),
-]
 
-FOCUS_START_DATE = "2031-03-16"
+def make_session_schedule() -> tuple[list[datetime.datetime], str]:
+    """Generate 21 sessions spread across 10 weeks ending yesterday."""
+    now = datetime.datetime.now()
+    today = now.date()
+    yesterday = today - datetime.timedelta(days=1)
+    this_monday = today - datetime.timedelta(days=today.weekday())
+
+    sessions = []
+
+    # Newest week (ending yesterday): 3 sessions
+    # e.g. Monday, Wednesday, Friday (yesterday)
+    # If yesterday is Friday (weekday 4):
+    if yesterday.weekday() >= 4:
+        sessions.append(datetime.datetime.combine(this_monday, datetime.time(10, 0)))
+        sessions.append(datetime.datetime.combine(this_monday + datetime.timedelta(days=2), datetime.time(14, 30)))
+        sessions.append(datetime.datetime.combine(yesterday, datetime.time(10, 15)))
+    elif yesterday.weekday() >= 2:
+        sessions.append(datetime.datetime.combine(this_monday, datetime.time(10, 0)))
+        sessions.append(datetime.datetime.combine(this_monday + datetime.timedelta(days=1), datetime.time(14, 30)))
+        sessions.append(datetime.datetime.combine(yesterday, datetime.time(10, 15)))
+    else:
+        # Fallback if run on Monday/Tuesday
+        sessions.append(datetime.datetime.combine(yesterday - datetime.timedelta(days=4), datetime.time(10, 0)))
+        sessions.append(datetime.datetime.combine(yesterday - datetime.timedelta(days=2), datetime.time(14, 30)))
+        sessions.append(datetime.datetime.combine(yesterday, datetime.time(10, 15)))
+
+    # Preceding 9 weeks: 2 sessions each (Tuesday, Thursday)
+    for w in range(1, 10):
+        w_monday = this_monday - datetime.timedelta(weeks=w)
+        sessions.append(datetime.datetime.combine(w_monday + datetime.timedelta(days=1), datetime.time(10, 0)))
+        sessions.append(datetime.datetime.combine(w_monday + datetime.timedelta(days=3), datetime.time(14, 30)))
+
+    sessions.sort()
+
+    # Focus started around session 10 (halfway through the 10 weeks)
+    focus_idx = 10
+    focus_start_date = sessions[focus_idx].strftime("%Y-%m-%d")
+
+    return sessions, focus_start_date
 
 
 def generate_demo_data() -> None:
     random.seed(SEED)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+    session_schedule, focus_start_date = make_session_schedule()
+
     all_clips = []
     swings_records = {}
-
     shot_number = 1000
 
-    for sess_idx, sess_start in enumerate(SESSION_SCHEDULE):
-        is_after_focus = sess_start.strftime("%Y-%m-%d") >= FOCUS_START_DATE
+    for sess_idx, sess_start in enumerate(session_schedule):
+        is_after_focus = sess_start.strftime("%Y-%m-%d") >= focus_start_date
+        is_latest_sess = (sess_idx == len(session_schedule) - 1)
         curr_time = sess_start
 
-        # 28 swings per session: mostly 7 iron, plus some PW, 9 iron, driver
+        # 28 swings per session: PW, 9 iron, 7 iron, driver (both irons and woods >= 8)
         club_sequence = (
-            ["PW"] * 4
+            ["PW"] * 3
             + ["I9"] * 3
-            + ["I7"] * 18
-            + ["DR"] * 3
+            + ["I7"] * 14
+            + ["DR"] * 8
         )
 
         for swing_idx, club in enumerate(club_sequence):
@@ -75,107 +95,138 @@ def generate_demo_data() -> None:
             face_name = f"swing_face_1920x1080_240fps_{ts}_{duration_ms}ms.mp4"
             dtl_name = f"swing_dtl_1920x1080_240fps_{ts}_{duration_ms - 10}ms.mp4"
 
-            # Launch monitor numbers
-            is_latest_sess = (sess_idx == len(SESSION_SCHEDULE) - 1)
+            # 1. Within-session correlated hip motion (leads to confirmed link with smash & carry)
+            delta_hip = random.normalvariate(0.0, 0.4)
             if club == "I7":
-                if not is_after_focus:
-                    # Before focus
-                    club_speed = round(random.normalvariate(84.5, 1.0), 2)
-                    smash = round(random.normalvariate(1.30, 0.02), 2)
-                    ball_speed = round(club_speed * smash, 2)
-                    carry = round(random.normalvariate(146.0, 3.5), 1)
-                    total = round(carry + 2.5, 1)
-                    attack = round(random.normalvariate(-3.2, 0.4), 2)
-                    loft = round(random.normalvariate(28.5, 0.6), 2)
-                    path = round(random.normalvariate(-1.8, 0.6), 2)
-                    face = round(random.normalvariate(0.6, 0.5), 2)
-                    # Earlier sessions: wider offline misses (~28% good shots)
-                    offline = round(random.normalvariate(4.0, 5.5), 1)
-                    vla = round(random.normalvariate(20.2, 0.6), 2)
-                    hla = round(random.normalvariate(0.3, 0.4), 2)
-                    spin = int(random.normalvariate(6400, 200))
-                    spin_axis = round(random.normalvariate(2.0, 1.2), 2)
-                    lead_hip_p6 = round(random.normalvariate(2.0, 0.25), 2)
-                else:
-                    # After focus
-                    club_speed = round(random.normalvariate(86.5, 0.9), 2)
-                    smash = round(random.normalvariate(1.35, 0.015), 2)
-                    ball_speed = round(club_speed * smash, 2)
-                    carry = round(random.normalvariate(153.5, 2.5), 1)
-                    total = round(carry + 2.8, 1)
-                    attack = round(random.normalvariate(-3.8, 0.35), 2)
-                    loft = round(random.normalvariate(28.0, 0.5), 2)
-                    path = round(random.normalvariate(-1.0, 0.5), 2)
-                    face = round(random.normalvariate(0.2, 0.4), 2)
-                    # Latest session has tighter offline (more good shots) than sessions 7-10
-                    offline_sd = 3.2 if is_latest_sess else 5.2
-                    offline = round(random.normalvariate(1.0, offline_sd), 1)
-                    vla = round(random.normalvariate(20.8, 0.5), 2)
-                    hla = round(random.normalvariate(0.1, 0.3), 2)
-                    spin = int(random.normalvariate(6600, 180))
-                    spin_axis = round(random.normalvariate(1.0, 0.8), 2)
-                    lead_hip_p6 = round(random.normalvariate(4.25, 0.25), 2)
+                base_hip = 4.25 if is_after_focus else 2.0
+            elif club == "DR":
+                base_hip = 4.0 if is_after_focus else 2.5
+            elif club == "PW":
+                base_hip = 3.5 if is_after_focus else 2.2
+            else:  # I9
+                base_hip = 3.8 if is_after_focus else 2.1
+            lead_hip_p6 = round(base_hip + delta_hip, 2)
 
-                # Strike location: tight clear blob around centre (0, 0)
-                strike_h = round(random.normalvariate(0.0, 3.0), 2)
-                strike_v = round(random.normalvariate(0.0, 2.4), 2)
+            # 2. Launch monitor metrics per club
+            if club == "I7":
+                club_speed = round(random.normalvariate(86.5 if is_after_focus else 84.5, 0.8), 2)
+                base_smash = 1.35 if is_after_focus else 1.30
+                # Strong correlation with leadHipP6
+                smash = round(base_smash + 0.04 * delta_hip + random.normalvariate(0, 0.003), 2)
+                ball_speed = round(club_speed * smash, 2)
+                base_carry = 153.5 if is_after_focus else 146.0
+                carry = round(base_carry + 6.0 * delta_hip + random.normalvariate(0, 0.8), 1)
+                total = round(carry + 2.8, 1)
+                attack = round(random.normalvariate(-3.8 if is_after_focus else -3.2, 0.35), 2)
+                loft = round(random.normalvariate(28.0, 0.5), 2)
+                path = round(random.normalvariate(-1.0, 0.5), 2)
+                face = round(random.normalvariate(0.2, 0.4), 2)
+                vla = round(random.normalvariate(20.8, 0.5), 2)
+                spin = int(random.normalvariate(6600, 180))
+                strike_h = round(random.normalvariate(0.0, 2.5), 2)
+                strike_v = round(random.normalvariate(0.0, 2.0), 2)
 
             elif club == "PW":
-                club_speed = round(random.normalvariate(78.0, 1.2), 2)
-                smash = round(random.normalvariate(1.23, 0.015), 2)
+                club_speed = round(random.normalvariate(78.0, 1.0), 2)
+                smash = round(1.24 + 0.02 * delta_hip + random.normalvariate(0, 0.005), 2)
                 ball_speed = round(club_speed * smash, 2)
-                carry = round(random.normalvariate(118.0, 2.5), 1)
+                carry = round(118.0 + 3.0 * delta_hip + random.normalvariate(0, 1.2), 1)
                 total = round(carry + 1.5, 1)
-                attack = round(random.normalvariate(-4.5, 0.5), 2)
-                loft = round(random.normalvariate(39.0, 0.8), 2)
-                path = round(random.normalvariate(-1.2, 0.6), 2)
-                face = round(random.normalvariate(0.2, 0.5), 2)
-                offline = round(random.normalvariate(1.5, 2.5), 1)
-                vla = round(random.normalvariate(25.5, 0.8), 2)
-                hla = round(random.normalvariate(0.1, 0.4), 2)
-                spin = int(random.normalvariate(8500, 250))
-                spin_axis = round(random.normalvariate(1.0, 1.0), 2)
-                strike_h = round(random.normalvariate(0.0, 2.8), 2)
-                strike_v = round(random.normalvariate(0.0, 2.2), 2)
-                lead_hip_p6 = round(random.normalvariate(3.5 if is_after_focus else 2.2, 0.3), 2)
+                attack = round(random.normalvariate(-4.5, 0.4), 2)
+                loft = round(random.normalvariate(39.0, 0.6), 2)
+                path = round(random.normalvariate(-1.2, 0.5), 2)
+                face = round(random.normalvariate(0.2, 0.4), 2)
+                vla = round(random.normalvariate(25.5, 0.6), 2)
+                spin = int(random.normalvariate(8500, 200))
+                strike_h = round(random.normalvariate(0.0, 2.2), 2)
+                strike_v = round(random.normalvariate(0.0, 1.8), 2)
 
             elif club == "I9":
-                club_speed = round(random.normalvariate(81.0, 1.1), 2)
-                smash = round(random.normalvariate(1.27, 0.015), 2)
+                club_speed = round(random.normalvariate(81.0, 0.9), 2)
+                smash = round(1.28 + 0.02 * delta_hip + random.normalvariate(0, 0.005), 2)
                 ball_speed = round(club_speed * smash, 2)
-                carry = round(random.normalvariate(132.0, 2.8), 1)
+                carry = round(132.0 + 3.5 * delta_hip + random.normalvariate(0, 1.2), 1)
                 total = round(carry + 2.0, 1)
-                attack = round(random.normalvariate(-4.0, 0.5), 2)
-                loft = round(random.normalvariate(34.0, 0.7), 2)
-                path = round(random.normalvariate(-1.4, 0.6), 2)
-                face = round(random.normalvariate(0.4, 0.5), 2)
-                offline = round(random.normalvariate(2.0, 3.0), 1)
-                vla = round(random.normalvariate(22.8, 0.7), 2)
-                hla = round(random.normalvariate(0.2, 0.4), 2)
-                spin = int(random.normalvariate(7400, 220))
-                spin_axis = round(random.normalvariate(1.5, 1.1), 2)
-                strike_h = round(random.normalvariate(0.0, 2.9), 2)
-                strike_v = round(random.normalvariate(0.0, 2.3), 2)
-                lead_hip_p6 = round(random.normalvariate(3.8 if is_after_focus else 2.1, 0.3), 2)
+                attack = round(random.normalvariate(-4.0, 0.4), 2)
+                loft = round(random.normalvariate(34.0, 0.6), 2)
+                path = round(random.normalvariate(-1.4, 0.5), 2)
+                face = round(random.normalvariate(0.3, 0.4), 2)
+                vla = round(random.normalvariate(22.8, 0.6), 2)
+                spin = int(random.normalvariate(7400, 190))
+                strike_h = round(random.normalvariate(0.0, 2.4), 2)
+                strike_v = round(random.normalvariate(0.0, 2.0), 2)
 
             else:  # DR
-                club_speed = round(random.normalvariate(101.5, 1.5), 2)
-                smash = round(random.normalvariate(1.44, 0.02), 2)
+                club_speed = round(random.normalvariate(101.5, 1.2), 2)
+                smash = round(1.44 + 0.025 * delta_hip + random.normalvariate(0, 0.006), 2)
                 ball_speed = round(club_speed * smash, 2)
-                carry = round(random.normalvariate(234.0, 5.0), 1)
+                carry = round(234.0 + 5.0 * delta_hip + random.normalvariate(0, 2.5), 1)
                 total = round(carry + 16.0, 1)
-                attack = round(random.normalvariate(1.5, 0.6), 2)
-                loft = round(random.normalvariate(12.5, 0.7), 2)
-                path = round(random.normalvariate(-1.0, 0.7), 2)
-                face = round(random.normalvariate(0.5, 0.6), 2)
-                offline = round(random.normalvariate(4.0, 5.0), 1)
-                vla = round(random.normalvariate(13.2, 0.8), 2)
-                hla = round(random.normalvariate(0.3, 0.5), 2)
-                spin = int(random.normalvariate(2600, 180))
-                spin_axis = round(random.normalvariate(1.8, 1.5), 2)
-                strike_h = round(random.normalvariate(1.5, 3.8), 2)
-                strike_v = round(random.normalvariate(1.5, 3.0), 2)
-                lead_hip_p6 = round(random.normalvariate(4.0 if is_after_focus else 2.5, 0.4), 2)
+                attack = round(random.normalvariate(1.5, 0.5), 2)
+                loft = round(random.normalvariate(12.5, 0.6), 2)
+                path = round(random.normalvariate(-1.0, 0.6), 2)
+                face = round(random.normalvariate(0.5, 0.5), 2)
+                vla = round(random.normalvariate(13.2, 0.6), 2)
+                spin = int(random.normalvariate(2600, 150))
+                strike_h = round(random.normalvariate(0.5, 3.0), 2)
+                strike_v = round(random.normalvariate(0.5, 2.5), 2)
+
+            # 3. Ball flight shapes to populate all 9 cells of the 3x3 grid
+            # Thresholds: start line +-2.0 deg, curve +-0.025 * carry
+            thresh_curve = carry * 0.025
+            r_cat = random.random()
+            if is_latest_sess and club == "I7":
+                # Latest session has higher share of straight shots (~60%)
+                if r_cat < 0.60:
+                    cat_start, cat_curve = "straight", "straight"
+                elif r_cat < 0.75:
+                    cat_start, cat_curve = "straight", "right"
+                elif r_cat < 0.88:
+                    cat_start, cat_curve = "straight", "left"
+                elif r_cat < 0.94:
+                    cat_start, cat_curve = "right", "right"
+                elif r_cat < 0.97:
+                    cat_start, cat_curve = "left", "left"
+                else:
+                    cat_start, cat_curve = "right", "straight"
+            else:
+                if r_cat < 0.44:
+                    cat_start, cat_curve = "straight", "straight"
+                elif r_cat < 0.60:
+                    cat_start, cat_curve = "straight", "right"  # Fade
+                elif r_cat < 0.74:
+                    cat_start, cat_curve = "straight", "left"   # Draw
+                elif r_cat < 0.80:
+                    cat_start, cat_curve = "right", "right"     # Push fade
+                elif r_cat < 0.86:
+                    cat_start, cat_curve = "right", "straight"  # Push
+                elif r_cat < 0.91:
+                    cat_start, cat_curve = "right", "left"      # Push draw
+                elif r_cat < 0.95:
+                    cat_start, cat_curve = "left", "left"       # Pull draw
+                elif r_cat < 0.98:
+                    cat_start, cat_curve = "left", "straight"   # Pull
+                else:
+                    cat_start, cat_curve = "left", "right"      # Pull fade
+
+            if cat_start == "straight":
+                hla = round(random.uniform(-1.4, 1.4), 2)
+            elif cat_start == "right":
+                hla = round(random.uniform(2.3, 3.8), 2)
+            else:  # left
+                hla = round(random.uniform(-3.8, -2.3), 2)
+
+            if cat_curve == "straight":
+                curve_yd = round(random.uniform(-0.6 * thresh_curve, 0.6 * thresh_curve), 1)
+                spin_axis = round(random.uniform(-0.8, 0.8), 2)
+            elif cat_curve == "left":
+                curve_yd = round(-thresh_curve - random.uniform(0.8, 3.2), 1)
+                spin_axis = round(random.uniform(-4.5, -2.2), 2)
+            else:  # right
+                curve_yd = round(thresh_curve + random.uniform(0.8, 3.2), 1)
+                spin_axis = round(random.uniform(2.2, 4.5), 2)
+
+            offline = round(carry * math.tan(math.radians(hla)) + curve_yd, 1)
 
             strike_v_raw = round(strike_v - 14.0, 2)
 
@@ -275,7 +326,7 @@ def generate_demo_data() -> None:
                 "tempo": round(random.normalvariate(2.85, 0.08), 2),
                 "backswing": round(random.normalvariate(0.78, 0.02), 3),
                 "downswing": round(random.normalvariate(0.27, 0.01), 3),
-                "releaseArm": round(random.normalvariate(-28.0, 4.5), 1),   # casting (above -22) on a few swings
+                "releaseArm": round(random.normalvariate(-28.0, 4.5), 1),
                 "shoulderTop": round(random.normalvariate(115.5, 2.5), 1),
                 "pelvisTop": round(random.normalvariate(46.2, 2.0), 1),
                 "xFactor": round(random.normalvariate(69.3, 2.0), 1),
@@ -319,6 +370,10 @@ def generate_demo_data() -> None:
     with open(DATA_DIR / "clips.json", "w", encoding="utf-8") as f:
         json.dump(all_clips, f, indent=1)
 
+    latest_sess = session_schedule[-1]
+    latest_sess_ts = int(latest_sess.timestamp())
+    latest_sess_ms = latest_sess_ts * 1000
+
     # 2. noise.json
     noise_keys = {}
     for k in [
@@ -334,16 +389,16 @@ def generate_demo_data() -> None:
             "ratio": 0.2,
             "clips": len(all_clips) // 2,
             "swings": len(all_clips) // 2,
-            "sessions": len(SESSION_SCHEDULE),
+            "sessions": len(session_schedule),
             "shaky": False,
         }
     noise_obj = {
         "swings": len(all_clips) // 2,
-        "sessions": len(SESSION_SCHEDULE),
+        "sessions": len(session_schedule),
         "share": 0.5,
         "keys": noise_keys,
         "code": "demo",
-        "updated": "2031-03-28T10:15:00",
+        "updated": latest_sess.strftime("%Y-%m-%dT%H:%M:%S"),
     }
     with open(DATA_DIR / "noise.json", "w", encoding="utf-8") as f:
         json.dump(noise_obj, f, indent=1)
@@ -404,10 +459,12 @@ def generate_demo_data() -> None:
         json.dump(goodshots_obj, f, indent=1)
 
     # 5. journal.json
+    earliest_date = session_schedule[0].strftime("%Y-%m-%d")
+    latest_date = session_schedule[-1].strftime("%Y-%m-%d")
     journal_obj = {
         "handicap": [
-            {"date": "2031-03-01", "index": 9.4},
-            {"date": "2031-03-28", "index": 8.8},
+            {"date": earliest_date, "index": 9.4},
+            {"date": latest_date, "index": 8.8},
         ],
         "notes": {},
         "focus": {
@@ -415,7 +472,7 @@ def generate_demo_data() -> None:
             "aim": "more",
             "club": "I7",
             "results": ["carry", "smash"],
-            "since": FOCUS_START_DATE,
+            "since": focus_start_date,
         },
         "focuses": [
             {
@@ -423,17 +480,12 @@ def generate_demo_data() -> None:
                 "aim": "more",
                 "club": "I7",
                 "results": ["carry", "smash"],
-                "since": FOCUS_START_DATE,
+                "since": focus_start_date,
             }
         ],
     }
     with open(DATA_DIR / "journal.json", "w", encoding="utf-8") as f:
         json.dump(journal_obj, f, indent=1)
-
-    # Latest session timestamp (for status & coach notes)
-    latest_sess = SESSION_SCHEDULE[-1]
-    latest_sess_ts = int(latest_sess.timestamp())
-    latest_sess_ms = latest_sess_ts * 1000
 
     # 6. status.json
     status_obj = {
@@ -552,7 +604,7 @@ def generate_demo_data() -> None:
             {
                 "id": "lowpoint",
                 "name": "Low point forward",
-                "from": "Coach review Mar 2031",
+                "from": f"Coach review {latest_sess.strftime('%b %Y')}",
                 "cap": 30,
                 "clubs": "7 iron only",
                 "bringBack": "Per swing: attack angle, dynamic loft, face to path, strike height, carry",
@@ -577,7 +629,7 @@ def generate_demo_data() -> None:
         json.dump(program_obj, f, indent=1)
 
     prog_report_text = (
-        "Low point forward: Mar 28 2031, 10:15\n"
+        f"Low point forward: {latest_sess.strftime('%b %d %Y, %H:%M')}\n"
         "Swings: 30 of the 30 cap.\n"
         "Club order: 7i x30\n"
         "Setup notes: none (nothing changed)\n"
@@ -654,6 +706,7 @@ def generate_demo_data() -> None:
         "When your lead hip clears aggressively toward the target, ensure your chest doesn't lag behind leaving the face open. Focus on feeling the clubface square up earlier in the delivery. Use the Impact bag drill to feel a square face at delivery without rolling the forearms."
     )
 
+    now_monday = latest_sess.date() - datetime.timedelta(days=latest_sess.date().weekday())
     coach_notes_obj = [
         {
             "kind": "question",
@@ -675,7 +728,7 @@ def generate_demo_data() -> None:
         },
         {
             "kind": "week",
-            "session": "2031-03-24",
+            "session": now_monday.strftime("%Y-%m-%d"),
             "t": latest_sess_ts + 1200,
             "model": "claude-opus-5-5",
             "provider": "anthropic",
@@ -702,7 +755,7 @@ def generate_demo_data() -> None:
     # Summary
     total_size = sum(p.stat().st_size for p in DATA_DIR.glob("*.json"))
     print(f"Generated demo data in {DATA_DIR}:")
-    print(f"  Sessions: {len(SESSION_SCHEDULE)}")
+    print(f"  Sessions: {len(session_schedule)}")
     print(f"  Clips: {len(all_clips)} ({len(all_clips) // 2} swings)")
     print(f"  Total JSON files: {len(list(DATA_DIR.glob('*.json')))}")
     print(f"  Total data size: {total_size / 1024:.1f} KB")

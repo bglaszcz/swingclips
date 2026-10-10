@@ -2,7 +2,7 @@
  {
   "kind": "question",
   "question": "Why do my 7 irons go right?",
-  "t": 1932480900,
+  "t": 1791562500,
   "model": "claude-opus-5-5",
   "provider": "anthropic",
   "text": "**Why they go right**\nYour 30-day 7 iron data shows an average offline of +2.1 yards (push-fade tendency). While your club path is slightly in-to-out at +1.8\u00b0, your face to path averages +1.2\u00b0 open at impact, which starts the ball right and curves it further right.\n\n**What to do**\nWhen your lead hip clears aggressively toward the target, ensure your chest doesn't lag behind leaving the face open. Focus on feeling the clubface square up earlier in the delivery. Use the Impact bag drill to feel a square face at delivery without rolling the forearms.",
@@ -13,8 +13,8 @@
  },
  {
   "kind": "session",
-  "session": 1932477300000,
-  "t": 1932479760,
+  "session": 1791558900000,
+  "t": 1791561360,
   "model": "claude-opus-5-5",
   "provider": "anthropic",
   "text": "**How it went**\nA solid session: 82% good shots, better than your usual 64%. The 7 iron was crisp and on line, carrying 153 yards with consistent flush contact.\n\n**Your focus**\nYour focus on clearing the lead hip in the downswing is clearly taking hold. You moved the lead hip 4.3 inches forward toward the target, and smash and carry followed over the last 6 sessions.\n\n**Next session**\nStick with the hip rotation. Work on the Hip-to-the-stick drill: alignment stick in the ground just outside your lead hip at address. From the top, bump the lead hip into the stick before the arms start down, then turn. Swing thought: Lead hip to the target first.",
@@ -25,8 +25,8 @@
  },
  {
   "kind": "week",
-  "session": "2031-03-24",
-  "t": 1932478500,
+  "session": "2026-10-05",
+  "t": 1791560100,
   "model": "claude-opus-5-5",
   "provider": "anthropic",
   "text": "**The week**\nThree solid sessions this week with 84 total swings. Your good shot rate reached 78% (up from 65% last week), with 7 iron distance tight at 152 yards median and offline dispersion cut in half.\n\n**Your focus**\nThe lead hip move in the downswing is clearly taking hold. You are averaging 4.3 inches of hip clearance toward the target, compared to 2.0 inches before starting the focus, and smash factor followed.\n\n**Next week**\nStay the course with the hip rotation. Keep using the Hip-to-the-stick drill during warmups. Swing thought: Lead hip to the target first.",
