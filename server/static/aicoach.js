@@ -14,6 +14,7 @@
   const Focus = root.SwingFocus || (typeof require !== "undefined" && (function() { try { return require("./focus.js"); } catch(e){ return null; } })());
   const Coach = root.SwingCoach || (typeof require !== "undefined" && (function() { try { return require("./coach.js"); } catch(e){ return null; } })());
   const GoodShots = root.SwingGoodShots || (typeof require !== "undefined" && (function() { try { return require("./goodshots.js"); } catch(e){ return null; } })());
+  const Goal = root.SwingGoal || (typeof require !== "undefined" && (function() { try { return require("./goal.js"); } catch(e){ return null; } })());
 
   const METRIC_LABELS = {
     // Body metrics
@@ -388,6 +389,37 @@
       }
     }
 
+    const goal = input.focusGoal;
+    if (goal && goal.target) {
+      const t = goal.target;
+      const targetDir = t.side === "below" ? "under" : "over";
+      const boundStr = formatMetricValue(focus.move, t.bound);
+      const PB_TARGET_FROM = { own: "your own target", before: "your usual before you started", first: "your first session with it" };
+      const fromStr = PB_TARGET_FROM[t.from] || "your usual before you started";
+      lines.push(`Target: ${targetDir} ${boundStr}, ${fromStr}`);
+
+      if (goal.latest && goal.latest.n) {
+        lines.push(`Latest session score: ${goal.latest.k} of ${goal.latest.n} swings in target`);
+      }
+
+      const beforeRate = goal.before && goal.before.rate != null ? `${Math.round(goal.before.rate * 100)}%` : null;
+      const afterRate = goal.after && goal.after.rate != null ? `${Math.round(goal.after.rate * 100)}%` : null;
+      if (beforeRate || afterRate) {
+        const parts = [];
+        if (beforeRate) parts.push(`${beforeRate} before`);
+        if (afterRate) parts.push(`${afterRate} since`);
+        lines.push(`Share in target: ${parts.join(", ")}`);
+      }
+
+      if (goal.best && goal.best.rate != null) {
+        lines.push(`Best session: ${goal.best.k} of ${goal.best.n} (${Math.round(goal.best.rate * 100)}%)`);
+      }
+
+      if (goal.cameraMoved) {
+        lines.push("A camera moved since it started: scores either side may not compare");
+      }
+    }
+
     return lines.join("\n");
   }
 
@@ -564,7 +596,11 @@
     const ss = (sessions || []).map(s => ({ start: s.start, rows: (s.rows || []).filter(keep), moved: {} })).filter(s => s.rows.length);
     try {
       const focusCmp = Focus.compare(ss, focus);
-      return { focusCmp, focusWorking: Focus.working(focusCmp, k => (METRIC_LABELS[k] || k).toLowerCase()) };
+      const res = { focusCmp, focusWorking: Focus.working(focusCmp, k => (METRIC_LABELS[k] || k).toLowerCase()) };
+      if (Goal && Goal.progress) {
+        res.focusGoal = Goal.progress(ss, focus);
+      }
+      return res;
     } catch (e) {
       return {};
     }
