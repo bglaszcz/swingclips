@@ -115,7 +115,10 @@ side `server/improve.py`, `/api/improve`):
    **Nothing changes until the owner taps Use it** on the Night report. Use it copies the model over
    the deep pass's `club-deep.onnx` (the old one goes to `trash\models` and stays as a "used before"
    candidate: going back is the same tap), and every clip gets the deep pass again when the server is
-   idle.
+   idle. A candidate that did better keeps its **Use it** after a later night makes another one: the
+   Night report says "Ready to use: the candidate of Oct 10" in a card of its own, and its entry under
+   Earlier candidates has the button too. (Until Oct 11 only the newest candidate had it, so the better
+   model of the Oct 10 run could no longer be put into use once Oct 11's, not better, took its place.)
 
 What each night did (clips, the improve step's sentence) goes to `improve/nights.json` as it goes.
 The fuel is labels: each swing labeled from the **Where the two analyses disagree** list gives the next

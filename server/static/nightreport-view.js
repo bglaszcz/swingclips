@@ -333,6 +333,23 @@
       }
     }
 
+    // 2b. An earlier candidate that did better and was never put into use: said up here, with its button
+    // (the newest of them; it was judged against the model that is still in use).
+    const waiting = candidates.slice(1).find(c => c.status === "better");
+    if (waiting) {
+      const wDate = window.SwingNightReport ? SwingNightReport.formatNightDate(waiting.made, false) : (waiting.made || "");
+      html += `
+        <div class="t-card nr-waiting-card">
+          <div class="nr-card-header">
+            <strong>Ready to use: the candidate of ${escapeHtml(wDate)}</strong>
+            <span class="nr-tag nr-tag-better">better</span>
+          </div>
+          <p class="nr-summary">It did better than the model in use and hasn't been put into use. ${escapeHtml((waiting.verdict && waiting.verdict.why) || "")}</p>
+          <div class="nr-action-row"><button class="primary nr-use-btn" data-id="${escapeHtml(waiting.id)}">Use it</button></div>
+        </div>
+      `;
+    }
+
     // 3. Earlier candidates, folded
     const earlier = candidates.slice(1);
     if (earlier.length > 0) {
@@ -344,8 +361,11 @@
         const cRunsHtml = renderRunsSummary(c);
         const cTable = renderScoresTable(c.scores);
         const cTrain = renderTrainDetails(c.train);
+        // A candidate that did better stays usable after a later night made another one.
         const cAction = c.status === "used before"
           ? `<div class="nr-action-row"><button class="small nr-use-btn" data-id="${escapeHtml(c.id)}">Go back to this one</button></div>`
+          : c.status === "better"
+          ? `<div class="nr-action-row"><button class="primary nr-use-btn" data-id="${escapeHtml(c.id)}">Use it</button></div>`
           : "";
 
         earlierItems += `
