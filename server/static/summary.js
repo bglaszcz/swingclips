@@ -311,22 +311,45 @@
     return { ok, codes, text, say: ok ? `${cam}: good.` : `${cam}: ${tips.join(", and ")}.`, focus };
   }
 
+  // A takeaway found this soon after a clip's first frame (s) means the video starts after the swing
+  // began: there is no address in it. The phones keep 2 s before the strike, so a swing that takes
+  // longer than that from the takeaway (a drill, a rehearsal, a long pause at the top) loses its start.
+  // On the owner's 545 swings with timings (Oct 2026) the takeaway was under 0.05 s in on 7 and over
+  // 0.3 s in on all the rest.
+  const NO_ADDRESS_S = 0.15;
+
+  /**
+   * Whether each camera's clip has no address in it: {face, dtl} (false where there is no clip).
+   * Then "address" (P1) is the clip's first frame, wherever the golfer and the club were in it, and
+   * everything measured against the address is measured against that (trust.js FROM_ADDRESS).
+   */
+  function noAddress(a, main) {
+    const tk = a.positions && a.positions.takeaway;
+    const first = clip => clip && clip.frames && clip.frames.length ? clip.frames[0].t : null;
+    const early = (clip, shift) => !!tk && first(clip) != null && tk.t + shift - first(clip) < NO_ADDRESS_S;
+    const own = early(main, 0);
+    const other = a.dtl && a.dtl !== main ? early(a.dtl, a.offset || 0) : own;
+    return { face: main.angle === "dtl" ? false : own, dtl: a.dtl ? (a.dtl === main ? own : other) : false };
+  }
+
   /**
    * cameraCheck for both angles of an analyzed swing: {face, dtl}, each a list of codes or null.
    * Each also says when the key positions from the top on hang on an impact that can't be believed
    * (impactCheck): "noball" or "impact". The face-on clip's impact places them for both cameras; a
-   * down-the-line clip's own impact counts too when it was used to line the two clips up.
+   * down-the-line clip's own impact counts too when it was used to line the two clips up. And
+   * "noaddress" when that camera's video starts after the swing began (noAddress).
    */
   function cameras(a, main) {
     const p = key => a.positions.find(q => q.key === key);
     const own = impactCheck(main);
     let dtlImpact = own;
     if (a.dtl && a.dtl !== main && !own && a.dtl.impact != null) dtlImpact = impactCheck(a.dtl);
-    const withImpact = (codes, code) => code ? [...codes, code] : codes;
+    const late = noAddress(a, main);
+    const withCodes = (codes, impact, noAddr) => [...codes, ...(impact ? [impact] : []), ...(noAddr ? ["noaddress"] : [])];
     return {
       face: main.angle === "dtl" || !p("p1") ? null
-        : withImpact(cameraCheck(main, a.metrics ? a.metrics.address : p("p1").index, p("p4") ? p("p4").index : null), own),
-      dtl: a.dtl && p("p1") ? withImpact(cameraCheck(a.dtl, a.dtlIndex("p1"), a.dtlIndex("p4")), dtlImpact) : null,
+        : withCodes(cameraCheck(main, a.metrics ? a.metrics.address : p("p1").index, p("p4") ? p("p4").index : null), own, late.face),
+      dtl: a.dtl && p("p1") ? withCodes(cameraCheck(a.dtl, a.dtlIndex("p1"), a.dtlIndex("p4")), dtlImpact, late.dtl) : null,
     };
   }
 
@@ -487,7 +510,7 @@
   }
 
   const api = { BODY, SHOT, NUMBER_POSITIONS, IMPACT_WINDOW, STRIKE_FALLBACK, frameIndexAt, syncOffset, aspectOf,
-                strikeWindow, impactCheck, analyze, bodyNumbers, drillNumbers,
+                strikeWindow, impactCheck, noAddress, NO_ADDRESS_S, analyze, bodyNumbers, drillNumbers,
                 shotNumbers, correlation, summarize, cameras, setupAdvice, positionTimes, frameAngles, noiseFloor,
                 cameraMoved };
   if (typeof module !== "undefined" && module.exports) module.exports = api;

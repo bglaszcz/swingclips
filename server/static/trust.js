@@ -9,7 +9,11 @@
 //     floor says it moves more while standing still at address than half its usual swing-to-swing
 //     spread in a session; or it's noisy by definition (head rise, the plane numbers).
 //   "none" (no reading): shown as "--": the camera check says part of the golfer was out of the
-//     picture ("out") or the hands left it at the top ("hands"), or there is no number.
+//     picture ("out") or the hands left it at the top ("hands"), or there is no number; or the video
+//     starts after the swing began ("noaddress") and the number is measured against the address
+//     (turns, sways, the hip lines, the plane numbers: FROM_ADDRESS). The backswing time and tempo of
+//     such a swing are shaky instead: the backswing is cut off at the video's start, so it took at
+//     least that long, which is what marks the swing "check" on the list (review.js).
 // Every level comes with its reasons, most serious first, for the tooltip.
 //
 // A number is named by where it's read: {view: "face" | "dtl", value: its key in metrics.js's
@@ -27,6 +31,18 @@
   const FROM_IMPACT = ["p5", "p6", "p7", "p8"];
   const TIMING = ["tempo", "backswing", "downswing", "releaseArm"];
   const IMPACT_TIMED = ["tempo", "downswing", "releaseArm"];
+  // summary.js cameras(): that camera's video starts after the swing began, so its "address" is the
+  // clip's first frame. Per-frame values measured against the address (metrics.js), by camera: the
+  // turns (against the width at address), the sways and the hip lines, the bend and depths against
+  // address, and the plane numbers (the shaft's line at address). Not the numbers against the ball,
+  // the angles on their own (spine tilt, wrist hinge) or the hands against the shoulders.
+  const NO_ADDRESS = "noaddress";
+  const FROM_ADDRESS = {
+    face: ["pelvisTurn", "shoulderTurn", "separation", "spineTiltChange", "headSway", "headRise", "hipSway", "leadHip", "trailHip"],
+    dtl: ["bendChange", "shaftPlane", "hipDepth", "headDepth", "handsPlane"],
+  };
+  // Timed from the takeaway, which such a video doesn't hold: at least this long.
+  const FROM_TAKEAWAY = ["tempo", "backswing"];
   // Noise floor: shaky when the typical spread while standing still at address is more than this
   // share of the typical swing-to-swing spread in a session.
   const NOISE_SHARE = 0.5;
@@ -100,6 +116,10 @@
     const cam = facts && facts.camera ? facts.camera[n.view] : null;
     const bad = (cam || []).filter(c => BAD_CAMERA.includes(c));
     if (bad.length) add("none", "camera", "camera check: " + bad.join(", "));
+    if ((cam || []).includes(NO_ADDRESS)) {
+      if ((FROM_ADDRESS[n.view] || []).includes(n.value)) add("none", NO_ADDRESS, "the video starts after the swing began: no address to measure from");
+      else if (FROM_TAKEAWAY.includes(n.value)) add("shaky", NO_ADDRESS, "the video starts after the swing began: the backswing took at least this long");
+    }
     if (facts && n.pos && facts.estimated && facts.estimated[n.pos]) add("shaky", "estimated", `${n.pos.toUpperCase()} estimated`);
     if (!finite(value)) add("none", "missing", "not measured");
     const impact = (cam || []).find(c => IMPACT_CODES.includes(c));
@@ -231,7 +251,7 @@
     return { swings: recent.length, sessions: session + (recent.length ? 1 : 0), share: NOISE_SHARE, keys };
   }
 
-  const api = { BAD_CAMERA, IMPACT_CODES, FROM_IMPACT, NOISE_SHARE, NOISY, numberOf, factsOf, factsOfAnalysis,
+  const api = { BAD_CAMERA, IMPACT_CODES, FROM_IMPACT, NO_ADDRESS, FROM_ADDRESS, FROM_TAKEAWAY, NOISE_SHARE, NOISY, numberOf, factsOf, factsOfAnalysis,
                 judge, forSwing, worse, speakable, noiseTable, flickerMatters };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingTrust = api;

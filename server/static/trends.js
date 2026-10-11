@@ -284,7 +284,9 @@ function reviewFlags() {
   if (reviewCache.data !== dataSig || reviewCache.sig !== sig) {
     const rows = shownClips().filter(c => !c.excluded && c.shot).map(c => {
       const r = swingRow(c);
-      return { name: r.name, club: r.club, backswing: r.shown ? r.shown.backswing : null, clubSpeed: r.clubSpeed, carry: r.carry };
+      const cam = (r.rec && r.rec.quality && r.rec.quality.camera) || {};
+      return { name: r.name, club: r.club, backswing: r.shown ? r.shown.backswing : null, clubSpeed: r.clubSpeed, carry: r.carry,
+        late: ["face", "dtl"].some(k => (cam[k] || []).includes("noaddress")) };
     });
     reviewCache = { data: dataSig, sig, value: SwingReview.flags(rows) };
   }

@@ -347,6 +347,19 @@ swings of Sep 30 all were found (before: all "timing"), with bottoms ~1.3 s apar
 downswing. With fewer than two tops (no pumps after all) the swing is read as an ordinary one.
 `tests/pump.test.js` holds one of them (`fixtures/real/pump`).
 
+## A video that starts after the swing began (Oct 11 2026)
+
+The takeaway rule needs the club at rest before it. When the video starts after the swing (or drill)
+has begun, there is no rest in it: the takeaway and P1 land on the first frame (both at 0.00 s on the
+two checked clips of Oct 9, where a pump drill was hit with the phones keeping their usual 2 s), and
+the "address" everything is measured from is wherever the golfer was then. The rules don't try to
+guess an address that isn't there: `summary.js noAddress` says so when the takeaway is within
+`NO_ADDRESS_S` (0.15 s) of a clip's first frame, per camera, and the camera check carries it as
+`noaddress` (docs/review-page.md, "The video starts after the swing began"). Real takeaways sit 0.5 s
+or more into the video (the 48 fixture swings: 0.51 s at the least, 0.82 s in the middle), so the gap
+between the two cases is wide. `tests/trust.test.js` cuts a real swing to start 0.1 s after its
+takeaway and checks it is found.
+
 ## Refreshing
 
 After labeling more swings and refreshing the fixtures (`fixtures_export.py`):

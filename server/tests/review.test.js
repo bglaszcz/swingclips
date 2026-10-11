@@ -46,3 +46,27 @@ test("a swing can be marked for more than one thing; nothing is judged before a 
   assert.equal(Review.flags([]).size, 0);
   assert.equal(Review.flags([{ name: "z", club: null, backswing: 3 }]).size, 0);
 });
+
+test("a swing that began before its video does is one to check, whatever the club's count", () => {
+  // Only 3 swings with the club: nothing else is judged, but the camera check's own finding stands.
+  const few = [...usual("H4", 3), { name: "late", club: "H4", backswing: 1.9, clubSpeed: 84, carry: 150, late: true }];
+  let f = Review.flags(few);
+  assert.deepEqual(codes(f, "late"), ["rehearsal"]);
+  assert.equal(f.get("late")[0].text, "the swing began before the video does: at least 1.9 s to the top. A drill or a rehearsal? Its numbers measured from address have no reading");
+  assert.equal(f.size, 1);
+  // With a usual to set it against, that is said; one flag, not two.
+  f = Review.flags([...usual("I7", 20), { name: "late", club: "I7", backswing: 1.8, clubSpeed: 84, carry: 150, late: true }]);
+  assert.deepEqual(codes(f, "late"), ["rehearsal"]);
+  assert.match(f.get("late")[0].text, /at least 1\.8 s to the top, against your usual 1\.0\./);
+  // No backswing read at all.
+  f = Review.flags([...usual("I7", 3), { name: "late", club: "I7", backswing: null, late: true }]);
+  assert.match(f.get("late")[0].text, /^the swing began before the video does\. A drill/);
+});
+
+test("cut-off backswings don't shift the club's usual", () => {
+  // Ten real ones at 0.9-1.0 s and ten cut off at 1.8: the usual stays 1.0, so a 1.6 s backswing is still far from it.
+  const late = Array.from({ length: 10 }, (_, i) => ({ name: `late-${i}`, club: "I7", backswing: 1.8, clubSpeed: 84, carry: 150, late: true }));
+  const f = Review.flags([...usual("I7", 10), ...late, { name: "slow", club: "I7", backswing: 1.6, clubSpeed: 84, carry: 150 }]);
+  assert.deepEqual(codes(f, "slow"), ["rehearsal"]);
+  assert.match(f.get("slow")[0].text, /1\.6 s against your usual 1\.0/);
+});

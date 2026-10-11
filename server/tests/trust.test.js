@@ -198,3 +198,80 @@ test("cameras() adds the impact codes: the face-on clip's for both, a down-the-l
   cams = S.cameras(analysis(main, main), main);
   assert.deepEqual([cams.face, cams.dtl], [null, ["noball"]]);
 });
+
+// ---- The video starts after the swing began: no address in it ("noaddress") ----
+
+test("no address in the video: no reading for what is measured from address, on that camera", () => {
+  const rec = record({ face: ["noaddress"], body: { shoulderTop: 118, hipSway: 4.5, leadHipP6: 2, handsAhead: 1.6, lagP5: 90 } });
+  for (const key of ["headSway", "headRise", "shoulderTop", "hipSway", "leadHipP6"]) {
+    assert.equal(judge(key, rec).level, "none", key);
+    assert.deepEqual(judge(key, rec).why, ["the video starts after the swing began: no address to measure from"], key);
+  }
+  // Against the ball, or an angle on its own: they stand.
+  for (const key of ["handsAhead", "lagP5", "spineTiltImpact", "downswing"]) assert.equal(judge(key, rec).level, "ok", key);
+  // The other camera's numbers stand too.
+  assert.equal(judge("earlyExt", rec).level, "ok");
+  assert.equal(judge("handsPlaneP6", rec).level, "shaky");           // noisy by definition, as ever
+  const dtl = record({ dtl: ["noaddress"] });
+  for (const key of ["earlyExt", "handsPlaneP6", "shaftPlaneP6"]) assert.equal(judge(key, dtl).level, "none", key);
+  assert.equal(judge("handDepthTop", dtl).level, "ok");               // the hands against the shoulders
+  assert.equal(judge("headSway", dtl).level, "ok");
+});
+
+test("no address in the video: the backswing took at least that long (shaky, and still shown)", () => {
+  const rec = record({ face: ["noaddress"], body: { backswing: 1.8, tempo: 5.5 } });
+  for (const key of ["backswing", "tempo"]) {
+    const j = judge(key, rec);
+    assert.equal(j.level, "shaky", key);
+    assert.deepEqual(j.codes, ["noaddress"]);
+    assert.equal(j.text, "the video starts after the swing began: the backswing took at least this long");
+  }
+  assert.deepEqual([T.NO_ADDRESS, T.FROM_TAKEAWAY], ["noaddress", ["tempo", "backswing"]]);
+});
+
+test("cameras() says which camera's video has no address: the takeaway under 0.15 s after its first frame", () => {
+  const lm = Array.from({ length: 33 }, (_, i) => [0.5, 0.1 + 0.8 * i / 32, 0.9]).flat();
+  const clip = (angle, first) => ({ angle, impact: 1.97, strike: 2.0, frames: [{ t: first, lm }, { t: first + 1, lm }] });
+  const analysis = (main, dtl, takeaway, offset = 0) => {
+    const positions = [{ key: "p1", index: 0 }, { key: "p4", index: 1 }];
+    if (takeaway != null) positions.takeaway = { t: takeaway };
+    return { positions, metrics: { address: 0 }, dtl, offset, dtlIndex: key => (key === "p1" ? 0 : 1) };
+  };
+  const cams = (main, dtl, takeaway, offset) => { const c = S.cameras(analysis(main, dtl, takeaway, offset), main); return [c.face, c.dtl]; };
+  const face = clip("face", 0), dtl = clip("dtl", 0);
+  assert.deepEqual(cams(face, dtl, 0.8), [[], []]);                           // a swing with its address
+  assert.deepEqual(cams(face, dtl, 0), [["noaddress"], ["noaddress"]]);       // it began before the video
+  assert.deepEqual(cams(face, dtl, 0.14), [["noaddress"], ["noaddress"]]);
+  assert.deepEqual(cams(face, dtl, 0.15), [[], []]);
+  // The down-the-line phone's video began 0.5 s later on the face-on clock (offset -0.5): only it missed the address.
+  assert.deepEqual(cams(face, clip("dtl", 0), 0.6, -0.5), [[], ["noaddress"]]);
+  // A lone down-the-line clip.
+  assert.deepEqual(cams(dtl, dtl, 0.05), [null, ["noaddress"]]);
+  // No takeaway found: nothing claimed.
+  assert.deepEqual(cams(face, dtl, null), [[], []]);
+  assert.equal(S.NO_ADDRESS_S, 0.15);
+});
+
+test("a real swing cut to start after its takeaway: found as one with no address, the whole one not", () => {
+  const fs = require("fs"), path = require("path"), zlib = require("zlib");
+  globalThis.SwingPhases = require("../static/phases.js");
+  globalThis.SwingMetrics = require("../static/metrics.js");
+  const REAL = path.join(__dirname, "fixtures", "real");
+  const clips = JSON.parse(fs.readFileSync(path.join(REAL, "clips.json"), "utf8"));
+  const c = clips.find(x => x.angle === "face" && x.shot && x.shot.club === "I7");
+  const pose = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(REAL, "pose", c.name + ".v6.json.gz"))));
+  const input = frames => ({ name: c.name, strike: c.strike, angle: "face", rotation: pose.rotation || 0, frames, impact: pose.impact, ball: pose.ball, drill: null, clubOnset: pose.clubOnset });
+  const whole = S.summarize(input(pose.frames), null, "left");
+  assert.equal(whole.quality.swingFound, true);
+  assert.equal(whole.quality.camera.face.includes("noaddress"), false);
+  const takeaway = S.positionTimes(input(pose.frames), null, "left").main.times.takeaway;
+  // The same video from 0.1 s after the takeaway: as the phone would have kept it for a longer swing.
+  const cut = S.summarize(input(pose.frames.filter(f => f.t >= takeaway + 0.1)), null, "left");
+  assert.equal(cut.quality.swingFound, true);
+  assert.ok(cut.quality.camera.face.includes("noaddress"));
+  const j = T.forSwing(cut, null, null);
+  assert.equal(j.hipSway.level, "none");
+  assert.equal(j.backswing.level, "shaky");
+  assert.ok(cut.body.backswing < whole.body.backswing);     // cut off: at least this long
+  assert.equal(T.forSwing(whole, null, null).hipSway.level, "ok");
+});

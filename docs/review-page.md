@@ -362,6 +362,22 @@ server runs the same file), so they all agree:
   or it's noisy by definition (head rise, and the plane numbers: hands and shaft to plane).
 - **No reading**, shown as **--** (hover for why): the camera check says part of you was out of
   the picture (`out`) or your hands left it at the top (`hands`), or there's no number.
+- **The video starts after the swing began** (`noaddress`, Oct 11): the phones keep 2 s before the
+  strike, so a swing that takes longer than that from the takeaway (a drill without the drill switched
+  on, a rehearsal, a long pause at the top) loses its start. The takeaway is then found within 0.15 s
+  of the video's first frame (`summary.js noAddress`, per camera), and "address" is that first frame,
+  wherever you and the club were. Everything measured from the address then has **no reading** on that
+  camera (`trust.js FROM_ADDRESS`: the turns, the sways and hip lines, head rise, the bend and depths
+  against address, the plane numbers); the numbers against the ball, the angles on their own (spine
+  tilt, wrist hinge) and the hands against the shoulders stand. The backswing time and tempo are
+  **shaky**: cut off at the video's start, so "at least this long". The swing is marked **check** on
+  the list whatever its club's count ("The swing began before the video does: at least 1.9 s to the
+  top…"), so you leave it out, mark it as the drill it was, or keep it. On the 545 real swings with
+  timings on Oct 11 the takeaway was under 0.05 s in on 7 (5 pump swings marked afterwards, 2 already
+  left out by hand) and over 0.3 s in on every other; none of the 48 fixture swings is caught (their
+  earliest takeaway is 0.51 s in). Before this, such a swing's numbers went into the trends until
+  it was left out: the five Oct 9 clips checked read shoulder turns of 103 to 180° and hip sways of 2.6
+  to 6.0 in.
 - **The noise floor per number** comes from recent swings (the last 300): how much each number moves
   in the 0.35-0.05 s before the takeaway (the same spread as the scorecard's noise floor, kept per
   swing in `swings.json`), against its standard deviation within a session (a 45-minute gap starts

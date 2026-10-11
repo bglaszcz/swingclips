@@ -5,7 +5,8 @@
 //
 // Each swing is taken against the middle value of that club's own swings:
 //   rehearsal: the backswing took REHEARSAL times as long, and at least REHEARSAL_S longer (the pump
-//     drill and a paused top read like this);
+//     drill and a paused top read like this); or the swing began before its video does (`late`: the
+//     camera check's "noaddress", summary.js), which needs no usual to compare with;
 //   part swing: club speed under SLOW of the usual (not wedges: part swings are their job);
 //   fast: club speed over FAST of the usual (another club, or Square misread it);
 //   long: carry over LONG of the usual (another club than Square was set to).
@@ -27,8 +28,8 @@
   };
 
   /**
-   * @param rows swing rows of every club ({name, club, backswing (s), clubSpeed, carry}); swings already
-   *   left out should not be passed (they would shift the usual)
+   * @param rows swing rows of every club ({name, club, backswing (s), clubSpeed, carry, late (the video
+   *   starts after the swing began)}); swings already left out should not be passed (they would shift the usual)
    * @returns Map name -> [{code: "rehearsal" | "part" | "fast" | "long", text}] for the swings to check
    */
   function flags(rows) {
@@ -37,10 +38,15 @@
     const out = new Map();
     const add = (r, code, text) => (out.get(r.name) || out.set(r.name, []).get(r.name)).push({ code, text });
     for (const [club, list] of byClub) {
-      const back = median(list.map(r => r.backswing)), speed = median(list.map(r => r.clubSpeed));
+      // A backswing cut off at the video's start (late) is not a backswing time: out of the usual.
+      const back = median(list.filter(r => !r.late).map(r => r.backswing)), speed = median(list.map(r => r.clubSpeed));
       const carry = median(list.map(r => r.carry > 0 ? r.carry : null));
       for (const r of list) {
-        if (back != null && finite(r.backswing) && r.backswing >= REHEARSAL * back && r.backswing >= back + REHEARSAL_S) {
+        if (r.late) {
+          // Its backswing is cut off at the video's start: at least that long.
+          const took = finite(r.backswing) ? `: at least ${r.backswing.toFixed(1)} s to the top${back != null ? `, against your usual ${back.toFixed(1)}` : ""}` : "";
+          add(r, "rehearsal", `the swing began before the video does${took}. A drill or a rehearsal? Its numbers measured from address have no reading`);
+        } else if (back != null && finite(r.backswing) && r.backswing >= REHEARSAL * back && r.backswing >= back + REHEARSAL_S) {
           add(r, "rehearsal", `the backswing took ${r.backswing.toFixed(1)} s against your usual ${back.toFixed(1)}: a drill or a rehearsal?`);
         }
         if (speed != null && finite(r.clubSpeed)) {

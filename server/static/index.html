@@ -3653,6 +3653,7 @@ const CAMERA_ADVICE = {
   hands: "your hands leave the picture at the top. Tilt the phone up or step it back",
   noball: "the ball wasn't seen leaving, so impact is from the hands' motion: the numbers from the top on (P5-P7, tempo) are less certain (greyed ~). Keep the ball in the picture, lit, against a plain mat",
   impact: "the ball was seen leaving too far from the strike the phone heard (found at the wrong spot, or late), so the key positions from the top on may be off (greyed ~). More light on the ball helps",
+  noaddress: "the video starts after the swing began (the phones keep 2 s before the strike; a drill or a long pause takes longer), so your address isn't in it. The numbers measured from address (turns, sways, the plane numbers) have no reading, and the backswing took at least as long as shown. For a drill, switch it on first (Do the drill): the phones then keep more",
 };
 
 // The light check's codes (server/quality.py, measured from each clip), and what to do about them.
@@ -3743,7 +3744,7 @@ function trustCell(td, text, j) {
 
 // Short names for the camera check's one-line summary.
 const CHECK_SHORT = { out: "partly out of the picture", edge: "near the edge", small: "small in the picture",
-  hands: "hands leave the picture", noball: "ball not seen", impact: "impact doubtful", dark: "dark",
+  hands: "hands leave the picture", noball: "ball not seen", impact: "impact doubtful", noaddress: "the video starts mid-swing", dark: "dark",
   flicker: "flicker", grainy: "grainy" };
 // Only worth a note, not a warning: they don't change the numbers.
 const CHECK_MINOR = new Set(["edge", "small"]);
