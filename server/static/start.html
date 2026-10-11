@@ -209,6 +209,9 @@
   .dn-active-line button { padding: 4px 14px; font-size: 14px; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
   .focus-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
   .focus-card[hidden] { display: none; }
+  /* Today's plan, the guided part: what the reps did, and the result line once they are behind you. */
+  .plan-reps-did { font-size: 15px; font-weight: 600; margin: 8px 0 4px; }
+  .plan-result { margin-top: 6px; font-size: 14px; color: var(--text); }
   /* The focus's drill: a button with the drill's words; reps mode while it is on; the line after Done. */
   .focus-drill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
   .focus-drill-row button, .focus-reps-line button { font: inherit; font-size: 15px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); flex: none; }
@@ -1039,6 +1042,57 @@ function renderDrillNudge() {
   card.append(btns);
 }
 
+/** The focus's swings and its target from what the page has loaded: the focus card and the plan both read it. */
+function focusData(focus) {
+  const clipsList = (allClips && allClips.length) ? allClips : (recentClips || []);
+  const primary = clipsList.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face") && !c.excluded && c.recorded);
+  const allSessions = (typeof SwingRow !== "undefined" && typeof SwingRow.sessionsOf === "function") ? SwingRow.sessionsOf(primary) : [];
+
+  const clipsMap = new Map(clipsList.map(c => [c.name, c]));
+  const toRow = c => (typeof SwingRow !== "undefined" && typeof SwingRow.row === "function") ? SwingRow.row(c, swingRecords, clipsMap, noiseTable) : {};
+
+  const filterClub = focus.scope || focus.club || "*";
+  const matchClub = r => filterClub === "*"
+    ? !!(typeof SwingGoodShots !== "undefined" && SwingGoodShots.groupOf(r.club))
+    : (filterClub === "irons" || filterClub === "woods"
+        ? (typeof SwingGoodShots !== "undefined" && SwingGoodShots.groupOf(r.club) === filterClub)
+        : r.club === filterClub);
+
+  // Sessions oldest first for SwingGoal.target
+  const sessions = [...allSessions].reverse().map(s => ({
+    key: s.key,
+    start: s.start,
+    rows: [...s.clips].reverse().filter(c => !c.excluded).map(toRow).filter(matchClub),
+  })).filter(s => s.rows.length > 0);
+
+  const target = (typeof SwingGoal !== "undefined") ? SwingGoal.target(sessions, focus) : null;
+
+  // Swings of current session (allSessions[0] is current session)
+  const currentSessionClips = allSessions.length ? allSessions[0].clips : recentClips.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+  const todayRows = currentSessionClips.filter(c => !c.excluded).map(toRow).filter(matchClub);
+  const todayScore = (typeof SwingGoal !== "undefined" && target) ? SwingGoal.score(todayRows, focus, target) : { n: 0, k: 0, rate: null };
+  return { clipsList, allSessions, toRow, matchClub, sessions, target, currentSessionClips, todayRows, todayScore };
+}
+
+/**
+ * The focus swing by swing into `parent` (goal-live.js, as on Progress and Practice): the last one's number
+ * and where it sat, the count, and each as a dot against the target. `rows` oldest first.
+ */
+function drawFocusLive(parent, focus, target, rows, title, waiting) {
+  const liveBox = document.createElement("div");
+  parent.appendChild(liveBox);
+  const mv = (typeof SwingCoach !== "undefined" && SwingCoach.MOVES && SwingCoach.MOVES[focus.move]) ? SwingCoach.MOVES[focus.move][focus.aim] : null;
+  const plainOf = t => (typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(t) : t);
+  const fldL = (typeof SwingSummary !== "undefined" && SwingSummary.BODY.find(b => b.key === focus.move)) || {};
+  const unitL = fldL.unit && fldL.unit !== ":1" ? (fldL.unit === "°" ? "°" : " " + fldL.unit) : "";
+  const labelL = (typeof SwingShotStory !== "undefined" && SwingShotStory.LABELS && SwingShotStory.LABELS[focus.move]) || fldL.label || focus.move;
+  const thoughtL = mv && mv.thought ? plainOf(mv.thought).replace(/^["“]|["”.]+$/g, "") : "";
+  SwingGoalLive.render(liveBox, { ...SwingGoal.live(rows, focus, target), target }, {
+    title, label: labelL.charAt(0).toLowerCase() + labelL.slice(1), fmt: v => v.toFixed(1) + unitL, thought: thoughtL, waiting,
+    onOpen: row => { location.href = "/#" + encodeURIComponent(row.name); },
+  });
+}
+
 // The focus card's reps (round 58): what the card last said (drawn again only when that changes: the polls
 // call it every few seconds), the reps while they are on, and after Done their count until FOCUS_AFTER
 // normal swings are in.
@@ -1080,34 +1134,7 @@ function renderFocusCard() {
     return;
   }
 
-  // 2. Build sessions for target
-  const clipsList = (allClips && allClips.length) ? allClips : (recentClips || []);
-  const primary = clipsList.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face") && !c.excluded && c.recorded);
-  const allSessions = (typeof SwingRow !== "undefined" && typeof SwingRow.sessionsOf === "function") ? SwingRow.sessionsOf(primary) : [];
-
-  const clipsMap = new Map(clipsList.map(c => [c.name, c]));
-  const toRow = c => (typeof SwingRow !== "undefined" && typeof SwingRow.row === "function") ? SwingRow.row(c, swingRecords, clipsMap, noiseTable) : {};
-
-  const filterClub = focus.scope || focus.club || "*";
-  const matchClub = r => filterClub === "*"
-    ? !!(typeof SwingGoodShots !== "undefined" && SwingGoodShots.groupOf(r.club))
-    : (filterClub === "irons" || filterClub === "woods"
-        ? (typeof SwingGoodShots !== "undefined" && SwingGoodShots.groupOf(r.club) === filterClub)
-        : r.club === filterClub);
-
-  // Sessions oldest first for SwingGoal.target
-  const sessions = [...allSessions].reverse().map(s => ({
-    key: s.key,
-    start: s.start,
-    rows: [...s.clips].reverse().filter(c => !c.excluded).map(toRow).filter(matchClub),
-  })).filter(s => s.rows.length > 0);
-
-  const target = (typeof SwingGoal !== "undefined") ? SwingGoal.target(sessions, focus) : null;
-
-  // Swings of current session (allSessions[0] is current session)
-  const currentSessionClips = allSessions.length ? allSessions[0].clips : recentClips.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
-  const todayRows = currentSessionClips.filter(c => !c.excluded).map(toRow).filter(matchClub);
-  const todayScore = (typeof SwingGoal !== "undefined" && target) ? SwingGoal.score(todayRows, focus, target) : { n: 0, k: 0, rate: null };
+  const { clipsList, allSessions, toRow, sessions, target, currentSessionClips, todayRows, todayScore } = focusData(focus);
 
   // The focus's own drill (coach.js drillId): its reps are recorded as that drill, out of the trends.
   const drillId = (typeof SwingCoach !== "undefined" && SwingCoach.drillId) ? SwingCoach.drillId(focus.move, focus.aim) : null;
@@ -1161,18 +1188,7 @@ function renderFocusCard() {
   const plainOf = t => (typeof SwingShotStory !== "undefined" ? SwingShotStory.plain(t) : t);
   // The focus swing by swing (goal-live.js, as on Progress and Practice): the last one's number and where
   // it sat, the count, and each as a dot against the target.
-  const drawLive = (rows, title, waiting) => {
-    const liveBox = document.createElement("div");
-    box.appendChild(liveBox);
-    const fldL = (typeof SwingSummary !== "undefined" && SwingSummary.BODY.find(b => b.key === focus.move)) || {};
-    const unitL = fldL.unit && fldL.unit !== ":1" ? (fldL.unit === "°" ? "°" : " " + fldL.unit) : "";
-    const labelL = (typeof SwingShotStory !== "undefined" && SwingShotStory.LABELS && SwingShotStory.LABELS[focus.move]) || fldL.label || focus.move;
-    const thoughtL = mv && mv.thought ? plainOf(mv.thought).replace(/^["“]|["”.]+$/g, "") : "";
-    SwingGoalLive.render(liveBox, { ...SwingGoal.live(rows, focus, target), target }, {
-      title, label: labelL.charAt(0).toLowerCase() + labelL.slice(1), fmt: v => v.toFixed(1) + unitL, thought: thoughtL, waiting,
-      onOpen: row => { location.href = "/#" + encodeURIComponent(row.name); },
-    });
-  };
+  const drawLive = (rows, title, waiting) => drawFocusLive(box, focus, target, rows, title, waiting);
   const pending = c => !!c && c.pose !== "done" && c.pose !== "failed";
   const canLive = !!target && typeof SwingGoalLive !== "undefined" && typeof SwingGoal.live === "function";
 
@@ -1724,6 +1740,9 @@ function renderPelvisCard(clips) {
   targetCard.hidden = false;
 }
 
+// What the plan last said (renderPlan draws again only when that changes).
+let planSig = null;
+
 function renderPlan() {
   if (typeof SwingPlan === "undefined") return;
   const drillSets = typeof SwingDrillSets !== "undefined"
@@ -1739,12 +1758,59 @@ function renderPlan() {
     drillSet: drillSets[0] || null
   });
 
+  // The guided part (plan.js "focus" as reps, then "carry"): while either is Now, its swings live
+  // against the focus's target, as the focus card draws them; and once the reps are behind you, what they did.
+  const focus = journalData && journalData.focus && journalData.focus.move ? journalData.focus : null;
+  const nowBlock = planStep ? plan.blocks.find(b => b.id === planStep.block) : null;
+  const newestClip = recentClips.find(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+  let live = null;
+  if (focus && nowBlock && planStep.since && (nowBlock.kind === "reps" || nowBlock.id === "carry")
+      && typeof SwingGoalLive !== "undefined" && typeof SwingGoal !== "undefined") {
+    const fd = focusData(focus), since = planStep.since * 1000 - 3000;
+    const swing = c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face") && c.recorded;
+    const at = c => new Date(c.recorded).getTime();
+    const oldestFirst = (x, y) => at(x) - at(y);
+    const drill = nowBlock.kind === "reps" ? nowBlock.drillMode : nowBlock.after;
+    if (nowBlock.kind === "reps") {
+      live = { title: "Your reps", empty: "Hit the first rep: each one shows here against your target.",
+        rows: fd.clipsList.filter(c => swing(c) && c.drill === drill && at(c) >= since).sort(oldestFirst).map(fd.toRow) };
+    } else {
+      // The reps this session, before this block began.
+      const reps = fd.clipsList.filter(c => swing(c) && c.drill === drill && at(c) < since && at(c) >= since - 2 * 3600 * 1000).map(fd.toRow);
+      live = { title: "Your normal swings", empty: "Hit the first one: each swing shows here against your target.",
+        rows: fd.clipsList.filter(c => swing(c) && !c.excluded && at(c) >= since).sort(oldestFirst).map(fd.toRow).filter(fd.matchClub),
+        reps: reps.length && fd.target ? { n: reps.length, k: SwingGoal.score(reps, focus, fd.target).k } : null };
+    }
+    live.block = nowBlock.id;
+    live.target = fd.target;
+    live.waiting = !!newestClip && newestClip.pose !== "done" && newestClip.pose !== "failed";
+  }
+  // Today's set of the focus's drill, in a line, once its reps are done.
+  let result = null;
+  if (focus && !(nowBlock && nowBlock.kind === "reps") && typeof SwingCoach !== "undefined" && SwingCoach.drillId) {
+    const own = SwingCoach.drillId(focus.move, focus.aim);
+    const set = drillSets.find(x => x.drill === own);
+    if (set && new Date(set.timestamp).toDateString() === new Date().toDateString()) result = SwingDrillSets.formatSet(set);
+  }
+
+  // Drawn only when what it says changed: the swings poll calls this while the guided blocks are on.
+  const sig = JSON.stringify([planStep, plan.blocks.map(b => [b.id, b.title, b.balls, b.minutes, b.why, b.drill, b.thought, b.drillSet]),
+    live && [live.block, live.rows.map(r => [r.name, r[focus.move] ?? null]), live.reps, live.target && live.target.bound, live.waiting], result]);
+  if (sig === planSig && $("plan-blocks") && $("plan-blocks").children.length) return;
+  planSig = sig;
+
   const sumEl = $("plan-summary");
   if (sumEl) {
-    const now = planStep && plan.blocks.find(b => b.id === planStep.block);
+    const now = nowBlock;
     sumEl.textContent = now ? `Now: ${now.title}. Tap Next when you've hit its balls.`
       : `${plan.totalMinutes} minutes · ${plan.totalBalls} balls in ${plan.blocks.length} blocks, from your data. Tap Start on the first block `
         + "when recording is on: each block switches on what it needs (a drill recording, a game) and the one before off.";
+    if (result && !(nowBlock && nowBlock.id === "carry")) {
+      const res = document.createElement("div");
+      res.className = "plan-result";
+      res.textContent = `Today's drill: ${result}`;
+      sumEl.append(res);
+    }
   }
 
   const box = $("plan-blocks");
@@ -1794,6 +1860,24 @@ function renderPlan() {
       card.append(dt);
     }
 
+    if (live && live.block === b.id) {
+      if (live.reps) {
+        const did = document.createElement("div");
+        did.className = "plan-reps-did";
+        did.textContent = `${live.reps.n} rep${live.reps.n === 1 ? "" : "s"}, ${live.reps.k} in your target.`;
+        card.append(did);
+      }
+      if (live.target && live.rows.length) {
+        drawFocusLive(card, focus, live.target, live.rows, live.title, live.waiting);
+      } else {
+        const note = document.createElement("div");
+        note.className = "plan-why";
+        note.textContent = !live.target ? "No target yet: the first few normal swings set it."
+          : live.waiting ? "Waiting for the swing's numbers" : live.empty;
+        card.append(note);
+      }
+    }
+
     card.append(stepControls(plan.blocks, idx));
     return card;
   });
@@ -1809,7 +1893,9 @@ function blockAction(b) {
 /** What's on while a block is being practiced, in a few words. */
 function blockOnText(b) {
   const a = blockAction(b);
-  if (a.drill) return "Recording pump drills: the phones keep 6 s before the strike, and these swings stay out of your trends.";
+  if (a.drill === "pump") return "Recording pump drills: the phones keep 6 s before the strike, and these swings stay out of your trends.";
+  if (a.drill) return "Recording drill reps: these swings stay out of your trends.";
+  if (b.id === "carry") return "Drill off: normal swings, back in your trends.";
   if (a.game) return "Game on: the target shows below, and the phone says it.";
   return "Nothing to switch on: just hit.";
 }
@@ -1820,6 +1906,7 @@ async function goToBlock(action) {
       body: JSON.stringify(action) });
     if (res.ok) planStep = (await res.json()).step;
   } catch { /* stays as it was */ }
+  planSig = null;
   renderPlan();
   pollGame();
   renderPelvisCard(recentClips);
@@ -2636,6 +2723,7 @@ async function pollSwings() {
   }
   renderFocusCard();
   renderDrillNudge();
+  if (planStep && (planStep.block === "focus" || planStep.block === "carry")) renderPlan();
   if (!lastEndedSessionStory && !isDemoStop) {
     renderLastSwingCard(latestWithShot);
   }

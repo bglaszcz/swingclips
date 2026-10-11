@@ -770,6 +770,17 @@ toward the ball". The phones face away from you, so voice is the channel.
   block (or Next on the one being practiced) turns practice voice off, the block's drill on (any other
   off) and its game on (any other stopped), and remembers the block for 4 hours, so the laptop and a
   phone's browser both show which block is **Now**. End the plan turns everything off.
+  **The guided part** (Oct 10): when the focus's move has a drill, the focus block is two blocks that
+  share its 20 balls and 15 minutes: **focus** (`kind: "reps"`, `drillMode` = `SwingCoach.drillId`: reps
+  of the move, or the pump drill for the move it is the drill of; before, a match on the drill's words
+  also caught another move) and right after it **carry**, "Normal swings: do they keep it?" (10 balls, no
+  drill, `after` = the drill it follows, the same thought and Practice this). On the Start page, while
+  the reps block is **Now** its card shows the reps since it began as dots against the focus's target
+  ("Your reps", `drawFocusLive`, the focus card's picture); while the normal swings are **Now**, "12
+  reps, 9 in your target." and those swings the same way; and once the reps are behind you the plan's
+  summary has today's set in a line (`SwingDrillSets.formatSet`: the reps' number, the swings after, the
+  verdict). The plan is drawn only when what it says changes (`planSig`). Without a journal focus (the
+  block came from the session's top fault) there is no target, so the blocks show without the picture.
 - **Drill library** (Tools > Drills, `#drills`; `static/drilllib.js` builds and draws it, `static/drills-view.js`
   opens it and hands it the page's data; `/#drills` links to it): every drill the coach has, one per move
   and way (`coach.js MOVES`, 52). `SwingDrillLib.build(input)` (no DOM) returns `drills` (each: `id` from

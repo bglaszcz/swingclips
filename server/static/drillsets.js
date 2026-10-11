@@ -129,7 +129,9 @@
   }
   function fieldOf(metric) {
     const ind = indicators();
-    return ind && ind.KNOWN_FIELDS ? ind.KNOWN_FIELDS[metric] || null : null;
+    const known = ind && ind.KNOWN_FIELDS ? ind.KNOWN_FIELDS[metric] : null;
+    // The Start page has no indicators.js: summary.js knows each number's unit too.
+    return known || (Summary && Array.isArray(Summary.BODY) ? Summary.BODY.find(b => b.key === metric) : null) || null;
   }
   function unitOf(metric) {
     if (metric === "handsPlaneP6") return "in";

@@ -35,7 +35,7 @@ end).
 | You picked... | What shows | What you do |
 |---|---|---|
 | Just hit balls | Record, focus card, swings | Hit. Everything is recorded and analyzed. The focus card tracks today's progress score against your goal and gives swing-by-swing feedback. |
-| Today's plan | Record, the plan | **Start** on the first block, hit its balls, **Next**. |
+| Today's plan | Record, the plan | **Start** on the first block, hit its balls, **Next**. With a focus set, its drill is a block of reps (each one shows against your target, out of your trends), then 10 normal swings, then what the reps did. |
 | Coach program | Record, the program | Pick it, **Start program**. Follow the block on screen: no-ball reps, tap **Pass / Miss**; ball shots, listen for the verdict (flush line: tap where the mark started). Blocks move on by themselves. |
 | Play a game | Record, the game | Pick it, **Start game**; the phone says each target. |
 | Drills, no ball | The program only (no phones, no Square) | A no-ball program is picked; **Start program**, do the block's reps, then tap **All N passed** (or how many passed) once. |
