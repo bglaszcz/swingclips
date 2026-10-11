@@ -4311,17 +4311,20 @@ function renderDrillCard(a, body, ranges) {
   const box = document.getElementById("drillcard");
   const d = SwingSummary.drillNumbers(a);
   const c = clips.find(c => c.name === current);
-  // Marked afterwards: recorded with the usual 2 s before the strike, where drill mode keeps 6.
-  const late = c && c.drill === "pump" && c.drillMarked;
+  // Recorded with the usual 2 s before the strike, where drill mode keeps 6 (a swing marked as the drill
+  // afterwards): the video starts mid-drill. What it reads as the address is its first frame, so the
+  // shaft line the hands are measured against is not the address's: no numbers are shown for it.
+  const late = !!c && c.drill === "pump" && typeof c.strike === "number" && c.strike < SwingDrillSets.SHORT_LEAD_S;
   box.hidden = !late && (!d || !d.pumps.length);
   if (box.hidden) return;
-  if (!d || !d.pumps.length) {
+  if (late) {
     const head = document.createElement("div");
     head.innerHTML = "<strong>Pump drill</strong> <span class=\"hint\">marked afterwards</span>";
     const note = document.createElement("div");
     note.className = "hint";
-    note.textContent = "The drill wasn't switched on, so the video starts about 2 s before the strike: the pumps came before that. "
-      + "Switch the drill on (Start page) and the phones keep 6 s, enough for the pumps and your address.";
+    note.textContent = "The drill wasn't switched on, so the video starts about 2 s before the strike, in the middle of the drill. "
+      + "Your address isn't in it, and the hands are measured against the shaft's line at address: so no pump numbers for this swing. "
+      + "With the drill switched on (Do the drill, on the focus card) the phones keep 6 s, enough for the pumps and your address.";
     box.replaceChildren(head, note);
     return;
   }
@@ -4342,13 +4345,6 @@ function renderDrillCard(a, body, ranges) {
     ? `On your good shots the hands come down at ${SwingGoodShots.rangeText(r.q25, r.q75, unit)}. Each pump's bottom rehearses that spot; the swing's own is the real one.`
     : "Each pump's bottom rehearses where the hands come down; the swing's own is the real one.";
   kids.push(note);
-  if (late) {
-    const short = document.createElement("div");
-    short.className = "hint";
-    short.textContent = "Marked afterwards: the drill wasn't switched on, so the video starts about 2 s before the strike. Earlier pumps aren't in it, "
-      + "and without your address in the video there is no shaft line to measure the hands against.";
-    kids.push(short);
-  }
   d.pumps.forEach((p, i) => {
     const row = document.createElement("div");
     row.className = "drill-row";
@@ -5749,6 +5745,7 @@ setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 <script src="/static/week-view.js"></script>
 <script src="/static/wristcheck.js"></script>
 <script src="/static/aicoach-view.js"></script>
+<script src="/static/drilllib.js"></script>
 <script src="/static/drills-view.js"></script>
 <script src="/static/compare.js"></script>
 <script src="/static/update.js"></script>

@@ -815,3 +815,24 @@ test("the two sets of a session, a pump set and a reps set, are told apart", () 
   // The pump swings are drill swings: not among the reps set's "after".
   assert.strictEqual(sets[1].after.count, 4);
 });
+
+test("a short pump clip's numbers are not used: its video has no address to measure against", () => {
+  // The owner's Oct 9: 6 of the 20 clips marked afterwards did give pump numbers, with the "address"
+  // read at the clip's first frame. Those, and the swing's own number, stay out; the direction decides.
+  const clips = [], records = {};
+  const add = (name, day, min, drill, hands, pumps, extra) => {
+    clips.push(makeClip(name, `${day}T16:${String(min).padStart(2, "0")}:00`, drill, "I7", "face", null, extra));
+    records[name] = makeRecord(hands, pumps);
+  };
+  for (let i = 0; i < 5; i++) add(`u${i}`, "2026-10-08", i, null, 5.0 + (i % 2) * 0.2);
+  for (let i = 0; i < 6; i++) add(`d${i}`, "2026-10-09", i, "pump", i % 2 ? 9.6 : -2.0, [{ t: 1.0, handsPlane: -2.0, lag: 60 }],
+    { strike: 2.1, drillMarked: true, excluded: true });
+  for (let i = 0; i < 5; i++) add(`a${i}`, "2026-10-09", 10 + i, null, 4.0 + (i % 2) * 0.2);
+  const [s] = DrillSets.sets(clips, records);
+  assert.deepStrictEqual([s.count, s.short, s.marked], [6, 6, 6]);
+  assert.deepStrictEqual([s.pumps.count, s.pumps.handsPlane, s.drillP6, s.drillP6Count, s.leftOut], [0, null, null, 0, 0]);
+  const v = DrillSets.verdict(s);
+  assert.strictEqual(v.basis, "direction");
+  assert.strictEqual(v.text, "the hands came down clearly lower in your swings after the drill");
+  assert.match(DrillSets.formatSet(s), /^Pump drill, Oct 9 \(6 swings, 7 iron, marked afterwards\): the videos start after the pumps, so no pump numbers\. Your swings after 4\.0 in \(your usual 5\.0 in\): the hands came down clearly lower/);
+});

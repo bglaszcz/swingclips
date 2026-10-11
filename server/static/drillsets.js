@@ -238,10 +238,13 @@
         const clubsUsed = [...new Set(drillSwings.map(s => s.c.shot && s.c.shot.club).filter(Boolean))];
         const primaryClub = clubsUsed[0] || (sess.find(s => s.c.shot && s.c.shot.club)?.c.shot?.club) || options.defaultClub || null;
 
-        // Collect pumps
+        // Collect pumps. Not from a short clip: its video starts mid-drill, so what is read as the address
+        // (the shaft line the hands are measured against) is wherever the club was in its first frame.
+        // On the owner's 20 of Oct 9, six clips gave pump numbers that way, all with "address" at 0.00 s.
         const allPumpHands = [];
         const allPumpLag = [];
         for (const s of drillSwings) {
+          if (isShortClip(s.c)) continue;
           const pumps = s.rec && s.rec.drill && Array.isArray(s.rec.drill.pumps) ? s.rec.drill.pumps : [];
           for (const p of pumps) {
             if (finite(p.handsPlane)) allPumpHands.push(p.handsPlane);
@@ -260,12 +263,11 @@
           if (isShort) shortCount++;
           if (s.c.drillMarked) markedCount++;
 
+          // A short pump clip's own number is against that same wrong line: not used, and not "left out".
+          if (isShort) continue;
           const tRes = check(s);
-          if (tRes.valid) {
-            validDrillP6.push(tRes.value);
-          } else {
-            if (!isShort) drillLeftOut++;
-          }
+          if (tRes.valid) validDrillP6.push(tRes.value);
+          else drillLeftOut++;
         }
 
         // Normal swings with matching club in this session

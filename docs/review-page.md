@@ -805,9 +805,14 @@ toward the ball". The phones face away from you, so voice is the channel.
   (the toast's Undo). `/api/clips` says `drillMarked`, the open swing "Pump drill, marked afterwards". The swing worker
   works a marked swing's numbers out again as that drill (`drillAs` in its record), so it goes under
   Drill sets a few seconds later. What marking can't bring back: such a swing was recorded with 2 s
-  before the strike, so of a pump drill only the last pump (if any) is in the video, and with no address
-  in it there is no shaft line to measure the hands against (Oct 9's 20: one pump or none each, no
-  numbers). The Pump drill card says so. Switching the drill on is what records the whole of it.
+  before the strike, so of a pump drill only the last pump (if any) is in the video, and the address is
+  not in it. The hands are measured against the shaft's line at address, and on such a clip the "address"
+  is read at the video's first frame, mid-drill: on Oct 9's 20, 14 had a pump found and 6 of those a
+  number (-1.4 to -2.7 in, against -4.2 in for the real pumps of Oct 8), with the swing's own number
+  anywhere from -2.0 to 9.6 in. Those numbers are against the wrong line, so they are **not used**:
+  `drillsets.js` takes no pump number and no drill-swing number from a short clip (`strike` under
+  `SHORT_LEAD_S`), and the Pump drill card shows none for it and says why. What the set does say is what
+  the normal swings after it did. Switching the drill on is what records the whole of it.
   A pump-drill swing's key positions are found
   as in docs/key-positions.md "Pump drill", and the swing page shows a **Pump drill** card: each pump's
   bottom (the downswing position the drill rehearses: hands to plane, wrist hinge) against where the
