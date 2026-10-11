@@ -770,6 +770,22 @@ toward the ball". The phones face away from you, so voice is the channel.
   block (or Next on the one being practiced) turns practice voice off, the block's drill on (any other
   off) and its game on (any other stopped), and remembers the block for 4 hours, so the laptop and a
   phone's browser both show which block is **Now**. End the plan turns everything off.
+- **Drill library** (Tools > Drills, `#drills`; `static/drilllib.js` builds and draws it, `static/drills-view.js`
+  opens it and hands it the page's data; `/#drills` links to it): every drill the coach has, one per move
+  and way (`coach.js MOVES`, 52). `SwingDrillLib.build(input)` (no DOM) returns `drills` (each: `id` from
+  `SwingCoach.drillId`, `name` and `how` split at the drill text's first ": ", `trains` (the move in plain
+  words), `thought`, `moment` (Rhythm, Top of the swing, Downswing, Impact: `SwingIndicators.moment` of the
+  move's field), `isFocus`, `on`, and your `sets`, `reps` and `last` set with its verdict from
+  `drillsets.js`), `groups` (by moment), `mine` (the focus's drill and every drill with a set) and
+  `counts`. In a group and in `mine`: the focus's first, then drills with sets, newest first, then by
+  name. `render` draws chips (**Yours**, shown and chosen by default when there is anything in it, **All**,
+  one per moment; the choice is remembered in `localStorage["drill-lib-filter"]`) with their counts and
+  "52 drills · 2 tried", and a card per drill: the moment, the name, what it trains, how, the swing
+  thought, then "1 set, 10 reps · last Oct 5: clear carry-over into your swings" (a button: opens that
+  set's first swing) or "Not tried yet". One action a card: **Do this drill** on the focus's (Practice,
+  with the reps switched on), **Make this my focus** on the rest (Progress's focus picker on that move):
+  reps are measured against a focus's target, so a drill is done by working on its move. The menu's
+  button shows once `drilllib.js` has loaded (it must load before `drills-view.js`).
 - **Drill mode** (`drills.py`, `/api/drill`): when the focus drill is the pump drill, the plan's focus
   block turns it on (and a coach program's drill blocks turn theirs on). Drill sets (`drillsets.js`) are the
   pump drill's only. While it's on the phones (capture app 0.10) keep 6 s before the strike

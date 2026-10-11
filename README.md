@@ -72,6 +72,10 @@ swing is tagged with the Square Omni's numbers for that shot.
   The focus card on the Start page (and on Practice) has **Do the drill**: each rep shows as a dot against your target while you hit, the reps stay out of your trends, and **Done** hands over to normal swings to see whether they keep it.
   <br><img src="docs/img/start-reps.png" alt="Start page focus card in reps mode" width="600">
 
+- **Every drill, and what yours did**  
+  Tools > Drills lists the coach's 52 drills by the part of the swing they train: how to do each one, its swing thought, and your own sets with it and what they did. Your focus's drill starts from there; any other is one tap from being your focus.
+  <br><img src="docs/img/drills.png" alt="Drill library" width="600">
+
 - **Notice drills while they happen**  
   The Start page notices consecutive rehearsal swings with a long backswing and offers to turn the pump drill on so the phones record the full 6-second video.
   <br><img src="docs/img/start-drill-nudge.png" alt="Start page drill nudge" width="600">
