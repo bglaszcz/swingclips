@@ -660,6 +660,10 @@
   .nr-night-row { padding: 4px 0; border-bottom: 1px solid var(--line); }
   .nr-night-row:last-child { border-bottom: 0; }
   .nr-bottom-note { font-size: 12px; color: var(--muted); line-height: 1.45; }
+  /* Drill library (drilllib.js): the view's frame here; its chips and cards (dl-) below this line. */
+  #drills { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 1000px; margin: 0 auto; width: 100%; }
+  #drills[hidden] { display: none; }
+  #drills .note { color: var(--muted); font-size: 13px; }
   /* Week for coach (week-view.js): weekly report cards, calm layout, no red. */
   .week-run-report { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Consolas, monospace; margin: 8px 0 4px; max-height: 60vh; overflow: auto; }
   #week { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 1000px; margin: 0 auto; width: 100%; }
@@ -1487,6 +1491,7 @@
         <button class="small" data-page="/start" title="The session start page: checks, both cameras, Start / Stop recording, coach program, plan and games">Start a session</button>
         <button id="setup-btn" class="small" title="Check both cameras before you start: live pictures from the phones">Check cameras</button>
         <button class="small" data-page="/tripods" title="Find the tripod spots: live pictures, framing meters, level and alignment-stick tools, saved spots">Tripod setup</button>
+        <button id="drills-btn" class="small" hidden title="Every drill the coach has: what it trains, how to do it, and what your own reps of it did">Drills</button>
         <button id="week-btn" class="small" title="Week for coach: one page a week for the coach with practice, ball flight, focus move, faults, and games">Week for coach</button>
         <button id="aicoach-btn" class="small" title="The AI coach: status, how to add an API key, the brief sent for your latest session, and kept notes">AI coach</button>
         <button id="update-btn" class="small" title="Get the latest version from GitHub; the server restarts itself when the change needs it">Update the server</button>
@@ -1890,6 +1895,15 @@
     </div>
     <div id="week-copied" class="s-note" style="color: var(--accent);" hidden></div>
     <div id="week-cards" class="week-cards-container"></div>
+  </section>
+  <!-- Drill library (drills-view.js opens it; drilllib.js builds and draws it into #drills-body). -->
+  <section id="drills" hidden>
+    <div class="t-head">
+      <strong>Drills</strong>
+      <span class="note">What each one trains, how to do it, and what your own reps did</span>
+      <button id="drills-close" class="small" type="button" style="margin-left: auto;">Close</button>
+    </div>
+    <div id="drills-body"></div>
   </section>
   <section id="aicoach" class="aicoach-view" hidden>
     <div class="t-head" style="flex-wrap: wrap; gap: 8px; align-items: center;">
@@ -5617,7 +5631,7 @@ async function refresh() {
     try { wanted = pair ? wanted : decodeURIComponent(wanted); } catch {}
     // A link to a Tools view (#labels, #clubcheck, #p4check, #nightreport, #week: the Start page's "Since last time")
     // opens it over the newest swing (read before open() puts the swing's name in the address).
-    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", p4check: "p4check-btn", nightreport: "nightreport-btn", week: "week-btn", wristcheck: "wristcheck-btn", aicoach: "aicoach-btn" }[location.hash.slice(1)];
+    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", p4check: "p4check-btn", nightreport: "nightreport-btn", week: "week-btn", wristcheck: "wristcheck-btn", aicoach: "aicoach-btn", drills: "drills-btn" }[location.hash.slice(1)];
     open(clips.some(c => c.name === wanted) ? wanted : (filteredClips()[0] || shownClips()[0]).name);
     if (pair && clips.some(c => c.name === pair[0])) Compare.show(pair[0], pair[1]);
     if (view) setTimeout(() => document.getElementById(view)?.click(), 0);
@@ -5709,6 +5723,7 @@ setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 <script src="/static/week-view.js"></script>
 <script src="/static/wristcheck.js"></script>
 <script src="/static/aicoach-view.js"></script>
+<script src="/static/drills-view.js"></script>
 <script src="/static/compare.js"></script>
 <script src="/static/update.js"></script>
 </body>

@@ -228,6 +228,10 @@ function showView(which) {
   if (coachBox) coachBox.hidden = which !== "aicoach";
   const coachBtn = document.getElementById("aicoach-btn");
   if (coachBtn) coachBtn.classList.toggle("on", which === "aicoach");
+  const drillsBox = document.getElementById("drills");
+  if (drillsBox) drillsBox.hidden = which !== "drills";
+  const drillsBtn = document.getElementById("drills-btn");
+  if (drillsBtn) drillsBtn.classList.toggle("on", which === "drills");
   viewer.hidden = which !== "swing" || !current;
   if (which !== "swing") analysisReturn = null;
   document.getElementById("a-back").hidden = !analysisReturn;
@@ -240,7 +244,7 @@ function showView(which) {
   document.getElementById("analysis-btn").classList.toggle("on", analysisOpen);
   // The tabs: a session's trends belong to Swings; Labels, Club check, P4 check, Night report, Week for coach, Wrist check, AI coach and the shutter test are under Tools.
   document.getElementById("swings-btn").classList.toggle("on", which === "swing" || which === "trends");
-  document.getElementById("tools-btn").classList.toggle("on", which === "setup" || which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck" || which === "p4check" || which === "week" || which === "wristcheck" || which === "aicoach");
+  document.getElementById("tools-btn").classList.toggle("on", which === "setup" || which === "shutter" || which === "labelview" || which === "nightreport" || which === "clubcheck" || which === "p4check" || which === "week" || which === "wristcheck" || which === "aicoach" || which === "drills");
   document.body.dataset.view = which;
 }
 
@@ -253,7 +257,8 @@ function leaveTrendViews() {
       && (!document.getElementById("p4check") || document.getElementById("p4check").hidden)
       && (!document.getElementById("week") || document.getElementById("week").hidden)
       && (!document.getElementById("wristcheck") || document.getElementById("wristcheck").hidden)
-      && (!document.getElementById("aicoach") || document.getElementById("aicoach").hidden)) return;
+      && (!document.getElementById("aicoach") || document.getElementById("aicoach").hidden)
+      && (!document.getElementById("drills") || document.getElementById("drills").hidden)) return;
   showView("swing");
   renderList();
 }
