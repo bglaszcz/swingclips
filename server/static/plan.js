@@ -7,6 +7,10 @@
 // 1. Warm-up: a few easy wedge shots (fixed block, short).
 // 2. Focus block: the current focus (if any) with its drill and swing thought from coach.js,
 //    a ball count, and parameters to turn on practice mode for that move (Practice this).
+//    When the move has a drill it is two blocks, the guided part of the session: "focus" (kind
+//    "reps": the drill's reps, recorded as that drill: coach.js drillId) and right after it "carry"
+//    (kind "swings": 10 normal swings, to see whether they keep it). Their balls and minutes are
+//    the one block's, shared out.
 //    When no focus is set, the top session fault from faults.js feeds the block automatically
 //    (arms-led downswing from 3D data is the primary candidate).
 // 3. Scoring-zone block: from the latest Combines' worst targets (combineBreakdown worst), or,
@@ -330,6 +334,9 @@
   /**
    * Builds the 4 practice blocks for today's session.
    */
+  // Normal swings after a focus's reps (the "carry" block).
+  const CARRY_BALLS = 10;
+
   function buildPlan(inputs = {}, options = {}) {
     const rawNow = options.now ?? Date.now();
     const nowMs = typeof rawNow === "number"
@@ -545,9 +552,10 @@
         drill: fix && fix.drill ? fix.drill : null,
         thought: fix && fix.thought ? fix.thought : null,
         drillSet: drillSetLine,
-        // A drill with its own recording mode (app.py /api/drill): the pump drill's pumps come
-        // seconds before the strike, so the phones keep more video and the swings stay out of trends.
-        drillMode: fix && fix.drill && /^Pump drill/.test(fix.drill) ? "pump" : null,
+        // The drill's reps are recorded as that drill (app.py /api/drill), out of the trends: reps of
+        // the move itself, or the pump drill for the move it is the drill of (its pumps come seconds
+        // before the strike, so the phones keep more video then). coach.js drillId knows which.
+        drillMode: fix && fix.drill && Coach && Coach.drillId ? Coach.drillId(effectiveFocus.move, effectiveFocus.aim) : null,
         needs: makeNeeds({ phones: true, square: true, body3d: focusNeeds3d, ball: true }),
         button: {
           id: "practice",
@@ -780,9 +788,30 @@
       }
     }
 
+    // With a drill, the focus block is the reps and a second block the normal swings after them.
+    const focusBlocks = [focusBlock];
+    if (focusBlock.drillMode) {
+      const carryBalls = CARRY_BALLS, carryMinutes = Math.floor(focusBlock.minutes * carryBalls / focusBlock.balls);
+      focusBlocks.push({
+        id: "carry",
+        kind: "swings",
+        title: "Normal swings: do they keep it?",
+        minutes: carryMinutes,
+        balls: carryBalls,
+        why: "Your normal swing, no drill: the swings right after the reps show whether what the drill had carries into them.",
+        thought: focusBlock.thought,
+        needs: focusBlock.needs,
+        button: focusBlock.button,
+        // The drill these follow, for the page (its reps and what they did).
+        after: focusBlock.drillMode,
+      });
+      focusBlock.kind = "reps";
+      focusBlock.balls -= carryBalls;
+      focusBlock.minutes -= carryMinutes;
+    }
     const blocks = programBlock
-      ? [programBlock, warmupBlock, focusBlock, scoringBlock, finishBlock]
-      : [warmupBlock, focusBlock, scoringBlock, finishBlock];
+      ? [programBlock, warmupBlock, ...focusBlocks, scoringBlock, finishBlock]
+      : [warmupBlock, ...focusBlocks, scoringBlock, finishBlock];
     const totalMinutes = blocks.reduce((sum, b) => sum + (b.minutes || 0), 0);
     const totalBalls = blocks.reduce((sum, b) => sum + (b.balls || 0), 0);
 

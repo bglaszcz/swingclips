@@ -93,8 +93,10 @@ test("focus block with active focus and enough swings sets practice range", () =
 
   const plan = Plan.buildPlan({ focus, clips });
   const fBlock = plan.blocks.find(b => b.id === "focus");
-  assert.strictEqual(fBlock.minutes, 15);
-  assert.strictEqual(fBlock.balls, 20);
+  // The move has a drill, so the block's 15 minutes and 20 balls are shared with the normal swings after it.
+  const carry = plan.blocks.find(b => b.id === "carry");
+  assert.strictEqual(fBlock.minutes + carry.minutes, 15);
+  assert.strictEqual(fBlock.balls + carry.balls, 20);
   assert.ok(fBlock.title.includes("Focus:"));
   assert.ok(fBlock.drill);
   assert.ok(fBlock.thought);
@@ -520,4 +522,48 @@ test("explicit focus overrides auto-fault detection", () => {
     !fBlock.title.toLowerCase().includes("arms-led"),
     `Explicit focus should win over auto-fault. Title: "${fBlock.title}"`
   );
+});
+
+// ---- Round 59: the focus's reps, then normal swings (the guided part of the session) ----
+
+const focusOf = (move, aim) => ({ move, aim, club: "I7", results: ["carry"], since: "2026-09-28" });
+const ids = plan => plan.blocks.map(b => b.id);
+
+test("a focus with a drill: a reps block, then normal swings, in that order", () => {
+  const plan = Plan.buildPlan({ focus: focusOf("leadHipP6", "more"), clips: [] });
+  assert.deepStrictEqual(ids(plan), ["warmup", "focus", "carry", "scoring", "finish"]);
+  const reps = plan.blocks[1], carry = plan.blocks[2];
+  assert.deepStrictEqual([reps.kind, reps.drillMode, reps.balls, reps.minutes], ["reps", "move:leadHipP6:more", 10, 8]);
+  assert.deepStrictEqual([carry.kind, carry.after, carry.balls, carry.minutes, carry.drillMode], ["swings", "move:leadHipP6:more", 10, 7, undefined]);
+  assert.strictEqual(carry.title, "Normal swings: do they keep it?");
+  assert.strictEqual(carry.thought, reps.thought);
+  assert.ok(reps.drill);
+  // Practice this works on the normal swings too.
+  assert.strictEqual(carry.button, reps.button);
+  assert.strictEqual(carry.button.params.metric, "leadHipP6");
+});
+
+test("the reps are recorded as the move's own drill: the pump only for the move it is the drill of", () => {
+  const mode = (move, aim) => Plan.buildPlan({ focus: focusOf(move, aim), clips: [] }).blocks.find(b => b.id === "focus").drillMode;
+  assert.strictEqual(mode("handsPlaneP6", "less"), "pump");
+  // Its drill's words also begin "Pump drill", but it is another move: reps of that move.
+  assert.strictEqual(mode("lagP5", "more"), "move:lagP5:more");
+  assert.strictEqual(mode("shoulderTop", "more"), "move:shoulderTop:more");
+});
+
+test("the split keeps the plan's totals", () => {
+  const plan = Plan.buildPlan({ focus: focusOf("leadHipP6", "more"), clips: [] });
+  const two = plan.blocks.filter(b => b.id === "focus" || b.id === "carry");
+  assert.strictEqual(two.reduce((n, b) => n + b.balls, 0), 20);
+  assert.strictEqual(two.reduce((n, b) => n + b.minutes, 0), 15);
+  assert.strictEqual(plan.totalBalls, plan.blocks.reduce((n, b) => n + b.balls, 0));
+  assert.strictEqual(plan.totalMinutes, plan.blocks.reduce((n, b) => n + b.minutes, 0));
+  assert.ok(plan.totalBalls >= 60 && plan.totalBalls <= 80);
+});
+
+test("no focus: one focus block as before, and no normal-swings block", () => {
+  const plan = Plan.buildPlan({ clips: [] });
+  assert.deepStrictEqual(ids(plan), ["warmup", "focus", "scoring", "finish"]);
+  assert.strictEqual(plan.blocks[1].drillMode, undefined);
+  assert.strictEqual(plan.blocks[1].kind, undefined);
 });
