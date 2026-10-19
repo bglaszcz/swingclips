@@ -469,3 +469,44 @@ test("joinWeekAndRuns: multiple runs joined with timestamps and report texts", (
   assert.ok(result.endsWith("--- Brace and turn, Oct 7 ---\nReport 2 body line 1\nReport 2 body line 2"));
 });
 
+test("weekSummary includes the This week plan line (sessions, reps, Combine, held) near the top", () => {
+  const rows = [];
+  // Two 12-swing sessions this week: Mon Sep 28 and Wed Sep 30
+  for (let i = 0; i < 12; i++) {
+    const t = new Date("2026-09-28T10:00:00").getTime() + i * 60000;
+    rows.push({ name: `s1_${i}`, t, club: "7I", carry: 152, offline: -2, strikeV: -10, leadHipP6: 1.5 });
+  }
+  for (let i = 0; i < 12; i++) {
+    const t = new Date("2026-09-30T14:00:00").getTime() + i * 60000;
+    rows.push({ name: `s2_${i}`, t, club: "7I", carry: 154, offline: 1, strikeV: -8, leadHipP6: 1.8 });
+  }
+  const data = {
+    now: new Date("2026-10-02T12:00:00").getTime(), // Friday (3 days left)
+    rows,
+    drillSets: [
+      { drill: "move:leadHipP6:more", timestamp: new Date("2026-09-30T14:05:00").getTime(), count: 10, verdict: "clear carry-over into your swings" },
+    ],
+    gameLog: [
+      { id: "combine", started: new Date("2026-09-30T15:00:00").getTime() / 1000, summary: { sgPerShot: -0.18, shots: 27, greens: 14 } },
+    ],
+    journal: {
+      focus: { move: "leadHipP6", aim: "more", club: "7I", since: "2026-09-01" },
+    },
+    held: { state: "held", run: 3, of: 3 },
+    words: () => "Held for three sessions in a row. This one looks learned.",
+  };
+
+  const summary = Week.weekSummary(data, "2026-09-28");
+  const pSec = summary.sections.find(s => s.title === "Practice");
+  assert.ok(pSec);
+  const wpLine = pSec.lines.find(l => l.startsWith("This week:"));
+  assert.ok(wpLine, "Practice section should include the This week plan line");
+  assert.ok(wpLine.includes("1 of 3 done this week, 3 days left."), "Got: " + wpLine);
+  assert.ok(wpLine.includes("Your focus has held: pick the next one on the review page (Progress)."));
+  assert.ok(wpLine.includes("2 of 3 sessions"));
+  assert.ok(wpLine.includes("1 of 2 drill sets for your focus: clear carry-over into your swings"));
+  assert.ok(wpLine.includes("Combine on Wed: -0.18 strokes a shot vs tour (your first)"));
+  assert.ok(wpLine.includes("Held for three sessions in a row. This one looks learned."));
+});
+
+

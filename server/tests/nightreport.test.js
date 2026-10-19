@@ -514,5 +514,89 @@ test("renderScoresTable: renders Before, After, Change when candidate has no run
   assert.ok(!html.includes("<th>Run 1</th>"), "does not include Run 1 header");
 });
 
+test("swingRows: returns null when verdict has no rows, and omits lo===hi===0 rows", () => {
+  assert.equal(NightReport.swingRows(null), null);
+  assert.equal(NightReport.swingRows({}), null);
+  assert.equal(NightReport.swingRows({ better: true, why: "Old report" }), null);
+  assert.equal(NightReport.swingRows(sample.candidates[2].verdict), null);
 
+  // Sample 0 has 16 rows in verdict.rows (8 with lo === 0 && hi === 0: takeaway, p3, p5, impact on both angles)
+  const sw0 = NightReport.swingRows(sample.candidates[0].verdict);
+  assert.ok(sw0);
+  assert.equal(
+    sw0.pooledLine,
+    "Overall: P2, the top, P6 and P8 0.6 ms closer per swing (could be 2.0 closer to 0.7 further off), 21 swings"
+  );
+  assert.equal(sw0.rows.length, 8);
+  assert.ok(sw0.rows.every(r => r.verdict === "Same"));
+  assert.deepEqual(
+    sw0.rows.map(r => r.text),
+    [
+      "P2 face-on: 1.4 ms closer per swing (could be 5.9 closer to 3.1 further off) · 5 swings worse, 4 better",
+      "P4 face-on: 1.3 ms closer per swing (could be 3.3 closer to 0.5 further off) · 1 swing worse, 2 better",
+      "P6 face-on: 0.1 ms closer per swing (could be 0.9 closer to 0.6 further off) · 0 swings worse, 0 better",
+      "P8 face-on: 0.6 ms closer per swing (could be 2.4 closer to 1.4 further off) · 1 swing worse, 3 better",
+      "P2 down the line: 0.8 ms further off per swing (could be 4.2 closer to 5.7 further off) · 5 swings worse, 3 better",
+      "P4 down the line: 1.5 ms closer per swing (could be 3.7 closer to 0.3 further off) · 1 swing worse, 2 better",
+      "P6 down the line: 0.5 ms further off per swing (could be 0.3 closer to 1.3 further off) · 0 swings worse, 0 better",
+      "P8 down the line: 0.8 ms closer per swing (could be 2.4 closer to 1.2 further off) · 1 swing worse, 2 better",
+    ]
+  );
 
+  // Sample 0 club: dtl shaft (foundLo === 0 && foundHi === 0) is omitted -> 3 club lines remain
+  assert.equal(sw0.club.length, 3);
+  assert.deepEqual(
+    sw0.club.map(c => c.text),
+    [
+      "Shaft found 7 points more often in the downswing (face-on)",
+      "Clubhead found 2 points more often in the downswing (face-on) · placed 1.2% of your height closer",
+      "Clubhead found 13 points more often in the downswing (down the line) · placed 1.9% of your height closer",
+    ]
+  );
+});
+
+test("swingRows: sample 1 (Oct 9 worse run) puts Worse row first and formats all lines", () => {
+  const NightReportView = require("../static/nightreport-view.js");
+  const sw1 = NightReport.swingRows(sample.candidates[1].verdict);
+  assert.ok(sw1);
+  assert.equal(
+    sw1.pooledLine,
+    "Overall: P2, the top, P6 and P8 0.4 ms further off per swing (could be 0.7 closer to 1.6 further off), 20 swings"
+  );
+  assert.equal(sw1.rows.length, 8);
+  assert.equal(sw1.rows[0].verdict, "Worse");
+  assert.equal(sw1.rows[0].label, "P2 down the line");
+  assert.equal(sw1.rows[0].change, "4.4 ms further off per swing");
+  assert.equal(sw1.rows[0].range, "could be 0.3 to 9.3");
+  assert.equal(sw1.rows[0].tally, "5 swings worse, 1 better");
+  assert.equal(
+    sw1.rows[0].text,
+    "P2 down the line: 4.4 ms further off per swing (could be 0.3 to 9.3) · 5 swings worse, 1 better"
+  );
+  assert.deepEqual(
+    sw1.rows.slice(1).map(r => r.text),
+    [
+      "P2 face-on: 1.7 ms further off per swing (could be 2.0 closer to 5.3 further off) · 4 swings worse, 2 better",
+      "P4 face-on: 1.1 ms closer per swing (could be 3.1 closer to 0.7 further off) · 1 swing worse, 2 better",
+      "P6 face-on: 0.1 ms further off per swing (could be 0.9 closer to 1.2 further off) · 0 swings worse, 0 better",
+      "P8 face-on: 0.3 ms closer per swing (could be 2.2 closer to 1.7 further off) · 2 swings worse, 2 better",
+      "P4 down the line: 2.1 ms closer per swing (could be 0.6 to 3.6) · 0 swings worse, 3 better",
+      "P6 down the line: 0.5 ms further off per swing (could be 0.6 closer to 1.4 further off) · 0 swings worse, 0 better",
+      "P8 down the line: 0.3 ms closer per swing (could be 2.2 closer to 1.6 further off) · 2 swings worse, 2 better",
+    ]
+  );
+  assert.deepEqual(
+    sw1.club.map(c => c.text),
+    [
+      "Shaft found 2 points more often in the downswing (face-on)",
+      "Clubhead found 2 points less often in the downswing (face-on) · placed 0.8% of your height closer",
+      "Clubhead found 10 points more often in the downswing (down the line) · placed 0.2% of your height closer",
+    ]
+  );
+
+  const html = NightReportView.renderSwingBySwing(sample.candidates[1].verdict);
+  assert.ok(html.includes("<summary><strong>Swing by swing</strong></summary>"));
+  assert.ok(html.includes("Worse"));
+  assert.ok(html.includes("P2 down the line: 4.4 ms further off per swing (could be 0.3 to 9.3) · 5 swings worse, 1 better"));
+  assert.equal(NightReportView.renderSwingBySwing(sample.candidates[2].verdict), "");
+});

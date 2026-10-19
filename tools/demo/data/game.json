@@ -1,5 +1,34 @@
 {
  "game": null,
  "games": [],
- "log": []
+ "log": [
+  {
+   "id": "combine",
+   "name": "Combine",
+   "started": 1791905400,
+   "finished": 1791906300,
+   "how": "done",
+   "summary": {
+    "shots": 27,
+    "mishits": 0,
+    "greens": 18,
+    "sgTotal": -4.86,
+    "sgPerShot": -0.18
+   }
+  },
+  {
+   "id": "combine",
+   "name": "Combine",
+   "started": 1791403200,
+   "finished": 1791404100,
+   "how": "done",
+   "summary": {
+    "shots": 27,
+    "mishits": 0,
+    "greens": 16,
+    "sgTotal": -6.48,
+    "sgPerShot": -0.24
+   }
+  }
+ ]
 }
