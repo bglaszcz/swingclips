@@ -159,11 +159,12 @@ and drill from `coach.js`. Keys `1`–`8` jump between key positions (setup, top
 - **Tools**: everyday tools first (Start a session, Tripod setup, Week for coach, AI coach, Update server),
   tracking and setup checks below (3D calibration, Labels, Club check, P4 check, Wrist check, Night report, Shutter test).
 
-**Capture app (0.12)**: the camera fills the screen with which angle and mode it is and whether
+**Capture app (0.13)**: the camera fills the screen with which angle and mode it is and whether
 it's recording; below it the status, the server, one big Start / Stop, and the strike trigger
 (level bar and sensitivity; also set from the Start page, recording or not, from 0.12). Everything
 else (angle, mode, shutter, server, voices, auto-start) is under **Settings**; the camera ones are
-locked while recording.
+locked while recording. From 0.13 the screen dims while recording (a touch brings it back) to keep
+the phone cool, and each clip reports the frames it lost (a hot S23 Ultra loses many).
 
 ## Common commands
 
