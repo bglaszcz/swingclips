@@ -116,6 +116,96 @@ class JudgeTest(unittest.TestCase):
         self.assertEqual(night_improve.counts(info), {"swings": 2, "valSwings": 1, "frames": 2})
 
 
+def swing(t, angle="face", club_rows=(), head_rows=(), **events):
+    """One swing's compact scores (improve.swings_from), its clip named by the unix time t."""
+    name = f"swing_{'dtl_' if angle == 'dtl' else ''}1920x1080_240fps_{t}_2100ms.mp4"
+    return {"clip": name, "angle": angle, "events": events, "club": list(club_rows), "clubhead": list(head_rows)}
+
+
+def with_swings(rows):
+    return {"positions": [], "club": [], "clubhead": [], "swings": rows}
+
+
+class SwingBySwingTest(unittest.TestCase):
+    """judge_swings: the same swings under both models (Oct 18: the table judge's verdicts followed one or two
+    swings out of 7-17)."""
+    T = range(1790300000, 1790300012)
+
+    def test_better_beyond_chance(self):
+        cur = with_swings([swing(t, p2=-10 + (t % 3), p6=0, p8=4.2) for t in self.T])
+        new = with_swings([swing(t, p2=-6 + (t % 3), p6=0, p8=4.2) for t in self.T])
+        v = improve.judge(cur, new)
+        self.assertTrue(v["better"], v["why"])
+        p2 = next(r for r in v["rows"] if r["event"] == "p2")
+        self.assertEqual((p2["n"], p2["mean"], p2["verdict"], p2["better"]), (12, -4.0, "better", 0))
+        self.assertLess(v["pooled"]["hi"], 0)
+        self.assertIn("off by 1.3 ms less per swing", v["why"])        # p2 -4, p6 and p8 0, pooled
+
+    def test_one_position_clearly_worse(self):
+        cur = with_swings([swing(t, "dtl", p2=4.2, p8=8.3) for t in self.T[:7]])
+        new = with_swings([swing(t, "dtl", p2=12.5 + (t % 2) * 4.2, p8=4.2) for t in self.T[:7]])
+        v = improve.judge(cur, new)
+        self.assertFalse(v["better"])
+        self.assertTrue(v["why"].startswith("Worse: P2 down the line off by 10.1 ms more per swing on average "
+                                            "(7 of 7 swings worse by more than a frame)"), v["why"])
+
+    def test_one_swing_is_not_a_verdict(self):
+        """Like Oct 11: one row's within-one-frame share fell 15 points on one swing; swing by swing, nothing."""
+        cur = with_swings([swing(t, p2=4.2 * (t % 2)) for t in self.T])
+        changed = [swing(t, p2=4.2 * (t % 2)) for t in self.T]
+        changed[0]["events"]["p2"] = 16.7
+        changed[1]["events"]["p2"] = 0.0
+        v = improve.judge(cur, with_swings(changed))
+        self.assertFalse(v["better"])
+        self.assertTrue(v["why"].startswith("About the same"), v["why"])
+
+    def test_small_steady_change_is_not_clearly_worse(self):
+        """Every swing 1 ms worse: sure, but under half a frame."""
+        cur = with_swings([swing(t, p6=0.0) for t in self.T])
+        new = with_swings([swing(t, p6=1.0) for t in self.T])
+        v = improve.judge(cur, new)
+        self.assertEqual(v["rows"][0]["verdict"], "same")
+        self.assertTrue(v["why"].startswith("About the same"))
+
+    def test_clubhead_found_and_placed(self):
+        heads = lambda found, err: [[1.0 + k / 240, "downswing", found, err if found else None] for k in range(4)]
+        cur = with_swings([swing(t, "dtl", head_rows=heads(t % 2, 3.0), p2=4.2) for t in self.T])
+        new = with_swings([swing(t, "dtl", head_rows=heads(1, 2.0), p2=4.2) for t in self.T])
+        v = improve.judge(cur, new)
+        self.assertTrue(v["better"], v["why"])
+        self.assertIn("finds the clubhead 50 points more often in the downswing down the line", v["why"])
+        self.assertIn("places the clubhead 1.0% of your height closer", v["why"])
+        # Found less often instead: worse.
+        v = improve.judge(new, cur)
+        self.assertFalse(v["better"])
+        self.assertIn("clubhead found in the downswing down the line 50 points less often", v["why"])
+
+    def test_old_reports_still_judged_from_tables(self):
+        a = {**scores(pos("p2", 21, 55)), "swings": []}
+        b = scores(pos("p2", 17, 66))
+        self.assertTrue(improve.judge(a, b)["better"])                  # no swings on one side: the tables
+
+    def test_swings_from_eval_clips_and_two_runs(self):
+        clip = {"clip": "swing_1920x1080_240fps_1790206444.mp4", "angle": "face",
+                "events": [{"event": "p2", "ms": -29.156, "frames": -3}, {"event": "ball gone", "ms": 0.0, "frames": 0},
+                           {"event": "p8", "ms": None, "frames": None}],
+                "club": [{"t": 0.0, "phase": "address", "found": True, "err": 1.104},
+                         {"t": 2.2, "phase": "downswing", "found": False, "err": None}],
+                "clubhead": [{"t": 2.2, "phase": "downswing", "found": True, "err": 0.0253}]}
+        s = improve.swings_from([clip])
+        self.assertEqual(s, [{"clip": clip["clip"], "angle": "face", "events": {"p2": -29.2},
+                              "club": [[0.0, "address", 1, 1.1], [2.2, "downswing", 0, None]],
+                              "clubhead": [[2.2, "downswing", 1, 2.53]]}])
+        other = json.loads(json.dumps(s))
+        other[0]["events"]["p2"] = 8.4
+        other[0]["clubhead"][0] = [2.2, "downswing", 0, None]
+        avg = improve.average_scores([with_swings(s), with_swings(other)])["swings"][0]
+        self.assertEqual(avg["events"], {"p2": 18.8})                    # the mean of the two runs' |errors|
+        self.assertEqual(avg["clubhead"], [[2.2, "downswing", 0.5, 2.53]])
+        self.assertEqual(improve.swing_id(clip["clip"]), "1790206444")
+        self.assertEqual(improve.swing_id("swing_dtl_1920x1080_240fps_1790271665_2105ms.mp4"), "1790271665")
+
+
 class StoreTest(unittest.TestCase):
     def setUp(self):
         self.dir = Path(tempfile.mkdtemp(dir=TMP))

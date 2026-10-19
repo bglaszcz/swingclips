@@ -5,8 +5,9 @@ When there are enough new club points since the last scored try (club_frames, MI
 club model learns only from them, not from key moments or body points), the gaming PC
 (night_improve.py) trains a new club model on them and scores it and the model in use with eval.py's deep pass on the
 labeled swings neither trained on (the dataset's validation split). It sends the model and the two
-scorecards (scores_from) here; judge() says whether it's better: better on average, and no key
-position or club table clearly worse. A model scored better on its own training metric once made P2
+scorecards (scores_from) here; judge() says whether it's better: swing by swing against the model in
+use, better beyond chance on the key positions a club model moves (or finding the club clearly more
+often), and nothing clearly worse. A model scored better on its own training metric once made P2
 and P8 worse, which is why the scorecard decides, and why the owner does.
 
 Files, in the "improve" folder beside the pose folder: candidates/<id>/report.json and model.onnx,
@@ -14,6 +15,8 @@ and nights.json (what each night did, for the report).
 """
 import hashlib
 import json
+import random
+import re
 import shutil
 import time
 from datetime import datetime
@@ -75,11 +78,12 @@ def club_frames(labels_dir: Path) -> set[str]:
     return out
 
 
-def scores_from(tables: dict) -> dict:
+def scores_from(tables: dict, clips: list[dict] | None = None) -> dict:
     """An eval.py result's tables in the report's shape: positions (key positions, ms and %), club and
-    clubhead (found %, error)."""
+    clubhead (found %, error); with its per-clip results (`clips`), each swing's too (swings_from), for
+    judging swing by swing."""
     r1 = lambda v: None if v is None else round(v, 1)
-    return {
+    out = {
         "positions": [{"angle": r["angle"], "event": r["event"], "n": r.get("labeled", 0), "median": r1(r.get("median")),
                        "p90": r1(r.get("p90")), "within1": r1(r.get("within1"))}
                       for r in tables.get("events", []) if r["event"] != "ball gone"],
@@ -88,6 +92,9 @@ def scores_from(tables: dict) -> dict:
         "clubhead": [{"angle": r["angle"], "phase": r["phase"], "n": r.get("labeled", 0), "found": r1(r.get("found")),
                       "median": r1(r.get("median")), "p90": r1(r.get("p90"))} for r in tables.get("clubhead", [])],
     }
+    if clips:
+        out["swings"] = swings_from(clips)
+    return out
 
 
 def _paired(a: list, b: list, key) -> list[tuple[dict, dict]]:
@@ -101,9 +108,12 @@ def _name(row: dict) -> str:
 
 
 def judge(current: dict, candidate: dict) -> dict:
-    """{better, why}: better when no key position (or the club in the downswing) is clearly worse
-    and the key positions are better on average, or the club is found clearly more often with the
-    key positions no worse."""
+    """{better, why}: swing by swing (judge_swings) when both scorecards have their swings; otherwise (reports
+    from before Oct 18) from the tables: better when no key position (or the club in the downswing) is
+    clearly worse and the key positions are better on average, or the club is found clearly more often
+    with the key positions no worse."""
+    if current.get("swings") and candidate.get("swings"):
+        return judge_swings(current["swings"], candidate["swings"])
     rows = [(a, b) for a, b in _paired(current.get("positions", []), candidate.get("positions", []),
                                        lambda r: (r["angle"], r["event"]))
             if min(a["n"], b["n"]) >= MIN_N and None not in (a["p90"], b["p90"], a["within1"], b["within1"])]
@@ -137,6 +147,188 @@ def judge(current: dict, candidate: dict) -> dict:
     return {"better": False, "why": f"About the same: {avg}."}
 
 
+# ---- Swing by swing (Oct 18) ----
+# The table judge above compares within-one-frame shares on 7-17 swings, where one swing is 6-14 points:
+# on the nine tries so far its verdicts followed one or two swings (and two trainings on the same frames
+# disagreed by 50 points on face-on P2). With each swing's error from both models (the eval's own
+# per-clip results, scores_from's "swings"), judge_swings compares the same swings: per key position the
+# mean change in error, with a 90% bootstrap interval over the swings; clearly worse only when that whole
+# interval is above zero AND the change is at least half a frame; better only when the key positions a
+# club model moves (MODEL_EVENTS, both cameras, pooled by swing) are better beyond chance, or the club is
+# found clearly more often or the clubhead placed clearly closer in the downswing with them no worse. On the same nine tries: no candidate was
+# better beyond chance (pooled changes -0.6..+0.9 ms), and the Oct 10 "better" verdict was within it.
+MODEL_EVENTS = ("p2", "p4", "p6", "p8")
+JUDGED_EVENTS = ("takeaway", "p2", "p3", "p4", "p5", "p6", "impact", "p8")
+# Half a frame at 240 fps: a mean change smaller than this isn't "clearly" anything, however sure.
+MARGIN_MS = 2.1
+# Off by more than this (one frame), a swing counts as worse / better in a row's tally.
+FRAME_MS = 4.2
+# Club found in the downswing: a change of this many points, beyond chance, counts.
+FOUND_PTS = 5.0
+# Clubhead placed this much further from the label (% of the golfer's height), beyond chance: worse.
+HEAD_ERR_PCT = 0.5
+BOOT = 2000
+
+
+def swing_id(clip: str) -> str:
+    """Both cameras' clips of a swing share its time in their names."""
+    m = re.search(r"_(\d{10})(?:_|\.)", clip)
+    return m.group(1) if m else clip
+
+
+def swings_from(clips: list[dict]) -> list[dict]:
+    """eval.py's per-clip results, compact: [{clip, angle, events: {event: signed ms}, club / clubhead:
+    [[t, phase, found 0/1, err]]}] (club err in degrees, clubhead err in % of height)."""
+    r = lambda v, d=1: None if v is None else round(v, d)
+    out = []
+    for c in clips or []:
+        out.append({
+            "clip": c["clip"], "angle": c["angle"],
+            "events": {e["event"]: r(e["ms"]) for e in c.get("events", [])
+                       if e["event"] in JUDGED_EVENTS and e.get("ms") is not None},
+            "club": [[round(k["t"], 4), k["phase"], int(bool(k["found"])),
+                      r(k.get("err"), 2) if k["found"] else None] for k in c.get("club", [])],
+            "clubhead": [[round(k["t"], 4), k["phase"], int(bool(k["found"])),
+                          r(k["err"] * 100, 2) if k["found"] and k.get("err") is not None else None]
+                         for k in c.get("clubhead", [])],
+        })
+    return out
+
+
+def _average_swings(runs: list[list[dict]]) -> list[dict]:
+    """Several runs' swings (on the same clips) as one: each key position's error as the mean of the runs'
+    |errors| (what a training on these labels gets, on average), found as the share of runs, the club's
+    error as the mean where found."""
+    by = [{(s["clip"], s["angle"]): s for s in run} for run in runs]
+    out = []
+    for key, first in by[0].items():
+        group = [b[key] for b in by if key in b]
+        if len(group) != len(by):
+            continue
+        events = {e: round(sum(abs(g["events"][e]) for g in group) / len(group), 1)
+                  for e in first["events"] if all(e in g["events"] for g in group)}
+        row = {"clip": first["clip"], "angle": first["angle"], "events": events}
+        for table in ("club", "clubhead"):
+            frames = [{(k[0], k[1]): k for k in g.get(table, [])} for g in group]
+            merged = []
+            for fk, k in frames[0].items():
+                ks = [f[fk] for f in frames if fk in f]
+                if len(ks) != len(frames):
+                    continue
+                errs = [x[3] for x in ks if x[2] and x[3] is not None]
+                merged.append([k[0], k[1], round(sum(x[2] for x in ks) / len(ks), 3),
+                               round(sum(errs) / len(errs), 2) if errs else None])
+            row[table] = merged
+        out.append(row)
+    return out
+
+
+def _interval(groups: list[list[float]], seed: int = 1) -> tuple[float, float, float]:
+    """The mean of all values in `groups` and a 90% bootstrap interval for it, resampling whole groups
+    (a swing's values move together). Seeded: the same scores give the same verdict."""
+    flat = [v for g in groups for v in g]
+    mean = sum(flat) / len(flat)
+    rng = random.Random(seed)
+    sums = [(sum(g), len(g)) for g in groups]
+    means = []
+    for _ in range(BOOT):
+        tot = cnt = 0
+        for _ in sums:
+            a, b = sums[rng.randrange(len(sums))]
+            tot += a
+            cnt += b
+        means.append(tot / cnt)
+    means.sort()
+    return mean, means[int(0.05 * BOOT)], means[int(0.95 * BOOT) - 1]
+
+
+def _where(angle: str) -> str:
+    return "face-on" if angle == "face" else "down the line"
+
+
+def judge_swings(current: list[dict], candidate: list[dict]) -> dict:
+    """judge() when both scorecards have their swings: {better, why, rows, pooled, club}. rows: per key
+    position {angle, event, n, mean (change in error, ms; + = worse), lo, hi (its 90% interval), worse /
+    better (swings off by more than a frame more / less), verdict "worse" | "better" | "same"}; pooled:
+    MODEL_EVENTS together, by swing; club: the downswing per table and camera, {table, angle, n, found
+    (change in points), foundLo, foundHi, and for the clubhead err, errLo, errHi (% of height)}."""
+    cur = {(s["clip"], s["angle"]): s for s in current}
+    pairs = [(cur[(s["clip"], s["angle"])], s) for s in candidate if (s["clip"], s["angle"]) in cur]
+    rows, worse, pooled = [], [], {}
+    for angle in ("face", "dtl"):
+        for event in JUDGED_EVENTS:
+            diffs = [(swing_id(a["clip"]), abs(b["events"][event]) - abs(a["events"][event]))
+                     for a, b in pairs if a["angle"] == angle and event in a["events"] and event in b["events"]]
+            if len(diffs) < MIN_N:
+                continue
+            if event in MODEL_EVENTS:
+                for sid, d in diffs:
+                    pooled.setdefault(sid, []).append(d)
+            mean, lo, hi = _interval([[d] for _, d in diffs])
+            verdict = ("worse" if lo > 0 and mean >= MARGIN_MS else
+                       "better" if hi < 0 and mean <= -MARGIN_MS else "same")
+            row = {"angle": angle, "event": event, "n": len(diffs), "mean": round(mean, 1), "lo": round(lo, 1),
+                   "hi": round(hi, 1), "worse": sum(d > FRAME_MS for _, d in diffs),
+                   "better": sum(d < -FRAME_MS for _, d in diffs), "verdict": verdict}
+            rows.append(row)
+            if verdict == "worse":
+                worse.append(f"{_name(row)} off by {mean:.1f} ms more per swing on average "
+                             f"({row['worse']} of {row['n']} swings worse by more than a frame)")
+    club = []
+    for table in ("club", "clubhead"):
+        for angle in ("face", "dtl"):
+            found, err = {}, {}
+            for a, b in pairs:
+                if a["angle"] != angle:
+                    continue
+                before = {(k[0], k[1]): k for k in a.get(table, []) if k[1] == "downswing"}
+                for k in b.get(table, []):
+                    o = before.get((k[0], k[1]))
+                    if o is None:
+                        continue
+                    sid = swing_id(a["clip"])
+                    found.setdefault(sid, []).append((k[2] - o[2]) * 100)
+                    if table == "clubhead" and k[3] is not None and o[3] is not None:
+                        err.setdefault(sid, []).append(k[3] - o[3])
+            if sum(len(v) for v in found.values()) < MIN_N:
+                continue
+            mean, lo, hi = _interval(list(found.values()))
+            row = {"table": table, "angle": angle, "n": sum(len(v) for v in found.values()), "found": round(mean, 1),
+                   "foundLo": round(lo, 1), "foundHi": round(hi, 1)}
+            what = "shaft" if table == "club" else "clubhead"
+            if hi < 0 and mean <= -FOUND_PTS:
+                worse.append(f"{what} found in the downswing {_where(angle)} {abs(mean):.0f} points less often")
+            if sum(len(v) for v in err.values()) >= MIN_N:
+                e, elo, ehi = _interval(list(err.values()))
+                row.update(err=round(e, 2), errLo=round(elo, 2), errHi=round(ehi, 2))
+                if elo > 0 and e >= HEAD_ERR_PCT:
+                    worse.append(f"clubhead placed {e:.1f}% of your height further off in the downswing {_where(angle)}")
+            club.append(row)
+    out = {"rows": rows, "club": club, "pooled": None}
+    if not rows:
+        return {**out, "better": False, "why": "Nothing to compare: no labeled swings scored on both."}
+    if pooled:
+        m, lo, hi = _interval(list(pooled.values()))
+        out["pooled"] = {"n": sum(len(v) for v in pooled.values()), "swings": len(pooled), "mean": round(m, 2),
+                         "lo": round(lo, 2), "hi": round(hi, 2)}
+    if worse:
+        return {**out, "better": False, "why": "Worse: " + "; ".join(worse[:3]) + "."}
+    p = out["pooled"]
+    avg = (f"P2, the top, P6 and P8 off by {abs(p['mean']):.1f} ms {'less' if p['mean'] < 0 else 'more'} per swing "
+           f"on average ({p['swings']} swings; 90% sure the change is between {p['lo']:+.1f} and {p['hi']:+.1f} ms)"
+           if p else "no club key positions to compare")
+    if p and p["hi"] < 0:
+        return {**out, "better": True, "why": f"Better: {avg}; nothing clearly worse."}
+    # The club itself clearly better (found more often, or the clubhead placed closer), the key positions no worse.
+    gains = [f"finds the {'shaft' if r['table'] == 'club' else 'clubhead'} {r['found']:.0f} points more often in the "
+             f"downswing {_where(r['angle'])}" for r in club if r["foundLo"] > 0 and r["found"] >= FOUND_PTS]
+    gains += [f"places the clubhead {abs(r['err']):.1f}% of your height closer in the downswing {_where(r['angle'])}"
+              for r in club if "err" in r and r["errHi"] < 0 and r["err"] <= -HEAD_ERR_PCT]
+    if gains and (not p or p["mean"] <= 0.5):
+        return {**out, "better": True, "why": f"Better: {'; '.join(gains[:2])}; {avg}."}
+    return {**out, "better": False, "why": f"About the same: {avg}."}
+
+
 # Each candidate is trained this many times (different seeds) and judged on the runs' average: on Oct 6
 # two trainings on almost the same frames (872 vs 875) scored face-on P2 within one frame 25% and 75%,
 # so one run's verdict was as much luck as model.
@@ -163,6 +355,8 @@ def average_scores(runs: list[dict]) -> dict:
                     row[f] = round(sum(vals) / len(vals), 1) if len(vals) == len(group) else None
             merged.append(row)
         out[table] = merged
+    if runs and all(run.get("swings") for run in runs):
+        out["swings"] = _average_swings([run["swings"] for run in runs])
     return out
 
 

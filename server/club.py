@@ -235,6 +235,18 @@ def model_scores(found, lm, w, h):
     return out
 
 
+def points(found, lm, w, h):
+    """What model_scores was given, for trying other shaft rules later without the models (pose.py's
+    clubPts, SWINGCLIPS_KEEP_CLUB_POINTS): [score, grip x, y, visibility, hosel x, y, v, head x, y, v,
+    hands x, y, golfer's height], picture units, or None."""
+    if found is None or lm is None:
+        return None
+    score, pts = found
+    hands = grip(lm, w, h)
+    return [round(float(v), 4) for v in (score, *[c for p in pts for c in p], hands[0] / w, hands[1] / h,
+                                          body_height(lm, h) / h)]
+
+
 def clubhead(found):
     """The clubhead for the pose file, [x, y, confidence] (picture units, rounded), or None when the
     model isn't sure of it."""

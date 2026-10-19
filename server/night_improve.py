@@ -93,8 +93,8 @@ def run(cmd: list, env: dict, log: Path, timeout: float, cwd: Path) -> None:
 
 
 def scorecard(env: dict, club_model: Path, out: Path, dataset_json: Path, log: Path) -> dict:
-    """eval.py's deep pass on the swings the dataset didn't train on with `club_model`: its tables, with
-    "clips": how many labeled clips were scored."""
+    """eval.py's deep pass on the swings the dataset didn't train on with `club_model`: its scores
+    (improve.scores_from, each swing's included), with "clips": how many labeled clips were scored."""
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
     run([sys.executable, HERE / "eval.py", "--rerun", "--deep", "--no-noise", "--no-quality",
@@ -104,7 +104,7 @@ def scorecard(env: dict, club_model: Path, out: Path, dataset_json: Path, log: P
     if not saved:
         raise RuntimeError("eval.py saved no scorecard")
     doc = json.loads(Path(saved[-1]).read_text(encoding="utf-8"))
-    return {**doc["tables"], "clips": doc.get("labeledClips")}
+    return {**improve.scores_from(doc["tables"], doc.get("clips")), "clips": doc.get("labeledClips")}
 
 
 def try_once(server: str, current_of, force: bool = False, cache: Path = CACHE, say=print) -> str:
@@ -144,16 +144,17 @@ def try_once(server: str, current_of, force: bool = False, cache: Path = CACHE, 
         minutes = round((time.time() - clock) / 60, 1)
         say(f"Improve: trained {len(models_made)} in {minutes} min; scoring them and the model in use on the swings "
             "they didn't train on")
-        tables = scorecard(env, current_model, work / "eval-current", dataset / "dataset.json", work / "eval-current.log")
-        current = improve.scores_from(tables)
-        runs = [improve.scores_from(scorecard(env, m, work / f"eval-candidate-{i}", dataset / "dataset.json",
-                                              work / f"eval-candidate-{i}.log")) for i, m in enumerate(models_made)]
+        current = scorecard(env, current_model, work / "eval-current", dataset / "dataset.json", work / "eval-current.log")
+        runs = [scorecard(env, m, work / f"eval-candidate-{i}", dataset / "dataset.json", work / f"eval-candidate-{i}.log")
+                for i, m in enumerate(models_made)]
         candidate = improve.average_scores(runs)
         best = improve.best_run(runs)
         stamp = post(server, f"/api/improve/{cid}/model", models_made[best].read_bytes(), "application/octet-stream")["stamp"]
         verdict = improve.judge(current, candidate)
         train = {**report["train"], **counts(info), "epochs": EPOCHS, "minutes": minutes, "runs": len(runs), "kept": best,
-                 "scoredClips": tables.get("clips")}
+                 "scoredClips": current.pop("clips", None)}
+        for r in runs:
+            r.pop("clips", None)
         report.update(model=stamp, train=train, scores={"current": current, "candidate": candidate, "runs": runs},
                       verdict=verdict,
                       status="better" if verdict["better"] else "not better",

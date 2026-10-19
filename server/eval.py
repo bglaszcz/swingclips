@@ -129,6 +129,8 @@ def pipeline_fingerprint() -> str:
         h.update(f"{backend}:{body.name}:{body.stat().st_size if body.is_file() else 0}".encode())
         # How often it runs (SWINGCLIPS_BODY_STRIDE, or by default the CPU's or the GPU's) changes the result too.
         h.update(f"stride{pose.body_stride()}".encode())
+    if os.environ.get("SWINGCLIPS_KEEP_CLUB_POINTS"):
+        h.update(b"clubPts")
     if models.club_backend() != models.CLUB_DEFAULT:
         h.update((here / "models.py").read_bytes())
         h.update(f"club:{models.club_stamp()}".encode())

@@ -104,11 +104,29 @@ side `server/improve.py`, `/api/improve`):
    the model in use scored P2 61% / 44% within one frame there against 75% / 71% on the 8 / 7: the small
    set had flattered it), ~13 min each, the server's body model: the key positions, shaft and clubhead
    on the validation swings neither model trained on.
-4. **Judge** (`improve.judge`, on the two runs' average: `improve.average_scores`): better when no key position is clearly worse (within one frame 10
-   points lower, or 90th percentile 2 frames higher), the shaft and clubhead aren't found clearly less
-   often in the downswing, and the key positions are better on average (90th percentile 1 ms lower or
-   within one frame 3 points higher) or the club is found clearly more often. Club model v3 is the
-   reason for the "no position clearly worse" rule: better on its training metric, worse at P2 and P8.
+4. **Judge**, swing by swing (`improve.judge_swings`, since Oct 18): each scorecard carries every
+   scored swing's own errors (`improve.swings_from`, eval.py's per-clip results), and the candidate's are
+   the two runs' average |error| per swing (`improve.average_scores`). For each key position and camera,
+   the change in error on the same swings, with a 90% bootstrap interval over the swings
+   (`improve._interval`, seeded so the same scores give the same verdict):
+   - **worse** when the whole interval is above zero **and** the change is at least half a frame
+     (`MARGIN_MS` 2.1 ms); also when the shaft or clubhead is found clearly less often in the downswing
+     (5 points, interval below zero) or the clubhead is placed clearly further off (0.5% of height);
+   - **better** when nothing is worse and either P2, the top, P6 and P8 together (`MODEL_EVENTS`, both
+     cameras, resampled by swing) are better beyond chance, or the club is found clearly more often or the
+     clubhead placed clearly closer in the downswing with those key positions no worse (+0.5 ms at most);
+   - otherwise **about the same**.
+   The verdict's `rows`, `pooled` and `club` hold the numbers (for each row: the mean change, its
+   interval, and how many swings got worse or better by more than a frame).
+   Why: the table judge before it (within one frame 10 points lower, or 90th percentile 2 frames higher,
+   on the averaged tables; still used for reports without swings) compared shares on 7-17 swings, where
+   one swing is 6-14 points. Replayed on the nine tries Oct 5-11: its verdicts followed one or two swings
+   (Oct 11 was rejected for face-on P2 "59% -> 44% within one frame", while swing by swing P2 was 1.4 ms
+   *better* on average); swing by swing, no try changed the key positions by more than about a
+   millisecond beyond chance, and the newer models find and place the clubhead clearly better down the
+   line (Oct 5, 8, 10 and 11 now read better; Oct 6 x3, 7 and 9 still not, each on a down-the-line P2
+   or face-on P8 clearly worse). Club model v3 is the reason for the "no position clearly
+   worse" rule: better on its training metric, worse at P2 and P8.
 5. **Report**: the better of the two runs (`improve.best_run`) and the scorecards (the model in use,
    the average, and each run) go to the server as a candidate (`improve/candidates/<id>`).
    The Night report shows each run alongside the judged average, highlighting any key positions where the two trainings disagreed by 25 points or more.
