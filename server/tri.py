@@ -430,6 +430,28 @@ def filter_swing(t, Y, c, hz=SMOOTH_HZ, bones=True):
     return X, L
 
 
+def arcs(cams, Xb, Xc, mask, club_mask):
+    """Each phone's view of the 3D hands (wrists and index knuckles) and clubhead, frame by frame, in its
+    picture (0-1 of its upright width and height; None where the 3D has none), for the page to draw their
+    arcs (index.html): a camera's own points drop out where it loses the clubhead (blurred through the
+    downswing) or a hand (behind the body), and the 3D fills them from the other phone and the smoothing."""
+    idx = [15, 16, 19, 20]
+    have = mask[:, idx]
+    n = np.maximum(have.sum(axis=1), 1)
+    hands = np.where(have.any(axis=1)[:, None], (np.where(have[..., None], Xb[:, idx], 0.0)).sum(axis=1) / n[:, None], np.nan)
+    club = np.where(club_mask[:, None], Xc[:, 0], np.nan) if Xc is not None else None
+    out = {}
+    for name, cam in zip(("face", "dtl"), cams):
+        w, h = cam.size
+
+        def pic(P):
+            ok = np.isfinite(P).all(axis=1)
+            uv = cam.project(np.nan_to_num(P))
+            return [[round(float(u) / w, 4), round(float(v) / h, 4)] if o else None for (u, v), o in zip(uv, ok)]
+        out[name] = {"hands": pic(hands), "club": pic(club) if club is not None else None}
+    return out
+
+
 def coverage_mask(t, c):
     """(n, J) True where a frame is within FILL_MAX of a triangulated point of that joint, and
     between the first and last of them."""
@@ -531,6 +553,7 @@ def swing(face_pose: dict, dtl_pose: dict, session: dict, offset: float, face_im
         "boneSpreadPct": round(float(np.median(spreads)), 1) if spreads else None,
         "cameras": {k: {"position": session["cameras"][k]["position"]} for k in ("face", "dtl")},
         "frames": frames,
+        "arcs": arcs(cams, Xb, Xc, mask, mask[:, JOINTS] if Xc is not None else None),
     }
 
 

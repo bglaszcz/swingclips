@@ -45,7 +45,12 @@ What the server works out for each swing and what each part of the review page s
   way; a local curve fit that leans on confident frames and drops one-frame glitches), and ends at P8, or
   earlier once a wrist is lost behind the head. It's yellow up to the hands' own top (their highest point
   after P4) and pink after: P4 comes where the club turns, a median ~57 ms before the hands stop rising
-  (16 of the owner's swings), so splitting at P4 stopped the yellow line short of the hands at the top. Night pass (`Show > Night pass`): draws the skeleton from the
+  (16 of the owner's swings), so splitting at P4 stopped the yellow line short of the hands at the top.
+  On a swing with 3D (both phones, on a calibration) the hand path, and the **Club arc** (Show menu: the
+  clubhead's arc, lighter yellow / pink, shown only then), come from the 3D put back into each picture
+  (`tri.arcs`, the 3D file's `arcs`): smooth and whole where one camera loses the clubhead (it blurs
+  through the downswing) or a hand, since the other phone fills it; without 3D the hand path is the
+  camera's own and there's no club arc. Night pass (`Show > Night pass`): draws the skeleton from the
   night pass (`/api/night/pose/<clip>`, RTMW-l on the gaming PC) alongside the server's, matched by
   timestamp and drawn in dashed sky blue without angle labels; works during playback and in labeling mode.
   A kinematic

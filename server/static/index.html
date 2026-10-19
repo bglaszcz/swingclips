@@ -1586,6 +1586,7 @@
           <button id="skeleton" title="Show the pose skeleton (S)">Skeleton <kbd>S</kbd></button>
           <button id="angles" class="adv-only" title="Show the angles for the frame on screen (A; with Advanced data)">Angles <kbd>A</kbd></button>
           <button id="handpath" title="Show the path of the hands through the swing (H)">Hand path <kbd>H</kbd></button>
+          <button id="clubarc" title="Show the clubhead's arc through the swing (from the 3D: swings both phones filmed, on a calibration)" hidden>Club arc</button>
           <button id="headbox" title="Show where the head was at address">Head</button>
           <button id="impact" title="Show pelvis vs ball at impact (face-on)">Impact</button>
           <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane <kbd>P</kbd></button>
@@ -2646,7 +2647,7 @@ let speed = 1;
 let showSkeleton = true;
 try { showSkeleton = localStorage.getItem("skeleton") !== "off"; } catch {}
 // Extra overlays, each remembered like the skeleton.
-const overlays = { angles: true, handpath: false, headbox: false, impact: false, plane: true, night: false, seq: false };
+const overlays = { angles: true, handpath: false, clubarc: true, headbox: false, impact: false, plane: true, night: false, seq: false };
 // The numbers drawn on the videos are Advanced data: only with it on (and Angles on).
 const anglesOn = () => overlays.angles && viewer.classList.contains("adv");
 for (const k in overlays) {
@@ -2877,6 +2878,8 @@ const DTL_READOUT = [
   ["Hands to plane", "handsPlane", "in"], ["Shaft to plane", "shaftPlane", "°"],
 ];
 const PATH_BACK_COLOR = "#facc15", PATH_DOWN_COLOR = "#f472b6", HEAD_COLOR = "#a78bfa";
+// The clubhead's arc: the same back / down colours, lighter, so it reads apart from the hands'.
+const CLUB_BACK_COLOR = "#fef08a", CLUB_DOWN_COLOR = "#fbcfe8";
 
 function fmtValue(v, key, unit) {
   const x = v ? v[key] : null;
@@ -3041,10 +3044,73 @@ function handTopIndex(p, path, top, end) {
   return best;
 }
 
+// The swing's 3D hands and clubhead as each phone sees them (tri.py arcs), when it has 3D: {t (face-on clip
+// times), top (the hands' highest frame after P4), face: {hands, club}, dtl: {hands, club}}. Smooth and
+// whole where one camera's own points drop out (the clubhead blurs through the downswing; a hand goes
+// behind the body): the other phone fills them. Null without 3D: the paths come from the one camera.
+let arcs3d = null;
+
+/** arcs3d from a 3D doc: the times and the hands' top (highest, golf y up) from P4 to impact. */
+function arcsOf(doc) {
+  if (!doc || !doc.arcs || !doc.frames || !doc.frames.length) return null;
+  const t = doc.frames.map(f => f.t);
+  const at = key => (positions.find(q => q.key === key) || {}).t;
+  const p4 = at("p4"), p7 = at("p7");
+  let top = null;
+  doc.frames.forEach((f, i) => {
+    const l = f.p[15], rr = f.p[16];
+    if (!l || !rr || p4 == null || p7 == null || f.t < p4 - 0.15 || f.t > p7) return;
+    const y = (l[1] + rr[1]) / 2;
+    if (top == null || y > top.y) top = { i, y };
+  });
+  return { ...doc.arcs, t, top: top ? top.i : null };
+}
+
+/** Which arcs3d view a clip's pose is: "face" (the clip on the left) or "dtl" (its partner), or null. */
+function arcView(p) {
+  if (!arcs3d) return null;
+  if (p === pose && pose.angle !== "dtl") return "face";
+  if (partner && p === partner.pose) return "dtl";
+  return null;
+}
+
+/** One of arcs3d's paths, from address to P8: `colors` [back, down], split at the hands' top. */
+function drawArc(ctx, r, lineWidth, pts, colors) {
+  if (!pts) return;
+  const at = key => (positions.find(q => q.key === key) || {}).t;
+  const idx = time => { const k = arcs3d.t.findIndex(x => x >= time); return k < 0 ? arcs3d.t.length - 1 : k; };
+  const from = at("p1") != null ? idx(at("p1")) : 0, end = at("p8") != null ? idx(at("p8")) : arcs3d.t.length - 1;
+  const split = Math.min(arcs3d.top == null ? end : arcs3d.top, end);
+  ctx.save();
+  ctx.lineWidth = lineWidth;
+  ctx.lineJoin = ctx.lineCap = "round";
+  for (const [a, b, color] of [[from, split, colors[0]], [split, end, colors[1]]]) {
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    let started = false;
+    for (let i = a; i <= b; i++) {
+      const q = pts[i];
+      if (!q) { started = false; continue; }
+      const x = r.x + q[0] * r.w, y = r.y + q[1] * r.h;
+      if (started) ctx.lineTo(x, y); else { ctx.moveTo(x, y); started = true; }
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** The clubhead's arc (Club arc), from the 3D: none without it. */
+function drawClubArc(ctx, r, lineWidth, p = pose) {
+  const view = arcView(p);
+  if (view) drawArc(ctx, r, lineWidth * 0.8, arcs3d[view].club, [CLUB_BACK_COLOR, CLUB_DOWN_COLOR]);
+}
+
 /** The hands' path from address to P8 (shaft parallel in the follow-through) at the latest: back in yellow
  * up to the hands' top, down and through in pink. Past P8 the hands wrap behind the head and the path only
- * clutters. */
+ * clutters. From the 3D when the swing has it (arcs3d), else this camera's own points. */
 function drawHandPath(ctx, r, lineWidth, p = pose) {
+  const view = arcView(p);
+  if (view) return drawArc(ctx, r, lineWidth, arcs3d[view].hands, [PATH_BACK_COLOR, PATH_DOWN_COLOR]);
   const path = handPath(p), top = positionIndex("p4", p), p8 = positionIndex("p8", p);
   const from = positionIndex("p1", p) ?? 0, end = Math.min(handPathEnd(p), p8 ?? Infinity);
   const split = Math.min(top == null ? end : handTopIndex(p, path, top, end), end);
@@ -3297,6 +3363,7 @@ function draw(t) {
   if (!pose || !pose.frames.length || !video.videoWidth) return;
   const i = frameIndexAt(t), frame = pose.frames[i], r = fitRect(W, H);
   const lineWidth = Math.max(1.5, 3 * r.w / 400);
+  if (positions.length && overlays.clubarc) drawClubArc(ctx, r, lineWidth);
   if (positions.length && overlays.handpath) drawHandPath(ctx, r, lineWidth);
   if (pose.angle === "dtl" && positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, pose);
   // A down-the-line clip on its own has its own numbers.
@@ -3322,6 +3389,7 @@ function draw2(t) {
   const i = frameIndexAt(t, p), frame = p.frames[i], r = fitRect(W, H, video2);
   const lineWidth = Math.max(1.5, 3 * r.w / 400);
   const numbers = dtlMetrics && anglesOn();
+  if (positions.length && overlays.clubarc) drawClubArc(ctx, r, lineWidth, p);
   if (positions.length && overlays.handpath) drawHandPath(ctx, r, lineWidth, p);
   if (positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, p);
   if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !numbers, p);
@@ -3904,6 +3972,8 @@ let calibState = null;    // GET /api/calib, once
 async function show3d(name) {
   const box = document.getElementById("panel3d");
   const want = () => current === name && pose;
+  arcs3d = null;
+  document.getElementById("clubarc").hidden = true;
   if (calibState === null) {
     try { calibState = await (await fetch("/api/calib")).json(); } catch { calibState = { enabled: false }; }
   }
@@ -3916,6 +3986,9 @@ async function show3d(name) {
     } catch {}
   }
   if (!want()) return;
+  arcs3d = arcsOf(doc);
+  document.getElementById("clubarc").hidden = !(arcs3d && arcs3d.face && arcs3d.face.club);
+  if (arcs3d) redraw();
   const c = clips.find(c => c.name === name);
   View3D.show(box, { doc, positions, metrics2d: metrics, leadSide, club: c && c.shot ? c.shot.club : null,
     strip: document.getElementById("seq-strip"), seek: t => { video.pause(); video.currentTime = t; } });
