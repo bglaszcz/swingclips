@@ -409,3 +409,55 @@ the target. The three don't coincide: on 59 swings with 3D the pelvis started tu
 median 46 ms before the top (68% before it; quartiles -117 / -46 / +33 ms). P4 stays the hands and the
 clubhead (the rule above); the hip's start is its own number, "pelvis turn start vs top"
 (`pelvisStartMs`, metrics3d.js), which is the transition the coach watches.
+
+## Tempo (Oct 19 2026)
+
+Tempo's moments are timed the way the established timing systems time them (TPI, Tour Tempo, Garmin,
+Blast):
+1. **First movement**: the first frame the clubhead translates away from the ball in the move that becomes
+   the backswing (not a pre-swing waggle, ground tap, or forward press).
+2. **Change of direction**: where the club changes direction at the top (`found.tempo.top`, using
+   `clubheadTurn`).
+3. **Impact**: the first frame the ball leaves address (`found.tempo` downswing ends at impact).
+
+The owner's key positions (takeaway, P4) serve coach labeling, sitting ~17 ms after first movement and
+midway between hands starting down and clubhead turn. For tempo, `found.tempo` uses the timing systems'
+own endpoints.
+
+### Waggle filtering for first movement (`tempoStart`)
+`pose.py`'s `clubOnset` watches the address crop and walks back to the baseline. On swings with subtle
+address waggles, grounding taps, or forward presses, `clubOnset` fires on the waggle (median 52 ms early
+across 40 visual ground-truth swings, reaching 150 ms early on swings with address adjustments).
+`phases.js`'s `tempoStart` uses what the pose file already holds (`frames[i].clubhead`, `onset`, and the
+shaft takeaway boundary) to find the address position and walk backward to the last frame the clubhead was
+still at rest (within 0.008 picture units) before its continuous takeaway departure.
+
+Across 40 frame-by-frame visual ground truth swings (240 fps):
+- `clubOnset` alone was early on 100% of swings (median error 52.0 ms, mean 57.4 ms, p90 87.8 ms).
+- `tempoStart` dropped median error to **16.6 ms** (mean 22.2 ms, p90 50.4 ms), winning on 33 of 40 swings
+  (1 worse, 6 tied; Wilcoxon $p = 3.7 \times 10^{-7}$).
+- Backswing median: 0.945 s (eye ground truth: 0.928 s; raw onset: 0.972 s).
+- Tempo ratio: median **3.11 : 1** (eye ground truth: **3.06 : 1**; raw onset: **3.26 : 1**).
+
+### Large-scale results (N=502 normal face-on swings)
+Scored across all 502 available normal face-on swings:
+
+| Club | n | Before Back | After Back | Down | Before Ratio | After Ratio | Ratio Change > 0.2 |
+|---|---|---|---|---|---|---|---|
+| **Driver (DR)** | 25 | 0.999 s | 0.970 s | 0.279 s | 3.52 : 1 | **3.48 : 1** | 1 (4.0%) |
+| **3 Wood (W3)** | 13 | 1.029 s | 1.016 s | 0.279 s | 3.72 : 1 | **3.63 : 1** | 2 (15.4%) |
+| **4 Hybrid (H4)** | 21 | 0.891 s | 0.862 s | 0.291 s | 3.13 : 1 | **3.05 : 1** | 1 (4.8%) |
+| **5 Iron (I5)** | 59 | 0.974 s | 0.937 s | 0.296 s | 3.28 : 1 | **3.16 : 1** | 8 (13.6%) |
+| **6 Iron (I6)** | 35 | 1.016 s | 0.979 s | 0.304 s | 3.44 : 1 | **3.30 : 1** | 10 (28.6%) |
+| **7 Iron (I7)** | 172 | 0.954 s | 0.924 s | 0.296 s | 3.22 : 1 | **3.09 : 1** | 32 (18.6%) |
+| **8 Iron (I8)** | 49 | 0.912 s | 0.879 s | 0.292 s | 3.07 : 1 | **2.99 : 1** | 8 (16.3%) |
+| **9 Iron (I9)** | 47 | 0.924 s | 0.883 s | 0.292 s | 3.23 : 1 | **3.13 : 1** | 7 (14.9%) |
+| **Pitching Wedge (PW)** | 38 | 0.929 s | 0.893 s | 0.296 s | 3.24 : 1 | **3.08 : 1** | 8 (21.1%) |
+| **Gap Wedge (GW)** | 29 | 1.033 s | 1.004 s | 0.304 s | 3.20 : 1 | **3.10 : 1** | 6 (20.7%) |
+| **Sand Wedge (SW)** | 4 | 0.793 s | 0.756 s | 0.281 s | 2.80 : 1 | **2.63 : 1** | 2 (50.0%) |
+| **All clubs** | **502** | **0.949 s** | **0.920 s** | **0.296 s** | **3.24 : 1** | **3.12 : 1** | **89 (17.7%)** |
+
+Across all 502 swings, the waggle filter moved the overall tempo ratio from **3.24 : 1** to **3.12 : 1**,
+matching the classic tour reference standard (~3.0 : 1; Tour Tempo 3:1, Garmin 3.0, Blast 2.5-3.1, TPI 3.2).
+89 swings (17.7%) changed ratio by more than 0.2, and 303 swings (60.4%) changed by more than 0.1.
+
