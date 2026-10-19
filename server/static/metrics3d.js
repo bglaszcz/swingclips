@@ -25,6 +25,9 @@
 // Works in the browser (window.SwingMetrics3D) and in Node / the server's V8 (module.exports).
 (function (root) {
   const DEG = 180 / Math.PI, INCHES_PER_METRE = 39.37;
+  // A key position's number missing on its frame comes from a neighbour this close (s): address and the
+  // top are slow; at P6 and impact only the next 240 fps frame (atPositions).
+  const POSITION_FILL_SECONDS = 0.025, POSITION_FAST_SECONDS = 0.006;
   const I = { L_SHOULDER: 11, R_SHOULDER: 12, L_ELBOW: 13, R_ELBOW: 14, L_WRIST: 15, R_WRIST: 16,
               L_INDEX: 19, R_INDEX: 20, L_HIP: 23, R_HIP: 24 };
   // Speeds are measured over +-SPEED_SECONDS (240 fps frames are too close for a difference).
@@ -287,19 +290,13 @@
     if (ai < 0) return null;
     const pelvis = turnSeries(raw, "pelvisHeading"), thorax = turnSeries(raw, "thoraxHeading");
 
-    // Address baseline: if the exact frame at P1 has a joint dropout, search the static setup window
-    // (tStart to tEnd) for the nearest valid frame so a single noisy frame doesn't drop the entire swing.
+    // Address baseline: if the frame at P1 has a joint dropout, the nearest frame of the still setup
+    // (tStart to tEnd) that has it, so one noisy frame doesn't blank the whole swing's turns and sway
+    // (round 62: 56 of 161 Oct 6 swings). Only from the setup: a frame from the swing would move them all.
     const nearestValid = hasValue => {
       let best = -1, bestDt = Infinity;
       for (let i = 0; i < frames.length; i++) {
         if (frames[i].t >= tStart && frames[i].t <= tEnd && hasValue(i)) {
-          const dt = Math.abs(frames[i].t - tRef);
-          if (dt < bestDt) { bestDt = dt; best = i; }
-        }
-      }
-      if (best >= 0) return best;
-      for (let i = 0; i < frames.length; i++) {
-        if (hasValue(i)) {
           const dt = Math.abs(frames[i].t - tRef);
           if (dt < bestDt) { bestDt = dt; best = i; }
         }
@@ -446,23 +443,26 @@
     return { values, address: ai, sequence, clubCheck, thoraxTop, pelvisStartMs, setup };
   }
 
-  /** The numbers at key positions: {p1: values, p4: ..., p6, p7} (nearest 3D frame to each). */
+  /** The numbers at key positions: {p1: values, p4: ..., p6, p7} (nearest 3D frame to each). A number a
+   * one-frame dropout left out there is taken from a frame next to it: within POSITION_FILL_SECONDS at
+   * address and the top (slow), but only a frame away at P6 and impact, where the hips turn ~20 degrees
+   * in 25 ms. */
   function atPositions(result, doc, positions) {
     const out = {};
     if (!result) return out;
     for (const p of positions || []) {
       if (!["p1", "p4", "p6", "p7"].includes(p.key)) continue;
       const i = nearest(doc.frames, p.t);
-      if (Math.abs(doc.frames[i].t - p.t) < 0.025) {
+      const within = p.key === "p1" || p.key === "p4" ? POSITION_FILL_SECONDS : POSITION_FAST_SECONDS;
+      if (Math.abs(doc.frames[i].t - p.t) < Math.max(within, 0.01)) {
         const v = Object.assign({}, result.values[i]);
-        // If a key metric has a single-frame dropout right at this position, fill from adjacent frames within 25 ms
         for (const k of ["pelvisTurn", "thoraxTurn", "separation", "pelvisSideBend", "thoraxSideBend", "thoraxBend", "pelvisSway", "thoraxSway", "pelvisThrust", "pelvisLift", "pelvisBall", "thoraxBall"]) {
           if (v[k] == null) {
-            for (let dt = 1; dt <= 4; dt++) {
+            for (let dt = 1; dt <= 6; dt++) {
               const prev = result.values[i - dt];
-              if (prev && prev[k] != null && Math.abs(prev.t - p.t) <= 0.025) { v[k] = prev[k]; break; }
+              if (prev && prev[k] != null && Math.abs(prev.t - p.t) <= within) { v[k] = prev[k]; break; }
               const next = result.values[i + dt];
-              if (next && next[k] != null && Math.abs(next.t - p.t) <= 0.025) { v[k] = next[k]; break; }
+              if (next && next[k] != null && Math.abs(next.t - p.t) <= within) { v[k] = next[k]; break; }
             }
           }
         }
