@@ -61,6 +61,9 @@ BODY3D_KEYS = {"pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs", "armA
 # The face-on camera's numbers a gate can check (the swing record's "body", summary.js). They're in
 # by the time the swing's 3D is, so a block checking them waits the way a 3D block does.
 CAMERA_KEYS = {"pelvisBall", "chestBall", "handsAhead"}
+# The numbers that come with the swing's 3D (the 3D itself, and the face-on camera's, which are in by then):
+# a shot on a block checking them is judged in two parts, Square's at once and these when the 3D is in.
+LATER_KEYS = BODY3D_KEYS | CAMERA_KEYS
 
 
 def _finite(v):
@@ -175,10 +178,17 @@ def no_read(n: dict, keys: set | None = None) -> str | None:
 def missing(block: dict, n: dict) -> str | None:
     """A number the block's gate checks that this swing doesn't have (None: it has them all): said as
     the reason the rep isn't counted, rather than leaving it neither pass nor miss."""
-    for key in sorted(gate_keys(block)):
-        if n.get(key) is None:
-            return f"no {NUMBERS[key][0].lower()}" if key in NUMBERS else f"no {key}"
-    return None
+    key = missing_key(block, n)
+    return None if key is None else f"no {NUMBERS[key][0].lower()}" if key in NUMBERS else f"no {key}"
+
+
+def missing_key(block: dict, n: dict) -> str | None:
+    return next((key for key in sorted(gate_keys(block)) if n.get(key) is None), None)
+
+
+def square_fails(block: dict, n: dict) -> list[dict]:
+    """The block's checks on Square's numbers (not the 3D's) that this shot missed."""
+    return [c for c in block["gate"].get("checks", []) if c["key"] not in LATER_KEYS and check(n, c) is False]
 
 
 def why_words(why3d) -> str:
@@ -310,7 +320,13 @@ def judged(block: dict, reps: list[dict], marks: list[dict]) -> list[dict]:
             if not block["ball"]:
                 r["gate"] = bool(r["pass"])
         elif r["kind"] == "shot" and block["ball"]:
-            if not r.get("waiting3d"):
+            if r.get("waiting3d") or r.get("noRead3d"):
+                # Still waiting for its 3D, or the 3D never came right: a miss on Square's part is a miss
+                # (every check must pass), so it counts as one now; otherwise it waits / isn't counted.
+                r["fails"] = square_fails(block, r["numbers"])
+                if r["fails"]:
+                    r["gate"] = False
+            else:
                 if block["gate"].get("mark"):
                     # The golfer's tap for this swing: the first one from its strike to the next swing.
                     later = [t for t in swings_t if t > r["t"] + PAIR_SLACK_S]
@@ -331,7 +347,7 @@ def block_state(block: dict, reps: list[dict], marks: list[dict]) -> dict:
     waiting for their 3D)} for a block."""
     all_js = judged(block, reps, marks)
     js = [r for r in all_js if r["gate"] is not None]
-    waiting = sum(1 for r in all_js if r.get("waiting3d"))
+    waiting = sum(1 for r in all_js if r.get("waiting3d") and r["gate"] is None)
     gate = block["gate"]
     passes = sum(r["gate"] for r in js)
     streak = best = 0
@@ -607,19 +623,20 @@ class Programs:
                     p, block = self._current()
                     mine = next((b for b in p["blocks"] if b["id"] == r["block"]), None)
                     r["noRead"] = missing(mine, r["numbers"]) if mine else None
-                    if block["id"] == r["block"]:
-                        self._say_shot(block, r["t"])
+                    r["noRead3d"] = bool(mine) and missing_key(mine, r["numbers"]) in LATER_KEYS
+                    if block["id"] == r["block"] and not r.get("toldMiss"):
+                        self._say_shot(block, r["t"], f"Shot {self._shot_no(r)}: ")
                     self._settle(p, now)
                 elif s and s.get("why3d"):
-                    r["waiting3d"] = False
-                    r["noRead"] = why_words(s["why3d"])
-                    self._say(f"Invalid read ({r['noRead']}): not counted.")
+                    r.update(waiting3d=False, noRead=why_words(s["why3d"]), noRead3d=True)
+                    if not r.get("toldMiss"):
+                        self._say(f"Shot {self._shot_no(r)}: invalid read ({r['noRead']}): not counted.")
                     p, block = self._current()
                     self._settle(p, now)
                 elif now - r["t"] >= BODY3D_GIVE_UP_S:
-                    r["waiting3d"] = False
-                    r["noRead"] = "no 3D"
-                    self._say("Invalid read (no 3D): not counted.")
+                    r.update(waiting3d=False, noRead="no 3D", noRead3d=True)
+                    if not r.get("toldMiss"):
+                        self._say(f"Shot {self._shot_no(r)}: invalid read (no 3D): not counted.")
                     p, block = self._current()
                     self._settle(p, now)
 
@@ -672,17 +689,24 @@ class Programs:
                             nr = "no 3D"
                     if not nr and not waiting and block["ball"]:
                         nr = missing(block, n)
+                        late = nr is not None and missing_key(block, n) in LATER_KEYS
+                    else:
+                        late = nr is not None and needs_3d and not no_read(n, gate_keys(block))
                     r.update(kind="shot" if block["ball"] else "ball", club=s["shot"].get("club"),
                              numbers=n, noRead=nr, waiting3d=waiting)
+                    if late and block["ball"]:
+                        r["noRead3d"] = True
                 self.run["reps"].append(r)
                 made.append(r)
                 self._note_drills(self.run, [r])
                 if r["kind"] in ("shot", "ball") and not r.get("waiting3d"):
                     self._calibration_check()
                 if r["kind"] == "shot":
+                    p, block = self._current()
                     if not r.get("waiting3d"):
-                        p, block = self._current()
                         self._say_shot(block, t)
+                    else:
+                        self._say_square_part(block, r)
                 elif r["kind"] == "noshot":
                     self._say("No Square numbers for that one: not counted.")
                 if not self._settle(p, now):
@@ -768,22 +792,39 @@ class Programs:
                  else "Tap where the mark starts after each shot." if block["gate"].get("mark") else "")
         return f"Block {number}: {block['name']}. {block['how']} Gate: {gate_text(block)}. {judge}".strip()
 
-    def _say_shot(self, block: dict, t: float) -> None:
+    def _say_shot(self, block: dict, t: float, prefix: str = "") -> None:
         js = judged(block, self.run["reps"], self.run["marks"])
         r = next(x for x in js if x["t"] == t)
         st = block_state(block, self.run["reps"], self.run["marks"])
         # Short: pass or miss and which way, no numbers (the owner reads them on the screen; Oct 6).
-        if r.get("noRead"):
-            self._say(f"Invalid read ({r['noRead']}): not counted.")
+        if r.get("noRead") and r["gate"] is None:
+            self._say(f"{prefix}{'invalid' if prefix else 'Invalid'} read ({r['noRead']}): not counted.")
             return
         if r["gate"] is None:
             return
         streak = f" {st['streak']} in a row." if block["gate"]["kind"] == "streak" and st["streak"] >= 2 else ""
         if r["gate"]:
-            self._say(f"Pass.{streak}")
+            self._say(f"{prefix}Pass.{streak}")
         else:
             why = ", ".join(cue(c, r["numbers"][c["key"]]) for c in r["fails"]) if r["fails"] else "mark behind the ball"
-            self._say(f"Miss: {why}.")
+            self._say(f"{prefix}Miss: {why}.")
+
+    def _say_square_part(self, block: dict, r: dict) -> None:
+        """A shot on a block that checks the 3D, as it comes in: a miss on Square's numbers is said at once
+        (it can't pass whatever the 3D says); otherwise that the club part is good and the hips come with
+        the 3D (owner, Oct 19: the 3D can come minutes later, after the next swings)."""
+        if not any(c["key"] not in LATER_KEYS for c in block["gate"].get("checks", [])):
+            return   # nothing of Square's to say: it all waits for the 3D
+        fails = square_fails(block, r["numbers"])
+        if fails:
+            r["toldMiss"] = True
+            self._say(f"Miss: {', '.join(cue(c, r['numbers'][c['key']]) for c in fails)}.")
+        else:
+            self._say("Club good. Hips when the 3D is in.")
+
+    def _shot_no(self, r: dict) -> int:
+        """Which shot of its block this was (1 = the first), for a verdict said late."""
+        return 1 + sum(1 for x in self.run["reps"] if x["block"] == r["block"] and x["kind"] == "shot" and x["t"] < r["t"])
 
     def _settle(self, p: dict, now: float) -> bool:
         """Ends the block in play if its gate is decided, and the program at its cap. False once the
@@ -1088,7 +1129,9 @@ def report(p: dict, run: dict, body=None) -> dict:
         if shift:
             nums = f"{nums} | vs ball: " + ", ".join(shift)
 
-        verdict = ("invalid read, not counted (" + r0["noRead"] + ")" if r0.get("noRead") else
+        verdict = ("miss" + (" (3D: " + r0["noRead"] + ")" if r0.get("noRead") else ", 3D still to come" if r.get("waiting3d") else "")
+                   if r.get("gate") is False and (r0.get("noRead") or r.get("waiting3d")) else
+                   "invalid read, not counted (" + r0["noRead"] + ")" if r0.get("noRead") else
                    "waiting for 3D" if r.get("waiting3d") else
                    "pass" if r.get("gate") else "miss" if r.get("gate") is False else "")
         if r.get("mark") is not None:

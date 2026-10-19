@@ -2232,8 +2232,8 @@ function renderProgram(data) {
   const reps = document.createElement("div");
   reps.className = "prog-reps";
   reps.append(...judged.map((r, i) => Object.assign(document.createElement("span"), {
-    className: r.waiting3d ? "wait" : r.gate === true ? "y" : r.gate === false ? "n" : "",
-    textContent: r.waiting3d ? "…" : r.gate === true ? "✓" : r.gate === false ? "✗" : "?",
+    className: r.gate === false ? "n" : r.waiting3d ? "wait" : r.gate === true ? "y" : "",
+    textContent: r.gate === false ? "✗" : r.waiting3d ? "…" : r.gate === true ? "✓" : "?",
     title: r.waiting3d ? `rep ${i + 1}: waiting for 3D` : r.numbers ? `attack ${pgNum(r.numbers.attack)}, strike ${typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.vWords ? SwingStrikeMap.vWords(r.numbers.strikeV) : (pgNum(r.numbers.strikeV, 0) + " mm")}, face to path ${pgNum(r.numbers.faceToPath)}` +
       (r.numbers.pelvisPeakMs != null ? `, pelvis peak ${pgNum(r.numbers.pelvisPeakMs, 0)} ms` : "") +
       (r.numbers.pelvisOpen != null ? `, pelvis open ${pgNum(r.numbers.pelvisOpen, 0)}°` : "") +

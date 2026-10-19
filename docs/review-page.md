@@ -765,7 +765,12 @@ toward the ball". The phones face away from you, so voice is the channel.
   few words: "3D failed", "camera moved"). A clip only one phone recorded, with no swing and no shot in it (an
   echo of a phone's voice, `status.phantom`), is left out without a word. A block that checks 3D waits for
   it (up to 5 minutes): once all its reps are in but some wait, later swings wait too, so they go to the block
-  the 3D decides; at the cap the phone says to stop and the program ends once the last swings' 3D is in. Face to path = face minus path. The phone says each
+  the 3D decides; at the cap the phone says to stop and the program ends once the last swings' 3D is in.
+  Such a shot is said in two parts (owner, Oct 19): Square's part at once, a miss on it as "Miss: attack
+  too steep." (it counts as a miss then and there: every check must pass) or "Club good. Hips when the
+  3D is in."; then, when the 3D comes, numbered since the next swings may be in already ("Shot 3:
+  Pass.", "Shot 3: Miss: hips not open enough."), and nothing more for a shot that already missed. A
+  block that checks only the 3D (Sequence Tier 2) says nothing until it's in. Face to path = face minus path. The phone says each
   shot's verdict short, without numbers (they're on the screen): "Pass." (with "3 in a row" on a streak
   gate) or "Miss:" and which way, e.g. "face open to path" (`programs.CUES`), through the practice feed (practice voice and games are turned off; one voice at a time).
   On the Start page, a dedicated last-shot panel under the block gate displays the latest ball rep readable from 3 m on the mat: the verdict in 40 px, each gate check with its value, target band, and ✓ or ✗ in 28 px, and extra launch numbers in a summary row. Calm styling highlights passes in the accent colour and misses in muted text with ✗, never red.

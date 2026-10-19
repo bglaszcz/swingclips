@@ -582,7 +582,7 @@ class ProgramsTest(unittest.TestCase):
         st = self.p.state()["program"]["blocks"][1]["state"]
         self.assertEqual(st["reps"], 1)
         self.assertEqual(st["passes"], 1)
-        self.assertTrue(self.said()[-1].startswith("Pass."))
+        self.assertTrue(self.said()[-1].startswith("Shot 1: Pass."))
 
     def test_3d_never_arrived_timeout_and_why3d(self):
         self.p.start("sequence")
@@ -595,7 +595,7 @@ class ProgramsTest(unittest.TestCase):
         self.clock.t += programs.BODY3D_GIVE_UP_S + 5
         self.p.step(self.swings)
         self.assertEqual(self.p.state()["program"]["waiting3d"], 0)
-        self.assertIn("Invalid read (no 3D): not counted.", self.said()[-1])
+        self.assertIn("Shot 1: invalid read (no 3D): not counted.", self.said()[-1])
         # Camera moved failure
         self.hit(shot(), why3d="camera moved")
         self.assertIn("Invalid read (camera moved): not counted.", self.said()[-1])
@@ -615,7 +615,7 @@ class ProgramsTest(unittest.TestCase):
         self.hit(shot())                                           # its 3D comes later, still no reading
         self.swings[-1].update(body3d=body3d(pelvis_open=14), body={})
         self.p.step(self.swings)
-        self.assertEqual("Invalid read (no hips vs ball at impact): not counted.", self.said()[-1])
+        self.assertEqual("Shot 2: invalid read (no hips vs ball at impact): not counted.", self.said()[-1])
         self.assertEqual(self.p.state()["program"]["waiting3d"], 0)
 
     def test_why_there_is_no_3d_in_a_few_words(self):
@@ -628,6 +628,44 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual("Invalid read (camera moved): not counted.", self.said()[-1])
         self.hit(shot(), why3d="recorded in another mode than calibrated (240, 30)")
         self.assertEqual("Invalid read (recorded in another mode than calibrated): not counted.", self.said()[-1])
+
+    def test_the_square_part_is_said_at_once_and_the_hips_with_the_3d(self):
+        # Owner, Oct 19: the 3D can come minutes later; Square's part of the verdict shouldn't wait for it.
+        good = dict(body3d=body3d(pelvis_open=14), body={"pelvisBall": 4.5})
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        self.hit(shot(attack=-4.0))                       # club good, 3D not in yet
+        self.assertEqual("Club good. Hips when the 3D is in.", self.said()[-1])
+        self.hit(shot(attack=-6.0))                       # too steep: a miss, whatever the 3D says
+        self.assertEqual("Miss: attack too steep.", self.said()[-1])
+        st = self.p.state()["program"]["blocks"][1]["state"]
+        self.assertEqual((st["reps"], st["passes"], st["waiting"]), (1, 0, 1))
+        for s in self.swings:
+            s.update(good)
+        self.p.step(self.swings)
+        self.assertEqual("Shot 1: Pass.", self.said()[-1])   # the miss isn't said again
+        self.assertEqual(sum(1 for x in self.said() if x.startswith("Miss")), 1)
+        rep = self.p.report()["text"]
+        self.assertIn("pass", rep)
+
+    def test_a_square_miss_stays_a_miss_when_the_3d_fails(self):
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        self.hit(shot(attack=-6.0))
+        self.swings[-1]["why3d"] = "a camera seems to have moved since calibration x: at address 45 px"
+        self.p.step(self.swings)
+        st = self.p.state()["program"]["blocks"][1]["state"]
+        self.assertEqual((st["reps"], st["passes"]), (1, 0))      # counted as the miss it was
+        self.assertEqual("Miss: attack too steep.", self.said()[-1])
+        self.assertIn("miss (3D: camera moved)", self.p.report()["text"])
+
+    def test_nothing_said_early_when_the_gate_is_all_3d(self):
+        # Sequence Tier 2 checks only the hips' timing and turn: nothing of Square's to say first.
+        self.p.start("sequence")
+        self.taps(*[True] * 10)
+        n = len(self.said())
+        self.hit(shot())
+        self.assertEqual(len(self.said()), n)
 
     def test_the_cap_waits_for_the_last_swings_3d(self):
         good = dict(body3d=body3d(pelvis_open=14), body={"pelvisBall": 4.5})
@@ -647,7 +685,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(done["how"], "cap")
         tier2 = next(b for b in done["blocks"] if b["id"] == "tier2")
         self.assertEqual([r["gate"] for r in tier2["judged"]], [True, True])
-        self.assertEqual(self.said()[-2:], ["Pass.", done["spoken"]])
+        self.assertEqual(self.said()[-2:], ["Shot 2: Pass.", done["spoken"]])
 
     def test_a_full_block_holds_later_swings_until_its_3d(self):
         # Tier 2's 15th shot waits for its 3D: the next swing isn't Tier 2's 16th, it waits to see
