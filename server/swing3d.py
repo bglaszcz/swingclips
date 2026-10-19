@@ -13,6 +13,7 @@ moved past BALL_MOVED. The golfer's place in the picture isn't used: it changes 
 iron after 7 irons counted as "camera moved" there).
 """
 import gzip
+import hashlib
 import json
 from pathlib import Path
 
@@ -103,6 +104,14 @@ def save(path: Path, doc: dict) -> None:
     tmp.replace(path)
 
 
+def cameras_sig(session: dict) -> str:
+    """A short fingerprint of a session's camera places, for the 3D key (app.pass_3d): placing the cameras
+    again keeps the session's id (it's dated when the tripods were set), so the id alone left every swing's
+    3D on the old places (Oct 19: re-placed after round 61, nothing redone)."""
+    cams = {a: {k: c.get(k) for k in ("R", "t", "K", "dist")} for a, c in sorted((session.get("cameras") or {}).items())}
+    return hashlib.sha1(json.dumps(cams, sort_keys=True).encode()).hexdigest()[:10]
+
+
 def calib_health(all_sessions: list[dict], records: dict) -> list[dict]:
     """Health of the latest calibration session and the one before it, over their swings with 3D, from
     the swing records alone (the 3D pass stores body3d.setupMissing and addressError; /api/calib is
@@ -112,13 +121,14 @@ def calib_health(all_sessions: list[dict], records: dict) -> list[dict]:
     reprojection error (median of the swings' medians and of their 90th percentiles)."""
     out = []
     for s in reversed(all_sessions[-2:]):
-        sess_id = s.get("id")
+        sess_id, sig = s.get("id"), f"cams{cameras_sig(s)}"
         checked, pending = [], 0
         for rec in records.values():
             b3d = rec.get("body3d")
-            if not b3d or (rec.get("key3d") or "").split("|")[0] != sess_id:
+            key = (rec.get("key3d") or "").split("|")
+            if not b3d or key[0] != sess_id:
                 continue
-            if "setupMissing" in b3d:
+            if "setupMissing" in b3d and sig in key:   # worked out on these camera places
                 checked.append(b3d)
             else:
                 pending += 1

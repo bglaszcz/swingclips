@@ -943,8 +943,9 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
                     calib.mode_of(c["partner"]) != session["cameras"]["dtl"].get("mode"):
                 session, why = None, f"recorded in another mode than calibrated ({', '.join(sorted(map(str, modes)))})"
         # The body model is in the key too: after a switch the pose files are analyzed again.
+        # The cameras' places are in it too: placing them again keeps the session's id.
         key = (f"{session['id'] if session else why}|tri{tri.VERSION}|pose{pose.VERSION}|check{swing3d.CHECK_VERSION}"
-               f"|{pose_made(name)}|{pose_made(c['partner'])}")
+               f"|cams{swing3d.cameras_sig(session) if session else '-'}|{pose_made(name)}|{pose_made(c['partner'])}")
         if rec.get("key3d") == key:
             continue
         rec = dict(rec, key3d=key, body3d=None, why3d=None if session else why)

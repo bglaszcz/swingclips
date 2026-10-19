@@ -317,6 +317,9 @@ class CalibHealthTest(unittest.TestCase):
             },
         }
 
+        for rec in records.values():   # worked out on each session's current camera places
+            sid = rec["key3d"].split("|")[0]
+            rec["key3d"] += "|cams" + swing3d.cameras_sig(next(x for x in sessions if x["id"] == sid))
         h = swing3d.calib_health(sessions, records)
         # Should return the latest 2 sessions in reverse order
         self.assertEqual(len(h), 2)
@@ -351,6 +354,18 @@ class CalibHealthTest(unittest.TestCase):
         latest = swing3d.calib_health(sessions, records)[0]
         self.assertEqual(latest["swings"], 5)
         self.assertEqual(latest["pending"], 1)
+
+    def test_cameras_placed_again_redo_the_3d(self):
+        # Placing the cameras again keeps the session's id: its swings count as pending (to be
+        # worked out again on the new places), not healthy, and the 3D key changes.
+        import swing3d
+        old = {"id": "2026-10-06_145832", "cameras": {"face": {"R": [[1, 0, 0], [0, 1, 0], [0, 0, 1]], "t": [0, 0, 2]}}}
+        new = {"id": "2026-10-06_145832", "cameras": {"face": {"R": [[1, 0, 0], [0, 1, 0], [0, 0, 1]], "t": [0, 0, 2.1]}}}
+        self.assertNotEqual(swing3d.cameras_sig(old), swing3d.cameras_sig(new))
+        records = {"s1": {"key3d": f"2026-10-06_145832|tri2|check4|cams{swing3d.cameras_sig(old)}",
+                          "body3d": {"setupMissing": ["trail ankle"], "addressError": {"median": 4.0, "p90": 15.0}}}}
+        [h] = swing3d.calib_health([new], records)
+        self.assertEqual((h["swings"], h["pending"]), (0, 1))
 
     def test_api_calib_returns_health(self):
         from fastapi.testclient import TestClient
