@@ -524,10 +524,11 @@
     if (rLo < 0 && rHi > 0) {
       return `could be ${Math.abs(rLo).toFixed(1)} closer to ${Math.abs(rHi).toFixed(1)} further off`;
     }
+    // The whole range on one side: which side, said once at the end.
     if (rLo >= 0 && rHi >= 0) {
-      return `could be ${Math.abs(rLo).toFixed(1)} to ${Math.abs(rHi).toFixed(1)}`;
+      return `could be ${Math.abs(rLo).toFixed(1)} to ${Math.abs(rHi).toFixed(1)} further off`;
     }
-    return `could be ${Math.abs(rHi).toFixed(1)} to ${Math.abs(rLo).toFixed(1)}`;
+    return `could be ${Math.abs(rHi).toFixed(1)} to ${Math.abs(rLo).toFixed(1)} closer`;
   }
 
   function formatSwingEventLabel(ev, angle) {

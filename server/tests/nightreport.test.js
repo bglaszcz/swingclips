@@ -567,11 +567,11 @@ test("swingRows: sample 1 (Oct 9 worse run) puts Worse row first and formats all
   assert.equal(sw1.rows[0].verdict, "Worse");
   assert.equal(sw1.rows[0].label, "P2 down the line");
   assert.equal(sw1.rows[0].change, "4.4 ms further off per swing");
-  assert.equal(sw1.rows[0].range, "could be 0.3 to 9.3");
+  assert.equal(sw1.rows[0].range, "could be 0.3 to 9.3 further off");
   assert.equal(sw1.rows[0].tally, "5 swings worse, 1 better");
   assert.equal(
     sw1.rows[0].text,
-    "P2 down the line: 4.4 ms further off per swing (could be 0.3 to 9.3) · 5 swings worse, 1 better"
+    "P2 down the line: 4.4 ms further off per swing (could be 0.3 to 9.3 further off) · 5 swings worse, 1 better"
   );
   assert.deepEqual(
     sw1.rows.slice(1).map(r => r.text),
@@ -580,7 +580,7 @@ test("swingRows: sample 1 (Oct 9 worse run) puts Worse row first and formats all
       "P4 face-on: 1.1 ms closer per swing (could be 3.1 closer to 0.7 further off) · 1 swing worse, 2 better",
       "P6 face-on: 0.1 ms further off per swing (could be 0.9 closer to 1.2 further off) · 0 swings worse, 0 better",
       "P8 face-on: 0.3 ms closer per swing (could be 2.2 closer to 1.7 further off) · 2 swings worse, 2 better",
-      "P4 down the line: 2.1 ms closer per swing (could be 0.6 to 3.6) · 0 swings worse, 3 better",
+      "P4 down the line: 2.1 ms closer per swing (could be 0.6 to 3.6 closer) · 0 swings worse, 3 better",
       "P6 down the line: 0.5 ms further off per swing (could be 0.6 closer to 1.4 further off) · 0 swings worse, 0 better",
       "P8 down the line: 0.3 ms closer per swing (could be 2.2 closer to 1.6 further off) · 2 swings worse, 2 better",
     ]
@@ -597,6 +597,6 @@ test("swingRows: sample 1 (Oct 9 worse run) puts Worse row first and formats all
   const html = NightReportView.renderSwingBySwing(sample.candidates[1].verdict);
   assert.ok(html.includes("<summary><strong>Swing by swing</strong></summary>"));
   assert.ok(html.includes("Worse"));
-  assert.ok(html.includes("P2 down the line: 4.4 ms further off per swing (could be 0.3 to 9.3) · 5 swings worse, 1 better"));
+  assert.ok(html.includes("P2 down the line: 4.4 ms further off per swing (could be 0.3 to 9.3 further off) · 5 swings worse, 1 better"));
   assert.equal(NightReportView.renderSwingBySwing(sample.candidates[2].verdict), "");
 });

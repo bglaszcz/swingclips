@@ -23,11 +23,6 @@
       require("./graduate.js")
     );
   } else {
-    if (typeof document !== "undefined" && !root.SwingWeekPlan && document.head) {
-      const s = document.createElement("script");
-      s.src = "/static/weekplan.js";
-      document.head.appendChild(s);
-    }
     root.SwingWeek = factory(
       root.SwingSummary,
       root.SwingCoach,
