@@ -212,11 +212,15 @@
       return r;
     });
 
-    // Tempo: back from takeaway to the top, down from the top to impact. 3:1 is the classic ratio.
+    // Tempo: back from the clubhead's first movement to where the club changes direction at the top, down
+    // from there to impact (phases.js found.tempo: as TPI, Tour Tempo, Garmin and Blast time it; tour players
+    // ~3:1, e.g. 0.75 s / 0.25 s). Clips from before it: the takeaway and P4.
     let tempo = null;
-    const takeaway = positions && positions.takeaway;
-    if (takeaway && p4 && p7 && p4.t > takeaway.t && p7.t > p4.t) {
-      const back = p4.t - takeaway.t, down = p7.t - p4.t;
+    const tt = positions && positions.tempo;
+    const start = tt && tt.start != null ? tt.start : positions && positions.takeaway ? positions.takeaway.t : null;
+    const topT = tt && tt.top != null ? tt.top : p4 ? p4.t : null;
+    if (start != null && topT != null && p7 && topT > start && p7.t > topT) {
+      const back = topT - start, down = p7.t - topT;
       tempo = { back, down, ratio: back / down };
     }
 

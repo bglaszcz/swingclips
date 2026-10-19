@@ -530,9 +530,10 @@
                                 Math.min(ms[impact].t, turn + TOP_SLOW_WINDOW[1]));
       if (slow != null) turn = slow + TUNING.topRuleWeight * (turn - slow);
     }
+    let clubTop = null;   // where the clubhead itself turns at the top: tempo's top (found.tempo)
     if (turn != null && !pumps.length && TUNING.topTurnWeight > 0) {
       const club = clubheadTurn(frames, turn);
-      if (club != null) turn += TUNING.topTurnWeight * (club - turn);
+      if (club != null) { clubTop = club; turn += TUNING.topTurnWeight * (club - turn); }
     }
     if (turn != null) top = nearest(ms, turn);
     if (!pumps.length) backTop = top;
@@ -617,8 +618,16 @@
     if (p1 && a >= 0) Object.assign(p1, { t: frames[a].t, index: a });
 
     found.sort((a, b) => a.key.localeCompare(b.key));
-    // For tempo: when the club starts back, and whether that came from the shaft.
     found.takeaway = { t: takeaway, fromShaft: restEnd >= 0, fromClubhead };
+    // Tempo's own moments, as the timing systems define them (TPI, Tour Tempo, Garmin, Blast): from the
+    // clubhead's first movement to where the club changes direction at the top, then to impact. Not the
+    // takeaway and P4 above (the owner's labels: 17 ms after the first movement, and half way from the hands
+    // starting down to the clubhead's turn), which made the backswing short and the downswing long (Oct 19).
+    // Without the club model's clubhead: the shaft rule's takeaway and P4.
+    const p4 = found.find(p => p.key === "p4");
+    // (Never before the clip's first frame: a clip that starts mid-swing has a backswing at least this long.)
+    found.tempo = { start: onset != null ? Math.max(onset, frames[0].t) : takeaway, top: clubTop != null ? clubTop : p4 ? p4.t : null,
+                    fromClubhead: onset != null, topFromClubhead: clubTop != null };
     if (pumps.length) {
       found.drill = "pump";
       found.pumps = pumps.map(i => ({ t: ms[i].t, index: ms[i].index }));

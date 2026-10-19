@@ -29,7 +29,8 @@ What the server works out for each swing and what each part of the review page s
   narrows the impact search to ±0.15 s around it.
 - Swing numbers (`static/metrics.js`), on the video (Angles) and in a table at address / top /
   P6 / impact: pelvis and shoulder turn, X-factor, lead arm, shaft, spine tilt, forward bend, hip and
-  shoulder tilt, head sway / rise, hip sway, and tempo. Turns come from how much narrower the hips
+  shoulder tilt, head sway / rise, hip sway, and tempo (timed as TPI, Tour Tempo, Garmin and Blast do: from the
+  clubhead's first movement to where the club changes direction at the top, then to impact; tour players ~3:1). Turns come from how much narrower the hips
   and shoulders look than at address; MediaPipe's 3D estimate (saved per frame as `w`) is only used
   for forward bend and for scale. Overlays: hand path, head position vs address, and pelvis vs ball
   at impact (Show > Impact, face-on). On the P7 impact frame and frames within ±2 of it, the Impact
