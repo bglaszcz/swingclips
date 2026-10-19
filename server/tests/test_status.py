@@ -85,6 +85,25 @@ class HeartbeatTest(unittest.TestCase):
         self.assertEqual(snap["level"], "bad")
         self.assertEqual(snap["headline"], "Face-on: not recording")
 
+    def test_running_hot(self):
+        self.s.relay_heartbeat({"squareRunning": True})
+        face = lambda: next(r for r in self.s.snapshot({}, {"queued": 0}, None)["rows"] if r["key"] == "face")
+        self.s.heartbeat("face", hb(recording=True, batteryTempC=36.5, thermal=0, droppedPct=0.8))
+        self.assertEqual(face()["level"], "ok")
+        self.assertNotIn("losing", face()["text"])     # under 1%: not worth a mention
+        self.assertNotIn("°C", face()["text"])
+        self.s.heartbeat("face", hb(recording=True, batteryTempC=37.0, thermal=1, droppedPct=1.5))
+        self.assertEqual(face()["level"], "ok")
+        self.assertIn("losing 1.5% of frames", face()["text"])
+        self.s.heartbeat("face", hb(recording=True, batteryTempC=41.2, thermal=2, droppedPct=27.0))
+        self.assertEqual(face()["level"], "warn")
+        self.assertIn("41.2 °C", face()["text"])
+        self.assertEqual(face()["problem"], "running hot: losing frames")
+        self.s.heartbeat("face", hb(recording=True, batteryTempC=39.0, thermal=2, droppedPct=1.0))
+        self.assertEqual(face()["problem"], "running hot")
+        self.s.heartbeat("face", hb(recording=True, thermal=0, droppedPct=6.0))   # cool, but losing frames
+        self.assertEqual(face()["level"], "warn")
+
     def test_a_phone_never_seen_isnt_needed(self):
         self.s.heartbeat("face", hb(recording=True))
         self.s.relay_heartbeat({"squareRunning": True})
@@ -590,6 +609,11 @@ class HealthTest(unittest.TestCase):
         self.assertEqual(self.s.health_step([swing(1, t)]), ["The face-on phone isn't answering."])
         # Said by the phone that's left.
         self.assertIn("The face-on phone isn't answering.", [x["text"] for x in self.s.take("dtl")["say"]])
+        # Running hot: said once.
+        self.s.heartbeat("dtl", hb(recording=True, thermal=2, droppedPct=20.0))
+        self.assertEqual(self.s.health_step([swing(1, t)]), ["Down the line phone is running hot and losing frames. "
+                                                             "Take it off the charger or out of its case, out of the sun."])
+        self.assertEqual(self.s.health_step([swing(1, t)]), [])
 
     def test_swings_from_before_the_session_arent_checked(self):
         self.assertEqual(self.step([swing(1, self.start - 60)], self.start + 40), [])

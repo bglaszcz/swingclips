@@ -1296,14 +1296,18 @@ def load_camera(name: str) -> dict | None:
 
 
 def save_camera(name: str, shutter: str | None, exposure: str | None, exposure_ns: int | None,
-                iso: int | None, frame_ns: int | None) -> None:
+                iso: int | None, frame_ns: int | None, frames: int | None = None, dropped: int | None = None,
+                thermal: int | None = None) -> None:
     """Keeps what the phone reported: the setting ("Auto", "1/1000"), what the camera did with it
-    ("auto", "manual", "compensation", "refused"), and the exposure (ns) and ISO it really used."""
+    ("auto", "manual", "compensation", "refused"), and the exposure (ns) and ISO it really used; from
+    capture app 0.13 also the clip's frames, how many it's missing, and Android's heat level then."""
     if shutter is None and exposure is None and exposure_ns is None and iso is None:
         return  # an older capture app: nothing to keep
     info = {"shutter": shutter, "exposure": exposure, "exposureNs": exposure_ns, "iso": iso, "frameNs": frame_ns,
             # The same exposure as 1/<n> s, for reading and grouping clips by shutter speed.
             "shutterSpeed": round(1e9 / exposure_ns) if exposure_ns else None}
+    if frames is not None:
+        info.update(frames=frames, dropped=dropped, thermal=thermal)
     path = CLIPS_DIR / (name + CAMERA_SUFFIX)
     tmp = path.with_name(path.name + ".part")
     tmp.write_text(json.dumps(info))
@@ -1314,9 +1318,12 @@ def save_camera(name: str, shutter: str | None, exposure: str | None, exposure_n
 async def upload(name: str, request: Request, shutter: str | None = Query(None, max_length=20),
                  exposure: str | None = Query(None, max_length=20),
                  exposure_ns: int | None = Query(None, ge=1), iso: int | None = Query(None, ge=1),
-                 frame_ns: int | None = Query(None, ge=1)):
+                 frame_ns: int | None = Query(None, ge=1), frames: int | None = Query(None, ge=0),
+                 dropped: int | None = Query(None, ge=0), thermal: int | None = Query(None, ge=0, le=10)):
     """The capture app sends each clip as the raw request body: POST /api/upload?name=<file name>,
-    and from version 0.4 what its camera used: &shutter=1/1000&exposure=manual&exposure_ns=...&iso=...&frame_ns=..."""
+    and from version 0.4 what its camera used: &shutter=1/1000&exposure=manual&exposure_ns=...&iso=...&frame_ns=...,
+    from 0.13 &frames=<in the clip>&dropped=<missing>&thermal=<Android's heat level>."""
+    camera = (shutter, exposure, exposure_ns, iso, frame_ns, frames, dropped, thermal)
     if not UPLOAD_NAME.match(name) or name.startswith("."):
         raise HTTPException(400, "Bad clip name")
     CLIPS_DIR.mkdir(parents=True, exist_ok=True)
@@ -1324,7 +1331,7 @@ async def upload(name: str, request: Request, shutter: str | None = Query(None, 
     # A retry after a lost response: already have it, so say so rather than keep a second copy.
     if final.exists():
         if not (CLIPS_DIR / (name + CAMERA_SUFFIX)).exists():
-            save_camera(name, shutter, exposure, exposure_ns, iso, frame_ns)
+            save_camera(name, *camera)
         return {"ok": True, "size": final.stat().st_size, "duplicate": True}
     # Written under a name the clip list and pose worker ignore, then renamed once complete.
     part = CLIPS_DIR / (name + ".part")
@@ -1338,11 +1345,13 @@ async def upload(name: str, request: Request, shutter: str | None = Query(None, 
         if expected is not None and int(expected) != size:
             raise HTTPException(400, f"Upload cut short: got {size} of {expected} bytes")
         # The camera info first, so the clip never shows up without it.
-        save_camera(name, shutter, exposure, exposure_ns, iso, frame_ns)
+        save_camera(name, *camera)
         part.replace(final)
     finally:
         part.unlink(missing_ok=True)
     shot = f", {exposure} 1/{round(1e9 / exposure_ns)} s ISO {iso}" if exposure_ns else ""
+    if dropped:
+        shot += f", {dropped} of {frames + dropped} frames lost" + (f" (hot: level {thermal})" if thermal and thermal >= 2 else "")
     m, t = SWING_NAME.match(name), UNIX_TIME_SUFFIX.search(Path(name).stem)
     angle = (m.group(1) or "face") if m else "face"
     echo = speech_before(angle, float(t.group(1))) if t else None
@@ -1350,7 +1359,7 @@ async def upload(name: str, request: Request, shutter: str | None = Query(None, 
         upload_notes[name] = echo
         while len(upload_notes) > 200:
             upload_notes.pop(next(iter(upload_notes)))
-    log_event("upload", clip=name, angle=angle, mb=round(size / 1e6, 1), afterSpeech=echo)
+    log_event("upload", clip=name, angle=angle, mb=round(size / 1e6, 1), afterSpeech=echo, dropped=dropped, thermal=thermal)
     heard = f' - heard {echo["after"]} s after the {status.NAMES[echo["to"]].lower()} phone was sent "{echo["text"]}"' if echo else ""
     print(f"Upload: {name} ({size / 1e6:.1f} MB{shot}){heard}", flush=True)
     return {"ok": True, "size": size}

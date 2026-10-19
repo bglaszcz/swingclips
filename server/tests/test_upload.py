@@ -46,6 +46,15 @@ class UploadTest(unittest.TestCase):
         # Still a two-angle swing clip as before.
         self.assertEqual(self.listed(name)["angle"], "dtl")
 
+    def test_frames_and_heat_kept(self):
+        # Capture app 0.13: the clip's frames, how many it's missing, and Android's heat level.
+        name = "swing_face_1280x720_240fps_1789000151_2000ms.mp4"
+        r = self.client.post(f"/api/upload?name={name}&shutter=Auto&exposure=auto&exposure_ns=4001007&iso=2998"
+                             f"&frame_ns=4166666&frames=1180&dropped=24&thermal=2", content=b"video")
+        self.assertEqual(r.status_code, 200)
+        cam = self.listed(name)["camera"]
+        self.assertEqual((cam["frames"], cam["dropped"], cam["thermal"]), (1180, 24, 2))
+
     def test_retry_fills_in_missing_camera_info(self):
         name = "swing_face_1280x720_240fps_1789000201_2000ms.mp4"
         self.client.post(f"/api/upload?name={name}", content=b"video")

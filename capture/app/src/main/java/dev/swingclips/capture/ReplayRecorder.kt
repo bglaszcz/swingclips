@@ -17,6 +17,7 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import android.util.Range
@@ -41,11 +42,20 @@ class ReplayRecorder(
     shutter: Int = 0,
     /** What the camera really did with the shutter setting, once it's known (camera thread). */
     private val onExposure: (ExposureReport) -> Unit = {},
+    /** The encoder's bitrate (bits/s) instead of the usual one, for trying others. */
+    private val bitrateOverride: Int? = null,
 ) {
     private class Packet(val data: ByteArray, val ptsUs: Long, val key: Boolean)
 
+    /** What [save] wrote: where the moment falls (s), and the clip's frames and frames lost. */
+    class Saved(val momentS: Double, val frames: Int, val dropped: Long)
+
     private val thread = HandlerThread("replay").apply { start() }
     private val handler = Handler(thread.looper)
+    // The encoder's output gets its own thread: on the camera's, 240 capture results a second
+    // queue up in front of it.
+    private val encoderThread = HandlerThread("encoder", Process.THREAD_PRIORITY_VIDEO).apply { start() }
+    private val encoderHandler = Handler(encoderThread.looper)
     private var device: CameraDevice? = null
     private var session: CameraCaptureSession? = null
     private var encoder: MediaCodec? = null
@@ -88,7 +98,7 @@ class ReplayRecorder(
 
     private fun createEncoder(): MediaCodec {
         // HEVC at half the bitrate MediaRecorder picks by default looked the same and is smaller.
-        val bitrate = (mode.width.toLong() * mode.height * mode.fps / 20).coerceIn(4_000_000, 60_000_000).toInt()
+        val bitrate = bitrateOverride ?: (mode.width.toLong() * mode.height * mode.fps / 20).coerceIn(4_000_000, 60_000_000).toInt()
         var lastError: Exception? = null
         // Older encoders (e.g. the Galaxy S8's) may refuse an operating rate they don't advertise;
         // they still keep up with the camera without being told it.
@@ -110,11 +120,12 @@ class ReplayRecorder(
             var codec: MediaCodec? = null
             try {
                 codec = MediaCodec.createEncoderByType(m)
-                codec.setCallback(encoderCallback, handler)
+                codec.setCallback(encoderCallback, encoderHandler)
                 codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                 encoderSurface = codec.createInputSurface()
                 codec.start()
                 mime = m
+                Log.i(TAG, "encoder ${codec.name}: $m ${mode.label} at ${bitrate / 1_000_000} Mbit/s")
                 return codec
             } catch (e: Exception) {
                 lastError = e
@@ -144,6 +155,8 @@ class ReplayRecorder(
                     buf.position(info.offset)
                     buf.get(data)
                     val key = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
+                    encoded.add(info.presentationTimeUs)
+                    if (info.presentationTimeUs - countedFromUs >= COUNT_EVERY_US) reportFrames(info.presentationTimeUs)
                     synchronized(lock) {
                         packets.addLast(Packet(data, info.presentationTimeUs, key))
                         val oldest = info.presentationTimeUs - (keepSeconds * 1e6).toLong()
@@ -185,6 +198,48 @@ class ReplayRecorder(
         else d.createCaptureSession(targets, cb, handler)
     }
 
+    // ---- Lost frames ----
+    // Where a frame goes missing: the camera never took it (a jump in the sensor's timestamps), the
+    // camera lost it on the way to the encoder (onCaptureBufferLost), or the encoder dropped it (a
+    // jump in the timestamps it puts out with the camera's frames in order). Logged every
+    // COUNT_EVERY_US when any went missing; each clip also counts its own (save). On the S23 Ultra
+    // (Oct 2026) it's the camera: between two bursts of 8 frames it sometimes skips 4, ~1% of
+    // frames when the phone is cool and over 25% once it's hot (Android's "moderate" heat level).
+
+    private val frameUs = 1e6 / mode.fps
+    /** The camera's frames, by the sensor's timestamps (camera thread). */
+    private val taken = FrameGaps(frameUs)
+    /** The encoder's output (encoder thread). */
+    private val encoded = FrameGaps(frameUs)
+    private var lastStarted = -1L
+    private var lostOnTheWay = 0
+    private var failed = 0
+    private var countedFromUs = 0L
+
+    /** Share of frames lost in the last count (0-1), for the review page. */
+    @Volatile var recentDropped: Double? = null
+        private set
+
+    /** Encoder thread: hands its counts to the camera thread, which logs both and starts again. */
+    private fun reportFrames(nowUs: Long) {
+        val first = countedFromUs == 0L
+        countedFromUs = nowUs
+        val frames = encoded.frames
+        val missing = encoded.missing
+        val longest = encoded.longest
+        encoded.clearCounts()
+        if (first) return   // the camera was still starting
+        recentDropped = if (frames + missing > 0) missing.toDouble() / (frames + missing) else null
+        handler.post {
+            if (missing > 0 || taken.missing > 0 || lostOnTheWay > 0 || failed > 0) Log.i(TAG,
+                "frames: camera ${taken.frames} (missing ${taken.missing}, longest ${taken.longest}), " +
+                "lost on the way $lostOnTheWay, failed $failed; encoder $frames (missing $missing, longest $longest)")
+            taken.clearCounts()
+            lostOnTheWay = 0
+            failed = 0
+        }
+    }
+
     /** The camera's standing request, for changing focus later. */
     private var request: CaptureRequest.Builder? = null
 
@@ -202,6 +257,21 @@ class ReplayRecorder(
      * keeps the exposure each frame really had. */
     private var afState: Int? = null
     private val afWatch = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureStarted(s: CameraCaptureSession, r: CaptureRequest, timestamp: Long, frameNumber: Long) {
+            // Some phones (the S23 Ultra) say each frame has started twice.
+            if (frameNumber <= lastStarted) return
+            lastStarted = frameNumber
+            taken.add(timestamp / 1000)
+        }
+
+        override fun onCaptureBufferLost(s: CameraCaptureSession, r: CaptureRequest, target: Surface, frameNumber: Long) {
+            if (target == encoderSurface) lostOnTheWay++
+        }
+
+        override fun onCaptureFailed(s: CameraCaptureSession, r: CaptureRequest, failure: android.hardware.camera2.CaptureFailure) {
+            failed++
+        }
+
         override fun onCaptureCompleted(s: CameraCaptureSession, r: CaptureRequest, result: TotalCaptureResult) {
             // High-speed bursts report some of these on some frames only; keep the last seen.
             result.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.let { exposureNs = it }
@@ -434,10 +504,10 @@ class ReplayRecorder(
     /**
      * Writes [beforeUs] before to [afterUs] after [momentUs] (video clock) to [out]. The clip starts
      * on the last keyframe at or before the window, so it can run a fraction of a second longer.
-     * Returns how far into the file [momentUs] falls, in seconds, or null if the buffer doesn't
-     * reach back that far.
+     * Returns how far into the file [momentUs] falls and how many frames the clip is missing, or
+     * null if the buffer doesn't reach back that far.
      */
-    fun save(momentUs: Long, beforeUs: Long, afterUs: Long, out: File): Double? {
+    fun save(momentUs: Long, beforeUs: Long, afterUs: Long, out: File): Saved? {
         val (format, clip) = synchronized(lock) {
             val fmt = outputFormat ?: return null
             val start = momentUs - beforeUs
@@ -459,7 +529,7 @@ class ReplayRecorder(
                 muxer.writeSampleData(track, ByteBuffer.wrap(p.data), info)
             }
             muxer.stop()
-            return (momentUs - base) / 1e6
+            return Saved((momentUs - base) / 1e6, clip.size, FrameGaps.missingIn(clip.map { it.ptsUs }, frameUs))
         } finally {
             muxer.release()
         }
@@ -475,6 +545,7 @@ class ReplayRecorder(
             runCatching { encoderSurface?.release() }
             session = null; device = null; encoder = null; encoderSurface = null
             thread.quitSafely()
+            encoderThread.quitSafely()
         }
         synchronized(lock) { packets.clear() }
     }
@@ -487,6 +558,7 @@ class ReplayRecorder(
 
     companion object {
         const val TAG = "SwingClips"
+        private const val COUNT_EVERY_US = 10_000_000L
         private val AF_STATES = listOf("inactive", "scanning (continuous)", "focused (continuous)", "scanning", "focused and locked", "locked, not in focus")
     }
 }

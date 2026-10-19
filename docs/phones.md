@@ -17,8 +17,25 @@ How the capture app records, how the two angles pair, the shutter and clip quali
   The server keeps 30 minutes of them (`Status.sounds`) for the Start page's strike levels and the
   Missed shots check (`Status.missed_check`: the loudest sound 3-20 s before each missed Square shot,
   and the lowest sensitivity, in steps of 5, whose threshold is at most 80% of the softest one).
-- Modes: 1080p/720p at 240, 120 or 30 fps. 240 fps drops ~30% of frames on the S23 Ultra, 120 fps
-  ~2-7%.
+- Modes: 1080p/720p at 240, 120 or 30 fps.
+- **Lost frames and heat** (0.13): at 240 fps the camera delivers frames in bursts of 8, and the S23
+  Ultra's camera sometimes misses the start of the next burst: 4 frames in a row never taken (its own
+  frame timestamps jump; the frame numbers don't, nothing is lost on the way to the encoder). How
+  often depends on how hot the phone is: ~1% of frames when cool, over 25% at Android's "moderate"
+  heat level (Oct 19, on the desk: 25 minutes with the camera running on the charger took the skin to
+  43 C). 720p, a fixed shutter, the camera's noise reduction off, no capture results, and a busy
+  thread keeping the processor awake made no difference; Android's sustained-performance mode made it
+  worse. Over 145 clips from 5 long sessions the face-on phone lost a median 5-7% from the first
+  swings (already warm), the S21 down the line none. So the app keeps the phone cooler: while
+  recording the screen dims after 20 s without a touch (it faces away from the golfer; a touch brings
+  it back), and the display runs at 60 Hz (the preview is 30 fps). It counts lost frames
+  (`FrameGaps.kt`): each clip reports `frames` and `dropped`, and every 10 s it logs where any went
+  (`adb logcat -s SwingClips`, "frames: camera ... encoder ..."). Each poll reports `droppedPct` (the
+  last 10 s), `batteryTempC` and `thermal` (Android's heat level, 0 none, 1 light, 2 moderate...). Off
+  the charger, out of the case and out of the sun or a lamp's heat helps; a clip-on phone cooler
+  more.
+- Test hook: `adb shell am start -n dev.swingclips.capture/.MainActivity --ei bitrateMbps 80` records
+  at another bitrate until the app is closed.
 - Opens **not recording**; settings are locked while recording. Clips wait in an outbox and upload
   to `POST /api/upload`, retrying until the server confirms. Named
   `swing_<angle>_WxH_FPSfps_<unix>_<strike>ms.mp4`: angle `face` or `dtl`, the unix time of the
@@ -105,7 +122,8 @@ exposure instead: **1/500**, **1/1000** or **1/2000**.
 - **Checking a clip's shutter**: each clip is uploaded with what the camera used at the strike.
   The server keeps it next to the clip (`<clip>.camera.json`) and lists it in `/api/clips` as
   `camera`: `{"shutter": "1/1000", "exposure": "manual", "exposureNs": 1000000, "iso": 1600,
-  "frameNs": 4166666, "shutterSpeed": 1000}`. `shutter` is the setting, `exposure` what the
+  "frameNs": 4166666, "shutterSpeed": 1000}`, from 0.13 with `frames` (in the clip), `dropped` (frames
+  missing between them) and `thermal` (Android's heat level then). `shutter` is the setting, `exposure` what the
   camera did with it (`auto`, `manual`, `compensation`, `refused`), `shutterSpeed` the real
   shutter as 1/n s. Clips from older app versions have `camera: null`. The server's window also
   prints it on each upload ("manual 1/1000 s ISO 1600"). By eye: at 1/1000 the clubhead is a
@@ -183,7 +201,8 @@ review page starts them and one of them does the talking.
   each (it remembers open or closed):
   - **each phone**: connected, recording, mode, shutter setting and what the camera really used,
     battery (amber under 20% when not charging), clips waiting to upload (amber from 3), free
-    storage, which phone speaks, and its **Start** / **Stop** with how the last command went
+    storage, how warm it is (from 38 C) and the frames it's losing (from 1%; amber "running hot" at
+    Android's moderate heat level or 5% lost, `status.HOT_THERMAL` / `DROPPED_WARN_PCT`), which phone speaks, and its **Start** / **Stop** with how the last command went
     ("Starting...", "Started", "Couldn't start: the camera isn't running yet", "no answer from the
     phone"). A phone seen in the last 12 hours is expected: Ready needs it recording.
   - **Square**: the laptop's heartbeat (the watcher), whether Square's app is running, the last shot.
@@ -224,7 +243,8 @@ review page starts them and one of them does the talking.
   "no clip", "the Square watcher isn't running"). After that only problems, once each until they
   clear: no Square shot on 2 swings in a row, a missing clip on 2 in a row, the same camera problem
   on 3 in a row, a phone that stops answering while recording, 3+ clips waiting on a phone, a
-  battery under 10%.
+  battery under 10%, a phone running hot and losing frames ("take it off the charger or out of its
+  case, out of the sun").
 - **No swing found**: said when key positions couldn't be found in a clip (phases.js). Why is on
   the swing page ("No swing found in this clip: ...") and in the **events log**
   (`D:\SwingClips\events.jsonl`, one JSON object per line), with the server window printing
@@ -252,7 +272,8 @@ review page starts them and one of them does the talking.
   update, so older clips get their reasons too.
 - **How**: each phone (while the app is open) posts `POST /api/phones/<angle>/poll?wait=10` with
   its state as JSON (recording, mode, shutter, shutterUsed, exposure, battery, charging, freeMb,
-  version, pending, saved, practiceVoice, setupVoice, autoStart, busy, cameraError) and its answers
+  version, pending, saved, practiceVoice, setupVoice, autoStart, busy, cameraError, droppedPct,
+  batteryTempC, thermal) and its answers
   to commands (`acks`). The server keeps the latest per phone and holds the request (a long poll)
   until it has a command or a sentence for that phone, or 10 s pass: so the phone reports in about
   every 10 s and a command arrives within a quarter of a second. A phone not heard from for 30 s is

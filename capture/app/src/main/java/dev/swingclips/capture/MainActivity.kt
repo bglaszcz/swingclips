@@ -21,9 +21,11 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.PowerManager
 import android.text.InputType
 import android.util.Size
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
@@ -118,6 +120,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        preferLowRefreshRate()
         buildUi()
         camera = runCatching { Modes.find(getSystemService(CameraManager::class.java)) }.getOrNull()
         mode = offeredModes().let { list -> list.firstOrNull { it.key == prefs.getString("mode", null) } ?: list.firstOrNull() }
@@ -215,6 +218,8 @@ class MainActivity : Activity() {
             onError = { msg -> main.post { cameraError = msg; setStatus("Camera problem: $msg", Color.rgb(245, 158, 11)) } },
             shutter = shutter(),
             onExposure = { report -> main.post { showExposure(report, m) } },
+            // For trying other bitrates: adb shell am start -n dev.swingclips.capture/.MainActivity --ei bitrateMbps 80
+            bitrateOverride = intent?.getIntExtra("bitrateMbps", 0)?.takeIf { it > 0 }?.let { it * 1_000_000 },
         ).also { it.start() }
         showLimits()
         listener = ImpactListener(this,
@@ -266,9 +271,10 @@ class MainActivity : Activity() {
             val giveUp = System.currentTimeMillis() + ((POST_S + 3) * 1000).toLong()
             while ((rec.newestUs() ?: 0) < endUs && System.currentTimeMillis() < giveUp) Thread.sleep(100)
             val tmp = File(outbox, "swing_$wallMs.tmp")
-            val at = runCatching { rec.save(momentUs, (preS * 1e6).toLong(), (POST_S * 1e6).toLong(), tmp) }
+            val clip = runCatching { rec.save(momentUs, (preS * 1e6).toLong(), (POST_S * 1e6).toLong(), tmp) }
                 .onFailure { android.util.Log.e(ReplayRecorder.TAG, "save failed", it) }
                 .getOrNull()
+            val at = clip?.momentS
             // e.g. swing_dtl_1280x720_240fps_1789123456_2137ms.mp4: the angle, the strike's time (server
             // clock), and how far into the clip it is - which lines up the two angles of one swing.
             val name = "swing_${angle}_${m.width}x${m.height}_${m.fps}fps_${wallMs / 1000}_${at?.let { Math.round(it * 1000) }}ms.mp4"
@@ -281,6 +287,9 @@ class MainActivity : Activity() {
                     exposure.exposureNs?.let { put("exposure_ns", it) }
                     exposure.iso?.let { put("iso", it) }
                     exposure.frameNs?.let { put("frame_ns", it) }
+                    // The clip's frames, how many it's missing, and how hot the phone was (0.13).
+                    clip?.let { put("frames", it.frames); put("dropped", it.dropped) }
+                    thermal()?.let { put("thermal", it) }
                 }.toString())
             }
             main.post {
@@ -299,6 +308,7 @@ class MainActivity : Activity() {
 
     private fun setArmed(on: Boolean) {
         armed = on
+        wake()
         if (on) autoStart.started()
         if (::phoneLink.isInitialized) phoneLink.poke()   // the review page hears of it now
         // Setup checks (and speech) only run while not recording; start the next setup fresh.
@@ -377,6 +387,57 @@ class MainActivity : Activity() {
         return if (done.await(timeoutMs, TimeUnit.MILLISECONDS)) out else null
     }
 
+    /** The battery's temperature (degrees C), the phone's own measure of how warm it's running. */
+    private fun batteryTempC(): Double? = runCatching {
+        registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+            ?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)?.takeIf { it != Int.MIN_VALUE }?.let { it / 10.0 }
+    }.getOrNull()
+
+    /** Android's heat level (PowerManager.THERMAL_STATUS_*: 0 none ... 6 shutdown), from Android 10. */
+    private fun thermal(): Int? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+        runCatching { getSystemService(PowerManager::class.java).currentThermalStatus }.getOrNull() else null
+
+    // ---- Keeping the phone cool ----
+    // A hot phone drops frames (see ReplayRecorder), and the screen is a big part of the heat. It faces
+    // away from the golfer while recording, so it dims after DIM_AFTER_MS without a touch (a touch
+    // brings it back), and it never needs more than 60 Hz: the preview is 30 frames a second.
+
+    /** The display's 60 Hz mode at its current size, if it has one (else the phone's own choice). */
+    private fun preferLowRefreshRate() {
+        runCatching {
+            @Suppress("DEPRECATION")
+            val display = windowManager.defaultDisplay
+            val now = display.mode
+            val low = display.supportedModes
+                .filter { it.physicalWidth == now.physicalWidth && it.physicalHeight == now.physicalHeight && it.refreshRate >= 59f }
+                .minByOrNull { it.refreshRate } ?: return
+            window.attributes = window.attributes.apply { preferredDisplayModeId = low.modeId }
+        }
+    }
+
+    private var dimmed = false
+    private val dim = Runnable { if (armed) setDimmed(true) }
+
+    private fun setDimmed(on: Boolean) {
+        if (dimmed == on) return
+        dimmed = on
+        window.attributes = window.attributes.apply {
+            screenBrightness = if (on) DIM_BRIGHTNESS else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
+    }
+
+    /** Back to full brightness, and dim again later if recording. */
+    private fun wake() {
+        main.removeCallbacks(dim)
+        setDimmed(false)
+        if (armed) main.postDelayed(dim, DIM_AFTER_MS)
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) wake()
+        return super.dispatchTouchEvent(ev)
+    }
+
     private val appVersion by lazy { runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() }
 
     /** What this phone is doing, for the review page's Ready panel (server/status.py reads these). */
@@ -391,6 +452,11 @@ class MainActivity : Activity() {
             "battery" to battery?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it in 0..100 },
             "charging" to battery?.isCharging,
             "freeMb" to filesDir.usableSpace / 1_000_000,
+            // Frames lost lately (%), how warm the battery is (degrees C), and Android's heat level
+            // (0 none, 1 light, 2 moderate: by then the S23 Ultra loses a quarter of its frames).
+            "droppedPct" to recorder?.recentDropped?.let { Math.round(it * 1000) / 10.0 },
+            "batteryTempC" to batteryTempC(),
+            "thermal" to thermal(),
             "version" to appVersion,
             "pending" to (outbox.listFiles { f -> f.name.endsWith(".mp4") }?.size ?: 0),
             "saved" to saved,
@@ -1024,6 +1090,8 @@ class MainActivity : Activity() {
     companion object {
         private const val PRE_S = 2.0
         private const val PRE_MAX_S = 8.0
+        private const val DIM_AFTER_MS = 20_000L
+        private const val DIM_BRIGHTNESS = 0.02f
         private const val POST_S = 2.0
         // Android can't look up Windows PC names, so the home server's LAN address.
         private const val DEFAULT_SERVER = "http://192.168.86.250:8000"
