@@ -518,11 +518,96 @@
     return out;
   }
 
+  function formatSwingRange(lo, hi) {
+    const rLo = round1(lo != null ? lo : 0);
+    const rHi = round1(hi != null ? hi : 0);
+    if (rLo < 0 && rHi > 0) {
+      return `could be ${Math.abs(rLo).toFixed(1)} closer to ${Math.abs(rHi).toFixed(1)} further off`;
+    }
+    if (rLo >= 0 && rHi >= 0) {
+      return `could be ${Math.abs(rLo).toFixed(1)} to ${Math.abs(rHi).toFixed(1)}`;
+    }
+    return `could be ${Math.abs(rHi).toFixed(1)} to ${Math.abs(rLo).toFixed(1)}`;
+  }
+
+  function formatSwingEventLabel(ev, angle) {
+    let name = ev || "";
+    if (name === "takeaway") name = "Takeaway";
+    else if (name === "impact" || name === "p7") name = "Impact";
+    else if (name === "p1") name = "Address";
+    else if (/^p\d$/i.test(name)) name = name.toUpperCase();
+    const where = angle === "face" ? "face-on" : angle === "dtl" ? "down the line" : angle;
+    return `${name} ${where}`;
+  }
+
+  /**
+   * Formats the swing-by-swing verdict from improve.py judge_swings:
+   * returns null without `rows`, else {pooledLine, rows: [{label, change, range, tally, verdict, text}], club: [{label, text}]}.
+   */
+  function swingRows(verdict) {
+    if (!verdict || !Array.isArray(verdict.rows)) return null;
+
+    let pooledLine = null;
+    if (verdict.pooled && typeof verdict.pooled === "object") {
+      const p = verdict.pooled;
+      const m = round1(p.mean != null ? p.mean : 0);
+      const dir = m <= 0 ? "closer" : "further off";
+      const rng = formatSwingRange(p.lo, p.hi);
+      const sw = p.swings != null ? p.swings : 0;
+      pooledLine = `Overall: P2, the top, P6 and P8 ${Math.abs(m).toFixed(1)} ms ${dir} per swing (${rng}), ${sw} ${sw === 1 ? "swing" : "swings"}`;
+    }
+
+    const activeRows = verdict.rows
+      .filter(r => r && !(r.lo === 0 && r.hi === 0))
+      .map((r, idx) => {
+        const label = formatSwingEventLabel(r.event, r.angle);
+        const m = round1(r.mean != null ? r.mean : 0);
+        const dir = m <= 0 ? "closer" : "further off";
+        const change = `${Math.abs(m).toFixed(1)} ms ${dir} per swing`;
+        const range = formatSwingRange(r.lo, r.hi);
+        const w = r.worse != null ? r.worse : 0;
+        const b = r.better != null ? r.better : 0;
+        const tally = `${w} ${w === 1 ? "swing" : "swings"} worse, ${b} better`;
+        const vWord = r.verdict === "worse" ? "Worse" : r.verdict === "better" ? "Better" : "Same";
+        const text = `${label}: ${change} (${range}) · ${tally}`;
+        const rank = r.verdict === "worse" ? 0 : r.verdict === "better" ? 1 : 2;
+        return { label, change, range, tally, verdict: vWord, text, _rank: rank, _idx: idx };
+      });
+
+    activeRows.sort((a, b) => a._rank - b._rank || a._idx - b._idx);
+    const rows = activeRows.map(({ _rank, _idx, ...rest }) => rest);
+
+    const club = [];
+    const rawClub = Array.isArray(verdict.club) ? verdict.club : [];
+    for (const c of rawClub) {
+      if (!c) continue;
+      const sameFound = c.foundLo === 0 && c.foundHi === 0;
+      const sameErr = c.err == null || (c.errLo === 0 && c.errHi === 0);
+      if (sameFound && sameErr) continue;
+
+      const what = c.table === "club" ? "Shaft" : "Clubhead";
+      const where = c.angle === "face" ? "face-on" : c.angle === "dtl" ? "down the line" : c.angle;
+      const label = `${what} ${where}`;
+      const pts = Math.round(Math.abs(c.found || 0));
+      const foundDir = (c.found || 0) >= 0 ? "more" : "less";
+      let text = `${what} found ${pts} ${pts === 1 ? "point" : "points"} ${foundDir} often in the downswing (${where})`;
+      if (c.err != null && !(c.errLo === 0 && c.errHi === 0)) {
+        const errAbs = Math.abs(round1(c.err)).toFixed(1);
+        const errDir = c.err <= 0 ? "closer" : "further off";
+        text += ` · placed ${errAbs}% of your height ${errDir}`;
+      }
+      club.push({ label, text });
+    }
+
+    return { pooledLine, rows, club };
+  }
+
   const api = {
     compareRows,
     runRows,
     runsLine,
     runsDisagree,
+    swingRows,
     headline,
     nightLine,
     progressLine,
@@ -534,3 +619,4 @@
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingNightReport = api;
 })(typeof window !== "undefined" ? window : globalThis);
+

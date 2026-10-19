@@ -44,6 +44,34 @@
     return `${h}:${m} ${ampm}`;
   }
 
+  function renderSwingBySwing(verdict) {
+    const reportApi = getReportApi();
+    if (!reportApi || typeof reportApi.swingRows !== "function") return "";
+    const sw = reportApi.swingRows(verdict);
+    if (!sw) return "";
+
+    let linesHtml = "";
+    if (sw.pooledLine) {
+      linesHtml += `<div class="nr-swing-line nr-swing-pooled">${escapeHtml(sw.pooledLine)}</div>`;
+    }
+    for (const r of sw.rows || []) {
+      const vClass = r.verdict === "Worse" ? "nr-swing-worse" : r.verdict === "Better" ? "nr-swing-better" : "nr-swing-same";
+      const rowText = r.text || `${r.label}: ${r.change} (${r.range}) · ${r.tally}`;
+      linesHtml += `<div class="nr-swing-line nr-swing-row"><span class="nr-swing-tag ${vClass}">${escapeHtml(r.verdict)}</span> <span class="nr-swing-text">${escapeHtml(rowText)}</span></div>`;
+    }
+    for (const c of sw.club || []) {
+      linesHtml += `<div class="nr-swing-line nr-swing-club">${escapeHtml(c.text)}</div>`;
+    }
+    if (!linesHtml) return "";
+
+    return `
+      <details class="nr-swings">
+        <summary><strong>Swing by swing</strong></summary>
+        <div class="nr-swings-body">${linesHtml}</div>
+      </details>
+    `;
+  }
+
   function renderRunsSummary(candidate) {
     const reportApi = getReportApi();
     if (!reportApi || !candidate) return "";
@@ -286,6 +314,7 @@
       const verdictHtml = newest.verdict && newest.verdict.why
         ? `<div class="note nr-verdict">${escapeHtml(newest.verdict.why)}</div>`
         : "";
+      const swingsHtml = renderSwingBySwing(newest.verdict);
       const runsHtml = renderRunsSummary(newest);
       const tableHtml = renderScoresTable(newest.scores);
       const trainHtml = renderTrainDetails(newest.train);
@@ -315,6 +344,7 @@
           </div>
           <p class="nr-summary">${escapeHtml(newest.summary || "")}</p>
           ${verdictHtml}
+          ${swingsHtml}
           ${runsHtml}
           ${tableHtml}
           ${trainHtml}
@@ -358,6 +388,7 @@
         const cStatusClass = `nr-tag-${(c.status || "").replace(/\s+/g, "-")}`;
         const cDate = window.SwingNightReport ? SwingNightReport.formatNightDate(c.made, false) : (c.made || "");
         const cVerdict = c.verdict && c.verdict.why ? `<div class="note nr-verdict">${escapeHtml(c.verdict.why)}</div>` : "";
+        const cSwings = renderSwingBySwing(c.verdict);
         const cRunsHtml = renderRunsSummary(c);
         const cTable = renderScoresTable(c.scores);
         const cTrain = renderTrainDetails(c.train);
@@ -377,6 +408,7 @@
             </summary>
             <div class="nr-earlier-body">
               ${cVerdict}
+              ${cSwings}
               ${cRunsHtml}
               ${cTable}
               ${cTrain}
@@ -583,6 +615,7 @@
   }
 
   const viewApi = {
+    renderSwingBySwing,
     renderRunsSummary,
     renderScoresTable,
     openNightReport,
