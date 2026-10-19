@@ -101,6 +101,30 @@ class SolveTest(unittest.TestCase):
         # The made-up feet are 0.72 m behind the ball: everything shifts by that, toward the golfer.
         self.assertAlmostEqual(cams["face"]["position"][2] - self.ses["cameras"]["face"]["position"][2], 0.72, delta=0.08)
 
+    def test_occluded_far_ankle_does_not_bias_target_axis(self):
+        # In down-the-line video, the near leg (trail ankle) occludes the far leg (lead ankle)
+        # at address, biasing the 2D detector forward toward the ball (30-50 px).
+        # Sighting the front axis z from address hips toward the ball prevents that ankle
+        # occlusion from twisting the golf axes and shifting the ball.
+        swings_shifted = []
+        for s in self.swings:
+            sf, sd = json.loads(json.dumps(s["face"])), json.loads(json.dumps(s["dtl"]))
+            imp_d = sd.get("impact", 2.05)
+            for f in sd["frames"]:
+                if f["t"] <= imp_d - bodycalib.ADDRESS_BEFORE_IMPACT and f.get("lm"):
+                    f["lm"][bodycalib.LEAD_ANKLE * 3] += 0.035  # ~38 px in 1080w
+            swings_shifted.append({"face": sf, "dtl": sd, "offset": s["offset"]})
+        cams, report = bodycalib.solve(swings_shifted, lens(self.ses["cameras"]["face"]),
+                                       lens(self.ses["cameras"]["dtl"]), HEIGHT)
+        self.assertTrue(report["good"], report)
+        for angle in ("face", "dtl"):
+            got, want = np.array(cams[angle]["position"]), np.array(self.ses["cameras"][angle]["position"])
+            self.assertLess(np.linalg.norm(got - want), 0.15, angle)
+            dr = np.array(cams[angle]["R"]) @ np.array(self.ses["cameras"][angle]["R"]).T
+            self.assertLess(np.degrees(np.arccos(np.clip((np.trace(dr) - 1) / 2, -1, 1))), 2.5, angle)
+        # Sighting from hips to ball kept dtlLooksVsFeet near true 3.4 deg, avoiding the 11 deg ankle twist
+        self.assertAlmostEqual(report["dtlLooksVsFeet"], 3.4, delta=2.5)
+
     def test_refused(self):
         fl, dl = lens(self.ses["cameras"]["face"]), lens(self.ses["cameras"]["dtl"])
         with self.assertRaises(ValueError):

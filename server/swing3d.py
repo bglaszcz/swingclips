@@ -29,7 +29,7 @@ MOVED_PX = 5.0
 # either picture), while a camera that really moved missed by 43-50 px.
 MOVED_PX_BODY = 12.0
 # In the 3D key (app.pass_3d): changing how "moved" is judged checks the swings again.
-CHECK_VERSION = 3
+CHECK_VERSION = 4
 # The ball's place in a picture (share of its width, height) moved more than this: that camera moved.
 BALL_MOVED = (0.04, 0.015)
 BALL_SWINGS = 5
@@ -107,7 +107,7 @@ def calib_health(all_sessions: list[dict], records: dict) -> list[dict]:
     """Health of the latest calibration session and the one before it, over their swings with 3D, from
     the swing records alone (the 3D pass stores body3d.setupMissing and addressError; /api/calib is
     polled every 1.5 s, so no 3D files are read here and nothing is written): how many swings were
-    checked (worked out with CHECK_VERSION 3 or later; the rest are "pending" until the 3D pass redoes
+    checked (worked out with CHECK_VERSION 4 or later; the rest are "pending" until the 3D pass redoes
     them, and don't count as healthy), how many lost a joint at setup and which, and the setup
     reprojection error (median of the swings' medians and of their 90th percentiles)."""
     out = []
