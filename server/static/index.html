@@ -3028,11 +3028,26 @@ function handPathEnd(p) {
   return f.length - 1;
 }
 
-/** The hands' path from address to P8 (shaft parallel in the follow-through) at the latest: back in yellow,
- * down and through in pink. Past P8 the hands wrap behind the head and the path only clutters. */
+/** Where the back part of the hand path ends: the hands' own top, their highest point from P4 to impact. P4
+ * is where the club turns (half way to the clubhead's turn), and the hands keep rising after it (median
+ * ~57 ms, up to 29 px on the owner's swings, Oct 19): split there, the back line stopped short of the
+ * hands at the top and the down line drew the rest of the way up. */
+function handTopIndex(p, path, top, end) {
+  const impact = positionIndex("p7", p) ?? end;
+  let best = top;
+  for (let i = top; i <= Math.min(impact, end); i++) {
+    if (path[i] && (best == null || !path[best] || path[i].y < path[best].y)) best = i;
+  }
+  return best;
+}
+
+/** The hands' path from address to P8 (shaft parallel in the follow-through) at the latest: back in yellow
+ * up to the hands' top, down and through in pink. Past P8 the hands wrap behind the head and the path only
+ * clutters. */
 function drawHandPath(ctx, r, lineWidth, p = pose) {
   const path = handPath(p), top = positionIndex("p4", p), p8 = positionIndex("p8", p);
-  const from = positionIndex("p1", p) ?? 0, end = Math.min(handPathEnd(p), p8 ?? Infinity), split = Math.min(top ?? end, end);
+  const from = positionIndex("p1", p) ?? 0, end = Math.min(handPathEnd(p), p8 ?? Infinity);
+  const split = Math.min(top == null ? end : handTopIndex(p, path, top, end), end);
   ctx.save();
   ctx.lineWidth = lineWidth;
   ctx.lineJoin = ctx.lineCap = "round";
