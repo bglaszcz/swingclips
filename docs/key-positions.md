@@ -420,24 +420,26 @@ Blast):
    `clubheadTurn`).
 3. **Impact**: the first frame the ball leaves address (`found.tempo` downswing ends at impact).
 
-The owner's key positions (takeaway, P4) serve coach labeling, sitting ~17 ms after first movement and
-midway between hands starting down and clubhead turn. For tempo, `found.tempo` uses the timing systems'
-own endpoints.
+The owner's key positions (takeaway, P4) stay as they are, tuned to the owner's labels (the takeaway is
+the onset plus `TUNING.onsetLead`). For tempo, `found.tempo` uses the timing systems' own endpoints.
 
 ### Waggle filtering for first movement (`tempoStart`)
 `pose.py`'s `clubOnset` watches the address crop and walks back to the baseline. On swings with subtle
-address waggles, grounding taps, or forward presses, `clubOnset` fires on the waggle (median 52 ms early
-across 40 visual ground-truth swings, reaching 150 ms early on swings with address adjustments).
+address waggles, grounding taps, or forward presses, `clubOnset` fires on the waggle (33-123 ms before the
+clubhead's first movement on 5 swings checked by eye, median 104).
 `phases.js`'s `tempoStart` uses what the pose file already holds (`frames[i].clubhead`, `onset`, and the
 shaft takeaway boundary) to find the address position and walk backward to the last frame the clubhead was
 still at rest (within 0.008 picture units) before its continuous takeaway departure.
 
-Across 40 frame-by-frame visual ground truth swings (240 fps):
-- `clubOnset` alone was early on 100% of swings (median error 52.0 ms, mean 57.4 ms, p90 87.8 ms).
-- `tempoStart` dropped median error to **16.6 ms** (mean 22.2 ms, p90 50.4 ms), winning on 33 of 40 swings
-  (1 worse, 6 tied; Wilcoxon $p = 3.7 \times 10^{-7}$).
-- Backswing median: 0.945 s (eye ground truth: 0.928 s; raw onset: 0.972 s).
-- Tempo ratio: median **3.11 : 1** (eye ground truth: **3.06 : 1**; raw onset: **3.26 : 1**).
+How it was checked (round 64): Gemini's 40 "frame by frame" moments came from a script on the same pose
+data (`gemini-data\round64\measure_start_eye.py`: the shaft 6 degrees off its address angle, then back to
+rest), not from looking, so its scores (`clubOnset` 52 ms early, `tempoStart` 16.6 ms off, 33 better of 40)
+are against a rule, and that rule runs late. Claude then looked at 5 of them frame by frame (the clubhead
+against a fixed line, every frame): the clubhead's first movement came 33-123 ms after `clubOnset`
+(median 104), and `tempoStart` was off by 2, 7, 12, 33 and 34 ms (median 12); the script's moments were
+25-40 ms late. On one of the 5 (a gap wedge) `tempoStart` stayed on the onset, 33 ms early. The clubhead
+model's position wobbles ~0.005-0.01 at address, about the size of `TEMPO_START_DIST`, so the rule can stop
+on a wobble.
 
 ### Large-scale results (N=502 normal face-on swings)
 Scored across all 502 available normal face-on swings:
@@ -457,7 +459,7 @@ Scored across all 502 available normal face-on swings:
 | **Sand Wedge (SW)** | 4 | 0.793 s | 0.756 s | 0.281 s | 2.80 : 1 | **2.63 : 1** | 2 (50.0%) |
 | **All clubs** | **502** | **0.949 s** | **0.920 s** | **0.296 s** | **3.24 : 1** | **3.12 : 1** | **89 (17.7%)** |
 
-Across all 502 swings, the waggle filter moved the overall tempo ratio from **3.24 : 1** to **3.12 : 1**,
-matching the classic tour reference standard (~3.0 : 1; Tour Tempo 3:1, Garmin 3.0, Blast 2.5-3.1, TPI 3.2).
+Across all 502 swings, the waggle filter moved the overall tempo ratio from **3.24 : 1** to **3.12 : 1**
+(tour references: Tour Tempo 3:1, Garmin 3.0, Blast 2.5-3.1, TPI 3.2).
 89 swings (17.7%) changed ratio by more than 0.2, and 303 swings (60.4%) changed by more than 0.1.
 

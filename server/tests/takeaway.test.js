@@ -55,6 +55,17 @@ test("a down-the-line clip on its own: the bare onset (onsetLeadDtl, onsetPullDt
   assert.ok(face.takeaway.t > dtl.takeaway.t);  // face-on keeps its lead
 });
 
+test("tempo.start: an onset set off early by an address waggle doesn't pull the start back", () => {
+  // Round 64: on 40 swings the onset came 13-150 ms before the clubhead's first movement into the
+  // backswing (by eye on 5 of them: 33-123 ms), on a waggle or the clubhead settling at address.
+  const start = clubOnset => Phases.detect(doc.frames, 1080 / 1920, "left", null, doc.impact, { clubOnset, angle: "face" }).tempo.start;
+  const real = start(doc.clubOnset);
+  for (const early of [0.04, 0.12, 0.2]) {
+    const got = start(doc.clubOnset - early);
+    assert.ok(Math.abs(got - real) <= 0.0045, `${early} s early: ${got} vs ${real}`);   // the same frame, give or take one
+  }
+});
+
 test("tempo.start filters pre-swing waggle before the continuous backswing departure", () => {
   const p = Phases.detect(doc.frames, 1080 / 1920, "left", null, doc.impact, { clubOnset: doc.clubOnset });
   assert.ok(p.tempo);
