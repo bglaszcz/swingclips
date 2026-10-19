@@ -29,6 +29,17 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
 
 ## What it's for
 
+0. **The skeleton on the review page** (Oct 19): a clip with a night pose shows the night pass's skeleton
+   (RTMW-l: whole body, hands and feet; its joints agree better between the two phones, a median 2.8 px
+   against the server's 5.8 px). **Show > Server skeleton** draws the server's beside it, dashed. The
+   numbers still come from the server's model: on the 93 labeled clips the night body points give the
+   same takeaway, P2, P6, impact and P8 but P3 ~10 ms late (29% within a frame against 79% face-on), so
+   the key-position rules need tuning for it first. **`SWINGCLIPS_NIGHT_MAIN=on`** (off by default) makes
+   the night pass the main analysis once a clip has one: `night.merge` puts its body points into the
+   server's pose file (club, clubhead, onset and ball stay the server's) as `night/<clip>.main.json.gz`, the
+   swing numbers, the 3D and the page's `/api/pose` use it, and every such swing is worked out again (its
+   pose stamp gets `+night`). To switch on after the tuning (Gemini round 65).
+
 1. **Where the two disagree, a label teaches most.** The swing worker works out the key positions
    from the night files (the page's own JavaScript, as for the server's pose files) and keeps how far
    each is from the server's, per angle (`night/compare.json`). The clubhead onset (the takeaway's

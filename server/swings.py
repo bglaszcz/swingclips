@@ -61,7 +61,9 @@ def pose_input(clip: dict, pose_path: Path) -> dict:
     return {"name": clip["name"], "strike": clip["strike"], "angle": clip["angle"],
             "rotation": data.get("rotation", 0), "frames": data["frames"],
             "impact": data.get("impact"), "ball": data.get("ball"), "drill": clip.get("drill"),
-            "clubOnset": data.get("clubOnset")}
+            "clubOnset": data.get("clubOnset"),
+            # Whose body points (pose.py's "model", or the night pass's when merged in: night.merge).
+            "bodyModel": data.get("bodyModel") or data.get("model")}
 
 
 def load(path: Path) -> dict:

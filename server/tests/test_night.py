@@ -71,6 +71,44 @@ class NightTest(unittest.TestCase):
         self.assertIsNone(night.worst(night.differences(None, theirs)))
 
 
+class NightMainTest(unittest.TestCase):
+    """SWINGCLIPS_NIGHT_MAIN: the numbers from the night pass's body points (night.merge)."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(prefix="swingclips-nightmain-"))
+        self.server = {"model": "rtmpose-m-256x192", "clubOnset": 0.85, "ball": {"x": 0.5, "y": 0.8},
+                       "frames": [{"t": 0.0, "lm": [0.1] * 99, "clubhead": [0.5, 0.5, 0.9], "club": [90, 0.8]},
+                                  {"t": 0.004167, "lm": [0.2] * 99, "clubhead": [0.6, 0.5, 0.9], "club": [91, 0.8]},
+                                  {"t": 0.008333, "lm": [0.3] * 99, "clubhead": None, "club": None}]}
+        self.night = {"night": {"version": night.VERSION}, "model": "rtmw-l-384x288", "clubOnset": None,
+                      "frames": [{"t": 0.0, "lm": [0.7] * 99, "clubhead": [0.1, 0.1, 0.5]},
+                                 {"t": 0.0042, "lm": [0.8] * 99, "clubhead": None}]}
+
+    def test_merge_takes_the_body_from_the_night_and_the_club_from_the_server(self):
+        m = night.merge(self.server, self.night)
+        self.assertEqual([f["lm"][0] for f in m["frames"]], [0.7, 0.8, 0.3])   # the third has no night frame
+        self.assertEqual([f["clubhead"] for f in m["frames"]], [f["clubhead"] for f in self.server["frames"]])
+        self.assertEqual((m["clubOnset"], m["ball"], m["bodyModel"], m["nightFrames"]), (0.85, {"x": 0.5, "y": 0.8}, "rtmw-l-384x288", 2))
+        self.assertEqual(self.server["frames"][0]["lm"][0], 0.1)                # the server's doc is left as it was
+
+    def test_analysis_file_only_with_the_setting(self):
+        name = "swing_face_1920x1080_240fps_1790000000_2000ms.mp4"
+        base = self.dir / "pose.json.gz"
+        base.write_bytes(gzip.compress(json.dumps(self.server).encode()))
+        nd = self.dir / "night"
+        nd.mkdir()
+        night.night_file(nd, name).write_bytes(gzip.compress(json.dumps(self.night, separators=(",", ":")).encode()))
+        with mock.patch.object(app, "pose_file", lambda n: base), mock.patch.object(app, "NIGHT_DIR", nd):
+            with mock.patch.object(app, "NIGHT_MAIN", False):
+                self.assertEqual(app.analysis_pose_file(name), base)
+            with mock.patch.object(app, "NIGHT_MAIN", True):
+                got = app.analysis_pose_file(name)
+                self.assertEqual(got, night.main_file(nd, name))
+                doc = json.loads(gzip.decompress(got.read_bytes()))
+                self.assertEqual(doc["frames"][0]["lm"][0], 0.7)
+                self.assertEqual(app.analysis_pose_file(name), got)              # made once, kept
+
+
 class DeepAgainTest(unittest.TestCase):
     def test_new_club_model(self):
         """A clip deep-analyzed with another club model needs the deep pass again; one never

@@ -1571,7 +1571,7 @@
         <canvas id="overlay2"></canvas>
       </div>
     </div>
-    <div id="night-legend" class="night-legend hint" hidden>Dashed: night pass (bigger model on the gaming PC). Solid: the server's.</div>
+    <div id="night-legend" class="night-legend hint" hidden>Solid: night pass (bigger model on the gaming PC). Dashed: the server's.</div>
     <div class="transport">
       <div id="scrub"><div id="marks"></div><input type="range" id="seek" min="0" max="1000" step="1" value="0" aria-label="Position in the clip"><canvas id="scrub-trace" height="20" hidden></canvas></div>
     <div class="controls">
@@ -1590,7 +1590,7 @@
           <button id="headbox" title="Show where the head was at address">Head</button>
           <button id="impact" title="Show pelvis vs ball at impact (face-on)">Impact</button>
           <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane <kbd>P</kbd></button>
-          <button id="night" title="Show the night pass skeleton (RTMW-l on the gaming PC)">Night pass</button>
+          <button id="night" title="Also show the server's own skeleton, dashed, beside the night pass's">Server skeleton</button>
         </span>
       </span>
       <button id="seq" title="Who moves first: hips, chest, lead arm and club speed, following the frames (3D swings)">Swing order</button>
@@ -3368,11 +3368,7 @@ function draw(t) {
   if (pose.angle === "dtl" && positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, pose);
   // A down-the-line clip on its own has its own numbers.
   const dtlHere = pose.angle === "dtl" && dtlMetrics;
-  if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !((metrics || dtlHere) && anglesOn()));
-  if (overlays.night && nightPose && frame) {
-    const nf = frameAtTime(frame.t, nightPose);
-    if (nf && nf.lm) drawPose(ctx, nf, r, false, nightPose);
-  }
+  drawSkeletons(ctx, frame, r, !((metrics || dtlHere) && anglesOn()), pose, nightPose);
   if (metrics && anglesOn()) drawAngles(ctx, metrics.values[i], r);
   if (dtlHere && anglesOn()) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
   if (metrics && overlays.headbox && frame.lm) drawHead(ctx, frame.lm, r, lineWidth);
@@ -3392,11 +3388,7 @@ function draw2(t) {
   if (positions.length && overlays.clubarc) drawClubArc(ctx, r, lineWidth, p);
   if (positions.length && overlays.handpath) drawHandPath(ctx, r, lineWidth, p);
   if (positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, p);
-  if (showSkeleton && frame.lm) drawPose(ctx, frame, r, !numbers, p);
-  if (overlays.night && partnerNightPose && frame) {
-    const nf = frameAtTime(frame.t, partnerNightPose);
-    if (nf && nf.lm) drawPose(ctx, nf, r, false, partnerNightPose);
-  }
+  drawSkeletons(ctx, frame, r, !numbers, p, partnerNightPose);
   if (numbers) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
   if (window.Labels) Labels.drawOn(ctx, r, "dtl", i);
 }
@@ -3525,7 +3517,7 @@ function setOverlay(key, on) {
   document.getElementById(key).classList.toggle("on", on);
   if (key === "seq") viewer.classList.toggle("no-seq", !on);
   try { localStorage.setItem("overlay-" + key, on ? "on" : "off"); } catch {}
-  if (key === "night") loadNightPoses();
+  if (key === "night") updateNightLegend();
   redraw();
 }
 
@@ -3553,6 +3545,24 @@ async function fetchPose(name, v) {
   }
   return { frames: data.frames, reference, impact: data.impact ?? null, clubLength: data.clubLength ?? null,
            ball: data.ball ?? null, clubOnset: data.clubOnset ?? null, video: v, angle: c.angle || "face" };
+}
+
+/**
+ * The skeleton for a frame of clip p: the night pass's (RTMW-l, the bigger whole-body model the gaming PC
+ * runs over every clip) when the clip has one, as the main solid skeleton, else the server's own. With
+ * "Server skeleton" on, the server's is drawn dashed beside the night one. The numbers still come from the
+ * server's model until the night pass becomes the main analysis (Gemini round 65).
+ */
+function drawSkeletons(ctx, frame, r, withLabel, p, night) {
+  const nf = night && frame ? frameAtTime(frame.t, night) : null;
+  const nightHere = nf && nf.lm;
+  if (showSkeleton) {
+    if (nightHere) drawPose(ctx, nf, r, withLabel, night.asMain || (night.asMain = Object.assign({}, night, { isNight: false })));
+    else if (frame && frame.lm) drawPose(ctx, frame, r, withLabel, p);
+  }
+  if (overlays.night && nightHere && frame && frame.lm) {
+    drawPose(ctx, frame, r, false, p.asDashed && p.asDashed.frames === p.frames ? p.asDashed : (p.asDashed = Object.assign({}, p, { isNight: true })));
+  }
 }
 
 const nightPoseCache = window.nightPoseCache = new Map();
@@ -3602,32 +3612,22 @@ function updateNightLegend() {
   const hasNight = Boolean(nightPose || partnerNightPose);
   el.hidden = !overlays.night;
   el.textContent = hasNight
-    ? "Dashed: night pass (bigger model on the gaming PC). Solid: the server's."
-    : "Night pass: not analyzed by the night worker yet.";
+    ? "Solid: night pass (bigger model on the gaming PC). Dashed: the server's (the numbers use it for now)."
+    : "No night pass for this clip yet: the skeleton is the server's.";
 }
 
 function updateNightButton() {
   const btn = document.getElementById("night");
   if (!btn) return;
-  if (!overlays.night) {
-    btn.title = "Show the night pass skeleton (RTMW-l on the gaming PC)";
-    return;
-  }
   const hasNight = Boolean(nightPose || partnerNightPose);
   btn.title = hasNight
-    ? "Show the night pass skeleton (RTMW-l on the gaming PC)"
-    : "Not analyzed by the night worker yet";
+    ? "Also show the server's own skeleton, dashed, beside the night pass's"
+    : "No night pass for this clip yet: the skeleton is already the server's";
 }
 
 async function loadNightPoses() {
-  if (!overlays.night) {
-    nightPose = null;
-    partnerNightPose = null;
-    updateNightButton();
-    updateNightLegend();
-    redraw();
-    return;
-  }
+  nightPose = null;
+  partnerNightPose = null;
   const myClip = current;
   const partnerClip = partner?.name;
   const [res1, res2] = await Promise.all([
@@ -3654,7 +3654,7 @@ async function loadPose(name) {
   pose = p;
   updateSkeletonButton();
   syncPartner();
-  if (overlays.night) loadNightPoses();
+  loadNightPoses();   // the skeleton is the night pass's when the clip has one
   redraw();
   buildPositions(name);
 }
@@ -3668,7 +3668,7 @@ async function loadPartnerPose() {
   partner.pose = p;
   // Now in step by the ball, if both saw it; and the cards get this angle too.
   syncPartner();
-  if (overlays.night) loadNightPoses();
+  loadNightPoses();
   draw2(video2.currentTime);
   if (pose) buildPositions(current);
 }

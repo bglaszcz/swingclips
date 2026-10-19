@@ -9,7 +9,14 @@ first). They're also the start of training data for the next club and body model
 
 Files live in the "night" folder beside the pose folder: <clip>.json.gz like a pose file, with
 "night": {"version": VERSION, ...} near the start, and compare.json (one entry per swing).
+
+With SWINGCLIPS_NIGHT_MAIN=on (app.py), the numbers are worked out from the night pass instead, once a
+clip has one: merge() puts its body points into the server's pose file (the club, clubhead, onset and
+ball stay the server's: the night worker ran an older club model and finds no onset), saved as
+<clip>.main.json.gz beside the night file. Off by default until the key positions are tuned for the
+night pass's body model (P3 came ~10 ms late with the RTMPose-m rules, Oct 19).
 """
+import bisect
 import gzip
 import json
 import re
@@ -26,6 +33,35 @@ POSITIONS = ("p1", "takeaway", "p2", "p3", "p4", "p5", "p6", "p7", "p8")
 
 def night_file(night_dir: Path, name: str) -> Path:
     return night_dir / (name + ".json.gz")
+
+
+def main_file(night_dir: Path, name: str) -> Path:
+    """The merged pose file the numbers come from with SWINGCLIPS_NIGHT_MAIN on (merge)."""
+    return night_dir / (name + ".main.json.gz")
+
+
+# A night frame is the server's frame within this much (s): both decode the same video, every frame.
+MERGE_SLACK_S = 0.002
+
+
+def merge(server: dict, night: dict) -> dict:
+    """The server's pose file with each frame's body points ("lm") from the night pass's frame at the same
+    time (the server's where the night one has none): the club, clubhead, clubRay, onset, ball and impact
+    stay the server's. "bodyModel" says whose body points they are, "night" which night file."""
+    ts = [f["t"] for f in night.get("frames") or []]
+    out = dict(server, frames=[], bodyModel=night.get("model"), night=night.get("night"))
+    replaced = 0
+    for f in server.get("frames") or []:
+        g = dict(f)
+        i = bisect.bisect_left(ts, f["t"])
+        near = [j for j in (i - 1, i) if 0 <= j < len(ts)]
+        j = min(near, key=lambda j: abs(ts[j] - f["t"])) if near else None
+        if j is not None and abs(ts[j] - f["t"]) <= MERGE_SLACK_S and night["frames"][j].get("lm"):
+            g["lm"] = night["frames"][j]["lm"]
+            replaced += 1
+        out["frames"].append(g)
+    out["nightFrames"] = replaced
+    return out
 
 
 def version_of(path: Path) -> int | None:

@@ -348,7 +348,8 @@ def pose_made(name: str) -> str | None:
     "rtmpose-m-256x192+ball3+deep". Quality records, swing numbers and 3D keep it, and are worked out
     again when it changes."""
     stamp = _pose_stamp(name)
-    return stamp and f"{stamp[0]}+ball{stamp[1]}" + ("+deep" if stamp[2] else "") + ("+onset" if stamp[3] else "") + (f"+hip{stamp[4]}" if stamp[4] else "")
+    return stamp and f"{stamp[0]}+ball{stamp[1]}" + ("+deep" if stamp[2] else "") + ("+onset" if stamp[3] else "") + (f"+hip{stamp[4]}" if stamp[4] else "") \
+        + (f"+night{night.VERSION}" if night_main(name) else "")
 
 
 def is_deep(name: str) -> bool:
@@ -725,8 +726,8 @@ def swing_worker(stop: threading.Event):
                 if not swing_record_stale(old, c, other, made_by):
                     continue
                 try:
-                    record = summarizer.summarize(swings.pose_input(c, pose_file(c["name"])),
-                                                  swings.pose_input(other, pose_file(other["name"])) if other else None)
+                    record = summarizer.summarize(swings.pose_input(c, analysis_pose_file(c["name"])),
+                                                  swings.pose_input(other, analysis_pose_file(other["name"])) if other else None)
                 except FileNotFoundError:
                     continue  # just deleted
                 except Exception:
@@ -773,6 +774,38 @@ def swing_worker(stop: threading.Event):
 
 # The night worker's files (night.py), and each swing's key positions by the server against by them.
 NIGHT_DIR = Path(os.environ.get("SWINGCLIPS_NIGHT", CLIPS_DIR.parent / "night"))
+# The numbers from the night pass's body points once a clip has one (night.merge): off until the key
+# positions are tuned for its body model (Gemini round 65).
+NIGHT_MAIN = os.environ.get("SWINGCLIPS_NIGHT_MAIN", "off").strip().lower() == "on"
+_night_merge_lock = threading.Lock()
+
+
+def night_main(name: str) -> Path | None:
+    """The night file the numbers come from for this clip (NIGHT_MAIN on, a current night pose), or None."""
+    if not NIGHT_MAIN:
+        return None
+    f = night.night_file(NIGHT_DIR, name)
+    return f if f.is_file() and night.version_of(f) == night.VERSION else None
+
+
+def analysis_pose_file(name: str) -> Path:
+    """The pose file the numbers are worked out from: the server's, or with NIGHT_MAIN and a night pose,
+    the two merged (night.merge), made again when either changes."""
+    base, nf = pose_file(name), night_main(name)
+    if nf is None or not base.is_file():
+        return base
+    out = night.main_file(NIGHT_DIR, name)
+    try:
+        if out.stat().st_mtime_ns >= max(base.stat().st_mtime_ns, nf.stat().st_mtime_ns):
+            return out
+    except OSError:
+        pass
+    with _night_merge_lock:
+        doc = night.merge(json.loads(gzip.decompress(base.read_bytes())), json.loads(gzip.decompress(nf.read_bytes())))
+        tmp = out.with_suffix(".tmp")
+        tmp.write_bytes(gzip.compress(json.dumps(doc, separators=(",", ":")).encode()))
+        tmp.replace(out)
+    return out
 NIGHT_COMPARE = NIGHT_DIR / "compare.json"
 night_table: dict = {}
 # Compared at most this many swings per round of the swing worker, so new swings aren't held up.
@@ -958,8 +991,8 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
             try:
                 other = clips[c["partner"]]
                 doc, numbers = swing3d.build(
-                    swings.pose_input(c, pose_file(name)), swings.pose_input(other, pose_file(other["name"])),
-                    swing3d.read_pose(pose_file(name)), swing3d.read_pose(pose_file(other["name"])),
+                    swings.pose_input(c, analysis_pose_file(name)), swings.pose_input(other, analysis_pose_file(other["name"])),
+                    swing3d.read_pose(analysis_pose_file(name)), swing3d.read_pose(analysis_pose_file(other["name"])),
                     session, summarizer, shot.get("club"), swings.LEAD_SIDE)
                 why_not = swing3d.moved(doc, session) or swing3d.ball_moved(
                     ball_ref(session), swing3d.read_pose(pose_file(name)).get("ball"),
@@ -3135,7 +3168,8 @@ def get_pose(name: str):
     state = pose_state(name)
     if state != "done":
         raise HTTPException(404, f"Pose is {state}")
-    return FileResponse(pose_file(name), media_type="application/json", headers={"Content-Encoding": "gzip"})
+    # The one the numbers come from (analysis_pose_file), so the page's own work matches the server's.
+    return FileResponse(analysis_pose_file(name), media_type="application/json", headers={"Content-Encoding": "gzip"})
 
 
 # The clubhead-motion trace for labeling the takeaway (labels.js): crops kept for the last few clips,
