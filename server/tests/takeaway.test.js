@@ -54,3 +54,12 @@ test("a down-the-line clip on its own: the bare onset (onsetLeadDtl, onsetPullDt
   const face = Phases.detect(doc.frames, 1080 / 1920, "left", null, doc.impact, { clubOnset: onset, angle: "face" });
   assert.ok(face.takeaway.t > dtl.takeaway.t);  // face-on keeps its lead
 });
+
+test("tempo.start filters pre-swing waggle before the continuous backswing departure", () => {
+  const p = Phases.detect(doc.frames, 1080 / 1920, "left", null, doc.impact, { clubOnset: doc.clubOnset });
+  assert.ok(p.tempo);
+  assert.equal(typeof p.tempo.start, "number");
+  assert.ok(p.tempo.start >= doc.clubOnset);
+  assert.ok(p.tempo.start <= p.tempo.top);
+});
+

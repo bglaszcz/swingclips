@@ -63,6 +63,7 @@
   // going back is the way it turned TURN_BACK seconds before the top; the turn is the last frame going
   // back before TURN_RUN frames in a row coming down, within TURN_WINDOW of the top.
   const TURN_SPAN = 2, TURN_RUN = 4, TURN_BACK = [0.35, 0.15], TURN_WINDOW = [0.15, 0.10], TURN_CONF = 0.25;
+  const TEMPO_START_DIST = 0.008;
   // Where handsSlowest looks, s round the speed rule's top: it runs late, so mostly before it.
   const TOP_SLOW_WINDOW = [0.2, 0.03];
   const TORSO_MIN_VISIBILITY = 0.25;
@@ -187,6 +188,59 @@
       }
     }
     return null;
+  }
+
+  /**
+   * The clubhead's first movement into the backswing for tempo, filtering out pre-swing waggles and
+   * ground taps (clip seconds). When the clubhead is tracked at address, finds the last frame it was
+   * at rest within TEMPO_START_DIST of its address position before moving continuously into the backswing.
+   */
+  function tempoStart(frames, onset, takeaway) {
+    if (!frames || !frames.length) return onset != null ? onset : takeaway;
+    if (takeaway == null) return onset != null ? Math.max(onset, frames[0].t) : frames[0].t;
+
+    // Address window: the quiet stretch before takeaway (0.35s to 0.05s before takeaway).
+    const addr = [];
+    for (const f of frames) {
+      if (f.t < takeaway - 0.35) continue;
+      if (f.t > takeaway - 0.05) break;
+      const ch = f.clubhead;
+      if (ch && ch[0] != null && ch[1] != null && (ch.length <= 2 || ch[2] >= 0.2)) {
+        addr.push(ch);
+      }
+    }
+
+    if (addr.length >= 3) {
+      const xs = addr.map(c => c[0]).sort((a, b) => a - b);
+      const ys = addr.map(c => c[1]).sort((a, b) => a - b);
+      const ax = xs[xs.length >> 1], ay = ys[ys.length >> 1];
+
+      // Walk backward from takeaway down to onset (or takeaway - 0.5s).
+      const floor = onset != null ? onset : takeaway - 0.5;
+      let lastAtAddr = -1;
+      for (let i = frames.length - 1; i >= 0; i--) {
+        const f = frames[i];
+        if (f.t > takeaway) continue;
+        if (f.t < floor) break;
+        const ch = f.clubhead;
+        if (ch && ch[0] != null && ch[1] != null && (ch.length <= 2 || ch[2] >= 0.2)) {
+          const d = Math.hypot(ch[0] - ax, ch[1] - ay);
+          if (d <= TEMPO_START_DIST) {
+            lastAtAddr = i;
+            break;
+          }
+        }
+      }
+
+      if (lastAtAddr >= 0) {
+        const leaveIdx = Math.min(frames.length - 1, lastAtAddr + 1);
+        let tLeave = frames[leaveIdx].t;
+        if (onset != null) tLeave = Math.max(onset, tLeave);
+        return Math.max(tLeave, frames[0].t);
+      }
+    }
+
+    return onset != null ? Math.max(onset, frames[0].t) : takeaway;
   }
 
   /**
@@ -604,6 +658,7 @@
     const restEnd = shaftRestEnd(restFrames, until);
     const moved = restEnd >= 0 ? shaftTakeaway(restFrames, restEnd, until) : -1;
     let takeaway = moved >= 0 ? frames[moved].t : restEnd >= 0 ? frames[restEnd].t : ms[address].t;
+    const shaftTakeawayT = takeaway;
     const onset = options.clubOnset;
     let fromClubhead = false;
     if (onset != null) {
@@ -626,7 +681,8 @@
     // Without the club model's clubhead: the shaft rule's takeaway and P4.
     const p4 = found.find(p => p.key === "p4");
     // (Never before the clip's first frame: a clip that starts mid-swing has a backswing at least this long.)
-    found.tempo = { start: onset != null ? Math.max(onset, frames[0].t) : takeaway, top: clubTop != null ? clubTop : p4 ? p4.t : null,
+    const tStart = tempoStart(frames, onset, shaftTakeawayT);
+    found.tempo = { start: tStart, top: clubTop != null ? clubTop : p4 ? p4.t : null,
                     fromClubhead: onset != null, topFromClubhead: clubTop != null };
     if (pumps.length) {
       found.drill = "pump";
