@@ -52,7 +52,7 @@
   }
 
   function clampNeed(n) {
-    if (!finite(Number(n))) return DEFAULT_NEED;
+    if (n == null || n === "" || typeof n === "boolean" || !finite(Number(n))) return DEFAULT_NEED;
     return Math.max(MIN_NEED, Math.min(MAX_NEED, Math.round(Number(n))));
   }
 

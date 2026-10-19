@@ -17,9 +17,17 @@
       require("./games.js"),
       require("./drillsets.js"),
       require("./programhistory.js"),
-      require("./sincelast.js")
+      require("./sincelast.js"),
+      require("./weekplan.js"),
+      require("./goal.js"),
+      require("./graduate.js")
     );
   } else {
+    if (typeof document !== "undefined" && !root.SwingWeekPlan && document.head) {
+      const s = document.createElement("script");
+      s.src = "/static/weekplan.js";
+      document.head.appendChild(s);
+    }
     root.SwingWeek = factory(
       root.SwingSummary,
       root.SwingCoach,
@@ -31,7 +39,10 @@
       root.SwingGames,
       root.SwingDrillSets,
       root.SwingProgramHistory,
-      root.SwingSinceLast
+      root.SwingSinceLast,
+      root.SwingWeekPlan,
+      root.SwingGoal,
+      root.SwingGraduate
     );
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function (
@@ -45,7 +56,10 @@
   Games,
   DrillSets,
   ProgramHistory,
-  SinceLast
+  SinceLast,
+  WeekPlan,
+  Goal,
+  Graduate
 ) {
   "use strict";
 
@@ -299,18 +313,23 @@
     });
 
     // Drill sets
+    let allDrillSets = [];
     let drillSetsThisWeek = [];
     if (Array.isArray(data.drillSets)) {
+      allDrillSets = data.drillSets;
       drillSetsThisWeek = data.drillSets.filter(d => {
         const t = d.timestamp || (d.date ? new Date(d.date).getTime() : 0);
         return t >= startMs && t < endMs;
       });
     } else if (DrillSets && Array.isArray(data.clips)) {
       try {
-        const sets = DrillSets.sets(data.clips, data.swings || {});
-        drillSetsThisWeek = sets.filter(d => d.timestamp >= startMs && d.timestamp < endMs);
+        allDrillSets = DrillSets.sets(data.clips, data.swings || {});
+        drillSetsThisWeek = allDrillSets.filter(d => d.timestamp >= startMs && d.timestamp < endMs);
       } catch {}
     }
+
+    const journal = data.journal || {};
+    const focus = journal.focus || data.focus || null;
 
     const sections = [];
 
@@ -363,6 +382,53 @@
         verdText = v ? v.text : "";
       }
       practiceLines.push(`Drill: ${dName}${cStr}${verdText ? " – " + verdText : ""}`);
+    }
+
+    const WP = WeekPlan || (typeof globalThis !== "undefined" && globalThis.SwingWeekPlan);
+    const GoalMod = Goal || (typeof globalThis !== "undefined" && globalThis.SwingGoal);
+    const GradMod = Graduate || (typeof globalThis !== "undefined" && globalThis.SwingGraduate);
+    if (WP && typeof WP.build === "function" && (practiceLines.length > 0 || gamesThisWeek.length > 0)) {
+      let need = data.need;
+      if (need == null) {
+        try {
+          const savedNeed = typeof localStorage !== "undefined" && localStorage ? localStorage.getItem("week-plan-need") : null;
+          if (savedNeed != null && savedNeed !== "") need = Number(savedNeed);
+        } catch {}
+      }
+      let held = data.held;
+      if (held === undefined && focus && focus.move && GoalMod && GradMod) {
+        const fScope = focus.scope || focus.club || "*";
+        const matchFocusClub = r => fScope === "*"
+          ? (GoodShots && GoodShots.groupOf ? !!GoodShots.groupOf(r.club) : true)
+          : (fScope === "irons" || fScope === "woods"
+              ? !!(GoodShots && GoodShots.groupOf && GoodShots.groupOf(r.club) === fScope)
+              : r.club === fScope);
+        const goalSessions = allSessions
+          .filter(s => s.start < endMs)
+          .sort((a, b) => a.start - b.start)
+          .map(s => ({
+            key: s.key,
+            start: s.start,
+            rows: (s.rows || []).filter(r => !r.drill && matchFocusClub(r)),
+          }))
+          .filter(s => s.rows.length > 0);
+        held = GradMod.check(GoalMod.progress(goalSessions, focus));
+      }
+      const wpNow = finite(data.now) ? data.now : (Date.now() >= startMs && Date.now() < endMs ? Date.now() : endMs - 1000);
+      const wp = WP.build({
+        now: wpNow,
+        sessions: allSessions,
+        need,
+        focus,
+        drillId: data.drillId || (Coach && Coach.drillId),
+        drillSets: allDrillSets,
+        verdict: data.verdict || (DrillSets && DrillSets.verdict),
+        games: allGames,
+        held,
+        words: data.words || (GradMod && GradMod.words),
+      });
+      const wpParts = [wp.line, ...(wp.items || []).map(i => i.text).filter(Boolean)];
+      practiceLines.push(`This week: ${wpParts.join(" · ")}`);
     }
 
     if (practiceLines.length > 0) {
@@ -502,8 +568,6 @@
     // ==========================================
     // (journal focus): its median this week vs last week vs the 4 weeks before,
     // with the good-shot range if there is one, and the coach.js swing thought for it.
-    const journal = data.journal || {};
-    const focus = journal.focus || data.focus || null;
     if (focus && focus.move) {
       const moveKey = focus.move;
       const aim = focus.aim || "less";
