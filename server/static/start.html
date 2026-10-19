@@ -180,6 +180,20 @@
   .since-last-details summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: 12px; user-select: none; }
   .since-last-details[open] summary { margin-bottom: 6px; }
   .since-last-ok-list { display: grid; gap: 6px; margin-top: 4px; }
+  .wp-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; display: grid; gap: 8px; }
+  .wp-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 6px; font-size: 14px; line-height: 1.4; }
+  .wp-title { font-weight: 700; color: var(--text); }
+  .wp-sep { color: var(--muted); }
+  .wp-line { color: var(--text); font-weight: 600; }
+  .wp-items { display: grid; gap: 6px; }
+  .wp-row { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.4; color: var(--text); }
+  .wp-mark { flex: none; width: 16px; text-align: center; font-weight: 700; color: var(--muted); }
+  .wp-row.wp-done .wp-mark { color: var(--accent); }
+  .wp-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .wp-foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; padding-top: 6px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .wp-last { font-weight: 600; }
+  .wp-need-label { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+  .wp-need { font: inherit; font-size: 12px; font-weight: 600; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
   .bay-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
   .bay-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .bay-verdict { display: inline-flex; align-items: center; padding: 4px 14px; border-radius: 999px; font-weight: 700; font-size: 24px; line-height: 1.2; }
@@ -279,6 +293,8 @@
 <script src="/static/goal.js"></script>
 <script src="/static/goal-live.js"></script>
 <script src="/static/aicoach.js"></script>
+<script src="/static/graduate.js"></script>
+<script src="/static/weekplan.js"></script>
 </head>
 <body>
 <header>
@@ -292,6 +308,7 @@
   <section id="sec-ready">
     <h2><span class="n" id="n1">1</span>Get ready</h2>
     <div id="since-last" class="since-last" hidden></div>
+    <div id="week-plan" class="wp-card" hidden></div>
     <div class="ready-sum" id="ready-sum" hidden><span id="ready-text"></span>
       <button class="linkbtn" id="ready-show">Show the cameras</button></div>
     <div id="ready-full">
@@ -1960,6 +1977,7 @@ async function loadPlanData() {
   if (pr) practiceConfig = pr.config;
   if (s) swingRecords = s.swings;
   renderPlan();
+  renderWeekPlan();
   renderFocusCard();
   renderPelvisCard(recentClips);
 }
@@ -2521,6 +2539,7 @@ function renderReady() {
   $("ready-full").hidden = !open;
   $("ready-sum").hidden = open;
   if ($("since-last")) $("since-last").hidden = recording || !hasSinceLastData;
+  renderWeekPlan();
   const sq = status && status.rows.find(r => r.key === "square");
   $("ready-text").textContent = !needed ? "No phones or Square needed for drills without a ball."
     : recording ? "● Both phones recording" + (missed ? ` · ${missed.label}` : sq ? ` · ${sq.label}: ${sq.text}` : "")
@@ -2528,6 +2547,59 @@ function renderReady() {
   $("ready-show").textContent = open ? "Hide the cameras" : "Show the cameras";
 }
 $("ready-show").onclick = () => { readyOpen = $("ready-full").hidden; renderReady(); };
+
+let weekPlanSig = null;
+
+function renderWeekPlan() {
+  if (typeof SwingWeekPlan === "undefined" || !allClips) return;
+  const box = $("week-plan");
+  if (!box) return;
+  let need = 3;
+  try {
+    const raw = localStorage.getItem("week-plan-need");
+    if (raw != null) need = Number(raw);
+  } catch (e) {}
+  const focus = journalData && journalData.focus && journalData.focus.move ? journalData.focus : null;
+  const fd = focus ? focusData(focus) : null;
+  let allSessions = fd ? fd.allSessions : null;
+  if (!allSessions) {
+    const clipsList = (allClips && allClips.length) ? allClips : (recentClips || []);
+    const primary = clipsList.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face") && !c.excluded && c.recorded);
+    allSessions = (typeof SwingRow !== "undefined" && typeof SwingRow.sessionsOf === "function") ? SwingRow.sessionsOf(primary) : [];
+  }
+  const drillSets = typeof SwingDrillSets !== "undefined" && SwingDrillSets.sets
+    ? SwingDrillSets.sets(allClips || [], swingRecords || {})
+    : [];
+  const held = focus && fd && typeof SwingGoal !== "undefined" && typeof SwingGraduate !== "undefined"
+    ? SwingGraduate.check(SwingGoal.progress(fd.sessions, focus))
+    : null;
+  const model = SwingWeekPlan.build({
+    now: Date.now(),
+    sessions: allSessions,
+    need,
+    focus,
+    drillId: typeof SwingCoach !== "undefined" ? SwingCoach.drillId : null,
+    drillSets,
+    verdict: typeof SwingDrillSets !== "undefined" ? SwingDrillSets.verdict : null,
+    games: gameState && gameState.log ? gameState.log : [],
+    held,
+    words: typeof SwingGraduate !== "undefined" ? SwingGraduate.words : null,
+  });
+  const p = (status && status.phones) || {};
+  const recording = !!(p.face && p.face.recording && p.dtl && p.dtl.recording);
+  const sig = JSON.stringify([model.title, model.line, model.items, model.last && [model.last.done, model.last.total], recording]);
+  if (sig === weekPlanSig && box.children.length) return;
+  weekPlanSig = sig;
+  box.hidden = false;
+  SwingWeekPlan.render(box, model, {
+    recording,
+    onNeed: n => {
+      try { localStorage.setItem("week-plan-need", String(n)); } catch (e) {}
+      weekPlanSig = null;
+      renderWeekPlan();
+    },
+  });
+}
 
 // ---- 1b. Since last time (the morning check) ----
 let sinceLastLoaded = false, hasSinceLastData = false;
@@ -2723,6 +2795,7 @@ async function pollSwings() {
   }
   renderFocusCard();
   renderDrillNudge();
+  renderWeekPlan();
   if (planStep && (planStep.block === "focus" || planStep.block === "carry")) renderPlan();
   if (!lastEndedSessionStory && !isDemoStop) {
     renderLastSwingCard(latestWithShot);
@@ -2736,6 +2809,7 @@ async function pollGame() {
   if (data) {
     renderGame(data);
     renderPlan();
+    renderWeekPlan();
     renderChoices();
     renderPelvisCard(recentClips);
   }

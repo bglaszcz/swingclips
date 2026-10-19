@@ -309,3 +309,72 @@ test("runs build on the real coach.js, drillsets.js, games.js, graduate.js with 
   assert.ok(m.total >= 1);
   assert.ok(Array.isArray(m.items));
 });
+
+test("render builds head, rows with marks, Last week line, Sessions a week select, and collapses when recording", () => {
+  function fakeDoc() {
+    function node(tag) {
+      let txt = "";
+      return {
+        tagName: tag.toUpperCase(),
+        className: "",
+        get textContent() { return txt; },
+        set textContent(v) { txt = v; if (v === "") this.children = []; },
+        value: "",
+        selected: false,
+        dataset: {},
+        attrs: {},
+        children: [],
+        ownerDocument: null,
+        setAttribute(k, v) { this.attrs[k] = v; },
+        append(...kids) {
+          for (const k of kids) {
+            if (k) this.children.push(k);
+          }
+        },
+      };
+    }
+    const doc = {
+      createElement(tag) {
+        const n = node(tag);
+        n.ownerDocument = doc;
+        return n;
+      },
+    };
+    return doc;
+  }
+
+  const doc = fakeDoc();
+  const box = doc.createElement("div");
+  const model = WeekPlan.build({
+    now: localTime(2025, 10, 16, 12, 0, 0),
+    sessions: [
+      makeSession(localTime(2025, 10, 13, 10, 0), 12),
+      makeSession(localTime(2025, 10, 6, 10, 0), 12),
+      makeSession(localTime(2025, 10, 7, 10, 0), 12),
+      makeSession(localTime(2025, 10, 8, 10, 0), 12),
+    ],
+    need: 3,
+  });
+
+  let chosenNeed = null;
+  WeekPlan.render(box, model, { onNeed: n => { chosenNeed = n; } });
+  assert.strictEqual(box.children.length, 3); // head, items, foot
+  const [head, items, foot] = box.children;
+  assert.strictEqual(head.children[0].textContent, "This week (Oct 13 to 19)");
+  assert.strictEqual(head.children[2].textContent, "0 of 2 done this week, 4 days left.");
+  assert.strictEqual(items.children.length, 2);
+  assert.strictEqual(items.children[0].children[0].textContent, "\u25cb");
+  assert.strictEqual(items.children[0].children[1].textContent, "1 of 3 sessions");
+  assert.strictEqual(foot.children[0].textContent, "Last week: 1 of 2");
+  const sel = foot.children[1].children[0];
+  assert.strictEqual(sel.value, "3");
+  sel.value = "4";
+  sel.onchange();
+  assert.strictEqual(chosenNeed, 4);
+
+  // Collapsed when recording
+  WeekPlan.render(box, model, { recording: true });
+  assert.strictEqual(box.children.length, 1);
+  assert.strictEqual(box.children[0].className, "wp-head");
+});
+

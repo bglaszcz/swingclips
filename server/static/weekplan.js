@@ -279,8 +279,9 @@
 
     const head = el(doc, "div", "wp-head");
     const title = el(doc, "span", "wp-title", model.title);
+    const sep = el(doc, "span", "wp-sep", " \u00b7 ");
     const line = el(doc, "span", "wp-line", model.line);
-    head.append(title, line);
+    head.append(title, sep, line);
     box.append(head);
 
     if (opts.recording) return;
