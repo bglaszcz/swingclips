@@ -68,6 +68,10 @@ swing is tagged with the Square Omni's numbers for that shot.
   Checks both camera phones, microphone strike triggers with sensitivity controls, launch monitor, and server at a glance before you swing.
   <br><img src="docs/img/start-ready.png" alt="Start page get ready" width="550">
 
+- **This week on the Start page**  
+  Turns your focus and the drills and games around it into three small weekly steps—sessions, focus drill sets, and a weekly Combine check—plus a quiet note when your focus has held for three sessions.
+  <br><img src="docs/img/start-week.png" alt="Start page this week card" width="600">
+
 - **Do the drill, rep by rep**  
   The focus card on the Start page (and on Practice) has **Do the drill**: each rep shows as a dot against your target while you hit, the reps stay out of your trends, and **Done** hands over to normal swings to see whether they keep it.
   <br><img src="docs/img/start-reps.png" alt="Start page focus card in reps mode" width="600">

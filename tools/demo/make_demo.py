@@ -29,25 +29,25 @@ def make_session_schedule() -> tuple[list[datetime.datetime], str]:
 
     sessions = []
 
-    # Newest week (ending yesterday): 3 sessions
-    # e.g. Monday, Wednesday, Friday (yesterday)
-    # If yesterday is Friday (weekday 4):
-    if yesterday.weekday() >= 4:
-        sessions.append(datetime.datetime.combine(this_monday, datetime.time(10, 0)))
-        sessions.append(datetime.datetime.combine(this_monday + datetime.timedelta(days=2), datetime.time(14, 30)))
+    # Newest week (ending yesterday): 2 sessions (so This week shows 2 of 3 sessions)
+    if yesterday.weekday() >= 2:
+        sessions.append(datetime.datetime.combine(this_monday + datetime.timedelta(days=1), datetime.time(10, 0)))
         sessions.append(datetime.datetime.combine(yesterday, datetime.time(10, 15)))
-    elif yesterday.weekday() >= 2:
+    elif yesterday.weekday() == 1:
         sessions.append(datetime.datetime.combine(this_monday, datetime.time(10, 0)))
-        sessions.append(datetime.datetime.combine(this_monday + datetime.timedelta(days=1), datetime.time(14, 30)))
         sessions.append(datetime.datetime.combine(yesterday, datetime.time(10, 15)))
     else:
-        # Fallback if run on Monday/Tuesday
-        sessions.append(datetime.datetime.combine(yesterday - datetime.timedelta(days=4), datetime.time(10, 0)))
-        sessions.append(datetime.datetime.combine(yesterday - datetime.timedelta(days=2), datetime.time(14, 30)))
-        sessions.append(datetime.datetime.combine(yesterday, datetime.time(10, 15)))
+        sessions.append(datetime.datetime.combine(this_monday, datetime.time(10, 0)))
+        sessions.append(datetime.datetime.combine(this_monday, datetime.time(15, 30)))
 
-    # Preceding 9 weeks: 2 sessions each (Tuesday, Thursday)
-    for w in range(1, 10):
+    # Previous week: 3 sessions (Monday, Wednesday, Friday)
+    prev_monday = this_monday - datetime.timedelta(weeks=1)
+    sessions.append(datetime.datetime.combine(prev_monday, datetime.time(10, 0)))
+    sessions.append(datetime.datetime.combine(prev_monday + datetime.timedelta(days=2), datetime.time(14, 30)))
+    sessions.append(datetime.datetime.combine(prev_monday + datetime.timedelta(days=4), datetime.time(10, 15)))
+
+    # Preceding 8 weeks: 2 sessions each (Tuesday, Thursday)
+    for w in range(2, 10):
         w_monday = this_monday - datetime.timedelta(weeks=w)
         sessions.append(datetime.datetime.combine(w_monday + datetime.timedelta(days=1), datetime.time(10, 0)))
         sessions.append(datetime.datetime.combine(w_monday + datetime.timedelta(days=3), datetime.time(14, 30)))
@@ -79,16 +79,16 @@ def generate_demo_data() -> None:
 
         # Special sessions:
         # 1. ~10 days before the latest session: pump drill set in drill mode (8 swings, drill: "pump", strike ~ 6.1)
-        # 2. Session before latest: pump drill set marked afterwards (10 swings, drill: "pump", drillMarked: True, strike ~ 2.1, excluded: True)
+        # 2. Two sessions before latest (last week): pump drill set marked afterwards (10 swings, drill: "pump", drillMarked: True, strike ~ 2.1, excluded: True)
         #    followed by 12 normal swings with hands ~1 in lower than usual
         # 3. Latest session: ends with 2 swings with 1.8 s backswing so Swings list has "2 to check" and Start page nudges
-        # 4. Two sessions before the latest: reps of the focus's own drill (10 swings, drill "move:leadHipP6:more",
+        # 4. Session before the latest (this week): reps of the focus's own drill (10 swings, drill "move:leadHipP6:more",
         #    excluded, the lead hip ~0.6 in further than usual), 8 normal swings before them and 10 after that keep
-        #    about half of it (~0.3 in), so Drill sets has a reps line with carry-over
+        #    about half of it (~0.3 in), so Drill sets has a reps line with carry-over and This week shows 1 of 2 drill sets
         target_10d = session_schedule[-1].date() - datetime.timedelta(days=10)
         sess_10d_idx = min(range(len(session_schedule)), key=lambda i: abs((session_schedule[i].date() - target_10d).days))
-        sess_before_last_idx = len(session_schedule) - 2
-        sess_reps_idx = len(session_schedule) - 3
+        sess_before_last_idx = len(session_schedule) - 3
+        sess_reps_idx = len(session_schedule) - 2
 
         if sess_idx == sess_10d_idx:
             swing_specs = (
@@ -142,7 +142,7 @@ def generate_demo_data() -> None:
         num_since = len(session_schedule) - focus_sess_idx
         sess_since = sess_idx - focus_sess_idx
         if is_after_focus and num_since > 1:
-            target_share = 0.44 + 0.32 * (sess_since / (num_since - 1))
+            target_share = 0.47 + 0.32 * (sess_since / (num_since - 1))
             num_in_target = int(round(num_normal_i7 * target_share))
             i7_target_set = set(random.sample(range(num_normal_i7), num_in_target))
         else:
@@ -170,7 +170,7 @@ def generate_demo_data() -> None:
                     lead_hip_p6 = round(2.0 + delta_hip, 2)
                 elif role in ("i7_before_reps", "focus_reps", "i7_after_reps"):
                     # Around the usual before the reps, well past it in them, about half of that kept after.
-                    delta_hip = {"i7_before_reps": 0.0, "focus_reps": 0.6, "i7_after_reps": 0.3}[role] + random.normalvariate(0.0, 0.12)
+                    delta_hip = {"i7_before_reps": 0.12, "focus_reps": 0.72, "i7_after_reps": 0.42}[role] + random.normalvariate(0.0, 0.12)
                     lead_hip_p6 = round(2.0 + delta_hip, 2)
                 elif is_after_focus:
                     in_target = (i7_counter in i7_target_set)
@@ -862,8 +862,40 @@ def generate_demo_data() -> None:
     with open(DATA_DIR / "drill.json", "w", encoding="utf-8") as f:
         json.dump({"current": None, "drills": [], "periods": []}, f, indent=1)
 
+    combine_this_week_ts = int(session_schedule[-2].timestamp()) + 1800
+    combine_last_week_ts = int(session_schedule[-4].timestamp()) + 1800
+    game_log = [
+        {
+            "id": "combine",
+            "name": "Combine",
+            "started": combine_this_week_ts,
+            "finished": combine_this_week_ts + 900,
+            "how": "done",
+            "summary": {
+                "shots": 27,
+                "mishits": 0,
+                "greens": 18,
+                "sgTotal": -4.86,
+                "sgPerShot": -0.18,
+            },
+        },
+        {
+            "id": "combine",
+            "name": "Combine",
+            "started": combine_last_week_ts,
+            "finished": combine_last_week_ts + 900,
+            "how": "done",
+            "summary": {
+                "shots": 27,
+                "mishits": 0,
+                "greens": 16,
+                "sgTotal": -6.48,
+                "sgPerShot": -0.24,
+            },
+        },
+    ]
     with open(DATA_DIR / "game.json", "w", encoding="utf-8") as f:
-        json.dump({"game": None, "games": [], "log": []}, f, indent=1)
+        json.dump({"game": None, "games": [], "log": game_log}, f, indent=1)
 
     # 13. AI coach status, notes, models
     coach_status_obj = {

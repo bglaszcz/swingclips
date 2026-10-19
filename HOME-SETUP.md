@@ -22,8 +22,9 @@ end).
    Start page. (First time: double-click `Golf launcher.cmd` in `Dropbox\SwingClips` and press "Put an
    icon on the desktop".) In Square's app, pick the **driving range**. (The server runs by itself; nothing to do there.)
 3. **Start page, 1 Get ready**: "Since last time" checks the previous session and the night worker
-   (camera misses, Square pairing, false triggers, camera moves). Every check green, both camera pictures
-   framed with the skeleton on you. Fix what it says if not. (It folds to one line once both phones record.)
+   (camera misses, Square pairing, false triggers, camera moves), and "This week" shows your weekly
+   sessions, focus drill sets, and Combine check. Every check green, both camera pictures
+   framed with the skeleton on you. Fix what it says if not. (Both fold to one line once both phones record.)
 4. **2 What are you doing?**: pick one. Only what it needs shows below it (the launcher's **Drills, no
    ball** button picks "Drills, no ball" for you).
 5. **3 Record: Start recording.** Each phone says "Recording". (A phone that joins late starts by itself.)
@@ -64,7 +65,7 @@ phones; `Start golf.cmd -StartCameras` starts both phones without the page; **Pr
 page (practise your #1 priority in one tap, games, or pick a number yourself); `Start golf (GSPro).cmd` instead of Square's app
 (README, "Sim laptop"; details in [docs/relay.md](docs/relay.md)). `Start golf.cmd -Startup` adds it to
 Windows sign-in; if Square's app isn't found, put its shortcut or .exe path in `square-app.txt` next to it.
-What each Start page part does in detail: docs/review-page.md ("Coach program", "Today's practice
+What each Start page part does in detail: docs/review-page.md ("Since last time", "This week", "Coach program", "Today's practice
 plan", "Plan steps", "Drill mode").
 
 ## Setting up the phones
