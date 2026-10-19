@@ -415,6 +415,10 @@ class Programs:
         doc = swings.load(state_file)
         self.run: dict | None = doc if doc.get("id") in self.programs else None
         self.said: list[dict] = []
+        # Clip name -> the drill of the block its swing was filed under (None: a block with no drill).
+        self.clip_drills: dict[str, str | None] = {}
+        for run in self._log() + ([self.run] if self.run else []):
+            self._note_drills(run)
 
     def catalog(self) -> list[dict]:
         return list(self.programs.values())
@@ -482,19 +486,43 @@ class Programs:
             return self._state()
 
     def undo(self) -> dict:
-        """Takes back the golfer's last tap in the block in play."""
+        """Takes back the golfer's last tap in the block in play. With nothing to take back there, and
+        the block before a no-ball one that the last tap ended (or Next), that block opens again
+        without its last tap: a mistaken "All 10 passed" moves the program on at once."""
         with self.lock:
             if not self.run:
                 raise ValueError("No program in play")
-            _, block = self._current()
+            p, block = self._current()
             key = "marks" if block["ball"] else "reps"
             items = self.run[key]
             for i in range(len(items) - 1, -1, -1):
                 if items[i]["block"] == block["id"] and (key == "marks" or items[i]["kind"] == "tap"):
                     del items[i]
                     break
+            else:
+                was = self._back_to(p)
+                if was:
+                    back = self.run["back"]
+                    self.run.update(block=back["block"], blockStarted=back["blockStarted"], results=back["results"])
+                    self.run.pop("back")
+                    taps = self.run["reps"]
+                    i = next((i for i in range(len(taps) - 1, -1, -1)
+                              if taps[i]["block"] == was["id"] and taps[i]["kind"] == "tap"), None)
+                    if i is not None:
+                        del taps[i]
+                    self._say(f"Back to {was['name']}.")
+                    self.on_block(was.get("drill"))
             self._save()
             return self._state()
+
+    def _back_to(self, p: dict) -> dict | None:
+        """The no-ball block undo() would open again (nothing done in the block in play yet), or None."""
+        back = self.run.get("back")
+        block = p["blocks"][self.run["block"]]
+        if not back or any(x["block"] == block["id"] for x in self.run["reps"] + self.run["marks"]):
+            return None
+        was = p["blocks"][back["block"]]
+        return None if was["ball"] else was
 
     def note(self, text: str, started: float | None = None) -> dict:
         """The golfer's setup notes (Omni moved, mat changed, an update) on the run in play, or on the
@@ -648,6 +676,7 @@ class Programs:
                              numbers=n, noRead=nr, waiting3d=waiting)
                 self.run["reps"].append(r)
                 made.append(r)
+                self._note_drills(self.run, [r])
                 if r["kind"] in ("shot", "ball") and not r.get("waiting3d"):
                     self._calibration_check()
                 if r["kind"] == "shot":
@@ -694,6 +723,25 @@ class Programs:
             return report(effective(self._program_of(run), run), run, body)
 
     # ---- Inside (lock held) ----
+
+    def drill_of_clip(self, name: str, partner: str | None = None) -> tuple[bool, str | None]:
+        """(whether a program filed this swing, the drill of its block). A swing is tagged by the block it
+        was filed under, not the time: a block ends after its last shot's Square numbers (and 3D) are in,
+        so the next block's first swings were hit while the drill mode was still the old block's."""
+        for n in (name, partner):
+            if n and n in self.clip_drills:
+                return True, self.clip_drills[n]
+        return False, None
+
+    def _note_drills(self, run: dict, reps: list[dict] | None = None) -> None:
+        p = self._program_of(run)
+        if not p:
+            return
+        drill = {b["id"]: b.get("drill") for b in p["blocks"]}
+        for r in run["reps"] if reps is None else reps:
+            for n in (r.get("clip"), r.get("partner")):
+                if n and r["block"] in drill:
+                    self.clip_drills[n] = drill[r["block"]]
 
     def _program_of(self, run: dict) -> dict | None:
         """The program a run was judged by: a finished run keeps a copy (since Oct 7: editing programs.json,
@@ -769,6 +817,9 @@ class Programs:
         return self.run is not None
 
     def _end_block(self, p: dict, block: dict, st: dict) -> None:
+        # What undo() needs to open this block again.
+        back = {"block": self.run["block"], "blockStarted": self.run["blockStarted"],
+                "results": dict(self.run["results"])}
         self.run["results"][block["id"]] = "passed" if st["passed"] else "not passed"
         said = f"{block['name']} {'gate passed' if st['passed'] else 'gate not passed'}: {progress_text(block, st)}."
         i = self.run["block"] + 1
@@ -783,7 +834,7 @@ class Programs:
             done = self._finish("done")
             self._say(f"{said} {p['name']} done. {done['spoken']}")
             return
-        self.run["block"], self.run["blockStarted"] = i, self.clock()
+        self.run["block"], self.run["blockStarted"], self.run["back"] = i, self.clock(), back
         self._say(f"{said} {self._block_intro(p['blocks'][i], i + 1)}")
         self.on_block(p["blocks"][i].get("drill"))
 
@@ -799,6 +850,7 @@ class Programs:
                 "notes": self.run.get("notes", ""), "calibration": calibration(p, self.run),
                 "used": self._swings_used(), "block": self.run["block"], "blocks": blocks,
                 "waiting3d": waiting_count, "wrist": self.run.get("wrist", {}),
+                "back": (self._back_to(p) or {}).get("name"),
                 "progress": progress_text(block, block_state(block, self.run["reps"], self.run["marks"]))}
 
     def _say(self, text: str) -> None:

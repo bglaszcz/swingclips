@@ -312,6 +312,21 @@ class QuietTest(unittest.TestCase):
         self.clock.t += status.TALK_MAX_S + 1
         self.assertFalse(self.s.has_mail("dtl"))
 
+    def test_a_longer_quiet_is_told_near_the_end_not_on_every_poll(self):
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=True))
+        self.assertAlmostEqual(self.s.take("dtl")["quiet"], status.TALK_MAX_S)
+        told = 0
+        for _ in range(40):                                   # the speaker polls every second, still speaking
+            self.clock.t += 1
+            self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=True))
+            out = self.s.take("dtl")
+            if "quiet" in out:
+                told += 1
+                self.assertGreater(out["quiet"], status.QUIET_RENEW_S)
+        self.assertLessEqual(told, 2)
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=False))
+        self.assertAlmostEqual(self.s.take("dtl")["quiet"], status.TALK_TAIL_S)   # shorter: told at once
+
     def test_speaking_stuck_doesnt_deafen_the_other_for_good(self):
         self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=True))
         self.s.take("dtl")

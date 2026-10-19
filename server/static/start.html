@@ -2213,6 +2213,17 @@ function renderProgram(data) {
     x.textContent = "Optional: " + b.extraBall;
     box.append(x);
   }
+  if (run.back && b.ball && !(b.gate && b.gate.mark)) {
+    // The tap that ended the no-ball block before (e.g. a mistaken "All 10 passed"): open it again.
+    const again = document.createElement("div");
+    again.className = "prog-taps";
+    const btn = document.createElement("button");
+    btn.className = "undo";
+    btn.textContent = `Undo: back to ${run.back}`;
+    btn.onclick = () => { btn.disabled = true; programPost("/api/program/undo"); };
+    again.append(btn);
+    box.append(again);
+  }
   const shot = typeof SwingProgShot !== "undefined" ? SwingProgShot.lastShot(b) : null;
   if (shot) {
     box.append(renderLastShot(shot));

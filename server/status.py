@@ -55,6 +55,9 @@ SETUP_LIVE_S = 5
 # and at most TALK_STUCK_S after it started speaking (nor does one stuck on "speaking").
 TALK_START_S, TALK_S_PER_WORD, TALK_REPORT_S, TALK_TAIL_S, TALK_MAX_S = 0.5, 0.4, 2.0, 1.5, 30.0
 TALK_STUCK_S = 90.0
+# A longer quiet (the speaker's poll moved it on) is told only once the one the listener has runs out
+# within this long: not on every one of the speaker's polls.
+QUIET_RENEW_S = 5.0
 # A combined setup sentence is said once it has held this long (not every flicker).
 HOLD_S = 1.5
 # Ready panel: amber below this battery (%) when not charging; spoken below LOW_BATTERY_SAY.
@@ -732,10 +735,12 @@ class Status:
 
     def _quiet_news(self, angle: str, now: float) -> float | None:
         """A new quiet-until for phone `angle` that it hasn't been told (None if nothing new)."""
-        q = self._quiet_until(angle, now)
-        if abs(q - self.quiet_sent[angle]) > 0.01 and max(q, self.quiet_sent[angle]) > now:
-            return q
-        return None
+        q, told = self._quiet_until(angle, now), self.quiet_sent[angle]
+        if abs(q - told) <= 0.01 or max(q, told) <= now:
+            return None
+        if q > told and told - now > QUIET_RENEW_S:
+            return None   # still quiet a while on what it has: the longer one goes out nearer its end
+        return q
 
     def set_pre(self, seconds: int) -> None:
         """How many seconds the phones should keep before the strike (drills.py); each is told on its poll."""

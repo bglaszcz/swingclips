@@ -751,7 +751,12 @@ toward the ball". The phones face away from you, so voice is the channel.
   moved, mat changed, an update) are saved on the run in play or the last one and go into Copy for coach. No-ball reps are
   tapped Pass/Miss on the page, one at a time or the whole block at once after doing them (**All N passed**,
   or how many passed: one walk off the mat; misses are entered first, so on a streak gate the passes are the
-  run in a row) (clips the phones record during them are ignored). Ball shots are judged
+  run in a row) (clips the phones record during them are ignored). A tap that ends a block can be undone
+  until the next block has a swing: **Undo** (on a ball block, **Undo: back to ...**) opens it again one tap
+  short. A swing the program files is tagged with its block's drill (in or out of the trends by the block,
+  `programs.drill_of_clip`), not by when the drill mode switched: a block ends only once its last shot's
+  numbers are in, so the next block's first swings were hit with the old drill still on. A mark said
+  afterwards still wins. Ball shots are judged
   once the shot pairs; a shot Square didn't read (club speed 0, or, on a gate that checks the strike, a strike
   across the face exactly 0.0, whose up-down number is filler, or none) is left out of the gate, and so is one
   missing a number its gate checks ("Invalid read (no hips vs ball at impact)"; why there's no 3D is said in a

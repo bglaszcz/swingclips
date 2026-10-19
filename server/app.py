@@ -1136,6 +1136,16 @@ def list_clips(since: float | None = None):
     return listed_clips(since=since)
 
 
+def clip_drill(name: str, partner: str | None, t: float) -> tuple[str | None, bool]:
+    """A swing's drill and whether the golfer said so afterwards: a mark first, then the coach program's
+    block it was filed under (programs.py drill_of_clip), then the drill that was on when it was recorded."""
+    drill, marked = drills_state.drill_of(name, partner, t)
+    if marked:
+        return drill, True
+    filed, block_drill = programs_state.drill_of_clip(name, partner)
+    return (block_drill if filed else drill), False
+
+
 def listed_clips(with_shots: bool = True, since: float | None = None) -> list[dict]:
     """The clips, newest first, with their pose state, angle, strike, partner and (optionally) shot;
     only those recorded since `since` (unix seconds), if given."""
@@ -1174,7 +1184,7 @@ def listed_clips(with_shots: bool = True, since: float | None = None) -> list[di
         c["calib"] = calib_runs.kind_at(c["_t"]) if SWING_NAME.match(c["name"]) else None
         # drillMarked: the golfer said so afterwards (a drill hit without the drill switched on, or not
         # a drill though one was left on), rather than the time it was recorded.
-        c["drill"], c["drillMarked"] = (drills_state.drill_of(c["name"], c["partner"], c["_t"])
+        c["drill"], c["drillMarked"] = (clip_drill(c["name"], c["partner"], c["_t"])
                                         if SWING_NAME.match(c["name"]) and not c["calib"] else (None, False))
         c["excluded"] = c["name"] in excluded or (c["partner"] or "") in excluded or bool(c["drill"] or c["calib"])
         c["reviewed"] = c["name"] in reviewed or (c["partner"] or "") in reviewed

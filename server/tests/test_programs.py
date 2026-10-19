@@ -488,6 +488,46 @@ class ProgramsTest(unittest.TestCase):
         st = self.p.state()["program"]["blocks"][0]["state"]
         self.assertEqual((st["reps"], st["streak"]), (1, 1))
 
+    def test_undo_opens_the_block_a_tap_just_ended(self):
+        # A mistaken "All 10 passed" moves on at once: undo opens the block again, one tap short.
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        self.assertEqual(self.block(), "tier2")
+        self.assertEqual(self.p.state()["program"]["back"], "Tier 1: brace and turn (no ball)")
+        self.assertEqual(self.drills[-1], "braceturn")
+        self.p.undo()
+        self.assertEqual(self.block(), "tier1")
+        st = self.p.state()["program"]
+        self.assertEqual(st["blocks"][0]["state"]["reps"], 9)
+        self.assertNotIn("tier1", self.p.run["results"])
+        self.assertIsNone(st["back"])
+        self.assertEqual("Back to Tier 1: brace and turn (no ball).", self.said()[-1])
+        self.p.undo()                                 # now it takes back taps as usual
+        self.assertEqual(self.p.state()["program"]["blocks"][0]["state"]["reps"], 8)
+
+    def test_no_undo_back_once_the_next_block_has_a_shot(self):
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        self.hit(shot(), body3d=body3d(pelvis_open=14), body={"pelvisBall": 4.5})
+        self.assertIsNone(self.p.state()["program"]["back"])
+        self.p.undo()
+        self.assertEqual(self.block(), "tier2")
+
+    def test_swings_are_tagged_with_their_blocks_drill(self):
+        # Filed swings carry their block's drill, whatever was switched on when they were hit; a new
+        # Programs (a restart) reads them back from the log.
+        good = dict(body3d=body3d(pelvis_open=14), body={"pelvisBall": 4.5})
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        self.hit(shot(), **good)
+        name = self.swings[-1]["name"]
+        self.assertEqual(self.p.drill_of_clip(name), (True, "braceturn"))
+        self.assertEqual(self.p.drill_of_clip("other.mp4", self.swings[-1]["partner"]), (True, "braceturn"))
+        self.assertEqual(self.p.drill_of_clip("swing_face_x.mp4"), (False, None))
+        self.p.next_block()                           # Tier 2 not passed: Tier 3 skipped, the run ends
+        again = programs.Programs(self.p.state_file, self.p.log_file, lambda: 99, self.clock)
+        self.assertEqual(again.drill_of_clip(name), (True, "braceturn"))
+
     def test_a_program_survives_a_restart(self):
         self.p.start("lowpoint")
         self.taps(True, True)
