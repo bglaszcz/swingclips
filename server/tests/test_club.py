@@ -102,6 +102,26 @@ class ScoresTest(unittest.TestCase):
         self.assertAlmostEqual(float(np.rad2deg(club.ANGLES[s.argmax()])), 90, delta=1e-6)
         self.assertAlmostEqual(float(s.max()), club.HANDS_WEIGHT, delta=0.01)
 
+    def test_hands_first_in_the_backswing(self):
+        """hands_first: hands -> clubhead even with a sure grip end (whose direction differs here); the grip
+        end only when the hands are on top of the clubhead."""
+        found = (1.0, [(0.45, 0.45, 1.0), (0, 0, 0), (0.5, 0.8, 1.0)])
+        usual = club.model_scores(found, self.lm(hands=(0.5, 0.5)), self.W, self.H)
+        first = club.model_scores(found, self.lm(hands=(0.5, 0.5)), self.W, self.H, hands_first=True)
+        self.assertNotAlmostEqual(float(np.rad2deg(club.ANGLES[usual.argmax()])), 90, delta=club.STEP / 2)
+        self.assertAlmostEqual(float(np.rad2deg(club.ANGLES[first.argmax()])), 90, delta=1e-6)
+        self.assertAlmostEqual(float(first.max()), 1.0, delta=0.01)       # the hands at full weight here
+        near = club.model_scores(found, self.lm(hands=(0.5, 0.79)), self.W, self.H, hands_first=True)
+        self.assertAlmostEqual(float(np.rad2deg(club.ANGLES[near.argmax()])), float(np.rad2deg(club.ANGLES[usual.argmax()])),
+                               delta=club.STEP)
+
+    def test_backswing_scores_switch_before_impact(self):
+        times = [0.0, 1.0, 1.69, 1.71, 2.0]
+        usual, first = ["u"] * 5, ["h", "h", "h", "h", None]
+        self.assertEqual(club.backswing_scores(times, 2.0, usual, first), ["h", "h", "h", "u", "u"])
+        self.assertEqual(club.backswing_scores(times, None, usual, first), usual)   # no impact: as before
+        self.assertEqual(club.backswing_scores(times, 2.0, usual, [None] * 5), usual)
+
     def test_no_direction(self):
         # Grip and head on top of each other, and the hands too: nothing to go on.
         found = (0.9, [(0.5, 0.5, 1.0), (0, 0, 0), (0.5, 0.505, 1.0)])
@@ -216,7 +236,8 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(got["clubModel"], models.club_stamp(MODEL))
             self.assertNotIn("model", got)
             self.assertEqual(set(got["msPerFrame"]), {"mediapipe", "club"})
-            self.assertEqual(list(got)[:3], ["version", "clubModel", "msPerFrame"])
+            self.assertEqual(list(got)[:4], ["version", "clubModel", "shaftRule", "msPerFrame"])
+            self.assertEqual(got["shaftRule"], club.SHAFT_RULE)
             self.assertEqual(got["clubLength"], base["clubLength"])
             for k, (f, b) in enumerate(zip(got["frames"], base["frames"])):
                 self.assertEqual((f["lm"], f["w"]), (b["lm"], b["w"]))
@@ -235,7 +256,7 @@ class PipelineTest(unittest.TestCase):
         fakes.simcc_model(folder / models.SPECS["rtmpose-m"].file, *models.SPECS["rtmpose-m"].size, fakes.CHANNELS)
         with mock.patch.dict(os.environ, club_env(SWINGCLIPS_MODELS=str(folder), SWINGCLIPS_POSE_BACKEND="rtmpose-m")):
             got = analyze(self.clips[90])
-        self.assertEqual(list(got)[:4], ["version", "model", "clubModel", "msPerFrame"])
+        self.assertEqual(list(got)[:5], ["version", "model", "clubModel", "shaftRule", "msPerFrame"])
         self.assertEqual(set(got["msPerFrame"]), {"mediapipe", "body", "club"})
         self.assertTrue(all("clubhead" in f for f in got["frames"]))
 

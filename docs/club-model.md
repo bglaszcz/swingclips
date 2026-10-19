@@ -139,3 +139,37 @@ set SWINGCLIPS_CLUB_BACKEND=yolo
   goes back to the ray casting in that window.
 - Using it on the server for real: set `SWINGCLIPS_CLUB_BACKEND=yolo` for the server itself, and
   bump `VERSION` in `pose.py` so every clip is analyzed again. Only once the scorecard says it's better.
+
+**The shaft's direction from the model's points (Oct 18, `club.model_scores`, `club.SHAFT_RULE` 2).**
+The model gives the grip (labeled where it shows just below the hands: 594 of 601 labeled frames, Oct 18),
+hosel and clubhead; the shaft angle is the direction grip -> clubhead (hands -> clubhead where the model
+is surer of the hands, at 0.8 weight), and P2 is where it passes horizontal. That made P2 depend on the
+training: the model's grip point lands a little to the side of the shaft by a different amount each
+time (1.5 cm sideways is ~1.3 degrees, and the shaft turns slowly at P2, so ~1.5 frames). Now, until
+0.3 s before impact (about the top, `HANDS_UNTIL_S`), the direction is hands -> clubhead (`hands_first`:
+MediaPipe's knuckles, which don't change with the club model; the grip only when the hands are too close
+to the clubhead), and grip -> clubhead from there on, where the hands blur and hide behind the arms
+(hands -> clubhead in the downswing put P6 within one frame at 86% instead of 96%).
+
+Swing by swing (eval.py's deep pass, P2 error before vs after, ms per swing, - = closer; 90% range):
+
+| Club model | Swings | P2 face-on | P2 down the line | P2 face-on within one frame |
+|---|---|---|---|---|
+| used until Oct 11 | 52 labeled P2 | -2.6 (-4.8 to -0.4) | -1.1 (-3.3 to +1.1) | 52% -> 75% |
+| used until Oct 11 | Oct 11's 17 untrained | -3.7 (-7.1 to -0.5) | -5.0 (-8.0 to -1.9) | 59% -> 82% |
+| Oct 11 training 1 | Oct 11's 17 untrained | -4.2 (-7.6 to -1.2) | -5.0 (-8.9 to -1.9) | 35% -> 71% |
+| Oct 11 training 2 | Oct 11's 17 untrained | -1.7 (-4.4 to +0.5) | -3.6 (-7.5 to -0.3) | 53% -> 65% |
+| in use since Oct 11 (Oct 10's second) | 52 labeled P2 | -0.4 (-2.0 to +1.4) | +0.7 (-1.1 to +2.6) | 63% -> 79% |
+| in use since Oct 11 | Oct 11's 17 untrained | -1.2 (-4.4 to +1.9) | +1.1 (-2.2 to +5.0) | 71% -> 76% |
+
+P6 and P8 unchanged in every case. The model in use happened to land its grip point on the shaft; the
+others didn't. With the hands, the two Oct 11 trainings' face-on P2 disagree by more than a frame on 2 of
+17 swings instead of 7, so the night's verdict on a new model depends less on which way its grip point
+fell. A line fitted through grip, hands and hosel, and grip -> hosel, were no better.
+
+Pose files made with the club model say which rule made them (`"shaftRule": 2`). Clips already analyzed
+keep the old rule until their deep pass is redone, which the next club model put into use does for every
+clip (the rule changes nothing on average with the one in use, so it isn't worth a pass of its own). They
+also keep the model's own points per frame (`clubPts`: score, grip, hosel, clubhead with their
+visibility, the hands, the golfer's height; `club.points`), so a rule like this one can be tried on saved
+pose files without running the models.

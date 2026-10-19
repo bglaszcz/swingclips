@@ -499,9 +499,9 @@ def run_chunk(args):
     # timing["ray"], one per frame.
     ray_too = bool(clubm) and opts["ray_too"]
     rays = []
-    # With a club model and SWINGCLIPS_KEEP_CLUB_POINTS: its raw points per frame (club_points), in
-    # timing["pts"], for trying shaft rules without running the models again.
-    keep_pts = bool(clubm) and opts["keep_points"]
+    # With a club model: the backswing's scores too (club.model_scores hands_first), in timing["back"],
+    # and its own points (club.points), in timing["pts"], one per frame.
+    backs = []
     pts_kept = []
     tracker = models.BodyTracker(models.load(*body)) if body else None
     ran = []                                 # per frame: whether the body model placed its points
@@ -541,6 +541,7 @@ def run_chunk(args):
                     ran.append(False)
                     mp_ran.append(False)
                     rays.append(None)
+                    backs.append(None)
                     pts_kept.append(None)
                     continue
                 clock = now
@@ -573,7 +574,7 @@ def run_chunk(args):
                         timing["convert"] += time.perf_counter() - clock
                     return full
 
-                landmarks = world = shaft = head = ray = kept = None
+                landmarks = world = shaft = head = ray = back = kept = None
                 if res.pose_landmarks:
                     landmarks = [(p.x, p.y, p.visibility) for p in res.pose_landmarks[0]]
                     if tracker is not None and in_swing and k % stride == 0:
@@ -593,9 +594,9 @@ def run_chunk(args):
                         clock = time.perf_counter()
                         found = clubber.find(img, landmarks)
                         shaft = club.model_scores(found, landmarks, img.shape[1], img.shape[0])
+                        back = club.model_scores(found, landmarks, img.shape[1], img.shape[0], hands_first=True)
                         head = club.clubhead(found)
-                        if keep_pts:
-                            kept = club.points(found, landmarks, img.shape[1], img.shape[0])
+                        kept = club.points(found, landmarks, img.shape[1], img.shape[0])
                         timing["club"] += time.perf_counter() - clock
                         if ray_too and bg is not None and res.segmentation_masks and in_swing:
                             clock = time.perf_counter()
@@ -614,6 +615,7 @@ def run_chunk(args):
                     ran.append(False)
                 out.append((t, landmarks, world, shaft, head))
                 rays.append(ray)
+                backs.append(back)
                 pts_kept.append(kept)
             if end_pts is None and last is not None:
                 timing["last"] = upright_gray(last, rotation)
@@ -623,14 +625,14 @@ def run_chunk(args):
     timing["mp"] = mp_ran
     if ray_too:
         timing["ray"] = rays
-    if keep_pts:
+    if clubber is not None:
+        timing["back"] = backs
         timing["pts"] = pts_kept
     return out, timing
 
 
 # run_chunk's speed settings when a job doesn't give them: everything as before them.
-RUN_DEFAULTS = {"mp_after": 1, "convert": "full", "shaft_stride": 1, "threads": None, "ray_too": False, "mp_swing": 1,
-                "keep_points": False}
+RUN_DEFAULTS = {"mp_after": 1, "convert": "full", "shaft_stride": 1, "threads": None, "ray_too": False, "mp_swing": 1}
 
 # OpenCV's BT.601 YUV -> RGB (studio range, as its I420 conversion: the same constants, / 2^20),
 # as a matrix on (Y, U, V, 1).
@@ -1244,19 +1246,20 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
             "threads": decode_threads(), "mp_swing": mp_swing}
     if deep is not None and clubm and deep.get("rayTakeaway"):
         opts["ray_too"] = True
-    if clubm and os.environ.get("SWINGCLIPS_KEEP_CLUB_POINTS"):
-        opts["keep_points"] = True
     clock = time.perf_counter()
     chunks = list(pool.map(run_chunk, [j + (bg, body, clubm, (body_until, stride), opts) for j in jobs]))
     stages["workers"] = time.perf_counter() - clock
     clock = time.perf_counter()
-    rows = sorted(((fr, r, m, y, k) for chunk, tm in chunks
-                   for fr, r, m, y, k in zip(chunk, tm["ran"], tm.get("mp") or [True] * len(chunk),
-                                             tm.get("ray") or [None] * len(chunk), tm.get("pts") or [None] * len(chunk))),
+    none = lambda chunk: [None] * len(chunk)
+    rows = sorted(((fr, r, m, y, k, b) for chunk, tm in chunks
+                   for fr, r, m, y, k, b in zip(chunk, tm["ran"], tm.get("mp") or [True] * len(chunk),
+                                                tm.get("ray") or none(chunk), tm.get("pts") or none(chunk),
+                                                tm.get("back") or none(chunk))),
                   key=lambda x: x[0][0])
     frames = [fr for fr, *_ in rows]
-    rays = [y for _, _, _, y, _ in rows] if opts.get("ray_too") else None
-    kept = [k for *_, k in rows] if opts.get("keep_points") else None
+    rays = [x[3] for x in rows] if opts.get("ray_too") else None
+    kept = [x[4] for x in rows] if clubm else None
+    backs = [x[5] for x in rows] if clubm else None
     if speed["mpStrideAfter"] > 1 or mp_swing > 1:
         frames = fill_skipped(frames, [m for _, _, m, *_ in rows], max(speed["mpStrideAfter"], mp_swing))
     if body and stride > 1:
@@ -1278,7 +1281,11 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
     world = smooth(times, [w for _, _, w, *_ in frames], spatial=3)
     stages["smooth"] = time.perf_counter() - clock
     clock = time.perf_counter()
-    shaft = club.track(times, [s for _, _, _, s, _ in frames])
+    scores = [s for _, _, _, s, _ in frames]
+    if backs is not None:
+        # With the club model: the backswing's direction from the hands (club.HANDS_UNTIL_S).
+        scores = club.backswing_scores(times, impact, scores, backs)
+    shaft = club.track(times, scores)
     ray_shaft = club.track(times, rays) if rays is not None else None
     stages["track"] = time.perf_counter() - clock
     if timing is not None:
@@ -1321,7 +1328,8 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
         for fr, c in zip(out["frames"], ray_shaft):
             fr["clubRay"] = list(c) if c else None
     if kept is not None:
-        # clubPts (SWINGCLIPS_KEEP_CLUB_POINTS): the club model's own points, club.points.
+        # clubPts: the club model's own points (club.points), so a later shaft rule can be tried, or the
+        # angle worked out again, without the models.
         for fr, k in zip(out["frames"], kept):
             fr["clubPts"] = k
     if body or clubm:
@@ -1329,7 +1337,8 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
         # has none of it.
         stamps = {"model": models.stamp(backend)} if body else {}
         if clubm:
-            stamps["clubModel"] = models.club_stamp(clubm)
+            # shaftRule: how its points became the shaft angle (club.SHAFT_RULE).
+            stamps.update(clubModel=models.club_stamp(clubm), shaftRule=club.SHAFT_RULE)
         # Where they ran, when not on the CPU: a GPU's arithmetic differs a little (models.py).
         where = models.provider()
         if where != models.PROVIDER_DEFAULT:
@@ -1341,7 +1350,8 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
             cost["club"] = round(ms["club"], 1)
         out = {"version": VERSION, **stamps, "msPerFrame": cost, **out}
     if deep is not None:
-        # Near the start, where the server reads what made a pose file (app.py, _pose_stamp).
+        # Near the start, where the server reads what made a pose file (app.py, _pose_stamp); shaftRule:
+        # how the club model's points became the shaft angle (club.SHAFT_RULE).
         out = {"version": VERSION, "pass": "deep", **out}
     elif quick:
         out = {"version": VERSION, "pass": "quick", "quick": quick, **out}

@@ -51,6 +51,20 @@ UNSEARCHED_GAP = 3
 MODEL_SPREAD = 4
 HANDS_WEIGHT = 0.8
 MIN_SPAN = 0.05
+# In the backswing, until this long before impact (about the top), the direction is hands -> clubhead
+# (hands_first). The model's grip point (labeled where the grip shows just below the hands) lands a
+# little to the side of the shaft by a different amount in each training, and the shaft turns slowly
+# there, so P2 (the shaft passing horizontal) moved with the training: 2 to 9 ms early with three of
+# four models, unbiased with the fourth. The hands (MediaPipe's knuckles) don't change with the club
+# model. Oct 18, swing by swing on swings no model trained on: P2 1.7-4.2 ms closer face-on and 3.6-5.0
+# down the line with those three, no change with the fourth (the one in use since Oct 11); the two Oct 11
+# trainings' face-on P2 disagreed by more than a frame on 7 of 17 swings, 2 with this. In the downswing the
+# hands blur and hide behind the arms and the grip point is better (P6 within one frame 96% vs 86%).
+HANDS_UNTIL_S = 0.3
+# Which shaft rule the club model's points went through, written in the pose file as "shaftRule"
+# (2 = hands_first in the backswing, Oct 18). Clips are not analyzed again for it: the next club
+# model put into use redoes every clip's deep pass anyway.
+SHAFT_RULE = 2
 # The clubhead is kept for a frame when the model is at least this sure of the club (Ultralytics'
 # own default) and of the clubhead (where its plots stop drawing a point).
 CLUB_SCORE, HEAD_VISIBLE = 0.25, 0.5
@@ -208,10 +222,11 @@ def region_scores(img, mask, bg, box, lm, w, h):
     return np.clip(best, 0, None)
 
 
-def model_scores(found, lm, w, h):
+def model_scores(found, lm, w, h, hands_first=False):
     """scores() from the club model's points: (score, [(x, y, visibility)] for grip, hosel, head in
     picture units) from models.ClubRunner.find, on a picture w x h pixels. None if the frame can't
-    be scored; all zeros if the model gives no direction."""
+    be scored; all zeros if the model gives no direction. hands_first (the backswing, HANDS_UNTIL_S):
+    hands -> clubhead, the grip end only when the hands are too close to the clubhead to give one."""
     if found is None or lm is None:
         return None
     height = body_height(lm, h)
@@ -220,8 +235,12 @@ def model_scores(found, lm, w, h):
     score, (grip_end, _, head) = found
     hands = grip(lm, w, h)
     best = None
-    for (x, y, v), weight in (((grip_end[0] * w, grip_end[1] * h, grip_end[2]), 1.0),
-                              ((hands[0], hands[1], 1.0), HANDS_WEIGHT)):
+    froms = (((grip_end[0] * w, grip_end[1] * h, grip_end[2]), 1.0), ((hands[0], hands[1], 1.0), HANDS_WEIGHT))
+    if hands_first:
+        froms = (((hands[0], hands[1], 1.0), 1.0),)
+        if np.hypot(head[0] * w - hands[0], head[1] * h - hands[1]) < MIN_SPAN * height:
+            froms = (((grip_end[0] * w, grip_end[1] * h, grip_end[2]), 1.0),)
+    for (x, y, v), weight in froms:
         dx, dy = head[0] * w - x, head[1] * h - y
         if np.hypot(dx, dy) < MIN_SPAN * height:
             continue
@@ -237,8 +256,8 @@ def model_scores(found, lm, w, h):
 
 def points(found, lm, w, h):
     """What model_scores was given, for trying other shaft rules later without the models (pose.py's
-    clubPts, SWINGCLIPS_KEEP_CLUB_POINTS): [score, grip x, y, visibility, hosel x, y, v, head x, y, v,
-    hands x, y, golfer's height], picture units, or None."""
+    clubPts): [score, grip x, y, visibility, hosel x, y, v, head x, y, v, hands x, y, golfer's height],
+    picture units, or None."""
     if found is None or lm is None:
         return None
     score, pts = found
@@ -256,6 +275,15 @@ def clubhead(found):
     if score < CLUB_SCORE or v < HEAD_VISIBLE:
         return None
     return [round(x, 4), round(y, 4), round(score * v, 2)]
+
+
+def backswing_scores(times, impact, scores, hands_first):
+    """Each frame's scores for track(): the hands-first ones (model_scores hands_first) until
+    HANDS_UNTIL_S before impact, the usual ones after; the usual ones everywhere without an impact."""
+    if impact is None:
+        return list(scores)
+    cut = impact - HANDS_UNTIL_S
+    return [b if t < cut and b is not None else s for t, s, b in zip(times, scores, hands_first)]
 
 
 def track(times, frame_scores):

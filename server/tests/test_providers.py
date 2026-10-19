@@ -278,6 +278,12 @@ class PipelineTest(unittest.TestCase):
                     self.assertNotIn("provider", now)
                     # The ball search's own version moves on without the providers (pose.BALL_VERSION).
                     now["ballVersion"] = before["ballVersion"]
+                    # With the club model, what came after (Oct 18): the shaft rule's number and the model's
+                    # own points per frame (club.SHAFT_RULE, club.points); the angles themselves as before
+                    # on this clip (no ball, so no impact to switch to the hands before).
+                    now.pop("shaftRule", None)
+                    for f in now["frames"]:
+                        f.pop("clubPts", None)
                     self.assertEqual(json.dumps(now), json.dumps(before), (setting, extra))
 
     def test_on_a_gpu(self):
