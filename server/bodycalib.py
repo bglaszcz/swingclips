@@ -29,7 +29,10 @@ import numpy as np
 import calib
 import tri
 
-LEG_SHARE = 0.435          # (thigh + shin) / standing height for tracked MediaPipe joints
+# (thigh + shin) / standing height, as the body model's hip, knee and ankle points measure them: they sit
+# inside the joints, so shorter than the anatomical 0.491 (Drillis & Contini). 0.435 is the owner's own,
+# from the tape-sized Oct 6 session (0.806 m legs at 1.854 m); the tape, when given, sets the size anyway.
+LEG_SHARE = 0.435
 UPPER_ARM_SHARE = 0.186    # for the report only: arms are seen less well
 JOINTS_USED = (11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28)
 LEG = ((23, 25, 27), (24, 26, 28))       # lead (left) and trail hip, knee, ankle
@@ -197,8 +200,8 @@ def solve(swings: list[dict], face_lens: dict, dtl_lens: dict, height_m: float,
     ValueError with what to do."""
     if len(swings) < MIN_SWINGS:
         raise ValueError(f"{len(swings)} swing(s) filmed from both phones: need {MIN_SWINGS} or more")
-    if not 1.2 <= height_m <= 2.6:
-        raise ValueError("height should be between 1.2 and 2.6 m (4 to 8.5 ft)")
+    if not 1.2 <= height_m <= 2.3:
+        raise ValueError("height should be between 1.2 and 2.3 m (4 to 7.5 ft)")
     g = gather(swings, face_lens, dtl_lens)
     n1, n2, p1, p2 = g["n1"], g["n2"], g["p1"], g["p2"]
     if len(n1) > MAX_POINTS:
@@ -265,8 +268,12 @@ def solve(swings: list[dict], face_lens: dict, dtl_lens: dict, height_m: float,
     if balls:
         origin = np.median(balls, axis=0) - BALL_RADIUS * up
         ball_spread = float(np.median(np.linalg.norm(np.array(balls) - np.median(balls, axis=0), axis=1)))
-        # When the ball is seen, the front axis z is from the golfer's address center toward the ball.
-        # This avoids down-the-line ankle occlusion bias (where the near leg hides the far ankle).
+        # When the ball is seen, the front axis z is from the golfer's address hips toward the ball, not
+        # square to the ankles: from down the line the near leg hides the far ankle, which then reads
+        # toward the ball and turned the axes 13-16 degrees (the ball at a foot; Oct 2 and Oct 6). So
+        # the calibration swings' pelvis is over the ball at address by definition, which the face-on
+        # camera agrees with for this golfer's irons (within 0.4 in, 191 swings). Calibrate on irons: a
+        # driver's ball, forward in the stance, would turn the axes a few degrees.
         hips = [np.median((X[ok[:, 23] & ok[:, 24], 23] + X[ok[:, 23] & ok[:, 24], 24]) / 2, axis=0)
                 for X, ok in pts if (ok[:, 23] & ok[:, 24]).any()]
         if hips:

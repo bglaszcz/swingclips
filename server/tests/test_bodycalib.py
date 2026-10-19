@@ -75,20 +75,20 @@ class SolveTest(unittest.TestCase):
 
     def test_scale_follows_the_height(self):
         cams, _ = bodycalib.solve(self.swings[:5], lens(self.ses["cameras"]["face"]),
-                                  lens(self.ses["cameras"]["dtl"]), HEIGHT * 1.1)
+                                  lens(self.ses["cameras"]["dtl"]), HEIGHT * 0.9)
         d = np.linalg.norm(np.array(cams["face"]["position"]))
-        self.assertAlmostEqual(d / np.linalg.norm(self.ses["cameras"]["face"]["position"]), 1.1, delta=0.03)
+        self.assertAlmostEqual(d / np.linalg.norm(self.ses["cameras"]["face"]["position"]), 0.9, delta=0.03)
 
     def test_tape_measure_sets_the_size(self):
-        # A height 15% off (as the real setup's legs made it), and the down-the-line phone's floor
+        # A height 15% off, and the down-the-line phone's floor
         # distance from a tape measure: the phones come out where they are anyway.
         want = {a: np.array(self.ses["cameras"][a]["position"]) for a in ("face", "dtl")}
         floor = float(np.hypot(want["dtl"][0], want["dtl"][2]))
         cams, report = bodycalib.solve(self.swings, lens(self.ses["cameras"]["face"]), lens(self.ses["cameras"]["dtl"]),
-                                       HEIGHT * 1.15, floor)
+                                       HEIGHT / 1.15, floor)
         self.assertEqual(report["scaleFrom"], "tape")
         self.assertAlmostEqual(report["fromBall"]["dtl"], floor, places=6)
-        self.assertAlmostEqual(report["tapeVsHeight"], 1 / 1.15, delta=0.03)
+        self.assertAlmostEqual(report["tapeVsHeight"], 1.15, delta=0.03)
         self.assertLess(np.linalg.norm(np.array(cams["face"]["position"]) - want["face"]), 0.15)
         self.assertLess(np.linalg.norm(np.array(cams["dtl"]["position"]) - want["dtl"]), 0.05)
         self.assertLess(report["rms"]["face"], bodycalib.GOOD_RMS)
