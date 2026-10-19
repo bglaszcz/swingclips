@@ -210,3 +210,98 @@ test("smoothSpeeds: a one-frame glitch and the readings next to a tracking gap d
   assert.equal(s[70], null);   // the gap isn't filled
   assert.ok(Math.abs(s[40] - 500) < 1);
 });
+
+test("address dropout: single frame missing hip at exact P1 does not blank pelvisTurn or pelvisSway", () => {
+  const doc = makeDoc({});
+  // Corrupt only the single frame nearest P1 (t = 1.0)
+  const p1Frame = doc.frames.find(f => Math.abs(f.t - 1.0) < 0.01);
+  assert.ok(p1Frame, "found p1 frame");
+  p1Frame.p[23] = null; // drop lead hip at P1 only
+
+  const r = M.compute(doc, POSITIONS);
+  assert.ok(r, "compute returned result");
+  // With robust address fallback, subsequent frames still have valid pelvisTurn and pelvisSway
+  const laterFrames = r.values.filter(v => v.t > 1.2);
+  const turns = laterFrames.map(v => v.pelvisTurn).filter(x => x != null);
+  const sways = laterFrames.map(v => v.pelvisSway).filter(x => x != null);
+  assert.ok(turns.length > 0, "pelvisTurn is not blanked for entire swing");
+  assert.ok(sways.length > 0, "pelvisSway is not blanked for entire swing");
+});
+
+test("thoraxTop search window: early noise spike or early P3 before P4 - 0.35s does not inflate thoraxTop", () => {
+  const doc = makeDoc({});
+  // Inject a tracking noise spike early in the backswing (e.g. t = 1.1s, > 0.35s before P4 at 1.6s)
+  const earlyFrame = doc.frames.find(f => Math.abs(f.t - 1.1) < 0.01);
+  assert.ok(earlyFrame);
+  // 120 degree spike
+  const rad120 = 120 * Math.PI / 180;
+  earlyFrame.p[11] = [-0.2 * Math.cos(rad120), 1.4, -0.2 * Math.sin(rad120)];
+  earlyFrame.p[12] = [0.2 * Math.cos(rad120), 1.4, 0.2 * Math.sin(rad120)];
+
+  // At top of backswing near P4 (t = 1.5s), normal 90 deg turn
+  const topFrame = doc.frames.find(f => Math.abs(f.t - 1.5) < 0.01);
+  assert.ok(topFrame);
+  const rad90 = 90 * Math.PI / 180;
+  topFrame.p[11] = [-0.2 * Math.cos(rad90), 1.4, -0.2 * Math.sin(rad90)];
+  topFrame.p[12] = [0.2 * Math.cos(rad90), 1.4, 0.2 * Math.sin(rad90)];
+
+  // Even if P3 was detected way too early at t = 0.6s
+  const positions = [
+    { key: "p1", t: 1.0 },
+    { key: "takeaway", t: 1.2 },
+    { key: "p3", t: 0.6 },
+    { key: "p4", t: 1.6 },
+    { key: "p7", t: 1.8 },
+  ];
+
+  const r = M.compute(doc, positions);
+  assert.ok(r && r.thoraxTop);
+  // thoraxTop must be bounded to the window within 0.35s of P4 and ignore the 120 deg spike at t = 1.1s
+  assert.ok(r.thoraxTop.thoraxTurn < 100, `thoraxTop (${r.thoraxTop.thoraxTurn}) must ignore early spike`);
+});
+
+test("separation at thoraxTop: uses synchronous pelvis turn from the peak moment", () => {
+  const doc = makeDoc({});
+  // Add rotation to thorax so it peaks before P4
+  doc.frames.forEach(f => {
+    if (f.t > 1.2 && f.t <= 1.6) {
+      // Simulate shoulder turn peaking at t = 1.5 with 90 deg, pelvis at 30 deg
+      const progress = (f.t - 1.2) / 0.4;
+      const shTurn = 90 * Math.sin(progress * Math.PI / 2);
+      const rad = shTurn * Math.PI / 180;
+      f.p[11] = [-0.2 * Math.cos(rad), 1.4, -0.2 * Math.sin(rad)];
+      f.p[12] = [0.2 * Math.cos(rad), 1.4, 0.2 * Math.sin(rad)];
+      const pRad = (30 * progress) * Math.PI / 180;
+      f.p[23] = [-0.15 * Math.cos(pRad), 0.95, -0.15 * Math.sin(pRad)];
+      f.p[24] = [0.15 * Math.cos(pRad), 0.95, 0.15 * Math.sin(pRad)];
+    }
+  });
+
+  const positions = [
+    { key: "p1", t: 1.0 },
+    { key: "takeaway", t: 1.2 },
+    { key: "p3", t: 1.4 },
+    { key: "p4", t: 1.6 },
+    { key: "p7", t: 1.8 },
+  ];
+
+  const r = M.compute(doc, positions);
+  assert.ok(r, "compute returned result");
+  assert.ok(r.thoraxTop, "thoraxTop found");
+  assert.ok(r.thoraxTop.thoraxTurn >= 85, `thoraxTop.thoraxTurn (${r.thoraxTop.thoraxTurn}) near 90 deg`);
+  // Synchronous separation at peak thorax turn must equal peak thorax turn minus pelvis turn at that frame
+  const expectedSep = r.thoraxTop.thoraxTurn - r.thoraxTop.pelvisTurn;
+  assert.ok(Math.abs(r.thoraxTop.separation - expectedSep) < 1e-4,
+    `r.thoraxTop.separation (${r.thoraxTop.separation}) matches synchronous difference (${expectedSep})`);
+
+  const at = M.atPositions(r, doc, positions);
+  // Simulate summarize3d separation logic
+  if (at.p4 && r.thoraxTop) {
+    at.p4 = Object.assign({}, at.p4, {
+      thoraxTurn: r.thoraxTop.thoraxTurn,
+      separation: r.thoraxTop.separation != null ? r.thoraxTop.separation : at.p4.separation,
+    });
+  }
+  assert.ok(at.p4.separation <= 65, `separation at top (${at.p4.separation}) must not be inflated`);
+});
+

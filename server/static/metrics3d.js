@@ -283,11 +283,40 @@
     const setup = { missing, frames: setupFrames.length };
     const ts = frames.map(f => f.t);
     const raw = frames.map(f => frameValues(f.p, f.club || null));
-    const ai = p1 ? nearest(frames, p1.t) : raw.findIndex(v => v.pelvisHeading != null && v.thoraxHeading != null);
+    let ai = p1 ? nearest(frames, p1.t) : raw.findIndex(v => v.pelvisHeading != null && v.thoraxHeading != null);
     if (ai < 0) return null;
-    const base = raw[ai];
     const pelvis = turnSeries(raw, "pelvisHeading"), thorax = turnSeries(raw, "thoraxHeading");
-    const p0 = pelvis[ai], t0 = thorax[ai];
+
+    // Address baseline: if the exact frame at P1 has a joint dropout, search the static setup window
+    // (tStart to tEnd) for the nearest valid frame so a single noisy frame doesn't drop the entire swing.
+    const nearestValid = hasValue => {
+      let best = -1, bestDt = Infinity;
+      for (let i = 0; i < frames.length; i++) {
+        if (frames[i].t >= tStart && frames[i].t <= tEnd && hasValue(i)) {
+          const dt = Math.abs(frames[i].t - tRef);
+          if (dt < bestDt) { bestDt = dt; best = i; }
+        }
+      }
+      if (best >= 0) return best;
+      for (let i = 0; i < frames.length; i++) {
+        if (hasValue(i)) {
+          const dt = Math.abs(frames[i].t - tRef);
+          if (dt < bestDt) { bestDt = dt; best = i; }
+        }
+      }
+      return best;
+    };
+
+    const pIdx = pelvis[ai] != null ? ai : nearestValid(i => pelvis[i] != null);
+    const tIdx = thorax[ai] != null ? ai : nearestValid(i => thorax[i] != null);
+    const p0 = pIdx >= 0 ? pelvis[pIdx] : null;
+    const t0 = tIdx >= 0 ? thorax[tIdx] : null;
+
+    const basePelvisIdx = (raw[ai] && raw[ai].pelvisCentre) ? ai : nearestValid(i => raw[i] && raw[i].pelvisCentre);
+    const baseThoraxIdx = (raw[ai] && raw[ai].thoraxCentre) ? ai : nearestValid(i => raw[i] && raw[i].thoraxCentre);
+    const basePelvisCentre = basePelvisIdx >= 0 ? raw[basePelvisIdx].pelvisCentre : null;
+    const baseThoraxCentre = baseThoraxIdx >= 0 ? raw[baseThoraxIdx].thoraxCentre : null;
+
     const sp = spans(ts);
     // The pelvis start (below) keeps the speeds as measured: its 20 deg/s threshold was set on them.
     const pelvisRaw = rateOf(pelvis, ts, sp);
@@ -305,14 +334,23 @@
       if (v.pelvisSideBend != null) r.pelvisSideBend = v.pelvisSideBend;
       if (v.thoraxSideBend != null) r.thoraxSideBend = v.thoraxSideBend;
       if (v.thoraxBend != null) r.thoraxBend = v.thoraxBend;
-      for (const [seg, key] of [["pelvis", "pelvisCentre"], ["thorax", "thoraxCentre"]]) {
-        if (!v[key]) continue;
-        r[seg + "Ball"] = inch(v[key][0]);
-        if (!base[key]) continue;
-        const d = sub(v[key], base[key]);
-        r[seg + "Sway"] = inch(d[0]);
-        r[seg + "Lift"] = inch(d[1]);
-        r[seg + "Thrust"] = inch(d[2]);
+      if (v.pelvisCentre) {
+        r.pelvisBall = inch(v.pelvisCentre[0]);
+        if (basePelvisCentre) {
+          const d = sub(v.pelvisCentre, basePelvisCentre);
+          r.pelvisSway = inch(d[0]);
+          r.pelvisLift = inch(d[1]);
+          r.pelvisThrust = inch(d[2]);
+        }
+      }
+      if (v.thoraxCentre) {
+        r.thoraxBall = inch(v.thoraxCentre[0]);
+        if (baseThoraxCentre) {
+          const d = sub(v.thoraxCentre, baseThoraxCentre);
+          r.thoraxSway = inch(d[0]);
+          r.thoraxLift = inch(d[1]);
+          r.thoraxThrust = inch(d[2]);
+        }
       }
       for (const [seg] of SEGMENTS) if (speed[seg][i] != null) r[seg + "Speed"] = speed[seg][i];
       return r;
@@ -322,11 +360,12 @@
     let thoraxTop = null, thoraxJump = null;
     const p3 = find("p3");
     if (p3 && p4) {
-      for (const v of values) if (v.t >= p3.t && v.t <= p4.t && v.thoraxTurn != null && (!thoraxTop || v.thoraxTurn > thoraxTop.thoraxTurn)) thoraxTop = v;
+      const topStart = Math.max(p3.t, p4.t - 0.35);
+      for (const v of values) if (v.t >= topStart && v.t <= p4.t && v.thoraxTurn != null && (!thoraxTop || v.thoraxTurn > thoraxTop.thoraxTurn)) thoraxTop = v;
       const end = p4.t;
       thoraxJump = 0;
       values.forEach((v, i) => {
-        if (v.t < p3.t || v.t > end || v.thoraxTurn == null) return;
+        if (v.t < topStart || v.t > end || v.thoraxTurn == null) return;
         for (let j = i + 1; j < values.length && values[j].t - v.t <= JUMP_SECONDS; j++) {
           if (values[j].thoraxTurn != null) thoraxJump = Math.max(thoraxJump, Math.abs(values[j].thoraxTurn - v.thoraxTurn));
         }
@@ -414,7 +453,21 @@
     for (const p of positions || []) {
       if (!["p1", "p4", "p6", "p7"].includes(p.key)) continue;
       const i = nearest(doc.frames, p.t);
-      if (Math.abs(doc.frames[i].t - p.t) < 0.01) out[p.key] = result.values[i];
+      if (Math.abs(doc.frames[i].t - p.t) < 0.025) {
+        const v = Object.assign({}, result.values[i]);
+        // If a key metric has a single-frame dropout right at this position, fill from adjacent frames within 25 ms
+        for (const k of ["pelvisTurn", "thoraxTurn", "separation", "pelvisSideBend", "thoraxSideBend", "thoraxBend", "pelvisSway", "thoraxSway", "pelvisThrust", "pelvisLift", "pelvisBall", "thoraxBall"]) {
+          if (v[k] == null) {
+            for (let dt = 1; dt <= 4; dt++) {
+              const prev = result.values[i - dt];
+              if (prev && prev[k] != null && Math.abs(prev.t - p.t) <= 0.025) { v[k] = prev[k]; break; }
+              const next = result.values[i + dt];
+              if (next && next[k] != null && Math.abs(next.t - p.t) <= 0.025) { v[k] = next[k]; break; }
+            }
+          }
+        }
+        out[p.key] = v;
+      }
     }
     return out;
   }
@@ -449,7 +502,7 @@
     // The thorax's top turn and its separation from the pelvis there: the most closed from P3 to P4.
     if (at.p4 && r.thoraxTop) {
       at.p4 = Object.assign({}, at.p4, { thoraxTurn: r.thoraxTop.thoraxTurn,
-        separation: at.p4.pelvisTurn != null ? r.thoraxTop.thoraxTurn - at.p4.pelvisTurn : at.p4.separation });
+        separation: r.thoraxTop.separation != null ? r.thoraxTop.separation : (at.p4.pelvisTurn != null ? r.thoraxTop.thoraxTurn - at.p4.pelvisTurn : at.p4.separation) });
     }
     const numbers = {};
     for (const [key, pos, value, sign = 1] of SUMMARY) {
