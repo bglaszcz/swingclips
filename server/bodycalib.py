@@ -29,7 +29,7 @@ import numpy as np
 import calib
 import tri
 
-LEG_SHARE = 0.491          # (thigh + shin) / standing height
+LEG_SHARE = 0.435          # (thigh + shin) / standing height for tracked MediaPipe joints
 UPPER_ARM_SHARE = 0.186    # for the report only: arms are seen less well
 JOINTS_USED = (11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28)
 LEG = ((23, 25, 27), (24, 26, 28))       # lead (left) and trail hip, knee, ankle
@@ -110,8 +110,15 @@ def relative_pose(n1, n2, p2, dtl_lens, f1: float):
     inl = mask.ravel() > 0
     if inl.sum() < MIN_POINTS:
         raise ValueError(f"only {int(inl.sum())} joint points agree between the two views: need {MIN_POINTS}+")
-    a, b = n1[inl], n2[inl]
-    R, t = refine(R, t.ravel(), a, b, f1, float(np.array(dtl_lens["K"])[0, 0]))
+    f2 = float(np.array(dtl_lens["K"])[0, 0])
+    R, t = refine(R, t.ravel(), n1, n2, f1, f2, c=RANSAC_PX * 4)
+    X = triangulate(np.eye(3), np.zeros(3), R, t, n1, n2)
+    x1 = X[:, :2] / X[:, 2:3]
+    X2 = X @ R.T + t
+    x2 = X2[:, :2] / X2[:, 2:3]
+    r1 = np.linalg.norm((x1 - n1) * f1, axis=1)
+    r2 = np.linalg.norm((x2 - n2) * f2, axis=1)
+    inl = (X[:, 2] > 0) & (X2[:, 2] > 0) & (r1 < RANSAC_PX * 2) & (r2 < RANSAC_PX * 2)
     return R, t, inl
 
 
@@ -126,7 +133,7 @@ def _angles(t):
     return np.array([np.arccos(np.clip(t[2], -1, 1)), np.arctan2(t[1], t[0])])
 
 
-def refine(R, t, a, b, f1: float, f2: float):
+def refine(R, t, a, b, f1: float, f2: float, c: float = RANSAC_PX * 2):
     """Least squares (Levenberg-Marquardt) on the second camera's rotation and baseline direction: the
     point pairs triangulated, then put back into both views (normalized, scaled to pixels by each
     lens's focal length), with a robust (Cauchy) weight so a stray joint can't pull it."""
@@ -142,7 +149,6 @@ def refine(R, t, a, b, f1: float, f2: float):
     p = np.concatenate([cv2.Rodrigues(R)[0].ravel(), _angles(t)])
     lam = 1e-3
     r = residuals(p)
-    c = RANSAC_PX * 2
 
     def cost(r):
         return float(np.sum(np.log1p((r / c) ** 2)))
@@ -191,8 +197,8 @@ def solve(swings: list[dict], face_lens: dict, dtl_lens: dict, height_m: float,
     ValueError with what to do."""
     if len(swings) < MIN_SWINGS:
         raise ValueError(f"{len(swings)} swing(s) filmed from both phones: need {MIN_SWINGS} or more")
-    if not 1.2 <= height_m <= 2.3:
-        raise ValueError("height should be between 1.2 and 2.3 m (4 to 7.5 ft)")
+    if not 1.2 <= height_m <= 2.6:
+        raise ValueError("height should be between 1.2 and 2.6 m (4 to 8.5 ft)")
     g = gather(swings, face_lens, dtl_lens)
     n1, n2, p1, p2 = g["n1"], g["n2"], g["p1"], g["p2"]
     if len(n1) > MAX_POINTS:
@@ -251,7 +257,6 @@ def solve(swings: list[dict], face_lens: dict, dtl_lens: dict, height_m: float,
     x = np.mean(feet, axis=0)
     x -= (x @ up) * up
     x /= np.linalg.norm(x)
-    z = np.cross(x, up)
 
     # Origin: the ball on the floor, else between the feet.
     warnings = []
@@ -260,6 +265,16 @@ def solve(swings: list[dict], face_lens: dict, dtl_lens: dict, height_m: float,
     if balls:
         origin = np.median(balls, axis=0) - BALL_RADIUS * up
         ball_spread = float(np.median(np.linalg.norm(np.array(balls) - np.median(balls, axis=0), axis=1)))
+        # When the ball is seen, the front axis z is from the golfer's address center toward the ball.
+        # This avoids down-the-line ankle occlusion bias (where the near leg hides the far ankle).
+        hips = [np.median((X[ok[:, 23] & ok[:, 24], 23] + X[ok[:, 23] & ok[:, 24], 24]) / 2, axis=0)
+                for X, ok in pts if (ok[:, 23] & ok[:, 24]).any()]
+        if hips:
+            z = origin - np.median(hips, axis=0)
+            z -= (z @ up) * up
+            if np.linalg.norm(z) > 1e-6:
+                x = np.cross(up, z / np.linalg.norm(z))
+                x /= np.linalg.norm(x)
     else:
         mids = [np.median((X[ok[:, LEAD_ANKLE] & ok[:, TRAIL_ANKLE], LEAD_ANKLE]
                            + X[ok[:, LEAD_ANKLE] & ok[:, TRAIL_ANKLE], TRAIL_ANKLE]) / 2, axis=0)
@@ -267,6 +282,7 @@ def solve(swings: list[dict], face_lens: dict, dtl_lens: dict, height_m: float,
         origin = np.median(mids, axis=0) - ANKLE_HEIGHT * up
         ball_spread = None
         warnings.append("no ball found in both views: the origin is between the feet instead of at the ball")
+    z = np.cross(x, up)
 
     # Golf axes: X1 = A^T Xg + origin (A's rows: x, up, z in face-on camera axes).
     A = np.stack([x, up, z])
