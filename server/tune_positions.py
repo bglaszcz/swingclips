@@ -182,6 +182,8 @@ def main(argv=None) -> int:
     ap.add_argument("--folders", nargs="+", default=[PRIMARY, SECONDARY])
     ap.add_argument("--all-labels", action="store_true",
                     help=f"also score the labels {RECHECK.name} leaves out until they're redone")
+    ap.add_argument("--recheck", type=Path, default=RECHECK,
+                    help=f"custom JSON file of labels to leave out (default: {RECHECK.name})")
     ap.add_argument("--json", type=Path, help="also write the rows here")
     ap.add_argument("--baseline", action="store_true",
                     help=f"save each labeled clip's errors with phases.js as it is to {BASELINE.relative_to(HERE)}, "
@@ -189,7 +191,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     if args.baseline and args.all_labels:
         ap.error("--baseline saves the errors without the labels to recheck; leave out --all-labels")
-    swing_list = load_swings(args.labels, args.clips, None if args.all_labels else RECHECK)
+    recheck_path = None if args.all_labels else args.recheck
+    swing_list = load_swings(args.labels, args.clips, recheck_path)
     scorers = {f: Scorer(args.pose / f, swing_list) for f in args.folders}
     try:
         base = next(iter(scorers.values())).tuning()
