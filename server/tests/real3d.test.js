@@ -18,7 +18,9 @@ const M = require("../static/metrics3d.js");
 const THORAX_TOP_MIN = 80;
 const THORAX_TOP_MAX = 125;
 
-// Pelvis open at impact: owner confirmed hips are square at impact on video (fixtures measured 0.3-2.9 deg).
+// Pelvis open at impact on these fixtures' 3D (made before tri.far_side, Oct 19): 0.3-2.9 deg. That 3D
+// read the hips square because the down-the-line phone guessed the lead hip it can't see; with far_side
+// the same session reads ~20 open. The band guards metrics3d.js on fixed 3D input, not the hips' truth.
 const PELVIS_OPEN_IMPACT_MIN = -5;
 const PELVIS_OPEN_IMPACT_MAX = 15;
 

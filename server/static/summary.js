@@ -104,7 +104,8 @@
 
   // The body numbers compared across a session: [key, label, unit, view, position, value key].
   // Signs follow metrics.js: turns + = closed, sway + = toward the target, "to ball" + = toward it.
-  // Not turns at impact: from face-on they come out ~0 there (the hips look as wide as at address).
+  // Not turns at impact here: the shoulders' width at impact reads about as at address (~0), and the hips'
+  // open at impact is the 3D's (metrics3d.js, from the face-on view for the lead hip: tri.far_side).
   const BODY = [
     ["tempo", "Tempo", ":1", "face"], ["backswing", "Backswing time", "s", "face"],
     ["downswing", "Downswing time", "s", "face"],

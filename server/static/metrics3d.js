@@ -19,8 +19,10 @@
 // lead arm (shoulder to wrist) and the club (hands to clubhead) how fast their direction turns. The
 // kinematic sequence is when each peaks from the top to AFTER_IMPACT: pelvis, thorax, arm, club is
 // the textbook order, each faster than the last. A pelvis or thorax that peaks after impact turned
-// late: the arms led the downswing (bodyLate; the first real session: every swing, hips square at
-// impact, which the golfer confirmed on the video).
+// late: the arms led the downswing (bodyLate). The first real sessions read every swing late with the
+// hips square at impact, but that was the down-the-line phone guessing the lead hip it can't see: with
+// tri.far_side (Oct 19) the hips are ~20 open at impact. Their peak's timing is still rough: at square the
+// hip line points at the down-the-line phone and the face-on width barely changes (docs/3d.md).
 //
 // Works in the browser (window.SwingMetrics3D) and in Node / the server's V8 (module.exports).
 (function (root) {

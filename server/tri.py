@@ -21,7 +21,7 @@ lengths varied before it. Output: <face clip>.3d.json beside the pose files (app
 """
 import numpy as np
 
-VERSION = 2
+VERSION = 3
 # The 33 MediaPipe landmarks, and the clubhead when both pose files have it (the club model's).
 JOINTS = 33
 # The joints both phones see as the same point: shoulders, elbows, wrists, hips, knees, ankles. The
@@ -62,6 +62,22 @@ ITERATIONS = 12
 # Frames further than this from any triangulated point of a joint are left empty (s).
 FILL_MAX = 0.06
 CLUB_MIN_CONF = 0.3
+# The joints the down-the-line phone looks past: from behind the golfer, down the target line, the lead
+# hip and shoulder are behind the trail ones, and through the downswing its point for them is a guess.
+# On the owner's swings (Oct 19, 36 swings) the 3D read the hips square at impact and opening only after
+# it, while the face-on phone, which sees both hips, has them square ~95 ms before impact and ~25 open at
+# it (their width narrows as they turn, as metrics.js reads it). So from the top to FAR_AFTER_S after
+# impact the lead hip is put on its face-on ray, as far from the trail hip as the pair is wide at square
+# (widest in the face-on view after the top: square to it, so the turn passes 0 there without a jump):
+# forward of it (closed) until square, behind it (open) after. Not the shoulders: their points slide with
+# the shoulder blades (the pair narrowed ~6% by impact with the shoulders square), so they aren't a fixed
+# width. (lead, trail), MediaPipe indices.
+FAR_PAIRS = ((23, 24),)
+FAR_TOP_WINDOW = (-1.0, -0.1)      # s from impact: the top is the pair narrowest in the face-on view here
+FAR_AFTER_S = 0.15
+FAR_PEAK = 0.93                    # the part of the width's peak the parabola is fitted to (~ within 20 deg)
+FAR_WELL = (10.0, 40.0)            # degrees from square where the width gives the turn well
+FAR_FIT_S = 0.15                   # s either side of square for the curve through it
 
 
 # ---- Cameras ----
@@ -200,6 +216,76 @@ def paired(face, dtl, cams, offset, t=None):
     wts = np.array([wf[sel], wdq])
     norm = np.array([normalized(cams[0], pxs[0], wts[0]), normalized(cams[1], pxs[1], wts[1])])
     return tq, pxs, wts, norm
+
+
+def far_side(Y, t, norm_face, w_face, face_cam, face_impact, address):
+    """Y (n, J, 3) with each lead joint of FAR_PAIRS put on its face-on ray at the pair's width from the
+    trail joint, from the top to FAR_AFTER_S after impact (see FAR_PAIRS). Returns (Y, replaced (n, J),
+    {pair: {width, topMs, squareMs}})."""
+    Y = Y.copy()
+    replaced = np.zeros(Y.shape[:2], bool)
+    info = {}
+    if face_impact is None:
+        return Y, replaced, info
+    C = -face_cam.R.T @ face_cam.t                                  # the face-on camera, golf axes
+    for lead, trail in FAR_PAIRS:
+        T = Y[:, trail]
+        ray = np.concatenate([norm_face[:, lead], np.ones((len(t), 1))], axis=1) @ face_cam.R   # R^T (x, y, 1)
+        ray /= np.linalg.norm(ray, axis=1, keepdims=True)
+        ok = np.isfinite(T).all(axis=1) & (w_face[:, lead] > 0) & np.isfinite(ray).all(axis=1)
+        b = np.einsum("ij,ij->i", ray, C - T)
+        # How far the trail joint is from the lead's ray: the pair's width as the face-on phone sees it
+        # (the full width when the pair is square to it, less as it turns).
+        spread = np.sqrt(np.maximum(np.einsum("ij,ij->i", C - T, C - T) - b * b, 0.0))
+        rel = t - face_impact
+        top_win = ok & (rel >= FAR_TOP_WINDOW[0]) & (rel <= FAR_TOP_WINDOW[1])
+        if top_win.sum() < 5:
+            continue
+        top = np.nonzero(top_win)[0][np.argmin(spread[top_win])]
+        down = ok & (np.arange(len(t)) > top) & (rel <= 0.1)
+        if not down.any():
+            continue
+        # Square: the width's peak after the top, from a parabola fitted to it (within FAR_PEAK of the
+        # widest): near square the width changes as the cosine, a few mm either way, so the single widest
+        # frame wanders with the noise (on the made-up swing, 40 ms early with the hips still 15 closed).
+        near = down & np.isfinite(spread) & (spread >= FAR_PEAK * np.nanmax(np.where(down, spread, np.nan)))
+        L, square = None, None
+        if near.sum() >= 5:
+            a2, a1, a0 = np.polyfit(rel[near], spread[near], 2)
+            v = -a1 / (2 * a2) if a2 < 0 else None
+            if v is not None and rel[near].min() <= v <= rel[near].max():
+                L = float(a0 - a1 * a1 / (4 * a2))
+                square = int(np.argmin(np.abs(rel - v)))
+        if L is None:
+            square = np.nonzero(down)[0][np.nanargmax(spread[down])]
+            L = float(spread[square])
+        # The turn, closed + until square, open - after. Near square the width barely changes (it's the
+        # cosine), so a few mm of noise is several degrees and square itself sits early (the hips speed up
+        # through it, so the width's peak isn't symmetric): the turn there comes from a smooth curve fitted
+        # where the width says it well (FAR_WELL degrees either side), and square is where that curve is 0.
+        idx = np.arange(len(t))
+        th = np.degrees(np.arccos(np.clip(spread / L, -1.0, 1.0))) * np.where(idx <= square, 1.0, -1.0)
+        well = down & np.isfinite(th) & (np.abs(th) >= FAR_WELL[0]) & (np.abs(th) <= FAR_WELL[1])             & (np.abs(rel - rel[square]) <= FAR_FIT_S)
+        if (well & (idx <= square)).sum() >= 4 and (well & (idx > square)).sum() >= 4:
+            coef = np.polyfit(rel[well], th[well], 3)
+            lo, hi = rel[well].min(), rel[well].max()
+            span = (rel >= lo) & (rel <= hi)
+            th[span] = np.polyval(coef, rel[span])
+            zeros = [r.real for r in np.roots(coef) if abs(r.imag) < 1e-9 and lo <= r.real <= hi]
+            if zeros:
+                square = int(np.argmin(np.abs(rel - min(zeros, key=lambda z: abs(z - rel[square])))))
+        # Along the ray from its nearest point to the trail joint: as far as the pair's depth difference.
+        along = L * np.abs(np.sin(np.radians(th)))
+        info[f"{lead}-{trail}"] = {"width": round(L, 4), "topMs": round(float(rel[top]) * 1000, 1),
+                                   "squareMs": round(float(rel[square]) * 1000, 1)}
+        for i in np.nonzero(ok & (np.arange(len(t)) >= top) & (rel <= FAR_AFTER_S))[0]:
+            P = [C + (-b[i] + sgn * along[i]) * ray[i] for sgn in (1.0, -1.0)]
+            # closed: the lead joint forward of the trail one (toward the ball, +z); open: behind it
+            fwd = max(P, key=lambda q: q[2] - T[i, 2])
+            back = min(P, key=lambda q: q[2] - T[i, 2])
+            Y[i, lead] = fwd if th[i] >= 0 else back
+            replaced[i, lead] = True
+    return Y, replaced, info
 
 
 def refine_offset(face, dtl, cams, offset, impact, frame=1 / 240):
@@ -380,9 +466,15 @@ def swing(face_pose: dict, dtl_pose: dict, session: dict, offset: float, face_im
     best, tried, at = refine_offset(face, dtl, cams, offset, face_impact, frame)
     t, pxs, wts, norm = paired(face, dtl, cams, best)
     Y = triangulate(cams, norm, wts)
-    err = reprojection(cams, Y, pxs, wts)                          # (2, n, J)
+    at_address = (t <= face_impact - ADDRESS_BEFORE_IMPACT) if face_impact is not None else (t <= t[0] + 0.4)
+    err_tri = reprojection(cams, Y, pxs, wts)                      # (2, n, J), as both phones saw them
+    Y, replaced, far = far_side(Y, t, norm[0], wts[0], cams[0], face_impact, at_address)
+    err = reprojection(cams, Y, pxs, wts)
+    # A lead joint put on its face-on ray is judged by the face-on view alone (the other one is the guess).
+    err[1][replaced] = np.nan
     worst = np.nanmax(np.nan_to_num(err, nan=0.0), axis=0)
-    c = np.where(np.isfinite(Y[..., 0]), np.minimum(wts[0], wts[1]) / (1 + (worst / REPROJ_SCALE) ** 2), 0.0)
+    both = np.where(replaced, wts[0], np.minimum(wts[0], wts[1]))
+    c = np.where(np.isfinite(Y[..., 0]), both / (1 + (worst / REPROJ_SCALE) ** 2), 0.0)
     c[worst > OUTLIER_PX] = 0.0
     other = np.ones(c.shape[1], bool)
     other[list(CORE)] = False
@@ -397,7 +489,6 @@ def swing(face_pose: dict, dtl_pose: dict, session: dict, offset: float, face_im
         Xc, _ = filter_swing(t, Y[:, JOINTS:], c[:, JOINTS:], hz=CLUB_SMOOTH_HZ, bones=False)
     mask = coverage_mask(t, c)
     after = reprojection(cams, np.where(mask[:, body, None], Xb, np.nan), pxs[:, :, body], wts[:, :, body])
-    at_address = (t <= face_impact - ADDRESS_BEFORE_IMPACT) if face_impact is not None else (t <= t[0] + 0.4)
 
     bones = {}
     for (name, a, b), length in zip(BONES, L):
@@ -429,10 +520,13 @@ def swing(face_pose: dict, dtl_pose: dict, session: dict, offset: float, face_im
                       "atBest": round(min(tried.values()), 2) if tried else None},
         "axes": "metres; x toward the target, y up, z toward the golfer's front; origin at the ball",
         # The core joints only (CORE); "address": both views, before the swing starts.
-        "reprojection": {"face": stats(err[0][:, core]), "dtl": stats(err[1][:, core]),
+        "reprojection": {"face": stats(err_tri[0][:, core]), "dtl": stats(err_tri[1][:, core]),
                          "filteredFace": stats(after[0][:, core]), "filteredDtl": stats(after[1][:, core]),
-                         "address": stats(err[:, at_address][:, :, core]),
-                         "dropped": round(float(np.mean(worst[:, core] > OUTLIER_PX)), 3)},
+                         "address": stats(err_tri[:, at_address][:, :, core]),
+                         "dropped": round(float(np.mean(worst[:, core] > OUTLIER_PX)), 3),
+                         "farSide": int(replaced.sum())},
+        # The lead hip from the face-on view (FAR_PAIRS): the pair's width, and when the top and square were.
+        "farSide": far,
         "bones": bones,
         "boneSpreadPct": round(float(np.median(spreads)), 1) if spreads else None,
         "cameras": {k: {"position": session["cameras"][k]["position"]} for k in ("face", "dtl")},

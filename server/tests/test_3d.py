@@ -197,6 +197,24 @@ class TriangulationTest(unittest.TestCase):
         doc = tri.swing(face, dtl, ses, off, face["impact"])
         self.assertLess(np.median(self.errors(doc)), 0.8 * raw_err)
 
+    def test_the_lead_hip_the_down_the_line_phone_cant_see(self):
+        """Down the line, the lead hip is behind the trail one through the downswing and the pose model puts
+        it about where the trail hip is (the owner's swings, Oct 19): the 3D still turns the hips open
+        through impact, from the face-on view (tri.far_side), instead of reading them square."""
+        ses, face, dtl = render_swing(seed=3)
+        for f in dtl["frames"]:
+            if syn.TOP <= f["t"] + 0.35 <= syn.IMPACT + 0.1:     # dtl clip time -> world time
+                f["lm"][23 * 3:23 * 3 + 2] = [f["lm"][24 * 3] + 0.004, f["lm"][24 * 3 + 1] + 0.002]
+        doc = tri.swing(face, dtl, ses, 0.35, face["impact"])
+        self.assertIn("23-24", doc["farSide"])
+        def turn(P):
+            d = np.array(P[23]) - np.array(P[24])
+            return -np.degrees(np.arctan2(-d[2], d[0]))
+        for f in doc["frames"]:
+            if syn.TOP + 0.05 <= f["t"] <= syn.IMPACT + 0.05 and f["p"][23] and f["p"][24]:
+                want = syn.turns(f["t"])[0]
+                self.assertAlmostEqual(turn(f["p"]), want, delta=6, msg=f["t"])
+
     def test_no_dtl_frames_nearby(self):
         """Down-the-line frames missing for a stretch: those face-on frames get nothing made up
         beyond FILL_MAX."""
