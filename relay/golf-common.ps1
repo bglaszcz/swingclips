@@ -114,7 +114,10 @@ function Stop-SquareWatcher([switch]$DryRun) {
 function Start-GSProStack([string]$baseDir = "", [string]$server = "", [switch]$DryRun) {
     if (-not $baseDir) { $baseDir = $PSScriptRoot }
     if ($DryRun) { return "Would start GSPro connector and shot listener" }
-    if (-not (Get-ListenerProcess)) {
+    $said = @()
+    if (Get-ListenerProcess) {
+        $said += "shot listener already running"
+    } else {
         $lCmd = Join-Path $baseDir "Shot listener.cmd"
         if (Test-Path -LiteralPath $lCmd) {
             if ($server) {
@@ -122,13 +125,23 @@ function Start-GSProStack([string]$baseDir = "", [string]$server = "", [switch]$
             } else {
                 Start-Process -FilePath $lCmd -WorkingDirectory $baseDir
             }
+            $said += "started the shot listener"
+        } else {
+            $said += "Shot listener.cmd not found"
         }
     }
-    if (-not (Get-ConnectorProcess)) {
+    if (Get-ConnectorProcess) {
+        $said += "connector already open"
+    } else {
         $app = Find-ConnectorApp $baseDir
-        if ($app) { [void](Open-App $app "Square GSPro connector" -DryRun:$DryRun) }
+        if ($app) {
+            [void](Open-App $app "Square GSPro connector" -DryRun:$DryRun)
+            $said += "opened the GSPro connector"
+        } else {
+            $said += "couldn't find the GSPro connector (put its path in connector-app.txt)"
+        }
     }
-    return "Started GSPro connector and shot listener"
+    return "GSPro: " + ($said -join ", ")
 }
 
 function Stop-GSProStack([switch]$DryRun) {
@@ -182,6 +195,8 @@ function Update-RelayFiles([string]$baseDir = "", [string]$server = "", [switch]
         if ($name -notmatch '^[A-Za-z0-9 ()._-]+\.(ps1|cmd)$') { continue }
         $local = Join-Path $baseDir $name
         if ((Test-Path -LiteralPath $local) -and (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash -eq $want) { continue }
+        # cmd reads a batch file by position as it runs: one whose window is open is left for next time.
+        if (($name -eq "Square watcher.cmd" -and (Get-WatcherProcess)) -or ($name -eq "Shot listener.cmd" -and (Get-ListenerProcess))) { continue }
         $changed += $name
         if ($DryRun) { continue }
         $tmp = "$local.download"

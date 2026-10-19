@@ -50,9 +50,11 @@ SETUP_LIVE_S = 5
 # server tells the other phone as it sends the sentence, before the voice starts; a phone that
 # reports "speaking" (0.9 on) then says when it really stopped. Until its report comes (a poke,
 # well under TALK_REPORT_S), and for older apps the whole estimated sentence, it's taken as talking.
-# The listener stays quiet TALK_TAIL_S past the end (room echo), and at most TALK_MAX_S past the
-# speaking phone's last report (one that drops off mid-sentence doesn't deafen the other for good).
+# The listener stays quiet TALK_TAIL_S past the end (room echo), at most TALK_MAX_S past the
+# speaking phone's last report (one that drops off mid-sentence doesn't deafen the other for good),
+# and at most TALK_STUCK_S after it started speaking (nor does one stuck on "speaking").
 TALK_START_S, TALK_S_PER_WORD, TALK_REPORT_S, TALK_TAIL_S, TALK_MAX_S = 0.5, 0.4, 2.0, 1.5, 30.0
+TALK_STUCK_S = 90.0
 # A combined setup sentence is said once it has held this long (not every flicker).
 HOLD_S = 1.5
 # Ready panel: amber below this battery (%) when not charging; spoken below LOW_BATTERY_SAY.
@@ -143,7 +145,7 @@ LISTENER = "shot-listener"
 AGENT_FIELDS = {
     "squareRunning": bool, "watcherRunning": bool, "connectorRunning": bool,
     "listenerRunning": bool, "source": str, "version": str, "computer": str,
-    "lastAction": str, "lastResult": str,
+    "lastAction": str, "lastResult": str, "doneIds": str,
 }
 # Fixed named actions the server may queue for the laptop agent.
 AGENT_ACTIONS = {
@@ -531,6 +533,8 @@ class Status:
             self._start_if_wanted(angle, old, now)
             if was and not self.phones[angle]["hb"].get("speaking"):
                 self.talk[angle]["stopped"] = now
+            if not was and self.phones[angle]["hb"].get("speaking"):
+                self.talk[angle]["speakingFrom"] = now
             for ack in body.get("acks") or []:
                 if not isinstance(ack, dict):
                     continue
@@ -704,7 +708,10 @@ class Status:
         """A sentence went out to phone `angle` to say (its poll or the practice feed): the other
         phone stops listening for strikes (see TALK_*); has_mail wakes its poll to tell it."""
         with self.lock:
-            self.talk[angle].update(sent=self.clock(), words=len(text.split()))
+            now, t = self.clock(), self.talk[angle]
+            # Words of the last sentence not said yet are still to come (several go out in one answer).
+            left = max(0.0, t["sent"] + TALK_S_PER_WORD * t["words"] - now) / TALK_S_PER_WORD
+            t.update(sent=now, words=len(text.split()) + round(left))
 
     def _quiet_until(self, angle: str, now: float) -> float:
         """Until when phone `angle` shouldn't listen for strikes: the other phone is talking."""
@@ -718,7 +725,7 @@ class Status:
             if "speaking" in hb:
                 out = max(out, t["sent"] + TALK_START_S + TALK_REPORT_S, t["stopped"] + TALK_TAIL_S)
                 if hb["speaking"]:
-                    out = max(out, p["seen"] + TALK_MAX_S)
+                    out = max(out, min(p["seen"] + TALK_MAX_S, t.get("speakingFrom", p["seen"]) + TALK_STUCK_S))
             elif t["words"]:   # an older app: the whole sentence, estimated
                 out = max(out, t["sent"] + TALK_START_S + TALK_S_PER_WORD * t["words"] + TALK_TAIL_S)
         return out
@@ -862,7 +869,13 @@ class Status:
             hb = clean(body, AGENT_FIELDS)
             self.agent = {"hb": hb, "seen": now}
             self._expire_agent(now)
-            if hb.get("lastAction"):
+            if "doneIds" in hb:
+                # The commands it ran since its last report, by id (several can go out in one poll).
+                done = set(hb["doneIds"].split(","))
+                for c in self.agent_commands:
+                    if c["id"] in done and c["state"] == "sent":
+                        c.update(state="completed", result=hb.get("lastResult"))
+            elif hb.get("lastAction"):   # an agent from before doneIds: by the action's name
                 for c in self.agent_commands:
                     if c["action"] == hb["lastAction"] and c["state"] == "sent":
                         c.update(state="completed", result=hb.get("lastResult"))

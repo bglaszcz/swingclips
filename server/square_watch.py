@@ -192,7 +192,11 @@ class SquareWatcher:
                 self.log(f"Square watcher: skipped shot #{self.last_id} (unreadable: {e})")
                 continue
             self.last_shot_at = shot["received"]
-            self.on_shot(shot)
+            try:
+                self.on_shot(shot)
+            except Exception as e:  # the rest of this read still goes, with its own time
+                self.log(f"Square watcher: couldn't keep shot #{self.last_id} ({e!r})")
+                continue
             sent.append(shot)
         return sent
 

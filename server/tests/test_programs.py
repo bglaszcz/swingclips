@@ -560,6 +560,86 @@ class ProgramsTest(unittest.TestCase):
         self.hit(shot(), why3d="camera moved")
         self.assertIn("Invalid read (camera moved): not counted.", self.said()[-1])
 
+    def test_a_strike_square_didnt_read_only_matters_to_a_strike_gate(self):
+        # Brace and turn checks attack, face to path and the hips: a failed impact read still counts.
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        self.hit(shot(h=None, v=None), body3d=body3d(pelvis_open=14), body={"pelvisBall": 4.5})
+        self.assertEqual("Pass.", self.said()[-1])
+
+    def test_a_missing_gate_number_is_said_not_left_open(self):
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        self.hit(shot(), body3d=body3d(pelvis_open=14), body={})   # the face-on camera had no reading
+        self.assertEqual("Invalid read (no hips vs ball at impact): not counted.", self.said()[-1])
+        self.hit(shot())                                           # its 3D comes later, still no reading
+        self.swings[-1].update(body3d=body3d(pelvis_open=14), body={})
+        self.p.step(self.swings)
+        self.assertEqual("Invalid read (no hips vs ball at impact): not counted.", self.said()[-1])
+        self.assertEqual(self.p.state()["program"]["waiting3d"], 0)
+
+    def test_why_there_is_no_3d_in_a_few_words(self):
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        self.hit(shot(), why3d="failed: Traceback (most recent call last):\n  File \"swing3d.py\", line 1")
+        self.assertEqual("Invalid read (3D failed): not counted.", self.said()[-1])
+        self.hit(shot(), why3d="a camera seems to have moved since calibration 2026-10-06_135224: at address "
+                                "the joints miss 45 px")
+        self.assertEqual("Invalid read (camera moved): not counted.", self.said()[-1])
+        self.hit(shot(), why3d="recorded in another mode than calibrated (240, 30)")
+        self.assertEqual("Invalid read (recorded in another mode than calibrated): not counted.", self.said()[-1])
+
+    def test_the_cap_waits_for_the_last_swings_3d(self):
+        good = dict(body3d=body3d(pelvis_open=14), body={"pelvisBall": 4.5})
+        self.p.start("braceturn")
+        self.p.programs["braceturn"]["cap"] = 12
+        self.p.tap_block(10, 0)
+        self.hit(shot(), **good)
+        self.hit(shot())                      # the 12th swing: its 3D isn't in yet
+        self.assertIsNotNone(self.p.run)
+        self.assertEqual("That's 12 swings, the cap: stop here. The last verdicts come with the 3D.", self.said()[-1])
+        self.hit(shot(), **good)              # past the cap: not taken
+        self.assertEqual(self.p.state()["program"]["used"], 12)
+        self.swings[1].update(good)
+        self.p.step(self.swings)
+        self.assertIsNone(self.p.run)
+        done = self.p.state()["log"][-1]
+        self.assertEqual(done["how"], "cap")
+        tier2 = next(b for b in done["blocks"] if b["id"] == "tier2")
+        self.assertEqual([r["gate"] for r in tier2["judged"]], [True, True])
+        self.assertEqual(self.said()[-2:], ["Pass.", done["spoken"]])
+
+    def test_a_full_block_holds_later_swings_until_its_3d(self):
+        # Tier 2's 15th shot waits for its 3D: the next swing isn't Tier 2's 16th, it waits to see
+        # whether Tier 3 comes (here it does).
+        good = dict(body3d=body3d(pelvis_open=14), body={"pelvisBall": 4.5})
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        for _ in range(14):
+            self.hit(shot(), **good)
+        self.hit(shot())
+        self.hit(shot(), **good)
+        self.assertEqual(self.block(), "tier2")
+        self.swings[14].update(good)
+        self.p.step(self.swings)
+        self.assertEqual(self.block(), "tier3")
+        blocks = self.p.state()["program"]["blocks"]
+        self.assertEqual((len(blocks[1]["judged"]), len(blocks[2]["judged"])), (15, 1))
+
+    def test_a_clip_nobody_swung_in_is_left_out(self):
+        # One phone set off by the other's voice (status.phantom): saying "no Square numbers" about it
+        # would set off another, and it isn't a swing for the cap.
+        self.p.start("lowpoint")
+        self.p.next_block()
+        self.p.next_block()
+        self.clock.t += 30
+        name = f"swing_dtl_1920x1080_240fps_{int(self.clock.t)}_2000ms.mp4"
+        self.swings.append({"t": self.clock.t, "name": name, "partner": None, "shot": None, "phantom": True})
+        self.clock.t += programs.SHOT_GIVE_UP_S + 1
+        self.p.step(self.swings)
+        self.assertEqual(self.p.state()["program"]["used"], 0)
+        self.assertNotIn("No Square numbers for that one: not counted.", self.said())
+
     def test_tier3_locked_until_tier2_passes(self):
         self.p.start("sequence")
         self.taps(*[True] * 10)
@@ -603,9 +683,9 @@ class ProgramsTest(unittest.TestCase):
         # 10 taps in Tier 1 passes to Tier 2
         self.taps(*[True] * 10)
         self.assertEqual(self.block(), "tier2")
-        # 30 shots with unread strike in Tier 2: not counted in gate, but count toward 40 swing cap
+        # 30 shots Square didn't read in Tier 2: not counted in gate, but count toward 40 swing cap
         for _ in range(30):
-            self.hit(shot(h=0.0, v=0.0))
+            self.hit(shot(speed=0.0))
         self.assertIsNone(self.p.run)
         self.assertEqual(self.p.state()["log"][-1]["how"], "cap")
 
@@ -639,10 +719,6 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(programs.say_number("strikeH", 8), "strike 8 millimetres heel")
         self.assertEqual(programs.say_number("strikeH", -3), "strike 3 millimetres toe")
         self.assertEqual(programs.say_number("strikeH", 0), "strike centre")
-
-        # say_limit
-        self.assertEqual(programs.say_limit({"key": "strikeV", "min": -3}, -9), "strike 3 millimetres low or higher")
-        self.assertEqual(programs.say_limit({"key": "strikeV", "max": 3}, 5), "strike 3 millimetres high or lower")
 
     def test_cue(self):
         # Failed checks as short spoken cues

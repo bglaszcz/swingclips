@@ -127,6 +127,18 @@ class Watching(unittest.TestCase):
         self.assertEqual([s["shotNumber"] for s in self.w.poll()], [3])
         self.assertTrue(any("#2" in line for line in self.said))
 
+    def test_a_shot_the_server_couldnt_keep_doesnt_hold_up_the_rest(self):
+        def keep(shot):
+            if shot["shotNumber"] == 2:
+                raise OSError("shots.jsonl is in use")
+            self.shots.append(shot)
+        self.w.on_shot = keep
+        self.w.start()
+        add_row(self.db, 2)
+        add_row(self.db, 3)
+        self.assertEqual([s["shotNumber"] for s in self.w.poll()], [3])
+        self.assertTrue(any("#2" in line for line in self.said))
+
     def test_heartbeat_reports_squares_app_and_the_last_shot(self):
         self.w.start()
         add_row(self.db, 2)
@@ -164,6 +176,7 @@ class IntoTheServer(unittest.TestCase):
         self.patch = mock.patch.object(self.app, "SHOTS_FILE", Path(self.dir.name) / "shots.jsonl")
         self.patch.start()
         self.app.recent_square_shots.clear()
+        self.app._square_shots_read = False
 
     def tearDown(self):
         self.patch.stop()
@@ -181,6 +194,24 @@ class IntoTheServer(unittest.TestCase):
         self.assertEqual(len(kept), 1)
         self.assertEqual(kept[0]["shotNumber"], 12)
         self.assertIn("serverReceived", kept[0])
+
+    def test_after_a_restart_a_shot_already_kept_is_kept_once(self):
+        row = (12, 1, 17, "Range", json.dumps(SHOT), json.dumps(RESULT), json.dumps(CLUB), "Range")
+        shot = square_watch.make_shot(row, datetime.now().astimezone())
+        self.app.record_shot(dict(shot))
+        self.app.recent_square_shots.clear()       # the server restarted
+        self.app._square_shots_read = False
+        self.assertEqual(self.app.record_shot(dict(shot)), {"ok": True, "duplicate": True})
+        self.assertEqual(len(self.kept()), 1)
+
+    def test_a_shot_that_wasnt_written_can_come_again(self):
+        row = (13, 1, 17, "Range", json.dumps(SHOT), json.dumps(RESULT), json.dumps(CLUB), "Range")
+        shot = square_watch.make_shot(row, datetime.now().astimezone())
+        with mock.patch("builtins.open", side_effect=OSError("in use")):
+            with self.assertRaises(OSError):
+                self.app.record_shot(dict(shot))
+        self.assertEqual(self.app.record_shot(dict(shot)), {"ok": True})
+        self.assertEqual(len(self.kept()), 1)
 
     def test_shots_without_a_number_are_all_kept(self):
         shot = {"received": datetime.now().astimezone().isoformat(), "source": "gspro-connect",

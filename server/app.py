@@ -1013,6 +1013,8 @@ def swings_since(since: float) -> list[dict]:
             s["body3d"] = rec.get("body3d")
             s["why3d"] = rec.get("why3d")
             s["body"] = rec.get("body")
+            # A clip nobody swung in (an echo of a phone's voice): programs leave it out (status.phantom).
+            s["phantom"] = status.phantom(s, rec)
     return swings_now
 
 
@@ -1333,8 +1335,29 @@ LONE_PENALTY_S = 3.0
 
 
 # Square shot numbers already taken, so the same shot from both the laptop's watcher and the server's
-# own (square_watch.py), or a retried send, is kept once.
+# own (square_watch.py), or a retried send, is kept once. Filled from shots.jsonl on the first shot
+# after a start (a retry can come in after a restart).
 recent_square_shots: collections.deque = collections.deque(maxlen=500)
+_square_shots_read = False
+
+
+def _read_square_shots() -> None:
+    """Fills recent_square_shots from shots.jsonl once. Call with files_lock held."""
+    global _square_shots_read
+    if _square_shots_read:
+        return
+    _square_shots_read = True
+    try:
+        lines = SHOTS_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for line in lines[-2000:]:
+        try:
+            s = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(s, dict) and s.get("source") == "square-app" and isinstance(s.get("shotNumber"), int):
+            recent_square_shots.append(s["shotNumber"])
 
 
 @app.post("/api/shots")
@@ -1350,11 +1373,12 @@ def record_shot(shot: dict) -> dict:
     global last_shot_at
     sent = datetime.fromisoformat(shot["received"])  # rejects a bad timestamp
     number = shot.get("shotNumber")
-    if shot.get("source") == "square-app" and isinstance(number, int):
+    square = shot.get("source") == "square-app" and isinstance(number, int)
+    if square:
         with files_lock:
+            _read_square_shots()
             if number in recent_square_shots:
                 return {"ok": True, "duplicate": True}
-            recent_square_shots.append(number)
     # Our own clock too: the difference shows whether the sending PC's clock is off.
     shot["serverReceived"] = datetime.now().astimezone().isoformat(timespec="milliseconds")
     skew = datetime.now().astimezone().timestamp() - sent.timestamp()
@@ -1362,8 +1386,13 @@ def record_shot(shot: dict) -> dict:
         print(f"Shot: sender's clock is {-skew:+.1f} s off from this server's", flush=True)
     ballflight.fill(shot)
     SHOTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with files_lock, open(SHOTS_FILE, "a", encoding="utf-8") as f:
-        f.write(json.dumps(shot, separators=(",", ":")) + "\n")
+    with files_lock:
+        if square and number in recent_square_shots:
+            return {"ok": True, "duplicate": True}   # the same shot from the other watcher meanwhile
+        with open(SHOTS_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(shot, separators=(",", ":")) + "\n")
+        if square:
+            recent_square_shots.append(number)   # only once written: a failed write can be sent again
     last_shot_at = time.time()
     calc = " (calculated)" if shot["ball"].get("computed") else ""
     print(f"Shot: {shot.get('club')} ball {shot['ball'].get('speed')} mph, carry {shot['ball'].get('carry')} yd{calc}", flush=True)
@@ -1929,7 +1958,8 @@ def set_plan_step(body: PlanStep):
         practice_state.set_config({**practice_state.config, "on": False})
     if programs_state.run and body.block:
         programs_state.stop()
-    drills_state.set(body.drill)
+    if body.block or not programs_state.run:
+        drills_state.set(body.drill)   # (ending the plan leaves a program's drill block as it is)
     drills_tick()
     running = games_state.game
     if running and running.get("id") != body.game:

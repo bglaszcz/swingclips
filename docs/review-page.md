@@ -752,8 +752,13 @@ toward the ball". The phones face away from you, so voice is the channel.
   tapped Pass/Miss on the page, one at a time or the whole block at once after doing them (**All N passed**,
   or how many passed: one walk off the mat; misses are entered first, so on a streak gate the passes are the
   run in a row) (clips the phones record during them are ignored). Ball shots are judged
-  once the shot pairs; a shot Square didn't read (club speed 0, or strike across the face exactly 0.0, whose
-  up-down number is filler) is left out of the gate. Face to path = face minus path. The phone says each
+  once the shot pairs; a shot Square didn't read (club speed 0, or, on a gate that checks the strike, a strike
+  across the face exactly 0.0, whose up-down number is filler, or none) is left out of the gate, and so is one
+  missing a number its gate checks ("Invalid read (no hips vs ball at impact)"; why there's no 3D is said in a
+  few words: "3D failed", "camera moved"). A clip only one phone recorded, with no swing and no shot in it (an
+  echo of a phone's voice, `status.phantom`), is left out without a word. A block that checks 3D waits for
+  it (up to 5 minutes): once all its reps are in but some wait, later swings wait too, so they go to the block
+  the 3D decides; at the cap the phone says to stop and the program ends once the last swings' 3D is in. Face to path = face minus path. The phone says each
   shot's verdict short, without numbers (they're on the screen): "Pass." (with "3 in a row" on a streak
   gate) or "Miss:" and which way, e.g. "face open to path" (`programs.CUES`), through the practice feed (practice voice and games are turned off; one voice at a time).
   On the Start page, a dedicated last-shot panel under the block gate displays the latest ball rep readable from 3 m on the mat: the verdict in 40 px, each gate check with its value, target band, and ✓ or ✗ in 28 px, and extra launch numbers in a summary row. Calm styling highlights passes in the accent colour and misses in muted text with ✗, never red.

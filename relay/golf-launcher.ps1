@@ -120,6 +120,10 @@ if (-not $NoUpdate) {
     }
 }
 
+# A golf agent left running (started at sign-in, or by an earlier window) keeps the old scripts:
+# stopped here when they changed, so Start-Agent runs the new ones.
+if ($Updated -and -not $DryRun -and $Updated -match 'golf-agent|golf-common') { Stop-Agent }
+
 # ---- The window ----
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing

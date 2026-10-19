@@ -13,12 +13,16 @@ The Square watcher, the GSPro-connector option, and the ball-flight fill-in. (Mo
   brings the folder's scripts up to date from the server (`Update-RelayFiles` in `golf-common.ps1`:
   `GET /api/relay/files` lists the server's `relay/*.ps1` and `*.cmd` with SHA-256; each one that
   differs or is missing is fetched from `/api/relay/files/<name>`, checked and swapped in; other
-  files, such as `square-app.txt`, are left alone), then opens the new launcher with `-NoUpdate`.
+  files, such as `square-app.txt`, are left alone; `Square watcher.cmd` / `Shot listener.cmd` wait for next
+  time while their window is open, since cmd reads a running batch file by position), then opens the new
+  launcher with `-NoUpdate`, which restarts the golf agent if its scripts changed.
 - **`golf-agent.ps1`** (+ **`Golf agent.cmd`**): the launcher agent the window runs (it can also run on
   its own, and `-Startup` would add it to Windows sign-in, which the owner doesn't want). It polls the server
   (`POST /api/relay/agent`), reports what is running (Square app, watcher, connector, listener, shot source),
   and executes named actions sent from the browser Start page (start/stop Square, start/stop watcher,
-  switch shot source, start/stop GSPro connector stack, open Start page). Supports `-DryRun` for testing.
+  switch shot source, start/stop GSPro connector stack, open Start page). Each report carries the ids of the
+  commands it ran since the last one (`doneIds`), so several sent in one poll are all marked done. Supports
+  `-DryRun` for testing.
 - **`golf-common.ps1`**: shared helper functions for `golf-agent.ps1` and `start-golf.ps1` (process checks,
   Start menu app resolution, shortcut creation, shot source toggling). Compatible with Windows PowerShell 5.1.
 - **`start-golf.ps1`** (+ **`Start golf.cmd`**, **`Start golf (GSPro).cmd`**): the manual one-click launcher

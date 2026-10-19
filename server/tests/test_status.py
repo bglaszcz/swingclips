@@ -165,6 +165,19 @@ class HeartbeatTest(unittest.TestCase):
         self.assertEqual(mail["commands"][0]["action"], "start_square")
         self.assertFalse(self.s.has_agent_mail())
 
+    def test_agent_commands_done_by_id(self):
+        # Two commands in one poll: the agent says the ids it ran, so both are done.
+        stop = self.s.agent_command("stop_square")["id"]
+        start = self.s.agent_command("start_gspro")["id"]
+        self.assertEqual(len(self.s.take_agent_mail()["commands"]), 2)
+        self.s.agent_heartbeat({"lastAction": "start_gspro", "lastResult": "GSPro: started", "doneIds": f"{stop},{start}"})
+        self.assertEqual([c["state"] for c in self.s.agent_commands], ["completed", "completed"])
+        # Nothing run since: a command sent meanwhile isn't taken as done.
+        again = self.s.agent_command("start_gspro")["id"]
+        self.s.take_agent_mail()
+        self.s.agent_heartbeat({"lastAction": "start_gspro", "lastResult": "GSPro: started", "doneIds": ""})
+        self.assertEqual(next(c for c in self.s.agent_commands if c["id"] == again)["state"], "sent")
+
     def test_agent_disallowed_actions(self):
         with self.assertRaises(ValueError):
             self.s.agent_command("rm_rf")
@@ -298,6 +311,22 @@ class QuietTest(unittest.TestCase):
         self.s.take("dtl")
         self.clock.t += status.TALK_MAX_S + 1
         self.assertFalse(self.s.has_mail("dtl"))
+
+    def test_speaking_stuck_doesnt_deafen_the_other_for_good(self):
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=True))
+        self.s.take("dtl")
+        for _ in range(int(status.TALK_STUCK_S // 5) + 2):   # still polling, still "speaking"
+            self.clock.t += 5
+            self.s.heartbeat("face", hb(recording=True, practiceVoice=True, speaking=True))
+            self.s.take("dtl")
+        self.assertLessEqual(self.s._quiet_until("dtl", self.clock.t), self.clock.t)
+
+    def test_sentences_sent_together_are_all_waited_for(self):
+        self.s.heartbeat("face", hb(recording=True, practiceVoice=True))   # an older app: estimated
+        self.s.talked("face", "one two three four five")
+        self.s.talked("face", "six seven")
+        q = self.s.take("dtl")["quiet"]
+        self.assertAlmostEqual(q, status.TALK_START_S + 7 * status.TALK_S_PER_WORD + status.TALK_TAIL_S, places=1)
 
     def test_older_app_whole_sentence_estimated(self):
         self.s.heartbeat("face", hb(recording=True, practiceVoice=True))   # no "speaking"

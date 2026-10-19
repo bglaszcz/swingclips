@@ -105,4 +105,5 @@ def relay_files() -> dict[str, str]:
 
 def relay_file(name: str) -> Path | None:
     """One of relay_files(), or None for any other name (no paths, no other kinds of file)."""
-    return RELAY_DIR / name if name in relay_files() else None
+    p = RELAY_DIR / name
+    return p if Path(name).name == name and p.suffix.lower() in RELAY_KINDS and p.is_file() else None

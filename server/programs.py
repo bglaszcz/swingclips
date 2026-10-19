@@ -123,9 +123,7 @@ def block_needs_3d(block: dict) -> bool:
         return False
     if block.get("needs3d"):
         return True
-    gate = block.get("gate") or {}
-    checks = gate.get("checks", []) + gate.get("medians", [])
-    return any(c.get("key") in BODY3D_KEYS | CAMERA_KEYS for c in checks)
+    return bool(gate_keys(block) & (BODY3D_KEYS | CAMERA_KEYS))
 
 
 def camera_numbers(body: dict | None) -> dict:
@@ -152,16 +150,46 @@ def numbers_of(shot: dict | None, body3d: dict | None = None, body: dict | None 
     return out
 
 
-def no_read(n: dict) -> str | None:
-    """Why Square's shot can't be judged (None: it can)."""
+STRIKE_KEYS = {"strikeV", "strikeH"}
+
+
+def gate_keys(block: dict) -> set:
+    """The numbers a block's gate checks (its checks and medians)."""
+    gate = block.get("gate") or {}
+    return {c["key"] for c in gate.get("checks", []) + gate.get("medians", [])}
+
+
+def no_read(n: dict, keys: set | None = None) -> str | None:
+    """Why Square's shot can't be judged (None: it can). `keys`: the numbers the gate checks; a failed
+    strike read only matters to a gate on the strike (None: any gate)."""
     # Checked before any gate compares numbers, so a missing reading is never taken as 0.
     if n["clubSpeed"] is None or n["clubSpeed"] == 0:
         return "no club speed"
     # Square's app flags a failed impact read (IsValidImpact*: the watcher sends null); its CSV export
     # wrote 0.0 across the face with a filler height instead.
-    if n["strikeH"] is None or n["strikeV"] is None or n["strikeH"] == 0.0:
+    if (keys is None or keys & STRIKE_KEYS) and (n["strikeH"] is None or n["strikeV"] is None or n["strikeH"] == 0.0):
         return "strike not read"
     return None
+
+
+def missing(block: dict, n: dict) -> str | None:
+    """A number the block's gate checks that this swing doesn't have (None: it has them all): said as
+    the reason the rep isn't counted, rather than leaving it neither pass nor miss."""
+    for key in sorted(gate_keys(block)):
+        if n.get(key) is None:
+            return f"no {NUMBERS[key][0].lower()}" if key in NUMBERS else f"no {key}"
+    return None
+
+
+def why_words(why3d) -> str:
+    """Why a swing has no 3D, in a few words for the phone (the swing record's why3d can be a traceback
+    or a long sentence about the cameras)."""
+    w = str(why3d)
+    if w.startswith("failed"):
+        return "3D failed"
+    if "moved" in w:
+        return "camera moved"
+    return w.split(":")[0].split(" (")[0][:60]
 
 
 def check(n: dict, c: dict) -> bool | None:
@@ -220,26 +248,13 @@ def say_number(key: str, v) -> str:
     return f"{name} {sign}{s}"
 
 
-# Which way past a check's max / min reads, in words: (past max, past min).
+# Which way past a check's max reads, in words (gate_text): (past max, past min).
 LIMIT_WORDS = {
     "attack": ("or steeper", "or shallower"),
     "strikeV": ("or lower", "or higher"),
     "pelvisPeakMs": ("or earlier", "or later"),
     "pelvisOpen": ("or less", "or more"),
 }
-
-
-def say_limit(c: dict, v) -> str:
-    """What a failed check (value v) wanted, in words for the phone."""
-    key, lo, hi = c["key"], c.get("min"), c.get("max")
-    if key == "armAfterPelvis":
-        return "arm peak after hips"
-    if lo is not None and hi is not None and lo == -hi:
-        return f"{NUMBERS[key][0].lower()} within {hi:g}"
-    down, up = LIMIT_WORDS.get(key, ("or less", "or more"))
-    if hi is not None and (v is None or v > hi):
-        return f"{say_number(key, hi)} {down}"
-    return f"{say_number(key, lo)} {up}"
 
 
 # What a missed check was, in a few words for the phone (the number is on the screen): (too high, too low).
@@ -312,8 +327,11 @@ def judged(block: dict, reps: list[dict], marks: list[dict]) -> list[dict]:
 
 
 def block_state(block: dict, reps: list[dict], marks: list[dict]) -> dict:
-    """{reps (gate reps so far), passes, streak, best (streak), passed, done} for a block."""
-    js = [r for r in judged(block, reps, marks) if r["gate"] is not None]
+    """{reps (gate reps so far), passes, streak, best (streak), passed, done, waiting (shots still
+    waiting for their 3D)} for a block."""
+    all_js = judged(block, reps, marks)
+    js = [r for r in all_js if r["gate"] is not None]
+    waiting = sum(1 for r in all_js if r.get("waiting3d"))
     gate = block["gate"]
     passes = sum(r["gate"] for r in js)
     streak = best = 0
@@ -330,7 +348,7 @@ def block_state(block: dict, reps: list[dict], marks: list[dict]) -> dict:
         passed = passes >= gate["need"] and meds_ok
         done = len(js) >= block["reps"]
     return {"reps": len(js), "passes": passes, "streak": streak, "best": best, "passed": passed, "done": done,
-            **({"medians": meds} if meds else {})}
+            "waiting": waiting, **({"medians": meds} if meds else {})}
 
 
 def gate_text(block: dict) -> str:
@@ -482,55 +500,45 @@ class Programs:
         """The golfer's setup notes (Omni moved, mat changed, an update) on the run in play, or on the
         finished run started at `started` (the last one without it)."""
         text = (text or "").strip()[:1000]
-        with self.lock:
-            if self.run and started in (None, self.run["started"]):
-                self.run["notes"] = text
-                self._save()
-                return {"started": self.run["started"], "notes": text}
-            logged = self._log()
-            i = next((i for i in range(len(logged) - 1, -1, -1) if started is None or logged[i]["started"] == started), None)
-            if i is None:
-                raise ValueError("No such run")
-            logged[i]["notes"] = text
-            tmp = self.log_file.with_suffix(".tmp")
-            tmp.write_text("".join(json.dumps(x, separators=(",", ":")) + "\n" for x in logged), encoding="utf-8")
-            tmp.replace(self.log_file)
-            return {"started": logged[i]["started"], "notes": text}
+        def put(run):
+            run["notes"] = text
+            return {"started": run["started"], "notes": text}
+        return self._edit_run(started, put)
 
     def wrist(self, started: float | None = None, clip: str = "", verdict: str | None = None) -> dict:
         """Saves the golfer's lead wrist call at impact ('flat', 'bowed', 'cupped', 'can't tell',
         or None to clear) on one shot of a finished run, or the run in play."""
-        if isinstance(started, str) and not isinstance(clip, (int, float)):
-            clip, verdict, started = started, clip, None
         if not clip:
             raise ValueError("No clip specified")
         if verdict is not None and verdict not in VALID_WRIST:
             raise ValueError(f"Invalid wrist verdict: {verdict!r}")
-        with self.lock:
-            if self.run and (started is None or self.run["started"] == started
-                             or (isinstance(started, (int, float)) and abs(self.run["started"] - started) < 0.001)):
-                wrist = self.run.setdefault("wrist", {})
-                if verdict is None:
-                    wrist.pop(clip, None)
-                else:
-                    wrist[clip] = verdict
-                self._save()
-                return {"started": self.run["started"], "wrist": wrist}
-            logged = self._log()
-            i = next((i for i in range(len(logged) - 1, -1, -1)
-                      if started is None or logged[i]["started"] == started
-                      or (isinstance(started, (int, float)) and abs(logged[i]["started"] - started) < 0.001)), None)
-            if i is None:
-                raise ValueError("No such run")
-            wrist = logged[i].setdefault("wrist", {})
+        def put(run):
+            wrist = run.setdefault("wrist", {})
             if verdict is None:
                 wrist.pop(clip, None)
             else:
                 wrist[clip] = verdict
+            return {"started": run["started"], "wrist": wrist}
+        return self._edit_run(started, put)
+
+    def _edit_run(self, started: float | None, put) -> dict:
+        """put(run) on the run in play when `started` is None or its start, else on the finished run
+        started then (the last one without it), saved either way. Returns what put returns."""
+        same = lambda run: started is None or abs(run["started"] - started) < 0.001
+        with self.lock:
+            if self.run and same(self.run):
+                out = put(self.run)
+                self._save()
+                return out
+            logged = self._log()
+            i = next((i for i in range(len(logged) - 1, -1, -1) if same(logged[i])), None)
+            if i is None:
+                raise ValueError("No such run")
+            out = put(logged[i])
             tmp = self.log_file.with_suffix(".tmp")
             tmp.write_text("".join(json.dumps(x, separators=(",", ":")) + "\n" for x in logged), encoding="utf-8")
             tmp.replace(self.log_file)
-            return {"started": logged[i]["started"], "wrist": wrist}
+            return out
 
     def next_block(self) -> dict:
         """Ends the block in play as it stands and moves on."""
@@ -556,7 +564,9 @@ class Programs:
 
             # Check existing reps that are waiting for 3D
             by_name = {s["name"]: s for s in swings_now}
-            for r in self.run["reps"]:
+            for r in list(self.run["reps"]):
+                if not self.run:
+                    break  # the program ended (its last block decided, or the cap)
                 if not r.get("waiting3d"):
                     continue
                 s = by_name.get(r.get("clip"))
@@ -567,12 +577,14 @@ class Programs:
                     r["numbers"].update(body3d_numbers(s["body3d"]))
                     r["numbers"].update(camera_numbers(s.get("body")))
                     p, block = self._current()
+                    mine = next((b for b in p["blocks"] if b["id"] == r["block"]), None)
+                    r["noRead"] = missing(mine, r["numbers"]) if mine else None
                     if block["id"] == r["block"]:
                         self._say_shot(block, r["t"])
-                        self._settle(p, now)
+                    self._settle(p, now)
                 elif s and s.get("why3d"):
                     r["waiting3d"] = False
-                    r["noRead"] = s["why3d"]
+                    r["noRead"] = why_words(s["why3d"])
                     self._say(f"Invalid read ({r['noRead']}): not counted.")
                     p, block = self._current()
                     self._settle(p, now)
@@ -599,9 +611,18 @@ class Programs:
                 if not s.get("shot") and now - t < SHOT_GIVE_UP_S:
                     break  # Square's shots come in order: wait for this one before later ones
                 p, block = self._current()
+                if self._swings_used() >= p["cap"]:
+                    break  # capped: the program ends once the last swings' 3D is in (_settle)
+                st = block_state(block, self.run["reps"], self.run["marks"])
+                if not st["done"] and st["waiting"] and st["reps"] + st["waiting"] >= block["reps"]:
+                    # The block's reps are all in but some wait for their 3D: later swings belong to
+                    # whatever comes next, which the 3D decides.
+                    break
                 done_t.append(t)
-                if not s.get("shot") and not block["ball"]:
-                    # A no-ball rep the phones heard: the golfer's tap counts it, not the clip.
+                if not s.get("shot") and (not block["ball"] or s.get("phantom")):
+                    # A no-ball rep the phones heard (the golfer's tap counts it, not the clip), or a
+                    # clip nobody swung in (status.phantom: an echo of a phone's voice; saying "no
+                    # Square numbers" about it would set off another).
                     self.run["ignored"].append(t)
                     continue
                 r = {"t": t, "block": block["id"], "clip": s["name"], "partner": s.get("partner")}
@@ -609,18 +630,20 @@ class Programs:
                     r["kind"] = "noshot"
                 else:
                     n = numbers_of(s["shot"], s.get("body3d"), s.get("body"))
-                    nr = no_read(n)
+                    nr = no_read(n, gate_keys(block)) if block["ball"] else no_read(n)
                     needs_3d = block_needs_3d(block)
                     waiting = False
                     if not nr and needs_3d:
                         if s.get("body3d"):
                             pass
                         elif s.get("why3d"):
-                            nr = s["why3d"]
+                            nr = why_words(s["why3d"])
                         elif now - t < BODY3D_GIVE_UP_S:
                             waiting = True
                         else:
                             nr = "no 3D"
+                    if not nr and not waiting and block["ball"]:
+                        nr = missing(block, n)
                     r.update(kind="shot" if block["ball"] else "ball", club=s["shot"].get("club"),
                              numbers=n, noRead=nr, waiting3d=waiting)
                 self.run["reps"].append(r)
@@ -716,14 +739,22 @@ class Programs:
 
     def _settle(self, p: dict, now: float) -> bool:
         """Ends the block in play if its gate is decided, and the program at its cap. False once the
-        program ended."""
+        program ended, or it's at its cap and takes no more swings (it ends when their 3D is in)."""
         if self._swings_used() >= p["cap"]:
+            stop = f"That's {p['cap']} swings, the cap: stop here."
+            if any(r.get("waiting3d") for r in self.run["reps"]):
+                # The last swings' verdicts wait for their 3D: no more swings, and the end once it's in.
+                if not self.run.get("capped"):
+                    self.run["capped"] = True
+                    self._say(f"{stop} The last verdicts come with the 3D.")
+                return False
             _, block = self._current()
             st = block_state(block, self.run["reps"], self.run["marks"])
             if st["reps"]:
                 self.run["results"][block["id"]] = "passed" if st["passed"] else "not passed"
+            said_stop = self.run.get("capped")
             done = self._finish("cap")
-            self._say(f"That's {p['cap']} swings, the cap: stop here. {done['spoken']}")
+            self._say(f"{'' if said_stop else stop + ' '}{done['spoken']}")
             return False
         _, block = self._current()
         st = block_state(block, self.run["reps"], self.run["marks"])

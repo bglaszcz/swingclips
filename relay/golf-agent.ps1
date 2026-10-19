@@ -30,6 +30,8 @@ if ($Startup) {
 
 $lastAction = ""
 $lastResult = ""
+# The ids of the commands run since the last report the server took (several can come in one poll).
+$doneIds = @()
 
 while ($true) {
     $sq = [bool](Get-SquareProcess)
@@ -48,6 +50,7 @@ while ($true) {
         computer = $env:COMPUTERNAME
         lastAction = $lastAction
         lastResult = $lastResult
+        doneIds = ($doneIds -join ",")
     }
     $json = ConvertTo-Json $payload -Compress
 
@@ -56,6 +59,7 @@ while ($true) {
     $resp = $null
     try {
         $resp = Invoke-RestMethod -Uri $url -Method Post -ContentType "application/json" -Body $json -TimeoutSec 25
+        $doneIds = @()
     } catch {
         Say "Server poll failed: $($_.Exception.Message)" "Yellow"
         if ($Once) { break }
@@ -95,6 +99,7 @@ while ($true) {
             Say "Command [$cid] result: $res" "Green"
             $lastAction = $act
             $lastResult = $res
+            $doneIds += "$cid"
         }
     }
 
