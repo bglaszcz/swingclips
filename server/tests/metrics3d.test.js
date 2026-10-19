@@ -228,6 +228,27 @@ test("address dropout: single frame missing hip at exact P1 does not blank pelvi
   assert.ok(sways.length > 0, "pelvisSway is not blanked for entire swing");
 });
 
+test("no hips anywhere in the setup: the turn is from the target line, and says so", () => {
+  // Hips square to the target line at address (lead hip toward +x), then turning 30 degrees open.
+  const hips = doc => {
+    for (const f of doc.frames) {
+      const a = f.t < 1.3 ? 0 : 30 * Math.PI / 180;
+      if (f.p[23]) f.p[23] = [0.15 * Math.cos(a), 0.95, -0.15 * Math.sin(a)];
+      if (f.p[24]) f.p[24] = [-0.15 * Math.cos(a), 0.95, 0.15 * Math.sin(a)];
+    }
+    return doc;
+  };
+  const ref = M.compute(hips(makeDoc({})), POSITIONS);
+  const doc = hips(makeDoc({}));
+  for (const f of doc.frames) if (f.t <= 1.21) f.p[23] = null;   // the lead hip lost through address
+  const r = M.compute(doc, POSITIONS);
+  assert.equal(ref.turnFrom.pelvis, "address");
+  assert.equal(r.turnFrom.pelvis, "target line");
+  const at = (res, t) => res.values.find(v => Math.abs(v.t - t) < 0.003).pelvisTurn;
+  assert.ok(Math.abs(Math.abs(at(ref, 1.5)) - 30) < 0.5);
+  assert.ok(Math.abs(at(r, 1.5) - at(ref, 1.5)) < 0.5);
+});
+
 test("thoraxTop search window: early noise spike or early P3 before P4 - 0.35s does not inflate thoraxTop", () => {
   const doc = makeDoc({});
   // Inject a tracking noise spike early in the backswing (e.g. t = 1.1s, > 0.35s before P4 at 1.6s)

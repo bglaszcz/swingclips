@@ -306,8 +306,13 @@
 
     const pIdx = pelvis[ai] != null ? ai : nearestValid(i => pelvis[i] != null);
     const tIdx = thorax[ai] != null ? ai : nearestValid(i => thorax[i] != null);
-    const p0 = pIdx >= 0 ? pelvis[pIdx] : null;
-    const t0 = tIdx >= 0 ? thorax[tIdx] : null;
+    // No hips (or shoulders) at all in the setup: the turn from the target line instead (heading 0 is square
+    // to it). The owner's hips at address sit within a few degrees of square (Oct 2 median +3.4, IQR 2;
+    // Oct 6 -1.4, IQR 6, 34 swings), while the down-the-line phone loses a hip at address on 10-30% of
+    // swings, which left those with no turn and no hips open at impact (the braceturn gate's number).
+    const p0 = pIdx >= 0 ? pelvis[pIdx] : 0;
+    const t0 = tIdx >= 0 ? thorax[tIdx] : 0;
+    const turnFrom = { pelvis: pIdx >= 0 ? "address" : "target line", thorax: tIdx >= 0 ? "address" : "target line" };
 
     const basePelvisIdx = (raw[ai] && raw[ai].pelvisCentre) ? ai : nearestValid(i => raw[i] && raw[i].pelvisCentre);
     const baseThoraxIdx = (raw[ai] && raw[ai].thoraxCentre) ? ai : nearestValid(i => raw[i] && raw[i].thoraxCentre);
@@ -440,7 +445,7 @@
                     diffPct: expected ? 100 * (measured - expected) / expected : null,
                     ok: expected ? Math.abs(measured - expected) <= CLUB_TOLERANCE * expected : null };
     }
-    return { values, address: ai, sequence, clubCheck, thoraxTop, pelvisStartMs, setup };
+    return { values, address: ai, sequence, clubCheck, thoraxTop, pelvisStartMs, setup, turnFrom };
   }
 
   /** The numbers at key positions: {p1: values, p4: ..., p6, p7} (nearest 3D frame to each). A number a
@@ -510,7 +515,7 @@
       numbers[key] = typeof v === "number" && Number.isFinite(v) ? sign * v : null;
     }
     numbers.pelvisStartMs = typeof r.pelvisStartMs === "number" && Number.isFinite(r.pelvisStartMs) ? r.pelvisStartMs : null;
-    return { numbers, sequence: r.sequence, clubCheck: r.clubCheck, reprojection: doc.reprojection,
+    return { numbers, turnFrom: r.turnFrom, sequence: r.sequence, clubCheck: r.clubCheck, reprojection: doc.reprojection,
              boneSpreadPct: doc.boneSpreadPct, setupMissing: r.setup ? r.setup.missing : [],
              addressError: (doc.reprojection && doc.reprojection.address) ? doc.reprojection.address : null };
   }
