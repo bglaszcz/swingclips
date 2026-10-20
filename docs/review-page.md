@@ -423,11 +423,18 @@ server runs the same file), so they all agree:
   since shoulders are read past side-on (29ddc0e) a session's spread is 3.2° (X-factor 4.9°, hips
   4.0°), the hips only just (0.55, 0.53). Which swings turned more within a session: the two models
   agree on it for the hips (correlation 0.88) and X-factor (0.76), less for the shoulders (0.53), and
-  the 3D follows none of them (0.40, -0.07, -0.23). Nothing changed. Elsewhere the two
-  disagree with it: the shoulder turn at P6 is marked shaky (address 1.8° against a 3.0° spread) though
-  the two models differ by 1.4° and agree on the swing-to-swing differences (0.92), and the hip turn at
-  P6 and X-factor at P6 and impact pass though they differ by 4.0°, 5.2° and 3.8° (spreads 6.1°, 7.6°,
-  6.7°). (Shoulders at impact read ~0 on both, so that row says nothing.)
+  the 3D follows none of them (0.40, -0.07, -0.23). Nothing changed.
+  **At P6 and impact** both models land on the same frame (83 of 83: P6 comes from the club, impact from
+  the ball), so their difference is the body points alone, and the moment's own timing adds to it: the
+  turn's speed there times how far off P6 and impact usually are against the hand labels (RTMPose-m
+  face-on, 4.8 ms ≈ 1.2 frames and 3.8 ms). The shoulder turn at P6: 1.4° between the models (they agree
+  on which swings turned more, 0.92) and 2.2° from timing (it turns ~1.9° a frame there), 2.6° together
+  against a 3.0° spread: shaky, as marked. The hip turn at P6 (4.0° and 1.3°, 4.2° against 6.1°) and at
+  impact (2.1° and 1.9°, 2.9° against 4.5°) and X-factor at P6 (5.2° and 1.3°, 5.4° against 7.6°) and at
+  impact (3.8° and 1.7°, 4.1° against 6.7°) are noisier than marked: they pass on address noise of 2.2°
+  and 2.8°. Left as they are (owner, Oct 20): only the swing view's numbers table and Compare show turns
+  at P6 and impact; Trends, Progress and the coach don't use them. Measuring this live would take the
+  night pass as a yardstick. (Shoulders at impact read ~0 on both, so that row says nothing.)
 - **Trends and Progress** leave out numbers with no reading everywhere (charts, the "what goes
   with" ranking, session medians). Shaky ones are hollow dots in the scatter and over-time charts
   and greyed in the tables; **Leave out shaky** (Trends and Progress, one setting) takes them out of
