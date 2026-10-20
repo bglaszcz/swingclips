@@ -479,6 +479,15 @@
   .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   /* Labeling mode (labels.js): clicks go to the pictures. */
   #stages.labeling canvas { pointer-events: auto; cursor: crosshair; }
+  /* Drawing (draw.js): the pictures take the pointer while drawing is on. */
+  #stages.drawing canvas { pointer-events: auto; cursor: crosshair; touch-action: none; }
+  .draw-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 8px 2px; }
+  .draw-bar[hidden] { display: none; }
+  .draw-bar .dr-colors, .draw-bar .dr-acts { display: inline-flex; gap: 6px; align-items: center; }
+  .dr-swatch { width: 26px; height: 26px; min-width: 0; padding: 0; border-radius: 50%; background: var(--sw);
+               border: 2px solid var(--line); }
+  .dr-swatch.on { border-color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
+  .draw-bar .dr-hint { flex: 1 1 220px; min-width: 0; }
   .angle-tag { position: absolute; top: 8px; right: 8px; z-index: 1; padding: 2px 8px; border-radius: 10px;
                background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 12px; pointer-events: none; }
   #stages:not(.two) .angle-tag { display: none; }
@@ -1593,6 +1602,7 @@
           <button id="night" title="Also show the server's own skeleton, dashed, beside the night pass's">Server skeleton</button>
         </span>
       </span>
+      <button id="draw-btn" aria-pressed="false" title="Draw lines, angles, circles and boxes on the videos; they stay with the swing on this device (D)">Draw</button>
       <button id="seq" title="Who moves first: hips, chest, lead arm and club speed, following the frames (3D swings)">Swing order</button>
       <button id="compare-btn" title="Compare this swing with another one, side by side (C)">Compare…</button>
       <button id="label-btn" title="Label this swing by hand, for the scorecard (L)">Label</button>
@@ -1608,6 +1618,8 @@
       <span id="frame"></span>
       <button id="fs" class="icon" title="Full screen (F)" aria-label="Full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
     </div>
+    <!-- Drawing on the videos (draw.js): its tools, shown while drawing. -->
+    <div id="draw-bar" class="draw-bar" hidden></div>
     <!-- Swing order (view3d.js): a flyout under the bar, opened by its button. -->
     <div id="seq-strip" hidden></div>
     </div>
@@ -2535,6 +2547,7 @@
         <dt><kbd>F</kbd></dt><dd>Full screen</dd>
         <dt><kbd>S</kbd> <kbd>A</kbd> <kbd>H</kbd> <kbd>P</kbd></dt><dd>Skeleton, angles, hand path, plane</dd>
         <dt><kbd>C</kbd></dt><dd>Compare with another swing</dd>
+        <dt><kbd>D</kbd></dt><dd>Draw on the videos (Esc stops, Ctrl+Z takes back)</dd>
         <dt><kbd>L</kbd></dt><dd>Label this swing</dd>
         <dt><kbd>?</kbd></dt><dd>This help</dd>
       </dl>
@@ -2598,6 +2611,7 @@
 <script src="/static/distro.js"></script>
 <script src="/static/indicators.js"></script>
 <script src="/static/checkpoints.js"></script>
+<script src="/static/draw.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
@@ -3360,7 +3374,10 @@ function draw(t) {
   showFrameLabel(t);
   markPosition(t);
   updateSeek(t);
-  if (!pose || !pose.frames.length || !video.videoWidth) return;
+  if (!pose || !pose.frames.length || !video.videoWidth) {
+    if (video.videoWidth && window.SwingDraw) SwingDraw.paint(ctx, "main", fitRect(W, H));
+    return;
+  }
   const i = frameIndexAt(t), frame = pose.frames[i], r = fitRect(W, H);
   const lineWidth = Math.max(1.5, 3 * r.w / 400);
   if (positions.length && overlays.clubarc) drawClubArc(ctx, r, lineWidth);
@@ -3374,6 +3391,7 @@ function draw(t) {
   if (metrics && overlays.headbox && frame.lm) drawHead(ctx, frame.lm, r, lineWidth);
   if (pose.angle !== "dtl" && metrics && overlays.impact) drawImpact(ctx, frame, i, r, lineWidth);
   if (window.Labels) Labels.drawOn(ctx, r, "main", i);
+  if (window.SwingDraw) SwingDraw.paint(ctx, "main", r);
   if (pose.angle !== "dtl") View3D.draw(t);
 }
 
@@ -3381,7 +3399,10 @@ function draw(t) {
 function draw2(t) {
   const ctx = freshCanvas(canvas2), W = canvas2.width, H = canvas2.height;
   const p = partner && partner.pose;
-  if (!p || !p.frames.length || !video2.videoWidth) return;
+  if (!p || !p.frames.length || !video2.videoWidth) {
+    if (partner && video2.videoWidth && window.SwingDraw) SwingDraw.paint(ctx, "dtl", fitRect(W, H, video2));
+    return;
+  }
   const i = frameIndexAt(t, p), frame = p.frames[i], r = fitRect(W, H, video2);
   const lineWidth = Math.max(1.5, 3 * r.w / 400);
   const numbers = dtlMetrics && anglesOn();
@@ -3391,6 +3412,7 @@ function draw2(t) {
   drawSkeletons(ctx, frame, r, !numbers, p, partnerNightPose);
   if (numbers) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
   if (window.Labels) Labels.drawOn(ctx, r, "dtl", i);
+  if (window.SwingDraw) SwingDraw.paint(ctx, "dtl", r);
 }
 
 function redraw() {
@@ -4864,6 +4886,7 @@ function setPartner(name) {
   const c = clips.find(c => c.name === current);
   document.getElementById("plane").hidden = !partner && !(c && c.angle === "dtl");
   document.getElementById("title").textContent = [current, name].filter(Boolean).join("  +  ");
+  if (window.SwingDraw) SwingDraw.setClips(current, name || null);
 }
 
 function open(name) {
@@ -5805,6 +5828,7 @@ document.getElementById("prev").onclick = () => step(-1);
 document.getElementById("next").onclick = () => step(1);
 document.addEventListener("keydown", e => {
   if (e.target.closest && e.target.closest("input:not([type=range]), select, textarea")) return;
+  if (!viewer.hidden && !helpDlg.open && window.SwingDraw && SwingDraw.key(e)) { e.preventDefault(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === "?") { e.preventDefault(); toggleHelp(); return; }
   if (helpDlg.open) return;
@@ -5824,6 +5848,19 @@ document.addEventListener("keydown", e => {
   if (e.key === "a" || e.key === "A") setOverlay("angles", !overlays.angles);
   if (e.key === "h" || e.key === "H") setOverlay("handpath", !overlays.handpath);
   if (e.key === "p" || e.key === "P") setOverlay("plane", !overlays.plane);
+});
+
+// Drawing on the videos (draw.js).
+if (window.SwingDraw) SwingDraw.attach({
+  stagesEl: document.getElementById("stages"),
+  button: document.getElementById("draw-btn"),
+  bar: document.getElementById("draw-bar"),
+  stages: [
+    { which: "main", canvas, rect: () => (video.videoWidth ? fitRect(canvas.width, canvas.height) : null) },
+    { which: "dtl", canvas: canvas2, rect: () => (partner && video2.videoWidth ? fitRect(canvas2.width, canvas2.height, video2) : null) },
+  ],
+  redraw,
+  canDraw: () => !document.getElementById("stages").classList.contains("labeling"),
 });
 
 // Pick up new clips and finished analyses without a manual reload; the noise floor now and then.

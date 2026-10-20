@@ -77,6 +77,17 @@ What the server works out for each swing and what each part of the review page s
   A kinematic
   sequence isn't attempted: from face-on alone the turn speeds come out in the wrong order (with
   both phones calibrated, the 3D panel has one: see [3d.md](3d.md)).
+- **Draw** (the button under the video, or D; `static/draw.js`, Oct 20 2026, from the feature pass against
+  V1, OnForm and CoachNow): Line (with its angle to level, in the picture's real pixels), Angle (drag the
+  first arm, then tap where the second ends; the angle at the vertex), Circle, Box and Free hand, in yellow,
+  red, blue or white, on either camera angle. Drawings stay put while the video plays (a line along the shaft
+  at address, then play to see the club come back to it) and are kept per clip in this browser
+  (`localStorage["drawings:<clip>"]`, not on the server), so a swing opens with them and the button says how
+  many ("Draw · 2"). Undo (Ctrl+Z) and Clear (Undo brings them back); Done, D or Esc stops drawing and leaves
+  them on. Off while labeling (the pictures take the clicks then).
+- **Key positions** (the strip of frames under "This swing"): every key position as a frame from each angle,
+  cropped round you with the skeleton, plain names (the P-number is in the tooltip); tap one to go there. It
+  was only under Advanced data until Oct 20 2026; it's the swing at a glance, as GolfFix's swing sequence.
 - **Find** (the box above the swing list; `static/find.js`): paste times ("4:25 PM", "Fri Sep 25
   4:25:49 PM"), dates ("Sep 25", "9/25") or clip numbers (the 10 digits in a clip's name, either
   angle's), several at once: the list shows just those swings and newer / older steps through them;
