@@ -53,6 +53,35 @@ test("swingMatch: the share of readable body numbers inside the good-shot range"
   assert.equal(Board.swingMatch(null, ranges), null);
 });
 
+test("swingMatchCount: counts readable body numbers inside good-shot range and returns counts + pct", () => {
+  const range = { enough: true, reliable: true, q10: 0, q90: 10 };
+  const ranges = {
+    m1: range, m2: range, m3: range, m4: range, m5: range,
+    m6: range, m7: range, m8: range, m9: range, m10: range,
+    unrel: { ...range, reliable: false },
+    notEnough: { enough: false },
+  };
+
+  // 7 of 10 inside (m1..m7 = 5 inside; m8 = -2 outside; m9 = 12 outside; m10 = 15 outside)
+  const body = {
+    m1: 5, m2: 5, m3: 5, m4: 5, m5: 5,
+    m6: 5, m7: 5, m8: -2, m9: 12, m10: 15,
+    unrel: 5, notEnough: 5,
+  };
+  const c = Board.swingMatchCount(body, ranges);
+  assert.ok(c);
+  assert.equal(c.inside, 7);
+  assert.equal(c.total, 10);
+  assert.equal(c.pct, 70);
+  near(c.share, 0.7);
+
+  // Under 5 readable numbers: returns null (nothing said)
+  const fewBody = { m1: 5, m2: 5, m3: 5, m4: 5, m5: null };
+  assert.equal(Board.swingMatchCount(fewBody, ranges), null);
+  assert.equal(Board.swingMatchCount(null, ranges), null);
+  assert.equal(Board.swingMatchCount(body, null), null);
+});
+
 test("session: the score is the average of the rule shares", () => {
   const rows = [shotOf(), shotOf({ offline: 20 }), shotOf({ carry: 120 }), shotOf({ smash: 1.2 }), { club: "PT", carry: 3, offline: 0 },
                 { club: "I7", carry: null, offline: 0 }];

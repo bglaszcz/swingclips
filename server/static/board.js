@@ -63,7 +63,11 @@
    * percentile), or null with fewer than MIN_MATCH to go on.
    * @param body {key: number | null} (null: no reading); ranges: goodshots.js ranges for the club
    */
-  function swingMatch(body, ranges) {
+  /**
+   * The count and share of a swing's readable body numbers inside the club's good-shot range (10th to 90th
+   * percentile), or null with fewer than MIN_MATCH to go on: {inside, total, share, pct}.
+   */
+  function swingMatchCount(body, ranges) {
     if (!body || !ranges) return null;
     let n = 0, inside = 0;
     for (const key in ranges) {
@@ -72,7 +76,14 @@
       n++;
       if (v >= g.q10 - EPS && v <= g.q90 + EPS) inside++;
     }
-    return n >= MIN_MATCH ? inside / n : null;
+    if (n < MIN_MATCH) return null;
+    const share = inside / n;
+    return { inside, total: n, share, pct: Math.round(share * 100) };
+  }
+
+  function swingMatch(body, ranges) {
+    const c = swingMatchCount(body, ranges);
+    return c ? c.share : null;
   }
 
   /**
@@ -230,7 +241,7 @@
     };
   }
 
-  const api = { MIN_SHOTS, USUAL, MIN_MATCH, SKILLS, SCORED, rules, swingMatch, session, board, records, activity, weekStart, dayStart };
+  const api = { MIN_SHOTS, USUAL, MIN_MATCH, SKILLS, SCORED, rules, swingMatch, swingMatchCount, session, board, records, activity, weekStart, dayStart };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingBoard = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -873,23 +873,75 @@ function renderRanking(rows, fx, fy) {
   }));
 }
 
+let trendTableSort = { key: "order", dir: 1 };
+
 /** Every swing, every number: the table twin of the chart. */
 function renderTrendTable(rows, fx, fy) {
   const cols = FIELDS.filter(f => f.key !== "order");
+
+  const getMatch = r => {
+    if (!r) return null;
+    if (r.swingMatchPct !== undefined) return r.swingMatchPct;
+    if (typeof SwingBoard === "undefined" || !r.club || !r.body) return null;
+    const cd = typeof goodShotData === "function" ? goodShotData().clubs[r.club] : null;
+    if (!cd || !cd.ranges) return null;
+    const c = SwingBoard.swingMatchCount ? SwingBoard.swingMatchCount(r.body, cd.ranges) : null;
+    r.swingMatchCount = c;
+    r.swingMatchPct = c ? c.pct : null;
+    return r.swingMatchPct;
+  };
+
+  const sortKey = trendTableSort.key, dir = trendTableSort.dir;
+  const sortedRows = [...rows].sort((a, b) => {
+    let va, vb;
+    if (sortKey === "order") { va = a.order; vb = b.order; }
+    else if (sortKey === "time") { va = a.t; vb = b.t; }
+    else if (sortKey === "club") { va = a.club; vb = b.club; }
+    else if (sortKey === "swingMatch") { va = getMatch(a); vb = getMatch(b); }
+    else if (sortKey) { va = a[sortKey]; vb = b[sortKey]; }
+    else return 0;
+    if (va == null || vb == null) return (va == null) - (vb == null);
+    if (typeof va === "string") return va.localeCompare(vb) * dir;
+    return (va - vb) * dir;
+  });
+
   const head = document.createElement("tr");
-  for (const t of ["#", "Time", "Club"]) head.append(Object.assign(document.createElement("th"), { textContent: t }));
+  const makeSortTh = (key, label, title, className = "") => {
+    const th = document.createElement("th");
+    th.className = "sort" + (sortKey === key ? " sorted" : "") + (className ? " " + className : "");
+    th.textContent = label + (sortKey === key ? (dir > 0 ? " ↑" : " ↓") : "");
+    if (title) th.title = title;
+    th.onclick = () => {
+      trendTableSort.dir = (sortKey === key ? -trendTableSort.dir : (key === "order" || key === "time" ? 1 : -1));
+      trendTableSort.key = key;
+      renderTrendTable(rows, fx, fy);
+    };
+    return th;
+  };
+
+  head.append(makeSortTh("order", "#"));
+  head.append(makeSortTh("time", "Time"));
+  head.append(makeSortTh("club", "Club"));
+  head.append(makeSortTh("swingMatch", "Swing match", "Share of readable body numbers inside your good-shot range (%)"));
+
   for (const f of cols) {
-    const th = Object.assign(document.createElement("th"), { textContent: fieldName(f), title: f.group });
+    const th = makeSortTh(f.key, fieldName(f), f.group);
     th.classList.toggle("sel", f.key === fx.key || f.key === fy.key);
     head.append(th);
   }
+
   const thead = document.createElement("thead"), tbody = document.createElement("tbody");
   thead.append(head);
-  for (const r of rows) {
+  for (const r of sortedRows) {
     const tr = document.createElement("tr");
     for (const t of [r.order, timeOf(r), r.club ? clubName(r.club) : "–"]) {
       tr.append(Object.assign(document.createElement("td"), { textContent: t }));
     }
+    const mPct = getMatch(r);
+    const tdMatch = document.createElement("td");
+    tdMatch.textContent = mPct != null ? `${mPct}%` : "–";
+    tr.append(tdMatch);
+
     for (const f of cols) {
       const td = document.createElement("td");
       if (f.shot) {

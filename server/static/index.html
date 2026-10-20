@@ -1521,6 +1521,7 @@
   .lp-tipl { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
   #stages.labeling video { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: -2px; }
   /* round 69 */
+  #coachcard .cc-match { font-size: 13px; color: var(--muted); margin-top: 2px; }
   .opt-card { margin-top: 16px; padding: 14px 16px; background: var(--panel); border-radius: 8px; border: 1px solid var(--line); }
   .opt-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
   .opt-title { font-size: 15px; font-weight: 700; margin: 0; color: var(--text); }
@@ -4494,6 +4495,22 @@ function renderCoachCard() {
       v.title = card.verdict.level === "good" ? `Passes your good-shot rules with the ${clubWords(club)} (set in Progress)`
         : card.verdict.fails.length ? "Not a good shot by your rules: " + card.verdict.fails.join("; ") : "";
       kids.push(v);
+
+      // Swing match line on coaching card
+      let matchCount = (typeof currentScorecard !== "undefined" && currentScorecard && currentScorecard.nTotal >= 5)
+        ? { inside: currentScorecard.nInside, total: currentScorecard.nTotal }
+        : null;
+      if (!matchCount && cd && cd.ranges && typeof swingRow === "function" && typeof SwingBoard !== "undefined") {
+        const row = swingRow(c);
+        if (row && row.body) {
+          matchCount = SwingBoard.swingMatchCount ? SwingBoard.swingMatchCount(row.body, cd.ranges) : null;
+        }
+      }
+      if (matchCount && matchCount.total >= 5) {
+        const matchEl = scEl("div", "cc-match note", `Swing match: ${matchCount.inside} of ${matchCount.total} numbers like your good shots`);
+        matchEl.title = "How many of this swing's readable body numbers sat inside your good-shot range";
+        kids.push(matchEl);
+      }
     }
     const row = (title, ...content) => {
       const r = scEl("div", "cc-row");

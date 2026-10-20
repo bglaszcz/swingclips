@@ -726,21 +726,46 @@ function renderSessionCard() {
 
   // Every swing, sortable.
   const cols = [...new Set([...A_SESS_COLS, fq.key])].map(aField);
+  const getMatch = r => {
+    if (!r) return null;
+    if (r.swingMatchPct !== undefined) return r.swingMatchPct;
+    if (typeof SwingBoard === "undefined" || !club || !r.body) return null;
+    const cd = typeof goodShotData === "function" ? goodShotData().clubs[club] : null;
+    if (!cd || !cd.ranges) return null;
+    const c = SwingBoard.swingMatchCount ? SwingBoard.swingMatchCount(r.body, cd.ranges) : null;
+    r.swingMatchCount = c;
+    r.swingMatchPct = c ? c.pct : null;
+    return r.swingMatchPct;
+  };
+
   const sortKey = aPick.sort, dir = aPick.dir;
   const sorted = [...s.rows].sort((a, b) => {
-    const va = sortKey === "good" ? (a.good == null ? null : +a.good) : a[sortKey], vb = sortKey === "good" ? (b.good == null ? null : +b.good) : b[sortKey];
+    let va, vb;
+    if (sortKey === "good") {
+      va = a.good == null ? null : +a.good;
+      vb = b.good == null ? null : +b.good;
+    } else if (sortKey === "swingMatch") {
+      va = getMatch(a);
+      vb = getMatch(b);
+    } else {
+      va = a[sortKey];
+      vb = b[sortKey];
+    }
     if (va == null || vb == null) return (va == null) - (vb == null);
     return (va - vb) * dir;
   });
   const head = document.createElement("tr");
-  for (const [key, text] of [["order", "#"], ["t", "Time"], ["good", "Shot"], ...cols.map(f => [f.key, fieldName(f)])]) {
+  for (const [key, text] of [["order", "#"], ["t", "Time"], ["good", "Shot"], ["swingMatch", "Swing match"], ...cols.map(f => [f.key, fieldName(f)])]) {
     const th = pEl("th", "sort" + (key === sortKey ? " sorted" : "") + (key === "good" ? " l" : ""), text + (key === sortKey ? (dir > 0 ? " ↑" : " ↓") : ""));
     th.onclick = () => { aPick.dir = key === aPick.sort ? -aPick.dir : (key === "order" || key === "t" ? 1 : -1); aPick.sort = key; aSave(); renderSessionCard(); };
     head.append(th);
   }
   const body = sorted.map(r => {
     const tr = document.createElement("tr");
-    tr.append(pEl("td", null, `${r.order}`), pEl("td", null, timeOf(r)), aVerdictCell(r));
+    const mPct = getMatch(r);
+    const tdMatch = document.createElement("td");
+    tdMatch.textContent = mPct != null ? `${mPct}%` : "–";
+    tr.append(pEl("td", null, `${r.order}`), pEl("td", null, timeOf(r)), aVerdictCell(r), tdMatch);
     for (const f of cols) {
       const td = document.createElement("td");
       if (f.shot) td.textContent = fmtField(f, r[f.key]);
