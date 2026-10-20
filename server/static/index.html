@@ -1520,6 +1520,14 @@
   .lp-tips dl.keys { font-size: 13px; margin-top: 6px; }
   .lp-tipl { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
   #stages.labeling video { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: -2px; }
+  /* round 69 */
+  .cs-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .cs-row { display: flex; flex-direction: column; padding: 10px 14px; background: var(--panel); border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+  .cs-row:hover { background: var(--panel-2); }
+  .cs-row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .cs-row-title { font-size: 15px; font-weight: 700; }
+  .cs-row-words { font-size: 13px; color: var(--text-2, #bbb); margin: 3px 0; }
+  .cs-row-sub { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
 </style>
 </head>
 <body data-view="swing">
@@ -2313,6 +2321,7 @@
         <button data-card="links">Links at a glance</button>
         <button data-card="overtime">Over time</button>
         <button data-card="spread" hidden>Spread</button>
+        <button data-card="consistency" hidden>Consistency</button>
         <div class="a-h">Strike</div>
         <button data-card="strike">Where on the face</button>
         <div class="a-h">Body</div>
@@ -2439,6 +2448,10 @@
       <summary><strong>Spread</strong> <span id="a-spread-status" class="note"></span></summary>
       <div class="t-filters"><label>Number <select id="a-spread-metric" aria-label="Number to show"></select></label></div>
       <div id="a-spread"></div>
+    </details>
+    <details class="t-card p-fold" data-fold="consistency">
+      <summary><strong>Consistency</strong> <span id="a-cs-status" class="note"></span></summary>
+      <div id="a-consistency"></div>
     </details>
     <details class="t-card p-fold" data-fold="session">
       <summary><strong>One session</strong></summary>
@@ -2610,6 +2623,7 @@
 <script src="/static/review.js"></script>
 <script src="/static/flightgrid.js"></script>
 <script src="/static/distro.js"></script>
+<script src="/static/consistency.js"></script>
 <script src="/static/indicators.js"></script>
 <script src="/static/checkpoints.js"></script>
 <script src="/static/draw.js"></script>

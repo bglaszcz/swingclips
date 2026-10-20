@@ -75,7 +75,7 @@ function renderAnalysis(sessions, club) {
 function aRenderCard() {
   if (!analysisOpen) return;
   const draw = { explore: renderExplore, links: renderLinks, overtime: renderOverTimeCard, session: renderSessionCard,
-                 flight: renderFlight, spread: renderSpread, target: renderTarget, bag: renderBag,
+                 flight: renderFlight, spread: renderSpread, consistency: renderConsistency, target: renderTarget, bag: renderBag,
                  checkpoints: renderCheckpoints }[analysisCard];
   if (draw) draw();
 }
@@ -84,6 +84,7 @@ function aRenderCard() {
 // nothing under it yet is hidden too.
 document.querySelector('#a-rail button[data-card="flight"]').hidden = typeof SwingFlightGrid === "undefined";
 document.querySelector('#a-rail button[data-card="spread"]').hidden = typeof SwingDistro === "undefined";
+document.querySelector('#a-rail button[data-card="consistency"]').hidden = typeof SwingConsistency === "undefined";
 document.querySelector('#a-rail button[data-card="checkpoints"]').hidden = typeof SwingCheckpoints === "undefined";
 for (const h of document.querySelectorAll("#a-rail .a-h")) {
   let any = false;
@@ -787,6 +788,31 @@ function renderSpread() {
     onPick: (rows, title) => aShowPicked(rows, title, [f.key]),
     onOpen: openFromAnalysis,
     onSession: key => openAnalysisSession(key, "spread"),
+  });
+}
+
+function renderConsistency() {
+  if (typeof SwingConsistency === "undefined") return;
+  const { sessions, club } = aCtx;
+  const group = SwingGoodShots.groupOf(club);
+  const pooled = aPick.scope === "group" && !!group;
+  const sessList = pooled ? aGroupSessions(group) : aCtx.sessions;
+  const model = SwingConsistency.analyze(sessList, {
+    club,
+    group,
+    scope: pooled ? "group" : "club",
+    goodRange: (cl, k) => goodRange(cl, k),
+    noiseTable: (typeof noiseTable !== "undefined" ? noiseTable : null)
+  });
+  const statusEl = document.getElementById("a-cs-status");
+  if (statusEl) statusEl.textContent = model.status || "";
+  SwingConsistency.render(document.getElementById("a-consistency"), model, {
+    onPick: key => {
+      aPick.spread = key;
+      aSave();
+      renderSpread();
+      selectAnalysisCard("spread");
+    }
   });
 }
 
