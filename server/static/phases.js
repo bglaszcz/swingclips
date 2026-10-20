@@ -60,29 +60,15 @@
     topSlowSeconds: 0.05, topRuleWeight: 0.5, onsetLeadDtl: 0, onsetPullDtl: 0, topTurnWeight: 0.5,
     p3Degrees: 0, p5Degrees: 0,
   };
-  const RTMWTuning = {
-    takeawayDegrees: 1, topSpeedShares: [0.1, 0.4], topSmoothSeconds: 0.03, onsetLead: 0.017, onsetPull: 0.01,
-    topSlowSeconds: 0.05, topRuleWeight: 0.5, onsetLeadDtl: 0, onsetPullDtl: 0, topTurnWeight: 0.5,
-    p3Degrees: -3, p5Degrees: 0,
-  };
-  const TUNING = {
-    ...RTMPoseTuning,
-    "rtmpose-m": RTMPoseTuning,
-    "rtmw-l": RTMWTuning,
-    "rtmw": RTMWTuning,
-  };
+  // The night pass's body model (RTMW-l, docs/night-worker.md) puts the elbow a little higher and the wrist
+  // a little lower, so its forearm reads ~3 degrees downhill at the owner's P3: within a frame of the labels
+  // on 49% of 43 face-on swings at -3 against 33% at 0 (RTMPose-m: 70%; Gemini round 65).
+  const RTMWTuning = { ...RTMPoseTuning, p3Degrees: -3 };
+  const TUNING = { ...RTMPoseTuning, "rtmpose-m": RTMPoseTuning, "rtmw-l": RTMWTuning };
 
+  /** The tuning for a pose file's body model (its "bodyModel": "rtmw-l...", "rtmpose-m..."), RTMPose-m's by default. */
   function tuningFor(model) {
-    if (model && (model.startsWith("rtmw") || model.includes("rtmw"))) {
-      return Object.assign({}, TUNING, TUNING["rtmw-l"] || {});
-    }
-    if (model && (model.startsWith("rtmpose") || model.includes("rtmpose"))) {
-      return Object.assign({}, TUNING, TUNING["rtmpose-m"] || {});
-    }
-    if (model && TUNING[model]) {
-      return Object.assign({}, TUNING, TUNING[model]);
-    }
-    return TUNING;
+    return model && model.includes("rtmw") ? Object.assign({}, TUNING, TUNING["rtmw-l"]) : TUNING;
   }
   // clubheadTurn: the clubhead's angle round the shoulders' middle (the owner's labels follow it; the
   // clubhead's own motion in the picture was 25-33 ms off them). Known miss: the body starting down first
