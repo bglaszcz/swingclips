@@ -148,7 +148,7 @@
   }
 
   function table(result, doc, positions, metrics2d, blankedKeys) {
-    const cols = ["p1", "p4", "p6", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
+    const cols = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"].map(k => positions.find(p => p.key === k)).filter(Boolean);
     const at = SwingMetrics3D.atPositions(result, doc, positions);
     const t = el("table");
     const head = el("tr");

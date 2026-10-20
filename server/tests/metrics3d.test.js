@@ -326,3 +326,57 @@ test("separation at thoraxTop: uses synchronous pelvis turn from the peak moment
   assert.ok(at.p4.separation <= 65, `separation at top (${at.p4.separation}) must not be inflated`);
 });
 
+
+test("atPositions extracts numbers at key positions P1 through P8", () => {
+  const doc = makeDoc({});
+  const positions = [
+    { key: "p1", t: 1.0 },
+    { key: "p2", t: 1.3 },
+    { key: "p3", t: 1.45 },
+    { key: "p4", t: 1.6 },
+    { key: "p5", t: 1.675 },
+    { key: "p6", t: 1.75 },
+    { key: "p7", t: 1.8 },
+    { key: "p8", t: 1.875 },
+  ];
+  const r = M.compute(doc, positions);
+  assert.ok(r, "compute returned result");
+  const at = M.atPositions(r, doc, positions);
+  for (const pos of ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"]) {
+    assert.ok(at[pos], `atPositions should contain ${pos}`);
+    assert.equal(typeof at[pos].t, "number", `${pos} should have timestamp t`);
+    assert.equal(typeof at[pos].pelvisTurn, "number", `${pos} should have pelvisTurn`);
+  }
+});
+
+test("SUMMARY includes held-up numbers at P2, P5, P8", () => {
+  const doc = makeDoc({});
+  const positions = [
+    { key: "p1", t: 1.0 },
+    { key: "p2", t: 1.3 },
+    { key: "p4", t: 1.6 },
+    { key: "p5", t: 1.675 },
+    { key: "p6", t: 1.75 },
+    { key: "p7", t: 1.8 },
+    { key: "p8", t: 1.875 },
+  ];
+  const fi = { name: "test_face.mp4", frames: [], rotation: 0 };
+  const di = { name: "test_dtl.mp4", frames: [], rotation: 0 };
+  const mockSummary = {
+    aspectOf: () => "landscape",
+    analyze: () => ({ positions }),
+  };
+  global.SwingSummary = mockSummary;
+  const s3d = M.summarize3d(fi, di, "left", doc, "I7");
+  assert.ok(s3d && s3d.numbers, "summarize3d returned numbers");
+
+  for (const k of ["pelvisBallP2", "thoraxBallP2", "pelvisSwayP2", "thoraxSwayP2", "pelvisThrustP2", "pelvisLiftP2", "thoraxSideBendP2", "thoraxBendP2", "thoraxTurnP2", "xFactorP2"]) {
+    assert.ok(k in s3d.numbers, `numbers should have P2 key ${k}`);
+  }
+  for (const k of ["pelvisBallP5", "thoraxBallP5", "pelvisSwayP5", "thoraxSwayP5", "pelvisThrustP5", "pelvisLiftP5", "thoraxSideBendP5", "pelvisTurnP5"]) {
+    assert.ok(k in s3d.numbers, `numbers should have P5 key ${k}`);
+  }
+  for (const k of ["thoraxBallP8", "thoraxSwayP8", "pelvisThrustP8", "pelvisLiftP8", "pelvisSideBendP8", "pelvisTurnP8", "thoraxTurnP8", "xFactorP8"]) {
+    assert.ok(k in s3d.numbers, `numbers should have P8 key ${k}`);
+  }
+});
