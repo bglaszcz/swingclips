@@ -25,6 +25,8 @@ test("every tour range entry has key, valid range, units, system, and published 
     assert.ok(typeof entry.source.title === "string" && entry.source.title.length > 0, `source.title required for ${entry.key}`);
     assert.ok(typeof entry.source.year === "number" && entry.source.year > 1900, `source.year required for ${entry.key}`);
     assert.ok(typeof entry.source.link === "string" && entry.source.link.startsWith("http"), `source.link required for ${entry.key}`);
+    // A real citation, not a home page.
+    assert.ok(new URL(entry.source.link).pathname.length > 1, `source.link must point at the source itself for ${entry.key}`);
   }
 });
 
@@ -35,21 +37,19 @@ test("TourRanges.get retrieves by key and handles club fallback", () => {
   assert.equal(tempo.min, 2.8);
   assert.equal(tempo.max, 3.2);
 
-  const pelvis = TourRanges.get("pelvisTop", "I7");
-  assert.ok(pelvis);
-  assert.equal(pelvis.min, 40);
-  assert.equal(pelvis.max, 50);
+  // The 3D turns aren't SwingClips' face-on 2D turns: no tour band for them.
+  assert.equal(TourRanges.get("pelvisTop", "I7"), null);
+  assert.equal(TourRanges.get("shoulderTop"), null);
+  assert.equal(TourRanges.get("backswing").max, 0.9);
 
   assert.equal(TourRanges.get("nonexistentKey"), null);
   assert.equal(TourRanges.get(null), null);
 });
 
 test("TourRanges.formatTourText formats clean text line for detail panel", () => {
-  const text = TourRanges.formatTourText("pelvisTop");
-  assert.match(text, /Tour players \(Cheetham 2008\): 40 to 50°/);
-
   const tempoText = TourRanges.formatTourText("tempo");
-  assert.match(tempoText, /Tour players \(Tour Tempo 2004\): 2.8 to 3.2 :1/);
+  assert.match(tempoText, /Tour players \(Tour Tempo\): 2.8 to 3.2 :1/);
+  assert.equal(TourRanges.formatTourText("pelvisTop"), "");
 
   assert.equal(TourRanges.formatTourText("unknownKey"), "");
 });

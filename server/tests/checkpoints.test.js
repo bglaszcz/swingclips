@@ -415,14 +415,14 @@ test("render: Tour ranges toggle is off by default, displays dashed band and det
   globalThis.document = makeMockDoc();
 
   const fields = [
-    { key: "pelvisTop", label: "Pelvis turn at top", unit: "°", dec: 1, pos: "p4" },
+    { key: "tempo", label: "Tempo", unit: ":1", dec: 1 },
   ];
-  // User good shot range is 30..38. Latest median is 45 (high compared to user range).
-  // Tour range is 40..50 (latest median 45 is inside tour range, but outside user range).
+  // User good shot range is 2.3..2.6. Latest median is 3.0 (high against the user's range).
+  // Tour range is 2.8..3.2 (3.0 is inside the tour range, outside the user's).
   const ranges = {
-    pelvisTop: { enough: true, reliable: true, q10: 25, q25: 30, q50: 34, q75: 38, q90: 42 },
+    tempo: { enough: true, reliable: true, q10: 2.2, q25: 2.3, q50: 2.45, q75: 2.6, q90: 2.7 },
   };
-  const rows = Array.from({ length: 10 }, () => ({ pelvisTop: 45 }));
+  const rows = Array.from({ length: 10 }, () => ({ tempo: 3.0 }));
   const sess = [{ key: "s1", start: 1000, rows }];
 
   const a = Checkpoints.analyze(sess, { fields, ranges });
@@ -442,7 +442,7 @@ test("render: Tour ranges toggle is off by default, displays dashed band and det
 
   // Tile before turning tour on
   const grid = box.children[2];
-  const tile = grid.children.find(c => c.dataset.key === "pelvisTop");
+  const tile = grid.children.find(c => c.dataset.key === "tempo");
   assert.ok(tile);
   // User range judged it out/high
   assert.equal(tile.dataset.zone, "out");
@@ -455,7 +455,7 @@ test("render: Tour ranges toggle is off by default, displays dashed band and det
 
   // Re-check grid after refresh
   const gridAfter = box.children[2];
-  const tileAfter = gridAfter.children.find(c => c.dataset.key === "pelvisTop");
+  const tileAfter = gridAfter.children.find(c => c.dataset.key === "tempo");
   // Tour ranges must NEVER change tile zone or user judge
   assert.equal(tileAfter.dataset.zone, "out", "Tour range never changes user zone");
 
@@ -473,14 +473,14 @@ test("render: Tour ranges toggle is off by default, displays dashed band and det
   // Detail panel must have tour line
   const tourLine = panel.children.find(c => c.className && c.className.includes("cp-panel-tour"));
   assert.ok(tourLine, "cp-panel-tour line must exist in detail panel");
-  assert.match(tourLine.textContent, /Tour players \(Cheetham 2008\): 40 to 50°/);
+  assert.match(tourLine.textContent, /Tour players \(Tour Tempo\): 2.8 to 3.2 :1/);
 
   // Focus action remains driven by user good-shot range (high -> less), not tour range
   const actions = panel.children.find(c => c.className === "cp-panel-actions");
   const focusBtn = actions.children.find(c => c.className.includes("cp-btn-focus"));
   assert.ok(focusBtn);
   focusBtn.onclick();
-  assert.equal(goalKey, "pelvisTop");
+  assert.equal(goalKey, "tempo");
   assert.equal(goalAim, "less", "focus aim is driven solely by user range");
 
   // Restore globals

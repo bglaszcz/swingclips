@@ -5,135 +5,24 @@
 (function (root) {
   "use strict";
 
+  // Only numbers with a source that measures what SwingClips measures (Claude's review of round 69, Oct 20):
+  // the turns, X-factor, hip sway and hips open that round 69 listed were cited to home pages, some with
+  // titles no paper has, and are 3D-sensor angles where SwingClips' turns are face-on 2D widths (your
+  // shoulder turn reads ~120 on this scale): left out until a real source on the same measure turns up.
+  // Tour Tempo (John Novosel): tour players' backswing takes three times as long as the downswing; the frame
+  // counts it lists for tour players run from 21/7 to 27/9 at 30 frames a second (0.70-0.90 s back, 0.23-0.30 s
+  // down), timed from the takeaway to the top to impact, as SwingClips times tempo (metrics.js).
+  const TOUR_TEMPO = {
+    title: "It's About Time (Tour Tempo, John Novosel)",
+    author: "Sports Illustrated",
+    cite: "Tour Tempo",
+    year: 2010,
+    link: "https://vault.si.com/vault/2010/08/02/its-about-time",
+  };
   const RANGES = [
-    {
-      key: "tempo",
-      label: "Tempo",
-      min: 2.8,
-      max: 3.2,
-      unit: ":1",
-      club: "all",
-      system: "video",
-      source: {
-        title: "Tour Tempo: Golf's Last Secret Finally Revealed",
-        author: "John Novosel",
-        cite: "Tour Tempo 2004",
-        year: 2004,
-        link: "https://www.tourtempo.com",
-      },
-    },
-    {
-      key: "backswing",
-      label: "Backswing time",
-      min: 0.70,
-      max: 0.85,
-      unit: "s",
-      club: "all",
-      system: "video / 3D sensor",
-      source: {
-        title: "Swing Tempo in Golf Biomechanics",
-        author: "Titleist Performance Institute",
-        cite: "TPI 2012",
-        year: 2012,
-        link: "https://www.mytpi.com",
-      },
-    },
-    {
-      key: "downswing",
-      label: "Downswing time",
-      min: 0.23,
-      max: 0.30,
-      unit: "s",
-      club: "all",
-      system: "video / 3D sensor",
-      source: {
-        title: "Swing Tempo in Golf Biomechanics",
-        author: "Titleist Performance Institute",
-        cite: "TPI 2012",
-        year: 2012,
-        link: "https://www.mytpi.com",
-      },
-    },
-    {
-      key: "pelvisTop",
-      label: "Pelvis turn at top",
-      min: 40,
-      max: 50,
-      unit: "°",
-      club: "all",
-      system: "3D sensor",
-      source: {
-        title: "Comparison of Pelvis and Thorax Kinematics in High and Low Handicap Golfers",
-        author: "Cheetham et al.",
-        cite: "Cheetham 2008",
-        year: 2008,
-        link: "https://www.mytpi.com",
-      },
-    },
-    {
-      key: "shoulderTop",
-      label: "Shoulder turn at top",
-      min: 85,
-      max: 105,
-      unit: "°",
-      club: "all",
-      system: "3D sensor",
-      source: {
-        title: "The Role of Upper Torso and Pelvis Rotation in Driving Performance during the Golf Swing",
-        author: "Myers et al.",
-        cite: "Myers 2008",
-        year: 2008,
-        link: "https://www.mytpi.com",
-      },
-    },
-    {
-      key: "xFactor",
-      label: "X-factor at top",
-      min: 40,
-      max: 55,
-      unit: "°",
-      club: "all",
-      system: "3D sensor",
-      source: {
-        title: "The X-Factor and X-Factor Stretch",
-        author: "Cheetham et al.",
-        cite: "Cheetham 2001",
-        year: 2001,
-        link: "https://www.mytpi.com",
-      },
-    },
-    {
-      key: "hipSway",
-      label: "Hip sway at impact",
-      min: 1.5,
-      max: 3.5,
-      unit: "in",
-      club: "all",
-      system: "optical / 3D sensor",
-      source: {
-        title: "Sportsbox 3D Golf Tour Benchmark Study",
-        author: "Sportsbox AI",
-        cite: "Sportsbox 2022",
-        year: 2022,
-        link: "https://www.sportsbox.ai",
-      },
-    },
-    {
-      key: "pelvisOpenImpact",
-      label: "Pelvis open at impact",
-      min: 35,
-      max: 45,
-      unit: "°",
-      club: "all",
-      system: "3D sensor",
-      source: {
-        title: "Comparison of Pelvis and Thorax Kinematics in High and Low Handicap Golfers",
-        author: "Cheetham et al.",
-        cite: "Cheetham 2008",
-        year: 2008,
-        link: "https://www.mytpi.com",
-      },
-    },
+    { key: "tempo", label: "Tempo", min: 2.8, max: 3.2, unit: ":1", club: "all", system: "video", source: TOUR_TEMPO },
+    { key: "backswing", label: "Backswing time", min: 0.70, max: 0.90, unit: "s", club: "all", system: "video", source: TOUR_TEMPO },
+    { key: "downswing", label: "Downswing time", min: 0.23, max: 0.30, unit: "s", club: "all", system: "video", source: TOUR_TEMPO },
   ];
 
   function get(key, club) {
