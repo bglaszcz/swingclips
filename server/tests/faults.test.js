@@ -10,15 +10,15 @@ test("names, drills and swing thoughts come from coach.js", () => {
   assert.equal(Faults.FAULTS.length, 9);
 
   const expected = [
-    { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more" },
-    { key: "bendLoss", name: "standing up", move: "bendLoss", dir: "less" },
-    { key: "handsPlaneP6", name: "over the top", move: "handsPlaneP6", dir: "more" },
-    { key: "headToBall", name: "head toward the ball", move: "headToBall", dir: "more" },
-    { key: "hipSway", name: "hip slide", move: "hipSway", dir: "less" },
-    { key: "headRise", name: "head dip", move: "headRise", dir: "less" },
-    { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more" },
-    { key: "headRise", name: "head lift", move: "headRise", dir: "more" },
-    { key: "armsLed", name: "arms-led downswing", move: "armsLed", dir: "more" },
+    { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more", fix: "less" },
+    { key: "bendLoss", name: "standing up", move: "bendLoss", dir: "less", fix: "more" },
+    { key: "handsPlaneP6", name: "over the top", move: "handsPlaneP6", dir: "more", fix: "less" },
+    { key: "headToBall", name: "head toward the ball", move: "headToBall", dir: "more", fix: "less" },
+    { key: "hipSway", name: "hip slide", move: "hipSway", dir: "less", fix: "less" },
+    { key: "headRise", name: "head dip", move: "headRise", dir: "less", fix: "more" },
+    { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more", fix: "less" },
+    { key: "headRise", name: "head lift", move: "headRise", dir: "more", fix: "less" },
+    { key: "armsLed", name: "arms-led downswing", move: "armsLed", dir: "more", fix: "more" },
   ];
 
   for (let i = 0; i < expected.length; i++) {
@@ -28,11 +28,12 @@ test("names, drills and swing thoughts come from coach.js", () => {
     assert.equal(f.name, exp.name);
     assert.equal(f.move, exp.move);
     assert.equal(f.dir, exp.dir);
+    assert.equal(f.fix, exp.fix);
 
-    const ce = Coach.MOVES[exp.move][exp.dir];
-    assert.ok(ce, `${exp.move}.${exp.dir}`);
-    assert.ok(ce.drill, `${exp.move}.${exp.dir} drill`);
-    assert.ok(ce.thought, `${exp.move}.${exp.dir} thought`);
+    const ce = Coach.MOVES[exp.move][exp.fix];
+    assert.ok(ce, `${exp.move}.${exp.fix}`);
+    assert.ok(ce.drill, `${exp.move}.${exp.fix} drill`);
+    assert.ok(ce.thought, `${exp.move}.${exp.fix} thought`);
 
     // In a swing row with this fault
     const testVal = f.test(f.threshold + 1) ? f.threshold + 1 : f.threshold - 1;
@@ -45,6 +46,19 @@ test("names, drills and swing thoughts come from coach.js", () => {
     assert.equal(match.drill, ce.drill);
     assert.equal(match.thought, ce.thought);
   }
+});
+
+test("a fault's drill works against it: the other way on its number, never a fault itself", () => {
+  // Until Oct 20 2026 early extension got the ground-push drill, standing up "turn your chest up".
+  for (const f of Faults.FAULTS.filter(x => !x.standing)) {
+    const faultWay = f.test(f.threshold + 1) ? "more" : "less";
+    assert.notEqual(f.fix, faultWay, `${f.name}: fix ${f.fix}`);
+    assert.ok(!Coach.MOVES[f.move][f.fix].fault, `${f.name}: ${Coach.MOVES[f.move][f.fix].name} is a fault`);
+  }
+  const ee = Faults.faultsOf({ earlyExt: 4 })[0];
+  assert.match(ee.drill, /^Chair drill/);
+  assert.equal(Faults.faultsOf({ bendLoss: -12 })[0].thought, "Chest down, through.");
+  assert.match(Faults.faultsOf({ handsPlaneP6: 7 })[0].drill, /^Pump drill/);
 });
 
 test("each threshold's edge: just inside vs just past", () => {
@@ -110,15 +124,16 @@ test("dip and lift split for headRise", () => {
   const dip = Faults.faultsOf({ headRise: -2.0 });
   assert.equal(dip.length, 1);
   assert.equal(dip[0].name, "head dip");
-  assert.equal(dip[0].drill, Coach.MOVES.headRise.less.drill);
-  assert.equal(dip[0].thought, Coach.MOVES.headRise.less.thought);
+  // The cure for a dip raises the head (posting up), for a lift keeps it at its height.
+  assert.equal(dip[0].drill, Coach.MOVES.headRise.more.drill);
+  assert.equal(dip[0].thought, Coach.MOVES.headRise.more.thought);
 
   // Head rise past 1.0 -> head lift only
   const lift = Faults.faultsOf({ headRise: 2.0 });
   assert.equal(lift.length, 1);
   assert.equal(lift[0].name, "head lift");
-  assert.equal(lift[0].drill, Coach.MOVES.headRise.more.drill);
-  assert.equal(lift[0].thought, Coach.MOVES.headRise.more.thought);
+  assert.equal(lift[0].drill, Coach.MOVES.headRise.less.drill);
+  assert.equal(lift[0].thought, Coach.MOVES.headRise.less.thought);
 
   // Neutral head rise (e.g. 0.0) -> neither
   assert.equal(Faults.faultsOf({ headRise: 0.0 }).length, 0);

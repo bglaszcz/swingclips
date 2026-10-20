@@ -110,7 +110,7 @@
       const scale = Math.abs(f.threshold) || 10;
       const dist = Math.abs(latest.value - f.threshold) / scale;
 
-      const ce = coachEntry(f.move, f.dir);
+      const ce = coachEntry(f.move, f.fix || f.dir);
       const ss = root.SwingShotStory || ShotStory;
       const plainFn = ss && typeof ss.plain === "function" ? ss.plain : (t => t);
       const thought = plainFn(ce.thought || "");

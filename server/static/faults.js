@@ -12,24 +12,31 @@
   // Thresholds: named on roughly the owner's worst quarter of swings or fewer (on his 178 swings to
   // Sep 28: early extension 23%, standing up 24%, over the top 16%, the rest under 10%). Textbook
   // limits would name nearly every swing from these 2D numbers, which says nothing.
+  //
+  // `fix`: the way that works on the fault, as coach.js MOVES has it (`move` both ways), so its drill and
+  // swing thought are the cure: early extension -> "less" (the chair drill), standing up -> "more" (chest
+  // down). Until Oct 20 2026 the drill came from `dir`, the fault's own way for most of them, so early
+  // extension got the ground-push drill ("stand up through the finish"), standing up "turn your chest
+  // up", over the top "turn the chest harder", head dip and head lift each the other's (Gemini round 66
+  // read the advice against the video). `dir` stays as it was: Today's plan reads it for arms-led.
   const FAULTS = [
     // Early extension: hips toward the ball at impact (in) > 3 (2.5 named 45% of swings)
-    { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more", threshold: 3, test: v => v > 3 },
+    { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more", fix: "less", threshold: 3, test: v => v > 3 },
     // Standing up: forward bend vs address at impact (deg; negative = lost) < -10 (-8 named 43%)
-    { key: "bendLoss", name: "standing up", move: "bendLoss", dir: "less", threshold: -10, test: v => v < -10 },
+    { key: "bendLoss", name: "standing up", move: "bendLoss", dir: "less", fix: "more", threshold: -10, test: v => v < -10 },
     // Over the top: hands above the address shaft plane at P6 (in) > 5
-    { key: "handsPlaneP6", name: "over the top", move: "handsPlaneP6", dir: "more", threshold: 5, test: v => v > 5 },
+    { key: "handsPlaneP6", name: "over the top", move: "handsPlaneP6", dir: "more", fix: "less", threshold: 5, test: v => v > 5 },
     // Head toward the ball: head moves toward the ball at impact (in) > 1
-    { key: "headToBall", name: "head toward the ball", move: "headToBall", dir: "more", threshold: 1, test: v => v > 1 },
+    { key: "headToBall", name: "head toward the ball", move: "headToBall", dir: "more", fix: "less", threshold: 1, test: v => v > 1 },
     // Hip slide: hips shift toward the target at impact (in) > 5.5
-    { key: "hipSway", name: "hip slide", move: "hipSway", dir: "less", threshold: 5.5, test: v => v > 5.5 },
+    { key: "hipSway", name: "hip slide", move: "hipSway", dir: "less", fix: "less", threshold: 5.5, test: v => v > 5.5 },
     // Head dip: head height drops at impact vs address (in; negative = dropped) < -1.5
-    { key: "headRise", name: "head dip", move: "headRise", dir: "less", threshold: -1.5, test: v => v < -1.5 },
+    { key: "headRise", name: "head dip", move: "headRise", dir: "less", fix: "more", threshold: -1.5, test: v => v < -1.5 },
     // Casting: the wrist hinge goes with the lead arm still less than 22 deg below horizontal (release
     // point, face-on; 22% of swings, more with the short irons)
-    { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more", threshold: -22, test: v => v > -22 },
+    { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more", fix: "less", threshold: -22, test: v => v > -22 },
     // Head lift: head height rises at impact vs address (in) > 1.0
-    { key: "headRise", name: "head lift", move: "headRise", dir: "more", threshold: 1.0, test: v => v > 1.0 },
+    { key: "headRise", name: "head lift", move: "headRise", dir: "more", fix: "less", threshold: 1.0, test: v => v > 1.0 },
     // Arms-led downswing: from 3D (pelvis reaches peak speed after impact, hips under 20 deg open at impact).
     // A standing pattern, not a per-swing fault (`standing`): on the owner's 79 judged 3D swings (Oct 2-7)
     // it named 76; the 3D under-reads hip turn (top 32 deg against 42 face-on, X-factor 71), his hips read
@@ -41,6 +48,8 @@
       name: "arms-led downswing",
       move: "armsLed",
       dir: "more",
+      // coach.js keeps the sequence drill (step and fire) under armsLed.more, which Today's plan uses too.
+      fix: "more",
       threshold: PELVIS_OPEN_IMPACT_MAX,
       test: (v, row) => {
         if (v == null || v >= PELVIS_OPEN_IMPACT_MAX) return false;
@@ -109,7 +118,7 @@
       if (!isReadable(row, f.key, shaky)) continue;
       const v = valueOf(row, f.key);
       if (f.test(v, row)) {
-        const ce = coachEntry(f.move, f.dir);
+        const ce = coachEntry(f.move, f.fix);
         out.push({
           key: f.key,
           name: f.name,
@@ -145,7 +154,7 @@
       }
       const share = total > 0 ? count / total : 0;
       const top = count >= MIN_TOP_SWINGS && share >= MIN_TOP_SHARE;
-      const ce = coachEntry(f.move, f.dir);
+      const ce = coachEntry(f.move, f.fix);
       return {
         key: f.key,
         name: f.name,

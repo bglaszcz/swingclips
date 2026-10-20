@@ -156,7 +156,7 @@
     // Build enriched fault definitions with phase and coach drill/thought
     const enriched = faultDefs.map((f, idx) => {
       const meta = FAULT_META[f.name] || { phase: "p7", order: 2, action: f.name, descriptor: `${f.name} swings` };
-      const ce = coachEntry(f.move, f.dir);
+      const ce = coachEntry(f.move, f.fix || f.dir);
       return {
         idx,
         key: f.key,
