@@ -4011,6 +4011,15 @@ async function show3d(name) {
  * @returns {club, any (some number has enough good shots), ranges: {key: range}}
  */
 let goodLoading = false;
+/** The trend data came in: draw everything on the open swing that reads it again (the numbers, the tiles
+ *  under the video, the coaching card). Whichever loader got there first, they all end here. Before, the
+ *  page's first refresh started the load before any swing was open and then redrew only the coaching card,
+ *  while the swing's own loader stood down (one was already running): the tiles kept "no range yet". */
+function trendDataArrived() {
+  if (!current) return;
+  showNumbers();
+  redraw();
+}
 function openGoodRanges(tp, facts) {
   const line = document.getElementById("good-tempo"), note = document.getElementById("good-note");
   line.textContent = note.textContent = "";
@@ -4019,8 +4028,8 @@ function openGoodRanges(tp, facts) {
   // Loaded once, and again when it's over a minute old (new swings since); drawn again if it changed.
   if (!goodLoading && (!trendDataLoaded || Date.now() - trendDataAt > 60000)) {
     goodLoading = true;
-    const name = current, first = !trendDataLoaded;
-    loadTrendData().then(changed => { if (current === name && trendDataLoaded && (first || changed)) { showNumbers(); redraw(); } })
+    const first = !trendDataLoaded;
+    loadTrendData().then(changed => { if (trendDataLoaded && (first || changed)) trendDataArrived(); })
       .finally(() => { goodLoading = false; });
   }
   if (!trendDataLoaded) return out;
@@ -4196,8 +4205,7 @@ function renderCoachCard() {
   if (club && !loaded && !goodLoading && typeof loadTrendData === "function") {
     // A swing with no body numbers yet: showNumbers won't load the trend data, so load it here.
     goodLoading = true;
-    const name = current;
-    loadTrendData().then(() => { if (current === name) renderCoachCard(); }).finally(() => { goodLoading = false; });
+    loadTrendData().then(trendDataArrived).finally(() => { goodLoading = false; });
   }
   const cd = club && loaded ? goodShotData().clubs[club] : null;
   const settings = goodSettings && goodSettings.settings;
@@ -5740,7 +5748,7 @@ async function refresh() {
   trendsTick();
   if (typeof trendDataLoaded !== "undefined" && !trendDataLoaded && !goodLoading && typeof loadTrendData === "function") {
     goodLoading = true;
-    loadTrendData().then(() => { if (current) renderCoachCard(); }).finally(() => { goodLoading = false; });
+    loadTrendData().then(trendDataArrived).finally(() => { goodLoading = false; });
   }
   if (window.shutterTick) shutterTick();
   if (window.labelViewTick) labelViewTick();
