@@ -113,6 +113,9 @@ test("analyze: ranks metrics by spread / goodWidth ratio and subtracts noise", (
   assert.equal(model.ranked.length, 2);
   assert.equal(model.ranked[0].key, "moveA");
   assert.ok(model.ranked[0].ratio > model.ranked[1].ratio);
+  // Spread against spread: the good shots' middle half (width 2) is a robust spread of 2 / 1.349.
+  const a = model.ranked[0];
+  assert.ok(Math.abs(a.ratio - a.netSpread / (2 / 1.349)) < 1e-9, "ratio = net spread / (good width / 1.349)");
   assert.equal(model.top5.length, 2);
   assert.equal(model.others.length, 0);
 });

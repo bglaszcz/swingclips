@@ -734,11 +734,14 @@
       // Range check
       const r = ranges[k];
       let rangeNote = "";
-      if (r && Number.isFinite(r.min) && Number.isFinite(r.max)) {
-        const rMin = formatMetricValue(k, r.min).trim();
-        const rMax = formatMetricValue(k, r.max).trim();
-        if (val < r.min) rangeNote = ` [below good range ${rMin} to ${rMax}]`;
-        else if (val > r.max) rangeNote = ` [above good range ${rMin} to ${rMax}]`;
+      // goodshots.js ranges: the middle half of the good shots (q25..q75), as the swing page shows; a range
+      // from too few good shots, or mostly shaky numbers, isn't one. (Plain {min, max} still read, for tests.)
+      const lo = r && (r.q25 ?? r.min), hi = r && (r.q75 ?? r.max);
+      if (r && r.enough !== false && r.reliable !== false && Number.isFinite(lo) && Number.isFinite(hi)) {
+        const rMin = formatMetricValue(k, lo).trim();
+        const rMax = formatMetricValue(k, hi).trim();
+        if (val < lo) rangeNote = ` [below good range ${rMin} to ${rMax}]`;
+        else if (val > hi) rangeNote = ` [above good range ${rMin} to ${rMax}]`;
         else rangeNote = ` [in good range ${rMin} to ${rMax}]`;
       }
 

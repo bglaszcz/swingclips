@@ -2,8 +2,9 @@
 // Distance optimizer for driver and fairway woods (TrackMan Optimizer style).
 // Computes optimal launch angle and spin rate at the golfer's median ball speed
 // using the aerodynamic flightPath model, constrained to physically achievable delivery
-// (within the golfer's actual shot range widened by 2° and 500 rpm).
+// (within the middle 80% of the golfer's own launch and spin, widened by 1° and 250 rpm).
 (function (root) {
+  const LAUNCH_MARGIN = 1, SPIN_MARGIN = 250;   // degrees, rpm beyond the middle 80% of your shots
   "use strict";
 
   const TracerAtLoad = typeof SwingTracer !== "undefined"
@@ -137,16 +138,20 @@
     const usualModel = tracer.flightPath(medSpeed, medLaunch, 0, medSpin, 0);
     const usualCarry = usualModel ? usualModel.carry : median(valid.map(s => s.carry));
 
-    // Bounds: golfer's actual shots widened by 2 degrees and 500 rpm
-    const hitLaunchMin = Math.min(...launches);
-    const hitLaunchMax = Math.max(...launches);
-    const hitSpinMin = Math.min(...spins);
-    const hitSpinMax = Math.max(...spins);
+    // Bounds: the middle of what you've hit (10th to 90th percentile of launch and of spin), widened by
+    // LAUNCH_MARGIN and SPIN_MARGIN. From the extremes plus 2 degrees and 500 rpm (round 69 as first asked),
+    // one high-launch shot and another low-spin one opened a corner never hit together, where the flight
+    // model (fit on shots mostly above 2,000 rpm) guesses: Oct 20, the driver's best came out 19 / 1,500.
+    const pct = (arr, q) => { const a = arr.slice().sort((x, y) => x - y); const i = (a.length - 1) * q, lo = Math.floor(i); return a[lo] + (a[Math.ceil(i)] - a[lo]) * (i - lo); };
+    const hitLaunchMin = pct(launches, 0.1);
+    const hitLaunchMax = pct(launches, 0.9);
+    const hitSpinMin = pct(spins, 0.1);
+    const hitSpinMax = pct(spins, 0.9);
 
-    const allowedLaunchMin = Math.max(6, hitLaunchMin - 2);
-    const allowedLaunchMax = Math.min(20, hitLaunchMax + 2);
-    const allowedSpinMin = Math.max(1500, hitSpinMin - 500);
-    const allowedSpinMax = Math.min(4000, hitSpinMax + 500);
+    const allowedLaunchMin = Math.max(6, hitLaunchMin - LAUNCH_MARGIN);
+    const allowedLaunchMax = Math.min(20, hitLaunchMax + LAUNCH_MARGIN);
+    const allowedSpinMin = Math.max(1500, hitSpinMin - SPIN_MARGIN);
+    const allowedSpinMax = Math.min(4000, hitSpinMax + SPIN_MARGIN);
 
     // Grid definition: 6-20 deg (1 deg steps) and 1500-4000 rpm (250 rpm steps)
     const gridLaunches = [];
@@ -426,7 +431,7 @@
       <div class="note">
         <strong>Aerodynamic check:</strong> model carry tested against Square carry for your ${club} shots: median difference ${diffSign}${opt.check.medianDiff.toFixed(1)} yd (spread IQR ${opt.check.iqr.toFixed(1)} yd, n = ${opt.check.n}). Cards only show when the model matches Square within 4 yd at the median.<br><br>
         <strong>Search grid:</strong> calculated step by step using ball flight aerodynamics at your median ball speed (${Math.round(opt.medSpeed)} mph) across launch angles 6° to 20° and spin rates 1,500 to 4,000 rpm.<br><br>
-        <strong>Achievable delivery:</strong> the optimal cell is strictly limited to launch and spin values within what you have actually hit with this club (widened by 2° launch and 500 rpm spin) to ensure the target is physically realistic with your swing.<br><br>
+        <strong>Achievable delivery:</strong> the optimal cell is strictly limited to launch and spin values within the middle 80% of what you have hit with this club (10th to 90th percentile, widened by 1° launch and 250 rpm spin) to ensure the target is physically realistic with your swing.<br><br>
         <strong>Driver and woods only:</strong> irons and hybrids launch and spin for green-stopping control, while woods seek maximum carry distance.
       </div>
     `;

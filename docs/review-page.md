@@ -110,6 +110,10 @@ What the server works out for each swing and what each part of the review page s
   4:25:49 PM"), dates ("Sep 25", "9/25") or clip numbers (the 10 digits in a clip's name, either
   angle's), several at once: the list shows just those swings and newer / older steps through them;
   one match opens it. `?find=...` in the address fills it, so a link can point at a set of swings.
+- **Swing match** (round 69; Sportsbox's Swing Score, Mustard's grades): "Swing match: 11 of 17 numbers like your
+  good shots" under the coaching card's verdict, and a sortable column in Trends' swing table and Analysis's One
+  session: of the body numbers that could be read, how many sat inside the club's good shots' 10th-90th percentile
+  (`board.js swingMatchCount`, as Progress's radar); none from fewer than 5, no colour, no good / bad word.
 - **Session trends** (Trends on a session in the list; `static/summary.js`): each swing's numbers
   (tempo, turns and sway at the top / impact, and the down-the-line ones: hips and bend at impact,
   hands to plane at P6 and the top, hand height and depth) against Square's (path, face, face to
@@ -299,6 +303,29 @@ What the server works out for each swing and what each part of the review page s
     - **Indicator tiles**: auto-fill grid of tiles. Each tile shows its plain name, moment tag (Rhythm, Top, Downswing, Impact), value big and colored (accent for in-range, amber for near/wobble, red for out), verbal status ("in range", "a little low", "high": color is never the only cue), a track with q10..q90 span faint, q25..q75 solid, middle-half ends labeled with numbers, a marker clamped with arrows when off the track, and a favorite star.
     - **Detail panel**: tap any tile to open a panel below the grid showing that number's row with SVG range bar, share in range, and three actions: **See it over time** (opens Analysis Over time for that metric), **Swings outside** (picks swings outside the good-shot range), and **Make this my focus** (opens Progress's focus picker on that move when the latest median is outside the middle half).
     - **How it's worked out**: expandable fold explaining how ranges describe your own good shots (not a tour model), shaky tracking, and camera shifts.
+  - **Consistency** (round 69, `static/consistency.js`; Sportsbox's "least consistent movements"): every body
+    number ranked by how much it wanders from swing to swing against how spread out your good shots are. Within
+    each session-and-club, the robust spread (1.4826 x median absolute deviation) of the readings that aren't shaky
+    or missing, pooled over sessions by swings, less the address noise (sqrt(spread^2 - noise^2)); divided by your
+    good shots' spread with that club (their middle half, q25..q75, as a spread: width / 1.349). 1 = you wander as
+    much as your good shots do; above 1, further. (Round 69 first divided by the width itself, which made a move
+    as steady as the good shots read 0.74; Claude's review, Oct 20.) Top 5 as rows, the rest folded; tap a row for
+    Spread on that number. Nothing from fewer than 20 readings over 3 sessions or 8 good shots; mostly-shaky
+    numbers listed apart. Plain names (shotstory.js plain()).
+  - **The distance you're leaving** (round 69, `static/optimize.js`, under Every club with the driver or a wood;
+    TrackMan's Optimizer): at the period's median ball speed, the carry over launch 6-20 degrees and spin
+    1,500-4,000 rpm (spin axis 0) from the tracer's flight model (`SwingTracer.flightPath`), searched only inside the
+    middle 80% of your own launch and spin with that club (10th-90th percentile) widened by 1 degree and 250 rpm:
+    from your extremes plus 2 degrees and 500 rpm (as first built) one high-launch shot and one low-spin shot opened
+    a corner never hit together and the driver's best came out 19 degrees / 1,500 rpm. Shown only when the model's
+    carry is within 4 yd of Square's at the median for that club (Oct 20: driver -2.0 yd, n 24; 3 wood +0.6 yd, n 13).
+    Oct 20, driver: 144 mph, 16 degrees with 2,250 rpm about 8 yd past the usual 11 degrees with 2,820 rpm.
+  - **Tour ranges** (round 69, `static/tourranges.js`; a switch in Swing checkpoints, off by default): a faint grey
+    dashed band on a tile's track and "Tour players (source): ..." in its panel, never a colour, verdict, focus or
+    coaching line (the owner: "I'd take tour ranges, but would rather focus on my good shots"). Only numbers with a
+    source that measures what SwingClips does: tempo about 3:1 and the backswing / downswing times from Tour Tempo's
+    tour frame counts (21/7 to 27/9 at 30 fps). Round 69's turns, X-factor, hip sway and hips open were cited to home
+    pages and are 3D-sensor angles where SwingClips' turns are face-on 2D widths: taken out.
 - **Where on the face** (Analysis card, `data-fold="strike"`; `static/strikemap.js`):
   heat map of impact locations on the club face (from Square's `faceImpactH` and `faceImpactV`) for the chosen club and period.
   The picture (`SwingStrikeMap.faceSvg`, Oct 9, the owner's ask: like FlightScope's): a club face seen from the front, toe on the
@@ -404,6 +431,12 @@ What the server works out for each swing and what each part of the review page s
   1. **Session take**: given right after a session on the Start page's end-of-session card and folded on Progress step 1 (under 150 words: How it went, Your focus, Next session with drill and thought). One call per session, cached by session key with "Ask again".
   2. **Weekly review**: in **Week for coach**, reviews the week's text (under 200 words: The week, Your focus, Next week). One per week, cached by week start with "Ask again".
   3. **Question box**: on **Tools > AI coach**, an **Ask the coach a question** box (up to 500 characters) answers questions ("Why do my 7 irons go right?", "Is my driver strike getting better?") in under 150 words, grounded in a 30-day brief (latest session brief + 30-day per-club medians in bag order + active focus move). Answers render under the box; questions stand alone and are never re-used.
+  4. **This swing** (round 69; Sportsbox's AI Highlights): **Ask the coach about this swing** under the coaching
+     card, shown when the coach has a key and a model. The brief (`aicoach.js swingBrief`) is the club, Square's
+     numbers, the card's verdict and lines, the body numbers with their trust (no reading left out, shaky marked;
+     taken from the swing view's own numbers, which carry trust) each against the middle half of the club's good
+     shots, the named faults and the focus if in scope; no clip names or times. `kind: "swing"`, kept per clip
+     (Ask again), counted in the daily cap; at most 120 words (`aicoach_swing_prompt.md`).
   Only text briefs go out: no video, no pictures, no names. All uses share a 10-call daily cap. Kept notes on Tools > AI coach show each note's kind (session / week / question with the question asked). Openable via `/#aicoach`.
 - Lead wrist check: **Tools > Wrist check** (`static/wristcheck.js`):
   provides a fast pass over a session's coach program shots to judge the golfer's lead wrist at impact by eye (flat, slightly bowed, cupped, or can't tell), on the down-the-line or the face-on camera (a switch, remembered; the back of the lead hand is often clearer face-on). Each card shows a strip of 4 frames (-8, -4 ms, impact, +4 ms: one 240 fps frame is often a blur), each cropped and enlarged round the hands. "Can't tell" is an answer, not a call: the coach report counts it apart ("10 of 12 shots called; can't tell on 2"). There is no computed wrist number: on 165 7 irons (Oct 7) neither the camera's hands-ahead (r -0.01) nor the club model's shaft angle at impact (r +0.06) predicted Square's dynamic loft. The app crops (using pose landmark 15 lead wrist from `/api/pose/<clip>` when available, or the middle 60% of the frame). One card per ball shot in order with shot number, block, and verdict, four judgment buttons with keyboard shortcuts (keys 1-4) that highlight and auto-advance to the next shot, run picker defaulting to the newest finished run, and a header count ("12 shots · 7 called") with a link to Week for coach. Calls are saved via `POST /api/program/wrist` and included in the coach report (`/api/program/report`). Openable via `/#wristcheck`.
@@ -829,6 +862,11 @@ toward the ball". The phones face away from you, so voice is the channel.
   ends, it gives one sentence comparing the result to your last game of the same kind (e.g. "Combine: -3.1, better than
   last time (-5.4)") and the best and worst target of the game. Under the Combine scores table, "Where you lose strokes"
   breaks down strokes gained by target distance over the last 3 Combines. Starting a game turns the practice number off.
+- **Tones** (round 69, the server's half; the sensor apps' beep): every spoken verdict carries `tone`: `"in"`,
+  `"near"` (outside by no more than a quarter of the target's width; for a one-sided gate, a quarter of its value)
+  or `"out"`, in the phone poll's `say` items (`status.py take`) and the practice feed's `results`
+  (`/api/practice/latest`, practice mode, games and programs); none on anything that isn't a verdict. Phones on
+  0.13 ignore it; the phone side (words, tone, or both) comes with the next capture app.
 - **Coach program** (`programs.py`, `programs.json`, `/api/program*`, Start page "Coach program"): a coach's drill
   ladder as data: blocks in order, each with its drill (drill mode, so rehearsals stay out of the trends;
   a block without one, like the transfer block, counts as normal swings), ball or no ball, reps, and a gate
@@ -924,6 +962,9 @@ toward the ball". The phones face away from you, so voice is the channel.
   summary has today's set in a line (`SwingDrillSets.formatSet`: the reps' number, the swings after, the
   verdict). The plan is drawn only when what it says changes (`planSig`). Without a journal focus (the
   block came from the session's top fault) there is no target, so the blocks show without the picture.
+- **Watch your best rep** (round 69, on each drill card with sets of yours; V1's and Mustard's drill videos, but
+  yours): the rep whose number went furthest the drill's way (the pump's lowest hands to plane for the pump drill),
+  opening that swing; "No rep of yours yet" otherwise (`drillsets.js bestRep`).
 - **Drill library** (Tools > Drills, `#drills`; `static/drilllib.js` builds and draws it, `static/drills-view.js`
   opens it and hands it the page's data; `/#drills` links to it): every drill the coach has, one per move
   and way (`coach.js MOVES`, 42: not the ways it marks as faults, Oct 20 2026). `SwingDrillLib.build(input)` (no DOM) returns `drills` (each: `id` from

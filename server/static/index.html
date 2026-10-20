@@ -4620,8 +4620,11 @@ async function renderCoachSwingAI(c) {
         : null;
       const rec = (typeof swingRecords !== "undefined" && swingRecords)
         ? (swingRecords[c.name] || (c.partner && swingRecords[c.partner])) : null;
-      const body = rec ? rec.body : (typeof coachBody !== "undefined" && coachBody ? coachBody.body : {});
-      const trust = rec ? rec.trust : (typeof coachBody !== "undefined" && coachBody ? coachBody.trust : {});
+      // The swing view's own numbers first: they carry each number's trust (no reading taken out). The stored
+      // record has the raw numbers and no trust, so a number the camera couldn't read would go as good.
+      const cb = typeof coachBody !== "undefined" && coachBody ? coachBody : null;
+      const body = cb ? cb.body : (rec ? rec.body : {}) || {};
+      const trust = cb ? cb.trust || {} : {};
       const ranges = (cd && cd.ranges) || (typeof coachBody !== "undefined" && coachBody ? coachBody.ranges : {});
       const faults = (typeof coachBody !== "undefined" && coachBody && coachBody.faults)
         || (typeof SwingFaults !== "undefined" ? SwingFaults.faultsOf({ body, trust }, (r, k) => trust[k] && trust[k].level === "shaky") : []);

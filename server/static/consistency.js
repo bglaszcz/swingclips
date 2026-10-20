@@ -61,11 +61,16 @@
   }
 
   function resolveField(key) {
+    let f;
     if (Indicators && Indicators.KNOWN_FIELDS && Indicators.KNOWN_FIELDS[key]) {
-      return Indicators.KNOWN_FIELDS[key];
+      f = Indicators.KNOWN_FIELDS[key];
+    } else {
+      const b = Summary && Summary.BODY ? Summary.BODY.find(x => x.key === key) : null;
+      f = b ? { key: b.key, label: b.label, unit: b.unit } : { key, label: key, unit: "" };
     }
-    const b = Summary && Summary.BODY ? Summary.BODY.find(x => x.key === key) : null;
-    return b ? { key: b.key, label: b.label, unit: b.unit } : { key, label: key, unit: "" };
+    // No P-numbers on screen: "Hands to plane at P6" -> "... in the downswing" (shotstory.js plain()).
+    const Story = root.SwingShotStory;
+    return Story && Story.plain ? Object.assign({}, f, { label: Story.plain(f.label) }) : f;
   }
 
   /**
@@ -249,7 +254,11 @@
 
       // Net spread: sqrt(max(0, spread^2 - noise^2))
       const netSpread = Math.sqrt(Math.max(0, rawSpread * rawSpread - addressNoise * addressNoise));
-      const ratio = goodWidth > 0 ? (netSpread / goodWidth) : 0;
+      // Like with like: the swings' spread (a standard deviation, robust) against the good shots' own, which
+      // for a middle half q25..q75 is its width / 1.349. Against the width itself (round 69 as first asked)
+      // a move exactly as steady as the good shots read 0.74, and every move looked steadier than them.
+      const goodSpread = goodWidth / 1.349;
+      const ratio = goodSpread > 0 ? (netSpread / goodSpread) : 0;
 
       ranked.push({
         key,
@@ -259,6 +268,7 @@
         addressNoise,
         netSpread,
         goodWidth,
+        goodSpread,
         ratio,
         words: ratioWords(ratio),
         swings: totalClean,
@@ -347,7 +357,7 @@
       const subLine = document.createElement("div");
       subLine.style.cssText = "font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap;";
       const spreadText = `spread ±${dec(item.netSpread, item.unit)}${item.unit}`;
-      const goodText = `good width ${dec(item.goodWidth, item.unit)}${item.unit}`;
+      const goodText = `your good shots ±${dec(item.goodSpread ?? item.goodWidth / 1.349, item.unit)}${item.unit}`;
       const countText = `${item.swings} swings · ${item.sessions} sessions`;
       subLine.append(
         Object.assign(document.createElement("span"), { textContent: spreadText }),
@@ -413,7 +423,7 @@
       <div class="note" style="margin-top: 8px; line-height: 1.5;">
         <p>Your movements are ranked by how much they wobble swing to swing compared to the room your good shots leave.</p>
         <p>For each session and club, we calculate the robust spread (1.4826 × median absolute deviation) of clean readings. Because spreads are calculated <em>within</em> each session, a camera placed at a slightly different distance or angle between days never artificially inflates your spread.</p>
-        <p>Session spreads are weighted by swings, and camera jitter at address is subtracted: <code>√(spread² - noise²)</code>. This net spread is divided by the middle half of your good shots with that club (75th percentile minus 25th percentile). A ratio above 1 means the movement wanders further than your good shots allow.</p>
+        <p>Session spreads are weighted by swings, and camera jitter at address is subtracted: <code>√(spread² - noise²)</code>. This net spread is set against how spread out your good shots with that club are (the middle half of them, 25th to 75th percentile, turned into the same ± measure: its width divided by 1.35). 1 means your swings wander as much as your good shots do; above 1, further than your good shots allow.</p>
       </div>
     `;
     box.appendChild(how);

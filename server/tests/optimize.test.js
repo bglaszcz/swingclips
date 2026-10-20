@@ -88,15 +88,14 @@ test("Optimize finds known optimal cell and calculates distance gain on planted 
   assert.equal(Math.round(res.medLaunch), 11);
   assert.ok(Math.abs(res.medSpin - 3100) <= 50);
 
-  // Allowed bounds: hit launch (10 to 12) widened by 2 -> 8 to 14
-  // hit spin (2900 to 3300) widened by 500 -> 2400 to 3800
-  assert.ok(res.bestCell.launch <= 14);
-  assert.ok(res.bestCell.launch >= 8);
-  assert.ok(res.bestCell.spin >= 2400);
-  assert.ok(res.bestCell.spin <= 3800);
+  // Allowed bounds: the middle 80% of launch and spin, widened by 1 degree and 250 rpm
+  assert.ok(res.bestCell.launch <= res.allowed.launchMax && res.bestCell.launch >= res.allowed.launchMin);
+  assert.ok(res.bestCell.spin >= res.allowed.spinMin && res.bestCell.spin <= res.allowed.spinMax);
+  assert.ok(res.allowed.launchMax <= 13 + 1e-9, "no further than 1 degree past the planted shots' 90th percentile");
+  assert.ok(res.allowed.spinMin >= 2900 - 250 - 1e-9, "no further than 250 rpm below their 10th percentile");
 
-  // At 148 mph, 14 deg launch with lower spin (~2400-2500 rpm) produces higher carry than 11 deg with 3100 rpm
-  assert.ok(res.gain > 5, `Expected gain > 5 yd, got ${res.gain} yd`);
+  // Higher launch with less spin than the usual 11 degrees and 3,100 rpm carries further, within those bounds.
+  assert.ok(res.gain > 2, `Expected gain > 2 yd, got ${res.gain} yd`);
   assert.ok(res.bestCell.carry > res.usualCarry);
 
   // Check summary wording
@@ -104,7 +103,7 @@ test("Optimize finds known optimal cell and calculates distance gain on planted 
   assert.match(res.summary, /would carry about \d+ yd more than your usual/);
 });
 
-test("Optimize respects physically achievable boundary constraints (widened by 2 deg and 500 rpm)", () => {
+test("Optimize respects physically achievable boundary constraints (middle 80%, widened by 1 deg and 250 rpm)", () => {
   const shots = makePlantedDriverShots();
   const res = Optimize.optimize(shots, "DR", { tracer: Tracer });
 

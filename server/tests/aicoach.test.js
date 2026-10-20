@@ -414,3 +414,14 @@ describe("SwingAICoach.swingBrief", () => {
     assert.strictEqual(AICoach.swingBrief({}), "# Swing");
   });
 });
+
+it("swingBrief: good-shot ranges are read as the page holds them (middle half, q25..q75)", () => {
+  const AC = AICoach;
+  const text = AC.swingBrief({
+    club: "I7", body: { tempo: 3.4, hipSway: 5.0 }, trust: {},
+    ranges: { tempo: { enough: true, reliable: true, q10: 2.7, q25: 2.9, q75: 3.3, q90: 3.5 },
+              hipSway: { enough: false, q25: 4, q75: 5 } },
+  });
+  assert.match(text, /Tempo: 3\.4:1 \[above good range 2\.9:1 to 3\.3:1\]/);
+  assert.ok(!/Hip slide[^\n]*good range/.test(text), "no range from too few good shots");
+});
