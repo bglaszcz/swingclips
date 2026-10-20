@@ -38,7 +38,7 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    the night pass the main analysis once a clip has one: `night.merge` puts its body points into the
    server's pose file (club, clubhead, onset and ball stay the server's) as `night/<clip>.main.json.gz`, the
    swing numbers, the 3D and the page's `/api/pose` use it, and every such swing is worked out again (its
-   pose stamp gets `+night`). To switch on after the tuning (Gemini round 65).
+   pose stamp gets `+night`). Tuned in Gemini round 65 (`phases.js` `TUNING["rtmw-l"].p3Degrees = -3`; verified on 144 swings and ready to enable).
 
 1. **Where the two disagree, a label teaches most.** The swing worker works out the key positions
    from the night files (the page's own JavaScript, as for the server's pose files) and keeps how far
