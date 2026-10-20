@@ -3,7 +3,8 @@
 // stands and its lens: the 3D calibration session). V1's Ball Tracing and Rapsodo's Shot Vision guess the
 // flight from the video; this one is the measured launch, flown by the same flight model as the server
 // (server/ballflight.py, within ~2 yd of Square's carry), and put into the picture through the camera.
-// Starts at this swing's ball (where the down-the-line view saw it, on the floor), grows from impact.
+// Starts at this swing's ball (where the down-the-line view saw it, on the floor), grows from impact; real up
+// to the impact screen, then drawn on the screen as a sim draws it (onScreen), so straight reads straight.
 // Only for swings with 3D (both phones, on a calibration); the page draws it with Show > Shot tracer.
 (function (root) {
   // ---- Flight: server/ballflight.py, step for step (tests/tracer.test.js checks they agree) ----
@@ -14,6 +15,14 @@
   const SAMPLE_EVERY = 2;            // keep every 2nd step (0.02 s) of the path
   const MAX_BALL_OFF_M = 0.45;       // a found ball further than this from the calibration's is a misread
   const GROW_S = 0.6;                // clip seconds after impact for the tracer to draw itself out
+  // The bay: the ball flies into an impact screen; past it the flight is only the picture the sim draws on
+  // the screen. Drawn in true 3D, a straight shot ran off toward the middle of the down-the-line picture
+  // (the camera stands 0.6 m toward the golfer, so the target line's far end is left of the ball) and
+  // read as a pull (owner, Oct 20, on a 157 yd 7 iron 1.8 yd left). So the flight is real up to the screen
+  // and, past it, put on the screen as a sim draws it: seen from an eye behind the ball on the target line.
+  const SCREEN_M = 3.05;             // ball to impact screen along the target line: the owner's ~10 ft
+  const EYE_BACK_M = 1.0, EYE_UP_M = 1.5;   // the sim's eye (a guess: it only sets how high the flight
+                                            // draws on the screen, not its line or curve)
 
   /**
    * The flight of a ball launched at `speed` mph, `vla` up, `hla` right (deg), `spin` rpm about an axis
@@ -133,7 +142,7 @@
    * {points: [[x, y, t, depth]] (x, y from 0 to 1 of the picture), seconds, carry (Square's, else the
    * model's, yd), fromBall} or null.
    */
-  function build(shot, camEntry, ball) {
+  function build(shot, camEntry, ball, opts) {
     const b = shot && shot.ball;
     const cam = camera(camEntry);
     if (!b || !cam) return null;
@@ -149,13 +158,32 @@
       if (B && Math.hypot(B[0], B[2]) < MAX_BALL_OFF_M) { origin = B; fromBall = true; }
     }
     const points = [];
+    const screen = onScreen(origin, opts && opts.screenM);
     for (const [t, x, y, z] of fl.points) {
-      const p = project(cam, [origin[0] + x, origin[1] + y, origin[2] + z]);
-      if (!p) break;
-      points.push([p[0] / W, p[1] / H, t, p[2]]);
+      const real = [origin[0] + x, origin[1] + y, origin[2] + z];
+      const p = project(cam, screen(real)), far = project(cam, real);
+      if (!p || !far) break;
+      // The depth is the real ball's: the line thins with how far the ball is, not the screen.
+      points.push([p[0] / W, p[1] / H, t, far[2]]);
     }
     if (points.length < 2) return null;
     return { points, seconds: fl.seconds, carry: num(b.carry) ?? fl.carry, modelCarry: fl.carry, fromBall };
+  }
+
+  /**
+   * Where a point of the flight shows in the bay: itself before the impact screen (screenM along the target
+   * line from the ball), and past it, on the screen where a sim would draw it, along the line from an eye
+   * EYE_BACK_M behind the ball and EYE_UP_M up, on the target line. A straight shot is then a straight line
+   * up the screen; a curve bends on it.
+   */
+  function onScreen(origin, screenM) {
+    const plane = origin[0] + (Number.isFinite(screenM) && screenM > 0 ? screenM : SCREEN_M);
+    const E = [origin[0] - EYE_BACK_M, EYE_UP_M, origin[2]];
+    return X => {
+      if (X[0] <= plane) return X;
+      const k = (plane - E[0]) / (X[0] - E[0]);
+      return [plane, E[1] + k * (X[1] - E[1]), E[2] + k * (X[2] - E[2])];
+    };
   }
 
   /**
@@ -215,7 +243,7 @@
     return Math.max(0, Math.min(1, (t - impact) / GROW_S));
   }
 
-  const api = { flightPath, camera, project, undistort, ballOnFloor, build, draw, shown, GROW_S, RADIUS };
+  const api = { flightPath, camera, project, undistort, ballOnFloor, onScreen, build, draw, shown, GROW_S, RADIUS, SCREEN_M };
   root.SwingTracer = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

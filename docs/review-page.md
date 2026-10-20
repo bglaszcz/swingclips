@@ -79,11 +79,17 @@ What the server works out for each swing and what each part of the review page s
   `tests/tracer.test.js` checks they agree), and put into the picture through the down-the-line phone of the
   calibration session the swing's 3D is on (`GET /api/calib/session?id=`; its lens and place, golf axes).
   It starts at this swing's ball: where the down-the-line view saw it (`pose.ball`), its ray met with the
-  floor (within 0.45 m of the calibration's ball, else the calibration's). Only for swings with 3D. The other
-  apps guess the flight from the video; the shape here is the launch numbers', so a push-slice starts right
-  and curves further right (Oct 9 5:05 PM 7 iron: lands well right of where a straight shot would). The
-  target line is the 3D's (square to the address hips-to-ball line), so a few degrees from Square's own
-  target line is possible. Night pass (`Show > Night pass`): draws the skeleton from the
+  floor (within 0.45 m of the calibration's ball, else the calibration's). Only for swings with 3D.
+  **On the screen** (Oct 20, the owner's pick): in true 3D a straight shot ran off toward the middle of the
+  picture, left of the ball (the phone stands 0.6 m toward the golfer, so the target line's far end is left of
+  the ball), and read as a pull (Oct 9 5:04 PM, 157 yd, 1.8 yd left). In the bay the ball meets the impact
+  screen ~10 ft out (`SCREEN_M` 3.05 m, the owner's estimate) and past it the flight is only what the sim draws,
+  so the tracer is the real flight up to the screen and, past it, put on the screen along the line from an eye
+  1 m behind the ball and 1.5 m up on the target line (a guess that only sets how high it draws, not its line
+  or curve). A straight shot is now one line up the screen; the Oct 9 5:05 PM push-slice bends right on it.
+  The other apps guess the flight from the video; the shape here is the launch numbers'. The target line is
+  the 3D's (square to the address hips-to-ball line), so a few degrees from Square's own target line is
+  possible. Night pass (`Show > Night pass`): draws the skeleton from the
   night pass (`/api/night/pose/<clip>`, RTMW-l on the gaming PC) alongside the server's, matched by
   timestamp and drawn in dashed sky blue without angle labels; works during playback and in labeling mode.
   A kinematic

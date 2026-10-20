@@ -69,6 +69,28 @@ test("build: a slice ends right of a straight shot, starts at the ball, carry is
   assert.equal(T.build(shot(0, 0), null, null), null);
 });
 
+test("on the screen: a straight shot is one line up the screen, curves bend on it", () => {
+  const ball = { x: 0, y: 0 };
+  const cam = T.camera(CAM);
+  const [bu, bv] = T.project(cam, [0, T.RADIUS, 0]);
+  ball.x = bu / 1080; ball.y = bv / 1920;
+  const fly = (hla, axis) => T.build({ ball: { speed: 111, vla: 16, hla, totalSpin: 5900, spinAxis: axis, carry: 157 } }, CAM, ball);
+  const past = tr => tr.points.filter(p => p[2] > 0.2);   // well past a 10 ft screen
+  const straight = past(fly(0, 0)).map(p => p[0]);
+  assert.ok(Math.max(...straight) - Math.min(...straight) < 0.01, "straight up the screen");
+  const slice = past(fly(1, 12)), hook = past(fly(-1, -12));
+  assert.ok(slice.at(-1)[0] > slice[0][0] + 0.03, "a slice bends right on the screen");
+  assert.ok(hook.at(-1)[0] < hook[0][0] - 0.03, "a hook bends left");
+  // Before the screen the points are the real flight; the screen only takes over past it.
+  const scr = T.onScreen([0, T.RADIUS, 0], 3.05);
+  assert.deepEqual(scr([1, 0.5, 0.1]), [1, 0.5, 0.1]);
+  const s = scr([50, 20, 3]);
+  close(s[0], 3.05, 1e-12);
+  assert.ok(s[1] > 1.5 && s[1] < 20 && s[2] > 0 && s[2] < 3);
+  // A longer screen distance can be passed.
+  assert.ok(T.build({ ball: { speed: 111, vla: 16, hla: 0, totalSpin: 5900, spinAxis: 0 } }, CAM, ball, { screenM: 4 }));
+});
+
 test("shown: grows over GROW_S after impact", () => {
   assert.equal(T.shown(1.0, 2.0), 0);
   close(T.shown(2.0 + T.GROW_S / 2, 2.0), 0.5, 1e-9);
