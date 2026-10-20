@@ -1616,11 +1616,11 @@
     <div id="coachcard" class="card" hidden></div>
     <div id="shotdata" hidden title="From the launch monitor, via the shot listener"></div>
     <!-- Everything marked adv-only shows only with Advanced data on (remembered per browser). -->
-    <div id="advbar"><button id="adv-btn" class="small" aria-expanded="false" title="All of Square's numbers, the scorecard, key positions and the swing numbers">Advanced data ▸</button></div>
+    <div id="advbar"><button id="adv-btn" class="small" aria-expanded="false" title="All of Square's numbers, the scorecard and the swing numbers">Advanced data ▸</button></div>
     <div id="drillcard" class="card" hidden></div>
     <div id="indicators" class="card" hidden></div>
     <div id="scorecard" class="card adv-only" hidden></div>
-    <div id="positions" class="card adv-only" hidden>
+    <div id="positions" class="card" hidden>
       <div class="pos-head">
         <strong>Key positions</strong><span class="hint">Tap a position, or press 1–8</span>
       </div>
@@ -3930,9 +3930,9 @@ async function buildPositions(name) {
     const b = document.createElement("button");
     b.className = other ? "pos two" : "pos";
     b.title = `${p.tag ? p.tag + " " : ""}${capName} - ${p.t.toFixed(3)} s`;
-    b.innerHTML = `<canvas width="${other ? 384 : 192}" height="256"></canvas><span><b></b> <i></i><br></span>`;
-    b.querySelector("b").textContent = p.tag;
-    b.querySelector("i").textContent = p.estimated ? "~" : "";
+    b.innerHTML = `<canvas width="${other ? 384 : 192}" height="256"></canvas><span></span>`;
+    // The P-number stays in the tooltip only (plain names on screen).
+    if (p.estimated) b.querySelector("span").append(Object.assign(document.createElement("i"), { textContent: "~ " }));
     b.querySelector("span").append(capName);
     b.onclick = () => jumpTo(p.index);
     return b;
