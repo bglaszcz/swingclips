@@ -880,7 +880,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   block came from the session's top fault) there is no target, so the blocks show without the picture.
 - **Drill library** (Tools > Drills, `#drills`; `static/drilllib.js` builds and draws it, `static/drills-view.js`
   opens it and hands it the page's data; `/#drills` links to it): every drill the coach has, one per move
-  and way (`coach.js MOVES`, 52). `SwingDrillLib.build(input)` (no DOM) returns `drills` (each: `id` from
+  and way (`coach.js MOVES`, 42: not the ways it marks as faults, Oct 20 2026). `SwingDrillLib.build(input)` (no DOM) returns `drills` (each: `id` from
   `SwingCoach.drillId`, `name` and `how` split at the drill text's first ": ", `trains` (the move in plain
   words), `thought`, `moment` (Rhythm, Top of the swing, Downswing, Impact: `SwingIndicators.moment` of the
   move's field), `isFocus`, `on`, and your `sets`, `reps` and `last` set with its verdict from
@@ -888,7 +888,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   `counts`. In a group and in `mine`: the focus's first, then drills with sets, newest first, then by
   name. `render` draws chips (**Yours**, shown and chosen by default when there is anything in it, **All**,
   one per moment; the choice is remembered in `localStorage["drill-lib-filter"]`) with their counts and
-  "52 drills · 2 tried", and a card per drill: the moment, the name, what it trains, how, the swing
+  "42 drills · 2 tried", and a card per drill: the moment, the name, what it trains, how, the swing
   thought, then "1 set, 10 reps · last Oct 5: clear carry-over into your swings" (a button: opens that
   set's first swing) or "Not tried yet". One action a card: **Do this drill** on the focus's (Practice,
   with the reps switched on), **Make this my focus** on the rest (Progress's focus picker on that move):

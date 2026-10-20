@@ -150,7 +150,19 @@ test("the pump's id", () => {
   assert.strictEqual(p.name, "Pump drill");
 });
 
-test("the real coach: 52 drills, every name and how, no P-numbers on screen", () => {
+test("a way that is a fault gets no card", () => {
+  const moves = Object.assign({}, MOVES, {
+    earlyExt: {
+      more: { name: "early extension", fault: true, drill: "Ground-push drill: stand up through the finish.", thought: "Push the ground." },
+      less: { name: "keeping your hips back", drill: "Chair drill: backside on the chair.", thought: "Tush on the wall." },
+    },
+  });
+  const m = Lib.build(input({ moves, drillId: (move, aim) => moves[move] && moves[move][aim] ? `move:${move}:${aim}` : null }));
+  assert.ok(!find(m, "move:earlyExt:more"));
+  assert.ok(find(m, "move:earlyExt:less"));
+});
+
+test("the real coach: 42 drills, every name and how, no P-numbers on screen", () => {
   const Coach = require("../static/coach.js");
   const Ind = require("../static/indicators.js");
   const Story = require("../static/shotstory.js");
@@ -158,12 +170,14 @@ test("the real coach: 52 drills, every name and how, no P-numbers on screen", ()
     moves: Coach.MOVES, drillId: Coach.drillId, sets: [], verdict: () => null, focus: null, current: null,
     plain: Story.plain, fields: Ind.KNOWN_FIELDS, moment: Ind.moment,
   });
-  assert.strictEqual(m.drills.length, 52);
-  assert.strictEqual(m.counts.all, 52);
+  // 52 before Oct 20 2026, with the 10 ways coach.js marks as faults (ground-push, post-and-rotate...).
+  assert.strictEqual(m.drills.length, 42);
+  assert.strictEqual(m.counts.all, 42);
+  assert.ok(!m.drills.some(d => Coach.MOVES[d.move][d.aim].fault));
   for (const d of m.drills) {
     assert.ok(d.name, `${d.id} has a name`);
     assert.ok(d.how, `${d.id} has a how`);
     for (const k of ["trains", "how", "thought"]) assert.ok(!/\bP[1-8]\b/.test(d[k]), `${d.id} ${k}: ${d[k]}`);
   }
-  assert.strictEqual(m.groups.reduce((n, g) => n + g.drills.length, 0), 52);
+  assert.strictEqual(m.groups.reduce((n, g) => n + g.drills.length, 0), 42);
 });

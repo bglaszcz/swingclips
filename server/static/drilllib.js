@@ -45,7 +45,9 @@
     for (const move of Object.keys(moves)) {
       for (const aim of ["more", "less"]) {
         const side = moves[move] && moves[move][aim];
-        if (!side || !side.drill) continue;
+        // Not a way that is a fault (coach.js `fault`: never offered as a fix): its card said it "trains"
+        // early extension or casting, and reps of it were judged toward the fault.
+        if (!side || !side.drill || side.fault) continue;
         const id = typeof inp.drillId === "function" ? inp.drillId(move, aim) : null;
         if (!id) continue;
         const { name, how } = split(side.drill);
