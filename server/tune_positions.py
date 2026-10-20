@@ -31,10 +31,11 @@ PREDICTED = {"impact": "p7"}
 GRID = {"takeawayDegrees": [1, 3, 5], "topSpeedShares": [[0.1, 0.4], [0.2, 0.5], [0.3, 0.6]],
         "topSmoothSeconds": [0.02, 0.03, 0.04], "onsetLead": [0.004, 0.008, 0.012, 0.017],
         "onsetPull": [0.0, 0.01, 0.02, 0.03], "topSlowSeconds": [0.03, 0.05, 0.07],
-        "topRuleWeight": [0.0, 0.2, 0.33, 0.5, 1.0], "topTurnWeight": [0.0, 0.25, 0.5, 0.75, 1.0]}
+        "topRuleWeight": [0.0, 0.2, 0.33, 0.5, 1.0], "topTurnWeight": [0.0, 0.25, 0.5, 0.75, 1.0],
+        "p3Degrees": [0, -1, -2, -3, -4], "p5Degrees": [0, 1, 2]}
 KNOB_EVENTS = {"takeawayDegrees": ["takeaway"], "topSpeedShares": ["p4"], "topSmoothSeconds": ["p4"],
                "onsetLead": ["takeaway"], "onsetPull": ["takeaway"], "topSlowSeconds": ["p4"], "topRuleWeight": ["p4"],
-               "topTurnWeight": ["p4"]}
+               "topTurnWeight": ["p4"], "p3Degrees": ["p3"], "p5Degrees": ["p5"]}
 PRIMARY, SECONDARY = "pose-rtmpose-m", "pose"
 # The errors test_fixtures.py holds phases.js to (tune_positions.py --baseline writes it).
 BASELINE = REAL / "key-positions.json"
@@ -75,10 +76,13 @@ class Scorer:
     def __init__(self, folder: Path, swing_list: list[dict]):
         self.js = swings.Summarizer(HERE / "static")
         self.inputs = []
+        self.model = None
         for s in swing_list:
             mi = swings.pose_input(s["main"], folder / f"{s['main']['name']}.v6.json.gz")
             oi = swings.pose_input(s["other"], folder / f"{s['other']['name']}.v6.json.gz") if s["other"] else None
             self.inputs.append((s, mi, oi))
+            if self.model is None and mi and mi.get("bodyModel"):
+                self.model = mi["bodyModel"]
         self.cache = {}
 
     def errors(self, tuning: dict) -> list[list[dict]]:
@@ -87,7 +91,8 @@ class Scorer:
         if key in self.cache:
             return self.cache[key]
         self.js.call("aspectOf", "x", 0)   # the engine is up
-        self.js.ctx.eval(f"Object.assign(SwingPhases.TUNING, {json.dumps(tuning)})")
+        target = "rtmw-l" if (self.model and "rtmw" in self.model) else "rtmpose-m"
+        self.js.ctx.eval(f"if (SwingPhases.TUNING['{target}']) Object.assign(SwingPhases.TUNING['{target}'], {json.dumps(tuning)}); Object.assign(SwingPhases.TUNING, {json.dumps(tuning)})")
         out = []
         for s, mi, oi in self.inputs:
             got = self.js.call("positionTimes", mi, oi, swings.LEAD_SIDE)
@@ -110,7 +115,10 @@ class Scorer:
     def tuning(self) -> dict:
         """phases.js's TUNING as the file holds it."""
         self.js.call("aspectOf", "x", 0)   # the engine is up
-        return json.loads(self.js.ctx.eval("JSON.stringify(SwingPhases.TUNING)"))
+        target = "rtmw-l" if (self.model and "rtmw" in self.model) else "rtmpose-m"
+        raw = self.js.ctx.eval(f"JSON.stringify(SwingPhases.TUNING['{target}'] || SwingPhases.TUNING)")
+        doc = json.loads(raw)
+        return {k: v for k, v in doc.items() if not isinstance(v, dict)}
 
     def close(self):
         self.js.close()
