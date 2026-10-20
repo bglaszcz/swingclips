@@ -94,6 +94,38 @@ class SentenceTest(unittest.TestCase):
         self.assertEqual(practice.sentence(m, None, "none"), "Tempo, no reading")
         self.assertEqual(practice.sentence(BY_KEY["path"], None, "none", why="no shot"), "Club path, no shot")
 
+    def test_judge_tone(self):
+        m = BY_KEY["tempo"]  # lo 2.8, hi 3.4 -> span 0.6 -> margin 0.15
+        self.assertEqual(practice.judge_tone(m, 3.1, 2.8, 3.4), "in")
+        self.assertEqual(practice.judge_tone(m, 2.8, 2.8, 3.4), "in")
+        self.assertEqual(practice.judge_tone(m, 3.4, 2.8, 3.4), "in")
+        self.assertEqual(practice.judge_tone(m, 2.7, 2.8, 3.4), "near")
+        self.assertEqual(practice.judge_tone(m, 2.6, 2.8, 3.4), "out")
+        self.assertEqual(practice.judge_tone(m, 3.5, 2.8, 3.4), "near")
+        self.assertEqual(practice.judge_tone(m, 3.6, 2.8, 3.4), "out")
+        self.assertIsNone(practice.judge_tone(m, None, 2.8, 3.4))
+
+    def test_step_and_latest_tone(self):
+        clock = Clock(T0)
+        p = Practice(TMP / "tone_cfg.json", TMP / "tone_log.jsonl", clock=clock)
+        p.set_config({"on": True, "metric": "tempo", "min": 2.8, "max": 3.4, "streak": False, "club": "all"})
+        # 1. In range
+        [e1] = p.step([swing(1, T0)], {"swing_face_1.mp4": record({"tempo": 3.1})})
+        self.assertEqual(e1.get("tone"), "in")
+        # 2. Near
+        [e2] = p.step([swing(2, T0 + 10)], {"swing_face_2.mp4": record({"tempo": 2.7})})
+        self.assertEqual(e2.get("tone"), "near")
+        # 3. Out
+        [e3] = p.step([swing(3, T0 + 20)], {"swing_face_3.mp4": record({"tempo": 2.0})})
+        self.assertEqual(e3.get("tone"), "out")
+        # 4. No reading
+        [e4] = p.step([swing(4, T0 + 30)], {"swing_face_4.mp4": record({"tempo": None})})
+        self.assertNotIn("tone", e4)
+        # Check latest(0)
+        res = p.latest(0)["results"]
+        tones = [r.get("tone") for r in res]
+        self.assertEqual(tones, ["in", "near", "out", None])
+
 
 class ReliabilityTest(unittest.TestCase):
     def test_camera_check_blocks_that_cameras_numbers_only(self):

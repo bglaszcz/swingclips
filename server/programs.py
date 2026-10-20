@@ -218,6 +218,50 @@ def check(n: dict, c: dict) -> bool | None:
     return (c.get("min") is None or v >= c["min"]) and (c.get("max") is None or v <= c["max"])
 
 
+def check_tone(n: dict, c: dict) -> str | None:
+    """"in", "near" (within 25% of the target range width outside), "out", or None if missing."""
+    v = n.get(c["key"])
+    if v is None:
+        return None
+    if "equals" in c:
+        return "in" if v == c["equals"] else "out"
+    if isinstance(v, bool):
+        target = True if (c.get("min") is True or c.get("min") == 1) else False if (c.get("max") is False or c.get("max") == 0) else c.get("val", True)
+        return "in" if v == target else "out"
+    lo, hi = c.get("min"), c.get("max")
+    if lo is not None and hi is not None:
+        if lo <= v <= hi:
+            return "in"
+        span = hi - lo
+        margin = 0.25 * span if span > 0 else 0.0
+        if (v < lo and (lo - v) <= margin + 1e-6) or (v > hi and (v - hi) <= margin + 1e-6):
+            return "near"
+        return "out"
+    elif lo is not None:
+        if v >= lo:
+            return "in"
+        margin = 0.25 * abs(lo) if lo != 0 else 0.0
+        return "near" if (lo - v) <= margin + 1e-6 else "out"
+    elif hi is not None:
+        if v <= hi:
+            return "in"
+        margin = 0.25 * abs(hi) if hi != 0 else 0.0
+        return "near" if (v - hi) <= margin + 1e-6 else "out"
+    return "in"
+
+
+def gate_miss_tone(block: dict, r: dict) -> str:
+    """"near" if every failed check was within the 25% margin outside, else "out"."""
+    if r.get("mark") is False:
+        return "out"
+    checks = block["gate"].get("checks", [])
+    failed = [c for c in checks if check(r["numbers"], c) is False]
+    if not failed:
+        return "out"
+    tones = [check_tone(r["numbers"], c) for c in failed]
+    return "near" if all(t == "near" for t in tones) else "out" 
+
+
 def load_programs(path: Path = PROGRAMS_FILE) -> dict:
     doc = json.loads(Path(path).read_text(encoding="utf-8"))
     return {p["id"]: p for p in doc["programs"]}
@@ -804,10 +848,11 @@ class Programs:
             return
         streak = f" {st['streak']} in a row." if block["gate"]["kind"] == "streak" and st["streak"] >= 2 else ""
         if r["gate"]:
-            self._say(f"{prefix}Pass.{streak}")
+            self._say(f"{prefix}Pass.{streak}", tone="in")
         else:
             why = ", ".join(cue(c, r["numbers"][c["key"]]) for c in r["fails"]) if r["fails"] else "mark behind the ball"
-            self._say(f"{prefix}Miss: {why}.")
+            tone = gate_miss_tone(block, r)
+            self._say(f"{prefix}Miss: {why}.", tone=tone)
 
     def _say_square_part(self, block: dict, r: dict) -> None:
         """A shot on a block that checks the 3D, as it comes in: a miss on Square's numbers is said at once
@@ -818,7 +863,8 @@ class Programs:
         fails = square_fails(block, r["numbers"])
         if fails:
             r["toldMiss"] = True
-            self._say(f"Miss: {', '.join(cue(c, r['numbers'][c['key']]) for c in fails)}.")
+            tone = gate_miss_tone(block, r)
+            self._say(f"Miss: {', '.join(cue(c, r['numbers'][c['key']]) for c in fails)}.", tone=tone)
         else:
             self._say("Club good. Hips when the 3D is in.")
 
@@ -894,10 +940,13 @@ class Programs:
                 "back": (self._back_to(p) or {}).get("name"),
                 "progress": progress_text(block, block_state(block, self.run["reps"], self.run["marks"]))}
 
-    def _say(self, text: str) -> None:
+    def _say(self, text: str, tone: str | None = None) -> None:
         now = self.clock()
         self.said = [e for e in self.said if now - e["made"] <= SPEAK_WITHIN_S]
-        self.said.append({"id": self.new_id(), "made": now, "text": " ".join(text.split()), "program": True})
+        item = {"id": self.new_id(), "made": now, "text": " ".join(text.split()), "program": True}
+        if tone is not None:
+            item["tone"] = tone
+        self.said.append(item)
 
     def _finish(self, how: str) -> dict:
         p = self.programs[self.run["id"]]

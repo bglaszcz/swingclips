@@ -824,6 +824,41 @@ class ProgramsTest(unittest.TestCase):
         count_med = {"reps": 10, "gate": {"kind": "count", "need": 6, "medians": [{"key": "attack", "min": -3.0}]}}
         self.assertEqual(programs.gate_text(count_med), "6 of 10, median attack angle -3 or more")
 
+    def test_tone_for_reps(self):
+        c = {"key": "attack", "min": -4.5, "max": -3.0}  # span 1.5, margin 0.375
+        self.assertEqual(programs.check_tone({"attack": -3.5}, c), "in")
+        self.assertEqual(programs.check_tone({"attack": -4.6}, c), "near")
+        self.assertEqual(programs.check_tone({"attack": -5.0}, c), "out")
+        self.assertEqual(programs.check_tone({"attack": -2.8}, c), "near")
+        self.assertEqual(programs.check_tone({"attack": -2.5}, c), "out")
+
+        self.p.programs = {"test": {"id": "test", "name": "Test", "cap": 20, "blocks": [{
+            "id": "b1", "name": "B1", "how": "test", "ball": True, "reps": 5,
+            "gate": {"kind": "total", "need": 3, "checks": [c]}
+        }]}}
+        self.p.start("test")
+        intro = self.p.latest(0)
+        self.assertEqual(len(intro), 1)
+        self.assertNotIn("tone", intro[0])  # block intro has no tone
+        last_id = intro[0]["id"]
+
+        # Pass
+        self.hit(shot(attack=-3.5))
+        s1 = self.p.latest(last_id)
+        self.assertEqual(s1[0].get("tone"), "in")
+        last_id = s1[0]["id"]
+
+        # Near miss (-4.6: within 0.375 margin)
+        self.hit(shot(attack=-4.6))
+        s2 = self.p.latest(last_id)
+        self.assertEqual(s2[0].get("tone"), "near")
+        last_id = s2[0]["id"]
+
+        # Out miss (-5.5: outside margin)
+        self.hit(shot(attack=-5.5))
+        s3 = self.p.latest(last_id)
+        self.assertEqual(s3[0].get("tone"), "out")
+
     def test_progress_text(self):
         # Streak progress
         block_streak = {"gate": {"kind": "streak", "need": 5}}

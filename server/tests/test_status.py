@@ -862,6 +862,29 @@ class TriggerTest(unittest.TestCase):
             self.s.set_sensitivity("face", 121)
         self.assertEqual(self.s.set_sensitivity("dtl", 100), [{"angle": "dtl", "error": None}])   # already
 
+    def test_status_say_tones(self):
+        from status import Status
+        clock = Clock(T0)
+        st = Status(clock=clock)
+        # 1. Setup verdict has no tone
+        st._say("face", "Face-on: good.", "setup", clock())
+        out = st.take("face")
+        self.assertEqual(len(out["say"]), 1)
+        self.assertNotIn("tone", out["say"][0])
+
+        # 2. Verdict with tone
+        st.say("face", "Pass.", tone="in")
+        out2 = st.take("face")
+        self.assertEqual(out2["say"][0].get("tone"), "in")
+
+        st.say("face", "Miss: attack steep.", tone="near")
+        out3 = st.take("face")
+        self.assertEqual(out3["say"][0].get("tone"), "near")
+
+        st.say("face", "Miss: attack steep.", tone="out")
+        out4 = st.take("face")
+        self.assertEqual(out4["say"][0].get("tone"), "out")
+
     def test_missed_shots_say_what_was_heard(self):
         s = self.s
         s.heartbeat("face", self.trig(practiceVoice=True, recording=True))

@@ -1835,7 +1835,9 @@ async def practice_latest(since: int | None = None, angle: str | None = Query(No
             # Practice games and coach programs speak through the same phone, with ids from the same counter.
             out["results"] = sorted(out["results"] + [
                 {"id": e["id"], "text": e["text"], "age": round(time.time() - e["made"], 1), "status": None,
-                 "clip": None} for e in games_state.latest(since) + programs_state.latest(since)], key=lambda e: e["id"])
+                 "clip": None,
+                 **({"tone": e["tone"]} if e.get("tone") is not None else {})}
+                for e in games_state.latest(since) + programs_state.latest(since)], key=lambda e: e["id"])
         if out["results"] or since is None or time.monotonic() >= give_up:
             if angle in status.ANGLES:
                 for e in out["results"]:

@@ -173,6 +173,20 @@ def judge(metric: dict, value: float | None, lo: float, hi: float) -> str:
     return "low" if v < lo else "high" if v > hi else "in"
 
 
+def judge_tone(metric: dict, value: float | None, lo: float, hi: float) -> str | None:
+    """"in", "near" (within 25% of the target range width outside), "out", or None if no reading."""
+    if value is None:
+        return None
+    v = rounded(metric, value)
+    if lo <= v <= hi:
+        return "in"
+    span = hi - lo
+    margin = 0.25 * span if span > 0 else 0.0
+    if (v < lo and (lo - v) <= margin + 1e-6) or (v > hi and (v - hi) <= margin + 1e-6):
+        return "near"
+    return "out"
+
+
 def sentence(metric: dict, value: float | None, status: str, streak: int = 0, why: str | None = None,
              cue: str = "") -> str:
     """What the phone says. `cue`: a swing thought said after a swing out of range (My focus)."""
@@ -310,6 +324,7 @@ class Practice:
                         continue  # worked out before the down-the-line clip arrived
                     value, why = reading(metric, rec, None)
                 status = judge(metric, value, c["min"], c["max"])
+                tone = judge_tone(metric, value, c["min"], c["max"])
                 streak = self._streak(metric, c, t) + 1 if status == "in" else 0
                 e = {"id": self._next_id(), "clip": s["name"], "t": t,
                      "strike": datetime.fromtimestamp(t).isoformat(timespec="seconds"),
@@ -317,6 +332,8 @@ class Practice:
                      "value": None if value is None else rounded(metric, value), "status": status,
                      "why": why, "streak": streak, "club": (s.get("shot") or {}).get("club"),
                      "text": sentence(metric, value, status, streak if c["streak"] else 0, why, c.get("cue") or "")}
+                if tone is not None:
+                    e["tone"] = tone
                 self.log.append(e)
                 done_names.add(s["name"])
                 done_times.append(t)
@@ -367,7 +384,8 @@ class Practice:
                      if e["id"] > since and now - e["made"] <= SPEAK_WITHIN_S
                      and (e.get("test") or e["made"] - e["t"] <= SAY_WITHIN_STRIKE_S)]
             out["results"] = [{"id": e["id"], "text": e["text"], "age": round(now - e["made"], 1),
-                               "status": e.get("status"), "clip": e.get("clip")}
+                               "status": e.get("status"), "clip": e.get("clip"),
+                               **({"tone": e["tone"]} if e.get("tone") is not None else {})}
                               for e in sorted(fresh, key=lambda e: e["id"])]
             return out
 

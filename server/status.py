@@ -718,13 +718,21 @@ class Status:
         voiced = [a for a in on if self.phones[a]["hb"].get("practiceVoice")]
         return (voiced or on or [None])[0]
 
-    def _say(self, angle: str | None, text: str, kind: str, now: float) -> None:
+    def _say(self, angle: str | None, text: str, kind: str, now: float, tone: str | None = None) -> None:
         if angle is None or not text:
             return
         box = self.outbox[angle]
         if kind == "setup":
             box[:] = [x for x in box if x["kind"] != "setup"]   # only the latest verdict matters
-        box.append({"id": self._id(), "text": text, "kind": kind, "made": now, "flush": kind == "setup"})
+        item = {"id": self._id(), "text": text, "kind": kind, "made": now, "flush": kind == "setup"}
+        if tone is not None:
+            item["tone"] = tone
+        box.append(item)
+
+    def say(self, angle: str | None, text: str, tone: str | None = None, kind: str = "verdict") -> None:
+        """Queue a sentence to go out on phone `angle`'s next poll reply."""
+        with self.lock:
+            self._say(angle, text, kind, self.clock(), tone=tone)
 
     def talked(self, angle: str, text: str) -> None:
         """A sentence went out to phone `angle` to say (its poll or the practice feed): the other
@@ -795,7 +803,8 @@ class Status:
                 if c["angle"] == angle and c["state"] == "queued":
                     c["state"], c["sent"] = "sent", now
                     cmds.append({"id": c["id"], "action": c["action"]})
-            say = [{"id": x["id"], "text": x["text"], "flush": x["flush"]}
+            say = [{"id": x["id"], "text": x["text"], "flush": x["flush"],
+                    **({"tone": x["tone"]} if x.get("tone") is not None else {})}
                    for x in self.outbox[angle] if now - x["made"] <= SAY_WITHIN_S]
             self.outbox[angle] = []
             out = {"commands": cmds, "say": say, "ms": int(now * 1000)}
