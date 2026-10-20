@@ -5,6 +5,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Coach = require("../static/coach.js");
 const Faults = require("../static/faults.js");
+// Early extension is named from the 3D's pelvis thrust (faults.js from3d): a row's 3D numbers.
+const t3 = thrust => ({ numbers: { pelvisThrustImpact: thrust } });
 
 test("names, drills and swing thoughts come from coach.js", () => {
   assert.equal(Faults.FAULTS.length, 9);
@@ -39,6 +41,7 @@ test("names, drills and swing thoughts come from coach.js", () => {
     const testVal = f.test(f.threshold + 1) ? f.threshold + 1 : f.threshold - 1;
     const testRow = exp.key === "armsLed"
       ? { body3d: { sequence: { bodyLate: true }, numbers: { pelvisOpenImpact: testVal } } }
+      : f.from3d ? { body3d: { numbers: { [f.from3d]: testVal } } }
       : { [exp.key]: testVal };
     const faults = Faults.faultsOf(testRow, undefined, { standing: true });
     const match = faults.find(item => item.name === exp.name);
@@ -55,20 +58,24 @@ test("a fault's drill works against it: the other way on its number, never a fau
     assert.notEqual(f.fix, faultWay, `${f.name}: fix ${f.fix}`);
     assert.ok(!Coach.MOVES[f.move][f.fix].fault, `${f.name}: ${Coach.MOVES[f.move][f.fix].name} is a fault`);
   }
-  const ee = Faults.faultsOf({ earlyExt: 4 })[0];
+  const ee = Faults.faultsOf({ earlyExt: 4, body3d: t3(2) })[0];
   assert.match(ee.drill, /^Chair drill/);
   assert.equal(Faults.faultsOf({ bendLoss: -12 })[0].thought, "Chest down, through.");
   assert.match(Faults.faultsOf({ handsPlaneP6: 7 })[0].drill, /^Pump drill/);
 });
 
 test("each threshold's edge: just inside vs just past", () => {
-  // Early extension: earlyExt > 3
-  assert.equal(Faults.faultsOf({ earlyExt: 3 }).length, 0);
-  assert.equal(Faults.faultsOf({ earlyExt: 2.99 }).length, 0);
-  const ee = Faults.faultsOf({ earlyExt: 3.01 });
+  // Early extension: the 3D's pelvis thrust > 1 in (not the down-the-line hips number)
+  assert.equal(Faults.faultsOf({ earlyExt: 3, body3d: t3(1) }).length, 0);
+  assert.equal(Faults.faultsOf({ earlyExt: 2.99, body3d: t3(0.99) }).length, 0);
+  const ee = Faults.faultsOf({ earlyExt: 3.01, body3d: t3(1.01) });
   assert.equal(ee.length, 1);
   assert.equal(ee[0].name, "early extension");
-  assert.equal(ee[0].value, 3.01);
+  assert.equal(ee[0].value, 1.01);
+  // No 3D, no early extension, however far the down-the-line number goes; and the 3D alone names it.
+  assert.equal(Faults.faultsOf({ earlyExt: 6 }).length, 0);
+  assert.equal(Faults.faultsOf({ earlyExt: 0.5, body3d: t3(1.5) })[0].name, "early extension");
+  assert.equal(Faults.faultsOf({ earlyExt: 0.5, rec: { body3d: t3(1.5) } })[0].value, 1.5);
 
   // Standing up: bendLoss < -10
   assert.equal(Faults.faultsOf({ bendLoss: -10.0 }).length, 0);
@@ -149,13 +156,13 @@ test("shaky and missing numbers are never named", () => {
 
   // trust level none
   const noReadRow = {
-    earlyExt: 3.5,
+    earlyExt: 3.5, body3d: t3(1.5),
     trust: { earlyExt: { level: "none", text: "partly out of picture" } },
   };
   assert.deepEqual(Faults.faultsOf(noReadRow), []);
 
   // Shaky via callback
-  const faultRow = { earlyExt: 3.5, bendLoss: -11 };
+  const faultRow = { earlyExt: 3.5, body3d: t3(1.5), bendLoss: -11 };
   const shakyAll = () => true;
   assert.deepEqual(Faults.faultsOf(faultRow, shakyAll), []);
 
@@ -166,19 +173,19 @@ test("shaky and missing numbers are never named", () => {
 
   // Shaky via trust object on row without callback
   const shakyTrustRow = {
-    earlyExt: 3.5,
+    earlyExt: 3.5, body3d: t3(1.5),
     trust: { earlyExt: { level: "shaky", text: "noisy" } },
   };
   assert.deepEqual(Faults.faultsOf(shakyTrustRow), []);
 
   // Shaky in sessionFaults: not counted in total or count
   const rows = [
-    { earlyExt: 3.5 }, // fault
-    { earlyExt: 3.5 }, // fault
-    { earlyExt: 3.5 }, // fault
-    { earlyExt: 3.5 }, // shaky -> ignored
+    { earlyExt: 3.5, body3d: t3(1.5) }, // fault
+    { earlyExt: 3.5, body3d: t3(1.5) }, // fault
+    { earlyExt: 3.5, body3d: t3(1.5) }, // fault
+    { earlyExt: 3.5, body3d: t3(1.5) }, // shaky -> ignored
     { earlyExt: null }, // missing -> ignored
-    { earlyExt: 1.0 }, // ok, no fault
+    { earlyExt: 1.0, body3d: t3(-1) }, // ok, no fault
   ];
   const isShaky = (r, k) => r === rows[3];
   const sf = Faults.sessionFaults(rows, isShaky);
@@ -204,8 +211,8 @@ test("casting: the wrist hinge under 70 deg with the lead arm level coming down"
 test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () => {
   // Exactly 3 swings out of 12 (25%) -> top
   const rows12 = [];
-  for (let i = 0; i < 3; i++) rows12.push({ earlyExt: 3.5 });
-  for (let i = 0; i < 9; i++) rows12.push({ earlyExt: 1.0 });
+  for (let i = 0; i < 3; i++) rows12.push({ earlyExt: 3.5, body3d: t3(1.5) });
+  for (let i = 0; i < 9; i++) rows12.push({ earlyExt: 1.0, body3d: t3(-1) });
   const sf12 = Faults.sessionFaults(rows12);
   const ee12 = sf12.find(f => f.name === "early extension");
   assert.equal(ee12.count, 3);
@@ -214,7 +221,7 @@ test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () =>
   assert.equal(ee12.top, true);
 
   // 2 swings out of 4 (50%) -> share >= 25%, but count < 3 -> not top
-  const rows4 = [{ earlyExt: 3.5 }, { earlyExt: 3.5 }, { earlyExt: 1.0 }, { earlyExt: 1.0 }];
+  const rows4 = [{ earlyExt: 3.5, body3d: t3(1.5) }, { earlyExt: 3.5, body3d: t3(1.5) }, { earlyExt: 1.0, body3d: t3(-1) }, { earlyExt: 1.0, body3d: t3(-1) }];
   const sf4 = Faults.sessionFaults(rows4);
   const ee4 = sf4.find(f => f.name === "early extension");
   assert.equal(ee4.count, 2);
@@ -224,8 +231,8 @@ test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () =>
 
   // 3 swings out of 13 (23.08%) -> count >= 3, but share < 25% -> not top
   const rows13 = [];
-  for (let i = 0; i < 3; i++) rows13.push({ earlyExt: 3.5 });
-  for (let i = 0; i < 10; i++) rows13.push({ earlyExt: 1.0 });
+  for (let i = 0; i < 3; i++) rows13.push({ earlyExt: 3.5, body3d: t3(1.5) });
+  for (let i = 0; i < 10; i++) rows13.push({ earlyExt: 1.0, body3d: t3(-1) });
   const sf13 = Faults.sessionFaults(rows13);
   const ee13 = sf13.find(f => f.name === "early extension");
   assert.equal(ee13.count, 3);
@@ -236,10 +243,10 @@ test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () =>
   // Sorted by share descending
   const mixedRows = [];
   // 12 of 21 early extension (57.1%)
-  for (let i = 0; i < 12; i++) mixedRows.push({ earlyExt: 3.5, bendLoss: -11 });
+  for (let i = 0; i < 12; i++) mixedRows.push({ earlyExt: 3.5, body3d: t3(1.5), bendLoss: -11 });
   // 9 of 21 standing up (42.9%)
   // remaining 9 swings have no standing up
-  for (let i = 0; i < 9; i++) mixedRows.push({ earlyExt: 1.0, bendLoss: 0 });
+  for (let i = 0; i < 9; i++) mixedRows.push({ earlyExt: 1.0, body3d: t3(-1), bendLoss: 0 });
 
   const mixedSf = Faults.sessionFaults(mixedRows);
   const topList = mixedSf.filter(f => f.top);
@@ -254,7 +261,7 @@ test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () =>
 
 test("faultsOf returns multiple faults with thought and drill", () => {
   const row = {
-    earlyExt: 3.2,
+    earlyExt: 3.2, body3d: t3(1.2),
     bendLoss: -11,
     handsPlaneP6: 6.5,
     headToBall: 1.5,
@@ -319,7 +326,7 @@ test("arms-led downswing from 3D: swing with 3D and fault, swing with 3D without
 
   // 3. Swing without 3D: never gets it and does not count against total in sessionFaults
   const swingWithout3D = {
-    earlyExt: 2.0,
+    earlyExt: 2.0, body3d: t3(0),
     bendLoss: -5.0,
     trust: { earlyExt: { level: "good" } },
   };

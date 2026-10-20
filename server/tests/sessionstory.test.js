@@ -4,6 +4,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Story = require("../static/sessionstory.js");
 const Score = require("../static/sessionscore.js");
+// Early extension is named from the 3D's pelvis thrust (faults.js from3d): a row's 3D numbers.
+const t3 = thrust => ({ numbers: { pelvisThrustImpact: thrust } });
 
 function makeContext() {
   let id = 0;
@@ -182,10 +184,10 @@ test("fault: top fault returns plain thought and drill; null when none is top", 
   // FAULTS earlyExtension: key earlyExt, test v => v > 2.5
   // sessionFaults requires at least 3 swings and 25% share to be top.
   const rowsWithFault = [
-    shot("I7", true, { earlyExt: 3.5, trust: { earlyExt: { level: "ok" } } }),
-    shot("I7", true, { earlyExt: 3.2, trust: { earlyExt: { level: "ok" } } }),
-    shot("I7", true, { earlyExt: 3.8, trust: { earlyExt: { level: "ok" } } }),
-    shot("I7", false, { earlyExt: 1.0, trust: { earlyExt: { level: "ok" } } }),
+    shot("I7", true, { earlyExt: 3.5, body3d: t3(1.5), trust: { earlyExt: { level: "ok" } } }),
+    shot("I7", true, { earlyExt: 3.2, body3d: t3(1.2), trust: { earlyExt: { level: "ok" } } }),
+    shot("I7", true, { earlyExt: 3.8, body3d: t3(1.8), trust: { earlyExt: { level: "ok" } } }),
+    shot("I7", false, { earlyExt: 1.0, body3d: t3(-1), trust: { earlyExt: { level: "ok" } } }),
   ];
 
   const st1 = Story.story({ start: 1, rows: rowsWithFault }, [], ctx);
@@ -198,9 +200,9 @@ test("fault: top fault returns plain thought and drill; null when none is top", 
 
   // When no fault meets threshold:
   const rowsNoFault = [
-    shot("I7", true, { earlyExt: 1.0, trust: { earlyExt: { level: "ok" } } }),
-    shot("I7", true, { earlyExt: 1.2, trust: { earlyExt: { level: "ok" } } }),
-    shot("I7", true, { earlyExt: 1.1, trust: { earlyExt: { level: "ok" } } }),
+    shot("I7", true, { earlyExt: 1.0, body3d: t3(-1), trust: { earlyExt: { level: "ok" } } }),
+    shot("I7", true, { earlyExt: 1.2, body3d: t3(-0.8), trust: { earlyExt: { level: "ok" } } }),
+    shot("I7", true, { earlyExt: 1.1, body3d: t3(-0.9), trust: { earlyExt: { level: "ok" } } }),
   ];
   const st2 = Story.story({ start: 1, rows: rowsNoFault }, [], ctx);
   assert.equal(st2.fault, null);
@@ -210,19 +212,19 @@ test("no P[1-8] in any text across the whole story", () => {
   const { shot, ctx } = makeContext();
   const rows = [
     shot("I7", true, {
-      earlyExt: 3.5,
+      earlyExt: 3.5, body3d: t3(1.5),
       hipSlide: 4,
       bendLoss: 3,
       trust: { earlyExt: { level: "ok" }, hipSlide: { level: "ok" }, bendLoss: { level: "ok" } },
     }),
     shot("I7", true, {
-      earlyExt: 3.5,
+      earlyExt: 3.5, body3d: t3(1.5),
       hipSlide: 4,
       bendLoss: 3,
       trust: { earlyExt: { level: "ok" }, hipSlide: { level: "ok" }, bendLoss: { level: "ok" } },
     }),
     shot("I7", true, {
-      earlyExt: 3.5,
+      earlyExt: 3.5, body3d: t3(1.5),
       hipSlide: 4,
       bendLoss: 3,
       trust: { earlyExt: { level: "ok" }, hipSlide: { level: "ok" }, bendLoss: { level: "ok" } },

@@ -15,6 +15,8 @@ const path = require("path");
 
 const FaultLinks = require("../static/faultlinks.js");
 const Faults = require("../static/faults.js");
+// Early extension is named from the 3D's pelvis thrust (faults.js from3d): a row's 3D numbers.
+const t3 = thrust => ({ numbers: { pelvisThrustImpact: thrust } });
 
 test("Cochran-Mantel-Haenszel pure function matches expected odds ratio and p value", () => {
   // Classic 2x2 stratified table
@@ -44,10 +46,10 @@ test("Club confounding: A and B correlated only through club comes out NOT linke
   // b = 8 (earlyExt > 3, bendLoss = 0)
   // c = 8 (earlyExt = 1, bendLoss < -10)
   // d = 2 (earlyExt = 1, bendLoss = 0)
-  for (let i = 0; i < 32; i++) rows.push({ club: "DR", earlyExt: 4.0, bendLoss: -15 });
-  for (let i = 0; i < 8; i++) rows.push({ club: "DR", earlyExt: 4.0, bendLoss: 0 });
-  for (let i = 0; i < 8; i++) rows.push({ club: "DR", earlyExt: 1.0, bendLoss: -15 });
-  for (let i = 0; i < 2; i++) rows.push({ club: "DR", earlyExt: 1.0, bendLoss: 0 });
+  for (let i = 0; i < 32; i++) rows.push({ club: "DR", earlyExt: 4.0, body3d: t3(2), bendLoss: -15 });
+  for (let i = 0; i < 8; i++) rows.push({ club: "DR", earlyExt: 4.0, body3d: t3(2), bendLoss: 0 });
+  for (let i = 0; i < 8; i++) rows.push({ club: "DR", earlyExt: 1.0, body3d: t3(-1), bendLoss: -15 });
+  for (let i = 0; i < 2; i++) rows.push({ club: "DR", earlyExt: 1.0, body3d: t3(-1), bendLoss: 0 });
 
   // 7-Iron (I7): 50 swings.
   // P(earlyExt) = 10/50 = 20%, P(bendLoss) = 10/50 = 20%.
@@ -56,10 +58,10 @@ test("Club confounding: A and B correlated only through club comes out NOT linke
   // b = 8 (earlyExt only)
   // c = 8 (bendLoss only)
   // d = 32 (neither)
-  for (let i = 0; i < 2; i++) rows.push({ club: "I7", earlyExt: 4.0, bendLoss: -15 });
-  for (let i = 0; i < 8; i++) rows.push({ club: "I7", earlyExt: 4.0, bendLoss: 0 });
-  for (let i = 0; i < 8; i++) rows.push({ club: "I7", earlyExt: 1.0, bendLoss: -15 });
-  for (let i = 0; i < 32; i++) rows.push({ club: "I7", earlyExt: 1.0, bendLoss: 0 });
+  for (let i = 0; i < 2; i++) rows.push({ club: "I7", earlyExt: 4.0, body3d: t3(2), bendLoss: -15 });
+  for (let i = 0; i < 8; i++) rows.push({ club: "I7", earlyExt: 4.0, body3d: t3(2), bendLoss: 0 });
+  for (let i = 0; i < 8; i++) rows.push({ club: "I7", earlyExt: 1.0, body3d: t3(-1), bendLoss: -15 });
+  for (let i = 0; i < 32; i++) rows.push({ club: "I7", earlyExt: 1.0, body3d: t3(-1), bendLoss: 0 });
 
   // Raw overall across 100 swings:
   // Both: 34, A only: 16, B only: 16, Neither: 34
@@ -90,16 +92,16 @@ test("Real within-club link comes out linked with Strong or Worth watching label
   // A real within-club link: casting (P5) and early extension (P7) go together within clubs
   const rows = [];
   // DR: 30 swings, strongly correlated
-  for (let i = 0; i < 15; i++) rows.push({ club: "DR", lagP5: 60, earlyExt: 4.0 }); // both
-  for (let i = 0; i < 2; i++) rows.push({ club: "DR", lagP5: 60, earlyExt: 1.0 });  // casting only
-  for (let i = 0; i < 2; i++) rows.push({ club: "DR", lagP5: 85, earlyExt: 4.0 });  // EE only
-  for (let i = 0; i < 11; i++) rows.push({ club: "DR", lagP5: 85, earlyExt: 1.0 }); // neither
+  for (let i = 0; i < 15; i++) rows.push({ club: "DR", lagP5: 60, earlyExt: 4.0, body3d: t3(2) }); // both
+  for (let i = 0; i < 2; i++) rows.push({ club: "DR", lagP5: 60, earlyExt: 1.0, body3d: t3(-1) });  // casting only
+  for (let i = 0; i < 2; i++) rows.push({ club: "DR", lagP5: 85, earlyExt: 4.0, body3d: t3(2) });  // EE only
+  for (let i = 0; i < 11; i++) rows.push({ club: "DR", lagP5: 85, earlyExt: 1.0, body3d: t3(-1) }); // neither
 
   // I7: 30 swings, strongly correlated
-  for (let i = 0; i < 15; i++) rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0 });
-  for (let i = 0; i < 2; i++) rows.push({ club: "I7", lagP5: 60, earlyExt: 1.0 });
-  for (let i = 0; i < 2; i++) rows.push({ club: "I7", lagP5: 85, earlyExt: 4.0 });
-  for (let i = 0; i < 11; i++) rows.push({ club: "I7", lagP5: 85, earlyExt: 1.0 });
+  for (let i = 0; i < 15; i++) rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0, body3d: t3(2) });
+  for (let i = 0; i < 2; i++) rows.push({ club: "I7", lagP5: 60, earlyExt: 1.0, body3d: t3(-1) });
+  for (let i = 0; i < 2; i++) rows.push({ club: "I7", lagP5: 85, earlyExt: 4.0, body3d: t3(2) });
+  for (let i = 0; i < 11; i++) rows.push({ club: "I7", lagP5: 85, earlyExt: 1.0, body3d: t3(-1) });
 
   const results = FaultLinks.links(rows);
   const link = results.find(l => l.a.name === "casting" && l.b.name === "early extension");
@@ -114,13 +116,13 @@ test("Real within-club link comes out linked with Strong or Worth watching label
 test("Shaky and missing numbers are ignored", () => {
   const rows = [];
   // 20 valid swings
-  for (let i = 0; i < 10; i++) rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0 });
-  for (let i = 0; i < 10; i++) rows.push({ club: "I7", lagP5: 85, earlyExt: 1.0 });
+  for (let i = 0; i < 10; i++) rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0, body3d: t3(2) });
+  for (let i = 0; i < 10; i++) rows.push({ club: "I7", lagP5: 85, earlyExt: 1.0, body3d: t3(-1) });
 
   // Add rows with trust level none or shaky
-  rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0, trust: { lagP5: { level: "none" } } });
-  rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0, trust: { earlyExt: { level: "shaky" } } });
-  rows.push({ club: "I7", lagP5: null, earlyExt: 4.0 });
+  rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0, body3d: t3(2), trust: { lagP5: { level: "none" } } });
+  rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0, body3d: t3(2), trust: { earlyExt: { level: "shaky" } } });
+  rows.push({ club: "I7", lagP5: null, earlyExt: 4.0, body3d: t3(2) });
   rows.push({ club: "I7", lagP5: 60, earlyExt: undefined });
 
   const all = FaultLinks.links(rows, null, { all: true });
@@ -131,8 +133,8 @@ test("Shaky and missing numbers are ignored", () => {
 
 test("Head dip and head lift are never paired", () => {
   const rows = [];
-  for (let i = 0; i < 20; i++) rows.push({ club: "I7", headRise: -2.0, earlyExt: 4.0 });
-  for (let i = 0; i < 20; i++) rows.push({ club: "I7", headRise: 2.0, earlyExt: 1.0 });
+  for (let i = 0; i < 20; i++) rows.push({ club: "I7", headRise: -2.0, earlyExt: 4.0, body3d: t3(2) });
+  for (let i = 0; i < 20; i++) rows.push({ club: "I7", headRise: 2.0, earlyExt: 1.0, body3d: t3(-1) });
 
   const all = FaultLinks.links(rows, null, { all: true });
   const dipLift = all.find(l => 
@@ -144,9 +146,9 @@ test("Head dip and head lift are never paired", () => {
 
 test("Fewer than enough swings yields nothing", () => {
   const rows = [
-    { club: "I7", lagP5: 60, earlyExt: 4.0 },
-    { club: "I7", lagP5: 60, earlyExt: 4.0 },
-    { club: "I7", lagP5: 85, earlyExt: 1.0 },
+    { club: "I7", lagP5: 60, earlyExt: 4.0, body3d: t3(2) },
+    { club: "I7", lagP5: 60, earlyExt: 4.0, body3d: t3(2) },
+    { club: "I7", lagP5: 85, earlyExt: 1.0, body3d: t3(-1) },
   ];
   const results = FaultLinks.links(rows);
   assert.deepEqual(results, [], "Fewer than enough swings must return empty array");

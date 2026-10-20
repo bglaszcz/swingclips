@@ -33,15 +33,19 @@
     return (c && c.MOVES && c.MOVES[move] && c.MOVES[move][dir]) || {};
   }
 
-  function valueOf(row, key) {
+  /** A fault's number on a row, by its key or the fault itself (one read from the 3D: faults.js valueOf). */
+  function valueOf(row, keyOrFault) {
     if (!row) return null;
-    const v = row.shown && row.shown[key] != null ? row.shown[key] : row[key];
+    const f = typeof keyOrFault === "object" && keyOrFault ? keyOrFault : { key: keyOrFault };
+    if (f.from3d && Faults && Faults.valueOf) return Faults.valueOf(row, f);
+    const v = row.shown && row.shown[f.key] != null ? row.shown[f.key] : row[f.key];
     return finite(v) ? v : null;
   }
 
-  function isReadable(row, key, shaky) {
+  function isReadable(row, keyOrFault, shaky) {
     if (!row) return false;
-    const v = valueOf(row, key);
+    const key = typeof keyOrFault === "object" && keyOrFault ? keyOrFault.key : keyOrFault;
+    const v = valueOf(row, keyOrFault);
     if (v == null) return false;
     if (row.trust && row.trust[key] && row.trust[key].level === "none") return false;
     if (typeof shaky === "function") {
@@ -163,6 +167,7 @@
         name: f.name,
         move: f.move,
         dir: f.dir,
+        from3d: f.from3d,
         threshold: f.threshold,
         test: f.test,
         phase: meta.phase,
@@ -195,8 +200,8 @@
         let countA = 0, countB = 0, countBoth = 0;
 
         for (const r of rows) {
-          if (!isReadable(r, a.key, shaky) || !isReadable(r, b.key, shaky)) continue;
-          const vA = valueOf(r, a.key), vB = valueOf(r, b.key);
+          if (!isReadable(r, a, shaky) || !isReadable(r, b, shaky)) continue;
+          const vA = valueOf(r, a), vB = valueOf(r, b);
           const hasA = a.test(vA);
           const hasB = b.test(vB);
 

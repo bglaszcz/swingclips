@@ -234,7 +234,7 @@ class PracticeTest(unittest.TestCase):
         self.clock.t = T0 + 40
         self.assertEqual(self.p.step(s, early), [])
         self.assertEqual(self.p.step(s, {"swing_face_1.mp4": record({"earlyExt": 2.04})})[0]["text"],
-                         "Early extension 2, too far toward the ball")
+                         "Hips to ball 2, too far toward the ball")
 
     def test_streak(self):
         self.turn_on()

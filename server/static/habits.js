@@ -63,7 +63,9 @@
       const readable = [];
       for (let i = 0; i < subset.length; i++) {
         const r = subset[i];
-        const v = (r.shown && r.shown[f.key] != null) ? r.shown[f.key] : r[f.key];
+        const F = root.SwingFaults || Faults;
+        const v = f.from3d ? (F && F.valueOf ? F.valueOf(r, f) : null)
+          : (r.shown && r.shown[f.key] != null) ? r.shown[f.key] : r[f.key];
         const t = r.trust && r.trust[f.key];
         const isOk = finite(v) && (!t || (t.level !== "none" && t.level !== "shaky"));
         if (isOk) {

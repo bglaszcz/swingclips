@@ -20,8 +20,15 @@
   // up", over the top "turn the chest harder", head dip and head lift each the other's (Gemini round 66
   // read the advice against the video). `dir` stays as it was: Today's plan reads it for arms-led.
   const FAULTS = [
-    // Early extension: hips toward the ball at impact (in) > 3 (2.5 named 45% of swings)
-    { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more", fix: "less", threshold: 3, test: v => v > 3 },
+    // Early extension: the pelvis's middle more than 1 in closer to the ball at impact than at address,
+    // from the 3D (`from3d`: body3d.numbers.pelvisThrustImpact; no 3D, no early extension). Until Oct 20
+    // 2026 it was the down-the-line hips toward the ball > 3 in (`earlyExt`), but that follows the trail
+    // hip (the lead hip is hidden at impact), which a pelvis turned ~40 open brings ~2.3 in toward the
+    // ball with its middle still: on 135 swings with both it read a median +2.2 in against the 3D's
+    // -0.4, within-club r 0.18, and only 1 of the 17 it named was in the 3D's worst quarter (Gemini
+    // round 68). The 3D has the owner's pelvis over 1 in toward the ball on 3 of 135.
+    { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more", fix: "less", from3d: "pelvisThrustImpact",
+      threshold: 1, test: v => v > 1 },
     // Standing up: forward bend vs address at impact (deg; negative = lost) < -10 (-8 named 43%)
     { key: "bendLoss", name: "standing up", move: "bendLoss", dir: "less", fix: "more", threshold: -10, test: v => v < -10 },
     // Over the top: hands above the address shaft plane at P6 (in) > 5
@@ -75,29 +82,40 @@
     return (c && c.MOVES && c.MOVES[move] && c.MOVES[move][dir]) || {};
   }
 
-  function valueOf(row, key) {
+  const body3dOf = row => row.body3d || (row.rec && row.rec.body3d) || null;
+
+  /** A fault's number on a swing row: its 3D number when it is read from the 3D (`from3d`), else the body number. */
+  function valueOf(row, fault) {
     if (!row) return null;
+    const key = fault.key;
     if (key === "armsLed") {
-      const b3 = row.body3d || (row.rec && row.rec.body3d);
+      const b3 = body3dOf(row);
       if (b3 && b3.numbers && b3.numbers.pelvisOpenImpact != null) {
         return finite(b3.numbers.pelvisOpenImpact) ? b3.numbers.pelvisOpenImpact : null;
       }
       return finite(row[key]) ? row[key] : null;
     }
+    if (fault.from3d) {
+      const b3 = body3dOf(row);
+      const v = b3 && b3.numbers ? b3.numbers[fault.from3d] : null;
+      return finite(v) ? v : null;
+    }
     const v = row.shown && row.shown[key] != null ? row.shown[key] : row[key];
     return finite(v) ? v : null;
   }
 
-  function isReadable(row, key, shaky) {
+  /** Whether a fault can be judged on a row: a number, not "no reading", not shaky (by the body number's trust). */
+  function isReadable(row, fault, shaky) {
     if (!row) return false;
+    const key = fault.key;
     if (key === "armsLed") {
-      const b3 = row.body3d || (row.rec && row.rec.body3d);
+      const b3 = body3dOf(row);
       if (b3) {
-        return !!(b3.sequence && typeof b3.sequence.bodyLate === "boolean" && valueOf(row, key) != null);
+        return !!(b3.sequence && typeof b3.sequence.bodyLate === "boolean" && valueOf(row, fault) != null);
       }
       return finite(row[key]);
     }
-    const v = valueOf(row, key);
+    const v = valueOf(row, fault);
     if (v == null) return false;
     if (row.trust && row.trust[key] && row.trust[key].level === "none") return false;
     if (typeof shaky === "function") {
@@ -119,8 +137,8 @@
     if (!row) return [];
     const out = [];
     for (const f of listed(opts)) {
-      if (!isReadable(row, f.key, shaky)) continue;
-      const v = valueOf(row, f.key);
+      if (!isReadable(row, f, shaky)) continue;
+      const v = valueOf(row, f);
       if (f.test(v, row)) {
         const ce = coachEntry(f.move, f.fix);
         out.push({
@@ -151,9 +169,9 @@
     const results = listed(opts).map(f => {
       let count = 0, total = 0;
       for (const r of list) {
-        if (!isReadable(r, f.key, shaky)) continue;
+        if (!isReadable(r, f, shaky)) continue;
         total++;
-        const v = valueOf(r, f.key);
+        const v = valueOf(r, f);
         if (f.test(v, r)) count++;
       }
       const share = total > 0 ? count / total : 0;
@@ -175,7 +193,7 @@
     return results;
   }
 
-  const api = { FAULTS, faultsOf, sessionFaults, MIN_TOP_SWINGS, MIN_TOP_SHARE, PELVIS_OPEN_IMPACT_MAX };
+  const api = { FAULTS, faultsOf, sessionFaults, valueOf, isReadable, MIN_TOP_SWINGS, MIN_TOP_SHARE, PELVIS_OPEN_IMPACT_MAX };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingFaults = api;
 })(typeof window !== "undefined" ? window : globalThis);

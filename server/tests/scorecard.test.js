@@ -4,6 +4,8 @@ const assert = require("node:assert");
 const Scorecard = require("../static/scorecard.js");
 const Summary = require("../static/summary.js");
 const Faults = require("../static/faults.js");
+// Early extension is named from the 3D's pelvis thrust (faults.js from3d): a row's 3D numbers.
+const t3 = thrust => ({ numbers: { pelvisThrustImpact: thrust } });
 
 // Mock global objects that scorecard.js might need via root if not running with require
 globalThis.SwingSummary = Summary;
@@ -74,7 +76,7 @@ test("buildScorecard sets faults correctly", () => {
   const swingFaults = [{
     key: "earlyExt",
     name: "early extension",
-    value: 5,
+    value: 1.7,   // the 3D's pelvis thrust: 0.7 past its 1 in threshold
     drill: "Wall drill",
     thought: "Keep back"
   }];
@@ -109,7 +111,7 @@ test("summary: names the best number with its capitals, and only says solid when
 
 test("shaky and unreadable numbers are grey and never count as inside or outside", () => {
   const positions = [{ key: "p7", index: 20, t: 0.9 }];
-  const res = Scorecard.buildScorecard(positions, { earlyExt: 9, hipSway: null },
+  const res = Scorecard.buildScorecard(positions, { earlyExt: 9, body3d: t3(7), hipSway: null },
     { earlyExt: { level: "shaky" }, hipSway: { level: "none" } }, { earlyExt: range(0, 2) }, []);
   assert.strictEqual(res.phases[0].color, "grey");
   assert.strictEqual(res.nTotal, 0);
@@ -118,7 +120,7 @@ test("shaky and unreadable numbers are grey and never count as inside or outside
 
 test("faults get a phase, a severity from the distance past the threshold, and are sorted worst first", () => {
   const positions = [{ key: "p6", index: 15, t: 0.8 }, { key: "p7", index: 20, t: 0.9 }];
-  const faults = Faults.faultsOf({ earlyExt: 3.5, handsPlaneP6: 12, trust: {} });
+  const faults = Faults.faultsOf({ earlyExt: 3.5, body3d: t3(1.5), handsPlaneP6: 12, trust: {} });
   const res = Scorecard.buildScorecard(positions, {}, {}, {}, faults);
   assert.deepStrictEqual(res.faults.map(f => f.key), ["handsPlaneP6", "earlyExt"]);
   assert.strictEqual(res.faults[0].phase, "p6");

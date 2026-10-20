@@ -84,9 +84,10 @@ test("SwingRow.coachBody ranks faults worst first by severity", () => {
   };
   const records = {
     "swing_face_103.mp4": {
-      // earlyExt threshold is 3 (diff = 4 - 3 = 1 -> severity 1)
+      // early extension: the 3D's pelvis thrust past 1 in (1.3 -> diff 0.3 -> severity 1)
       // bendLoss threshold is -10 (diff = -25 - -10 = 15 -> scale 10 -> diff > scale -> severity 3)
       body: { earlyExt: 4.0, bendLoss: -25 },
+      body3d: { numbers: { pelvisThrustImpact: 1.3 } },
       quality: { swingFound: true, camera: { face: [], dtl: [] } }
     }
   };

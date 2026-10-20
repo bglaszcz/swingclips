@@ -552,6 +552,15 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   panels none of the swings named that way showed the hinge gone at lead arm level (44 panels, and
   Claude's own look at the 4 most "casting"); the 3 lowest hinge readings there (~61° against a median of
   81°) show the club falling early. The release point itself stays a number on the page.
+  **Early extension** is named from the 3D: the pelvis's middle more than 1 in closer to the ball at
+  impact than at address (`from3d: pelvisThrustImpact` in `faults.js`); a swing with no 3D never gets
+  it. Until Oct 20 2026 it came from the down-the-line hips toward the ball (> 3 in), which follows the
+  trail hip (the lead hip is hidden at impact): a pelvis turned ~40° open brings the trail hip ~2.3 in
+  toward the ball with its middle still. On the 135 swings with both (Gemini round 68, checked by
+  Claude) that number read a median +2.2 in against the 3D's -0.4 (within-club r 0.18), and only 1 of
+  the 17 it named was in the 3D's worst quarter; it named early extension on 116 of 505 normal swings
+  (23%, 54% of the woods), the 3D on 3. The down-the-line number stays on the page as "hips to ball at
+  impact" (it does go with a more in-to-out path, r +0.30), and practice mode calls it that too.
   **Arms-led downswing** (3D) is a *standing pattern*, not a per-swing fault (2026-10-07, `standing` in
   `faults.js`): it named 76 of the owner's 79 judged 3D swings; the 3D under-reads hip turn (32° at the top
   against 42° face-on; X-factor 71°), hips read -9° to +9° open at impact, and good shots were as common at
@@ -737,7 +746,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   from the third one on ("Tempo 3.1, in range, 3 in a row"); a "no reading" doesn't break it, an
   out-of-range swing, a new range or a new session does.
 - **What can be practiced**: body numbers (tempo, backswing and downswing time, head and hip sway,
-  head rise, spine tilt at impact; down the line: early extension, bend vs address, head to ball,
+  head rise, spine tilt at impact; down the line: hips to ball at impact, bend vs address, head to ball,
   hands and shaft to plane, hand height and depth at the top) and Square's (club path, face to path,
   face, attack angle, carry, offline, smash, club and ball speed, launch). Face-on turns (shoulder,
   pelvis, X-factor) aren't offered: from one camera they're estimated from how narrow the body

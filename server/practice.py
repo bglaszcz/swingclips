@@ -70,7 +70,8 @@ METRICS = [
     _m("headRise", "Head rise at impact", "Head rise", "in", "body", "face", 1, "too far down", "too far up",
        noisy="small up-and-down moves are near the tracking noise"),
     _m("spineTiltImpact", "Spine tilt at impact", "Spine tilt", "°", "body", "face", 0, "too little tilt", "too much tilt"),
-    _m("earlyExt", "Early extension (hips to ball at impact)", "Early extension", "in", "body", "dtl", 1,
+    # Not "early extension" since Oct 20 2026: down the line it mostly follows the hips turning (faults.js).
+    _m("earlyExt", "Hips to ball at impact (down the line)", "Hips to ball", "in", "body", "dtl", 1,
        "too far back", "too far toward the ball"),
     _m("bendLoss", "Posture held through impact (bend vs address)", "Posture", "°", "body", "dtl", 0, "lost too much bend", "too much bend"),
     _m("headToBall", "Head to ball at impact", "Head to ball", "in", "body", "dtl", 1, "too far back", "too far toward the ball"),

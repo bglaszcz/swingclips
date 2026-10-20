@@ -2,6 +2,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Week = require("../static/week.js");
+// Early extension is named from the 3D's pelvis thrust (faults.js from3d): a row's 3D numbers.
+const t3 = thrust => ({ numbers: { pelvisThrustImpact: thrust } });
 
 function makeRow(dateStr, club, carry, offline, strikeV, body = {}) {
   const t = new Date(dateStr + "T12:00:00").getTime();
@@ -90,7 +92,7 @@ test("a fault that went down", () => {
   const rowsLastWeek = [];
   for (let i = 0; i < 10; i++) {
     rowsLastWeek.push(makeRow("2026-09-22", "7I", 150, 0, -10, {
-      earlyExt: i < 8 ? 4.5 : 1.0 // threshold is 3 in faults.js
+      earlyExt: i < 8 ? 4.5 : 1.0, body3d: t3(i < 8 ? 2.5 : -1) // named from the 3D's thrust past 1 in
     }));
   }
 
@@ -98,7 +100,7 @@ test("a fault that went down", () => {
   const rowsThisWeek = [];
   for (let i = 0; i < 10; i++) {
     rowsThisWeek.push(makeRow("2026-09-29", "7I", 150, 0, -10, {
-      earlyExt: i < 2 ? 4.5 : 1.0
+      earlyExt: i < 2 ? 4.5 : 1.0, body3d: t3(i < 2 ? 2.5 : -1)
     }));
   }
 
@@ -164,19 +166,19 @@ test("a normal week with all 7 sections populated", () => {
   // Swings across 3 days: Mon Sep 28, Wed Sep 30, Fri Oct 2
   for (let i = 0; i < 20; i++) {
     rows.push(makeRow("2026-09-28", "7I", 152 + (i % 3), -2, -12, {
-      earlyExt: 2.2,
+      earlyExt: 2.2, body3d: t3(0.2),
       bendLoss: -8
     }));
   }
   for (let i = 0; i < 16; i++) {
     rows.push(makeRow("2026-09-30", "DR", 240 + (i % 5), 4, 3, {
-      earlyExt: 3.5, // above 3 -> early extension fault
+      earlyExt: 3.5, body3d: t3(1.5), // above 3 -> early extension fault
       bendLoss: -12 // below -10 -> standing up fault
     }));
   }
   for (let i = 0; i < 10; i++) {
     rows.push(makeRow("2026-10-02", "PW", 118 + (i % 3), 0, -8, {
-      earlyExt: 1.8,
+      earlyExt: 1.8, body3d: t3(-0.2),
       bendLoss: -5
     }));
   }
@@ -184,7 +186,7 @@ test("a normal week with all 7 sections populated", () => {
   // Last week swings for comparison
   for (let i = 0; i < 20; i++) {
     rows.push(makeRow("2026-09-22", "7I", 145 + (i % 3), -5, -15, {
-      earlyExt: 3.8,
+      earlyExt: 3.8, body3d: t3(1.8),
       bendLoss: -14
     }));
   }
@@ -419,9 +421,9 @@ test("held-up findings: the strongest five, then how many more", () => {
 
 test("the focus move's 4 weeks before leave out last week", () => {
   const rows = [];
-  for (let i = 0; i < 5; i++) rows.push({ ...makeRow("2026-09-29", "7I", 150, 0, -10), earlyExt: 1 });
-  for (let i = 0; i < 5; i++) rows.push({ ...makeRow("2026-09-23", "7I", 150, 0, -10), earlyExt: 2 });
-  for (let i = 0; i < 5; i++) rows.push({ ...makeRow("2026-09-10", "7I", 150, 0, -10), earlyExt: 3 });
+  for (let i = 0; i < 5; i++) rows.push({ ...makeRow("2026-09-29", "7I", 150, 0, -10), earlyExt: 1, body3d: t3(-1) });
+  for (let i = 0; i < 5; i++) rows.push({ ...makeRow("2026-09-23", "7I", 150, 0, -10), earlyExt: 2, body3d: t3(0) });
+  for (let i = 0; i < 5; i++) rows.push({ ...makeRow("2026-09-10", "7I", 150, 0, -10), earlyExt: 3, body3d: t3(1) });
   const summary = Week.weekSummary({ rows, journal: { focus: { move: "earlyExt", club: "7I" } } }, "2026-09-28");
   const line = summary.sections.find(s => s.title === "The focus move").lines[0];
   assert.match(line, /this week 1\.0 in, last week 2\.0 in, the 4 weeks before 3\.0 in/);
