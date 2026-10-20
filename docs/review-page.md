@@ -387,7 +387,12 @@ server runs the same file), so they all agree:
   from the top on (P5-P7, tempo and downswing time) hang on a doubtful impact; the camera's light
   check says **dark**, or **flicker** that matters (a fixed shutter); the noise floor says it moves
   more while you stand still at address than half its usual swing-to-swing spread in a session;
-  or it's noisy by definition (head rise, and the plane numbers: hands and shaft to plane).
+  or it's noisy by definition (head rise, and shaft to plane). Hands to plane was too until Oct 20
+  2026, for the shaft's line at address; since the club model that line holds (taken from any frame
+  of the still address window, hands to plane at P6 moves by a median 0.05 in, p90 0.12, on 128
+  swings, against 0.69 in swing to swing), and within a club more of it goes with a more out-to-in
+  Square path (0.55° an inch, r -0.28, 458 swings). Judged like the others now, so over the top
+  (more than 5 in above the plane at P6) can be named: 61 of 505 normal swings (12%).
 - **No reading**, shown as **--** (hover for why): the camera check says part of you was out of
   the picture (`out`) or your hands left it at the top (`hands`), or there's no number.
 - **The video starts after the swing began** (`noaddress`, Oct 11): the phones keep 2 s before the
@@ -466,7 +471,7 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   how many shots they're from. A number with **no reading** under the trust rules (a camera that
   couldn't see all of you, or no number) is left out of its range. Below **8** good shots with a
   reading (settable) there is no range, only "not enough good shots yet (5 of 8)". When most of the
-  numbers behind a range are **shaky** (trust rules: head rise and the plane numbers always are),
+  numbers behind a range are **shaky** (trust rules: head rise and shaft to plane always are),
   it's marked **range not reliable**, with why.
 - **Swing page, the coaching card** (`static/shotstory.js`), right under the videos: a verdict
   (**Good shot** = passes your good-shot rules with that club; **Playable** = within twice the
@@ -737,9 +742,9 @@ toward the ball". The phones face away from you, so voice is the channel.
   face, attack angle, carry, offline, smash, club and ball speed, launch). Face-on turns (shoulder,
   pelvis, X-factor) aren't offered: from one camera they're estimated from how narrow the body
   looks, not good enough to judge one swing by. Marked **(noisy)** in the list, with why: head rise
-  (close to the tracking noise), hands to plane at P6 and at the top and shaft to plane at P6 (they
-  need the shaft seen at address, and P6 is often estimated). They work, but judge them over
-  several swings, not one.
+  (close to the tracking noise) and shaft to plane at P6 (the shaft is often a blur coming down).
+  They work, but judge them over several swings, not one. (Hands to plane at P6 and at the top were
+  marked too until Oct 20 2026: see the trust rules.)
 - **Only numbers that can be trusted are spoken** (the trust rules above, `static/trust.js`, which
   the server runs). A body number from a camera whose camera check says you were partly out of the
   picture or your hands left it at the top (`quality.camera`: `out`, `hands`), a P6 number where P6

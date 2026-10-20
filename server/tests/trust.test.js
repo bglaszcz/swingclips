@@ -45,13 +45,18 @@ test("shaky: an estimated key position", () => {
   assert.equal(judge("earlyExt", record({ p6: true })).level, "ok");   // read at P7
 });
 
-test("shaky: noisy by definition (head rise, the plane numbers)", () => {
-  for (const key of ["headRise", "handsPlaneP6", "shaftPlaneP6", "handsPlaneTop"]) {
+test("shaky: noisy by definition (head rise, shaft to plane)", () => {
+  for (const key of ["headRise", "shaftPlaneP6"]) {
     assert.equal(judge(key, record({ body: { handsPlaneTop: 1 } })).level, "shaky", key);
+  }
+  // Hands to plane is judged like the others since Oct 20 2026: its address line holds.
+  for (const key of ["handsPlaneP6", "handsPlaneTop"]) {
+    assert.equal(judge(key, record({ body: { handsPlaneTop: 1 } })).level, "ok", key);
   }
   // By readout cell too, at any key position (not in the other camera's numbers).
   const facts = T.factsOf(record(), null);
-  assert.equal(T.judge({ view: "dtl", value: "handsPlane", pos: "p1" }, facts, 0.2).level, "shaky");
+  assert.equal(T.judge({ view: "dtl", value: "shaftPlane", pos: "p6" }, facts, 0.2).level, "shaky");
+  assert.equal(T.judge({ view: "dtl", value: "handsPlane", pos: "p1" }, facts, 0.2).level, "ok");
   assert.equal(T.judge({ view: "face", value: "headRise", pos: "p4" }, facts, 0.2).level, "shaky");
   assert.equal(T.judge({ view: "face", value: "headSway", pos: "p4" }, facts, 0.2).level, "ok");
 });
@@ -211,7 +216,8 @@ test("no address in the video: no reading for what is measured from address, on 
   for (const key of ["handsAhead", "lagP5", "spineTiltImpact", "downswing"]) assert.equal(judge(key, rec).level, "ok", key);
   // The other camera's numbers stand too.
   assert.equal(judge("earlyExt", rec).level, "ok");
-  assert.equal(judge("handsPlaneP6", rec).level, "shaky");           // noisy by definition, as ever
+  assert.equal(judge("handsPlaneP6", rec).level, "ok");
+  assert.equal(judge("shaftPlaneP6", rec).level, "shaky");           // noisy by definition, as ever
   const dtl = record({ dtl: ["noaddress"] });
   for (const key of ["earlyExt", "handsPlaneP6", "shaftPlaneP6"]) assert.equal(judge(key, dtl).level, "none", key);
   assert.equal(judge("handDepthTop", dtl).level, "ok");               // the hands against the shoulders

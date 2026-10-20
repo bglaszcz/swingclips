@@ -58,21 +58,21 @@ test("SwingRow.row handles leaveOutShaky", () => {
     partner: null,
     shot: { club: "I7" }
   };
-  // handsPlaneP6 is noisy by definition so trust marks it shaky
+  // shaftPlaneP6 is noisy by definition so trust marks it shaky
   const records = {
     "swing_face_102.mp4": {
-      body: { earlyExt: 1.5, handsPlaneP6: 2.5 },
+      body: { earlyExt: 1.5, shaftPlaneP6: 2.5 },
       quality: { swingFound: true, camera: { face: [], dtl: [] } }
     }
   };
 
   const rWithShaky = SwingRow.row(clip, records, [clip], null, false);
-  assert.equal(rWithShaky.body.handsPlaneP6, 2.5);
-  assert.equal(SwingRow.isShaky(rWithShaky, "handsPlaneP6"), true);
+  assert.equal(rWithShaky.body.shaftPlaneP6, 2.5);
+  assert.equal(SwingRow.isShaky(rWithShaky, "shaftPlaneP6"), true);
 
   const rWithoutShaky = SwingRow.row(clip, records, [clip], null, true);
-  assert.equal(rWithoutShaky.body.handsPlaneP6, null);
-  assert.equal(rWithoutShaky.shown.handsPlaneP6, 2.5);
+  assert.equal(rWithoutShaky.body.shaftPlaneP6, null);
+  assert.equal(rWithoutShaky.shown.shaftPlaneP6, 2.5);
 });
 
 test("SwingRow.coachBody ranks faults worst first by severity", () => {

@@ -7,7 +7,7 @@
 //     hang on an impact that can't be believed (the ball wasn't found, or went too far from the
 //     heard strike); the camera's light check says "dark", or flicker at a fixed shutter; the noise
 //     floor says it moves more while standing still at address than half its usual swing-to-swing
-//     spread in a session; or it's noisy by definition (head rise, the plane numbers).
+//     spread in a session; or it's noisy by definition (head rise, shaft to plane).
 //   "none" (no reading): shown as "--": the camera check says part of the golfer was out of the
 //     picture ("out") or the hands left it at the top ("hands"), or there is no number; or the video
 //     starts after the swing began ("noaddress") and the number is measured against the address
@@ -46,10 +46,14 @@
   // Noise floor: shaky when the typical spread while standing still at address is more than this
   // share of the typical swing-to-swing spread in a session.
   const NOISE_SHARE = 0.5;
-  // Noisy by definition, by per-frame value key: [view, why].
+  // Noisy by definition, by per-frame value key: [view, why]. Not hands to plane any more (Oct 20 2026):
+  // it was here for the shaft's line at address, but since the club model that line holds (taking it
+  // from any frame of the still address window moves hands to plane at P6 by a median 0.05 in, p90
+  // 0.12, on 128 swings, against 0.69 in swing to swing; with no shaft seen there is no number), and it
+  // goes with Square's path the way over the top should (within club, 458 swings: 0.55 deg more
+  // out-to-in per inch, r -0.28). So it is judged like the others and over the top can be named.
   const NOISY = {
     headRise: ["face", "head rise: small up-and-down moves are near the tracking noise"],
-    handsPlane: ["dtl", "plane number: needs the shaft seen at address"],
     shaftPlane: ["dtl", "plane number: the shaft is often a blur in the downswing"],
   };
 

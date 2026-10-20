@@ -124,6 +124,9 @@ class ReliabilityTest(unittest.TestCase):
             self.assertNotIn(key, BY_KEY)
         self.assertTrue(BY_KEY["shaftPlaneP6"]["noisy"])
         self.assertFalse(BY_KEY["tempo"]["noisy"])
+        # Hands to plane is judged like the others since Oct 20 2026 (trust.js NOISY).
+        self.assertFalse(BY_KEY["handsPlaneP6"]["noisy"])
+        self.assertFalse(BY_KEY["handsPlaneTop"]["noisy"])
 
 
 class PracticeTest(unittest.TestCase):

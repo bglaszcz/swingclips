@@ -147,9 +147,9 @@ test("trust gating: numbers with no reading are left out of the range", () => {
 });
 
 test("trust gating: a range from mostly shaky numbers is 'not reliable', with why", () => {
-  // Noisy by definition (trust.js NOISY): hands to plane.
-  const b = G.build(club(9, { handsPlaneP6: i => i / 10, hipSway: i => i }), null, null);
-  const r = b.clubs.I7.ranges.handsPlaneP6;
+  // Noisy by definition (trust.js NOISY): shaft to plane.
+  const b = G.build(club(9, { shaftPlaneP6: i => i / 10, hipSway: i => i }), null, null);
+  const r = b.clubs.I7.ranges.shaftPlaneP6;
   assert.equal(r.enough, true);
   assert.equal(r.reliable, false);
   assert.match(r.why, /^9 of 9 shaky: plane number/);

@@ -79,7 +79,7 @@
    * Shaky: P6 estimated (quality.p6Estimated, for numbers taken at P6), doubtful impact, bad camera,
    * dark/flicker. Missing: no reading (null/undefined/NaN), or camera check "out"/"hands".
    * Note: 'noisy' by definition (trust.js NOISY) is NOT treated as a reason to exclude a swing,
-   * because such numbers (the plane numbers) are noisy on every swing and judged over sets.
+   * because such numbers (head rise, shaft to plane) are noisy on every swing and judged over sets.
    */
   function checkTrust(rec, clip, noiseTable, metric) {
     if (!rec || !rec.body || rec.error) return { valid: false, reason: "missing" };
