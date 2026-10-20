@@ -413,6 +413,21 @@ server runs the same file), so they all agree:
   server works it out whenever swings are analyzed (and every 10 minutes) and keeps it in
   `noise.json` next to the clips folder (`/api/noise`); the page doesn't recompute it. A number
   that's the same on every swing by definition (a turn at address) isn't judged.
+  **Face-on turns at the top, checked Oct 20 2026.** A turn's address noise is mostly the width
+  formula at square (acos is steepest there): the width's own jitter at address, carried through acos at
+  the top's angle, is only ~0.2° for the shoulders and ~0.5° for the hips. But the top has error of its
+  own: on the 83 Oct 6 swings with both body models, RTMPose-m and RTMW-l on the same video differ
+  swing by swing by about 2.3° each for the shoulder turn at the top, 2.1° for the hips and 3.4° for
+  X-factor (robust spread of the difference, over √2), against address noise of 1.8°, 2.2° and 2.8°.
+  So the address noise is about the right size there, and with either the three are shaky at the top:
+  since shoulders are read past side-on (29ddc0e) a session's spread is 3.2° (X-factor 4.9°, hips
+  4.0°), the hips only just (0.55, 0.53). Which swings turned more within a session: the two models
+  agree on it for the hips (correlation 0.88) and X-factor (0.76), less for the shoulders (0.53), and
+  the 3D follows none of them (0.40, -0.07, -0.23). Nothing changed. Elsewhere the two
+  disagree with it: the shoulder turn at P6 is marked shaky (address 1.8° against a 3.0° spread) though
+  the two models differ by 1.4° and agree on the swing-to-swing differences (0.92), and the hip turn at
+  P6 and X-factor at P6 and impact pass though they differ by 4.0°, 5.2° and 3.8° (spreads 6.1°, 7.6°,
+  6.7°). (Shoulders at impact read ~0 on both, so that row says nothing.)
 - **Trends and Progress** leave out numbers with no reading everywhere (charts, the "what goes
   with" ranking, session medians). Shaky ones are hollow dots in the scatter and over-time charts
   and greyed in the tables; **Leave out shaky** (Trends and Progress, one setting) takes them out of
