@@ -48,6 +48,9 @@ swing is tagged with the Square Omni's numbers for that shot.
   Chart any delivery or body move against any result over every session, against that day's usual, with thirds and ranked links.
   <br><img src="docs/img/analysis-explore.png" alt="What goes with what analysis" width="600">
 
+- **The ball's flight in the video**  
+  On swings with 3D, a shot tracer draws the flight into the down-the-line video from Square's launch numbers and the calibrated camera, from your ball to where it landed. Draw your own lines, angles, circles and boxes on either video (D), lay a reference swing's video over yours in Compare (O), and see every key position as a strip of frames under the swing.
+
 - **Where on the face?**  
   A strike heat map on the club face for each club: where your strikes land, your usual spot, and the latest session's shots.
   <br><img src="docs/img/strike-map.png" alt="Strike heat map" width="550">

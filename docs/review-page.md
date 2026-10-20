@@ -71,7 +71,19 @@ What the server works out for each swing and what each part of the review page s
   clubhead's arc, lighter yellow / pink, shown only then), come from the 3D put back into each picture
   (`tri.arcs`, the 3D file's `arcs`): smooth and whole where one camera loses the clubhead (it blurs
   through the downswing) or a hand, since the other phone fills it; without 3D the hand path is the
-  camera's own and there's no club arc. Night pass (`Show > Night pass`): draws the skeleton from the
+  camera's own and there's no club arc. **Shot tracer** (Show menu, down the line, on by default; `static/tracer.js`,
+  Oct 20 2026, from the feature pass against V1's Ball Tracing and Rapsodo's Shot Vision): the ball's flight
+  drawn into the down-the-line video, growing over 0.6 s of clip time from impact, thinner with distance, with
+  the landing spot and Square's carry. It's the measured launch (Square's ball speed, launch, direction, spin
+  and spin axis) flown by the server's flight model (`ballflight.py`, ported to the page step for step;
+  `tests/tracer.test.js` checks they agree), and put into the picture through the down-the-line phone of the
+  calibration session the swing's 3D is on (`GET /api/calib/session?id=`; its lens and place, golf axes).
+  It starts at this swing's ball: where the down-the-line view saw it (`pose.ball`), its ray met with the
+  floor (within 0.45 m of the calibration's ball, else the calibration's). Only for swings with 3D. The other
+  apps guess the flight from the video; the shape here is the launch numbers', so a push-slice starts right
+  and curves further right (Oct 9 5:05 PM 7 iron: lands well right of where a straight shot would). The
+  target line is the 3D's (square to the address hips-to-ball line), so a few degrees from Square's own
+  target line is possible. Night pass (`Show > Night pass`): draws the skeleton from the
   night pass (`/api/night/pose/<clip>`, RTMW-l on the gaming PC) alongside the server's, matched by
   timestamp and drawn in dashed sky blue without angle labels; works during playback and in labeling mode.
   A kinematic

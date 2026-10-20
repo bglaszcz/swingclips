@@ -1596,6 +1596,7 @@
           <button id="angles" class="adv-only" title="Show the angles for the frame on screen (A; with Advanced data)">Angles <kbd>A</kbd></button>
           <button id="handpath" title="Show the path of the hands through the swing (H)">Hand path <kbd>H</kbd></button>
           <button id="clubarc" title="Show the clubhead's arc through the swing (from the 3D: swings both phones filmed, on a calibration)" hidden>Club arc</button>
+          <button id="tracer" title="Down the line: the ball's flight from Square's launch numbers, put into the picture through the calibrated camera (swings with 3D)" hidden>Shot tracer</button>
           <button id="headbox" title="Show where the head was at address">Head</button>
           <button id="impact" title="Show pelvis vs ball at impact (face-on)">Impact</button>
           <button id="plane" title="Down the line: the shaft's line at address, across the picture (P)" hidden>Plane <kbd>P</kbd></button>
@@ -2612,6 +2613,7 @@
 <script src="/static/indicators.js"></script>
 <script src="/static/checkpoints.js"></script>
 <script src="/static/draw.js"></script>
+<script src="/static/tracer.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
@@ -2661,7 +2663,7 @@ let speed = 1;
 let showSkeleton = true;
 try { showSkeleton = localStorage.getItem("skeleton") !== "off"; } catch {}
 // Extra overlays, each remembered like the skeleton.
-const overlays = { angles: true, handpath: false, clubarc: true, headbox: false, impact: false, plane: true, night: false, seq: false };
+const overlays = { angles: true, handpath: false, clubarc: true, tracer: true, headbox: false, impact: false, plane: true, night: false, seq: false };
 // The numbers drawn on the videos are Advanced data: only with it on (and Angles on).
 const anglesOn = () => overlays.angles && viewer.classList.contains("adv");
 for (const k in overlays) {
@@ -3063,6 +3065,9 @@ function handTopIndex(p, path, top, end) {
 // whole where one camera's own points drop out (the clubhead blurs through the downswing; a hand goes
 // behind the body): the other phone fills them. Null without 3D: the paths come from the one camera.
 let arcs3d = null;
+// The shot tracer on the down-the-line view (tracer.js): {points, seconds, carry, clip} for the open swing.
+let tracer = null;
+const calibSessions = new Map();   // session id -> the session in full (its cameras), once each
 
 /** arcs3d from a 3D doc: the times and the hands' top (highest, golf y up) from P4 to impact. */
 function arcsOf(doc) {
@@ -3411,6 +3416,7 @@ function draw2(t) {
   if (positions.length && overlays.plane) drawPlane(ctx, r, lineWidth, p);
   drawSkeletons(ctx, frame, r, !numbers, p, partnerNightPose);
   if (numbers) drawAngles(ctx, dtlMetrics.values[i], r, DTL_READOUT);
+  if (tracer && overlays.tracer && tracer.clip === partner.name) SwingTracer.draw(ctx, r, tracer, SwingTracer.shown(t, p.impact), lineWidth);
   if (window.Labels) Labels.drawOn(ctx, r, "dtl", i);
   if (window.SwingDraw) SwingDraw.paint(ctx, "dtl", r);
 }
@@ -3989,6 +3995,31 @@ async function buildPositions(name) {
 
 // ---- 3D from both phones (only when the server has it on and the swing is calibrated) ----
 
+
+/** The open swing's shot tracer, from its Square shot, its 3D's calibration session and where the
+ *  down-the-line view saw the ball. Only for swings with 3D; shows Show > Shot tracer when there is one. */
+async function loadTracer(name, doc) {
+  const p = partner && partner.pose;
+  const c = clips.find(x => x.name === name);
+  if (!doc || !doc.session || !p || !c || !c.shot || !c.shot.ball || typeof SwingTracer === "undefined") return;
+  let session = calibSessions.get(doc.session);
+  if (session === undefined) {
+    try {
+      const res = await fetch("/api/calib/session?id=" + encodeURIComponent(doc.session));
+      session = res.ok ? await res.json() : null;
+    } catch { return; }
+    // A server from before ?id= sends the latest session: only use it when it's this swing's.
+    if (session && session.id !== doc.session) session = null;
+    calibSessions.set(doc.session, session);
+  }
+  if (!session || current !== name || !partner || partner.pose !== p) return;
+  const tr = SwingTracer.build(c.shot, session.cameras && session.cameras.dtl, p.ball || null);
+  if (!tr) return;
+  tracer = { ...tr, clip: partner.name };
+  document.getElementById("tracer").hidden = false;
+  redraw();
+}
+
 let calibState = null;    // GET /api/calib, once
 
 async function show3d(name) {
@@ -3996,6 +4027,8 @@ async function show3d(name) {
   const want = () => current === name && pose;
   arcs3d = null;
   document.getElementById("clubarc").hidden = true;
+  tracer = null;
+  document.getElementById("tracer").hidden = true;
   if (calibState === null) {
     try { calibState = await (await fetch("/api/calib")).json(); } catch { calibState = { enabled: false }; }
   }
@@ -4011,6 +4044,7 @@ async function show3d(name) {
   arcs3d = arcsOf(doc);
   document.getElementById("clubarc").hidden = !(arcs3d && arcs3d.face && arcs3d.face.club);
   if (arcs3d) redraw();
+  loadTracer(name, doc);
   const c = clips.find(c => c.name === name);
   View3D.show(box, { doc, positions, metrics2d: metrics, leadSide, club: c && c.shot ? c.shot.club : null,
     strip: document.getElementById("seq-strip"), seek: t => { video.pause(); video.currentTime = t; } });

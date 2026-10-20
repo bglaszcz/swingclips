@@ -2500,9 +2500,15 @@ def calib_status():
 
 
 @app.get("/api/calib/session")
-def calib_session_file():
-    """The latest calibration session in full (each camera's lens and place), for checking the 3D."""
+def calib_session_file(id: str | None = Query(None)):
+    """The latest calibration session in full (each camera's lens and place), for checking the 3D; with
+    `id`, that session (the shot tracer draws through the camera of the session a swing's 3D is on)."""
     s = calib.sessions()
+    if id:
+        for one in s:
+            if one.get("id") == id:
+                return one
+        raise HTTPException(404, "No such calibration session")
     if not s:
         raise HTTPException(404, "No calibration session yet")
     return s[-1]
