@@ -55,8 +55,35 @@
   //    (Oct 6); on the 28 P4-check labels the turn alone was 8 ms off (median) against 17 for the rule, but
   //    on the 57 older labels 17 against 8: the two label sets sit ~13 ms apart. Half way leaned neither
   //    way on either and had the smallest 90th percentile on both (docs/key-positions.md).
-  const TUNING = { takeawayDegrees: 1, topSpeedShares: [0.1, 0.4], topSmoothSeconds: 0.03, onsetLead: 0.017, onsetPull: 0.01,
-                   topSlowSeconds: 0.05, topRuleWeight: 0.5, onsetLeadDtl: 0, onsetPullDtl: 0, topTurnWeight: 0.5 };
+  const RTMPoseTuning = {
+    takeawayDegrees: 1, topSpeedShares: [0.1, 0.4], topSmoothSeconds: 0.03, onsetLead: 0.017, onsetPull: 0.01,
+    topSlowSeconds: 0.05, topRuleWeight: 0.5, onsetLeadDtl: 0, onsetPullDtl: 0, topTurnWeight: 0.5,
+    p3Degrees: 0, p5Degrees: 0,
+  };
+  const RTMWTuning = {
+    takeawayDegrees: 1, topSpeedShares: [0.1, 0.4], topSmoothSeconds: 0.03, onsetLead: 0.017, onsetPull: 0.01,
+    topSlowSeconds: 0.05, topRuleWeight: 0.5, onsetLeadDtl: 0, onsetPullDtl: 0, topTurnWeight: 0.5,
+    p3Degrees: -3, p5Degrees: 0,
+  };
+  const TUNING = {
+    ...RTMPoseTuning,
+    "rtmpose-m": RTMPoseTuning,
+    "rtmw-l": RTMWTuning,
+    "rtmw": RTMWTuning,
+  };
+
+  function tuningFor(model) {
+    if (model && (model.startsWith("rtmw") || model.includes("rtmw"))) {
+      return Object.assign({}, TUNING, TUNING["rtmw-l"] || {});
+    }
+    if (model && (model.startsWith("rtmpose") || model.includes("rtmpose"))) {
+      return Object.assign({}, TUNING, TUNING["rtmpose-m"] || {});
+    }
+    if (model && TUNING[model]) {
+      return Object.assign({}, TUNING, TUNING[model]);
+    }
+    return TUNING;
+  }
   // clubheadTurn: the clubhead's angle round the shoulders' middle (the owner's labels follow it; the
   // clubhead's own motion in the picture was 25-33 ms off them). Known miss: the body starting down first
   // turns that angle while the clubhead is still going back (1790972121: 80 ms early); its velocity over +-TURN_SPAN frames;
@@ -306,9 +333,9 @@
    * Positions smoothed over +-TUNING.topSmoothSeconds, speed over +-SPEED_SECONDS, x scaled by the
    * aspect; only frames between `from` and `to` count.
    */
-  function handsStartDown(frames, aspect, leadSide, from, to) {
+  function handsStartDown(frames, aspect, leadSide, from, to, tuning = TUNING) {
     const k = leadSide === "left" ? LM.L_WRIST : LM.R_WRIST;
-    const half = TUNING.topSmoothSeconds;
+    const half = tuning.topSmoothSeconds;
     const pts = [];
     for (const f of frames) {
       if (f.lm && f.t >= from - half - SPEED_SECONDS && f.t <= to + half + SPEED_SECONDS) {
@@ -335,7 +362,7 @@
       }
       return null;
     };
-    const [lo, hi] = TUNING.topSpeedShares;
+    const [lo, hi] = tuning.topSpeedShares;
     const tLo = climbs(lo), tHi = climbs(hi);
     if (!peak || tLo == null || tHi == null || tHi <= tLo) return null;
     return Math.max(from, tLo - (tHi - tLo) * lo / (hi - lo));
@@ -349,9 +376,9 @@
    * 12 ms off on 43 swings relabeled by stepping, no bias; the speed rule 21 ms, +15 ms
    * (RTMPose-m, docs/key-positions.md).
    */
-  function handsSlowest(frames, aspect, leadSide, from, to) {
+  function handsSlowest(frames, aspect, leadSide, from, to, tuning = TUNING) {
     const k = leadSide === "left" ? LM.L_WRIST : LM.R_WRIST;
-    const half = TUNING.topSlowSeconds;
+    const half = tuning.topSlowSeconds;
     const pts = [];
     for (const f of frames) {
       if (f.lm && f.t >= from - half - SPEED_SECONDS && f.t <= to + half + SPEED_SECONDS) {
@@ -383,13 +410,15 @@
    * while the labels sit on the forearm's level with no offset (face-on). Frames without a
    * clear forearm are passed over.
    */
-  function forearmLevel(ms, from, to, rising) {
+  function forearmLevel(ms, from, to, rising, levelAngle = 0) {
     let prev = -1;
     for (let i = Math.max(0, from); i < to && i < ms.length; i++) {
       if (ms[i].forearm == null) continue;
       if (prev >= 0) {
         const a = ms[prev].forearm, b = ms[i].forearm;
-        if (rising ? a < 0 && b >= 0 : a > 0 && b <= 0) return Math.abs(a) < Math.abs(b) ? prev : i;
+        if (rising ? a < levelAngle && b >= levelAngle : a > levelAngle && b <= levelAngle) {
+          return Math.abs(a - levelAngle) < Math.abs(b - levelAngle) ? prev : i;
+        }
       }
       prev = i;
     }
@@ -414,7 +443,7 @@
    * angle. The owner labels the first frame the clubhead visibly moves: the first step came ~25 ms
    * after it (median, RTMPose-m), the line back to address ~17 ms (docs/key-positions.md).
    */
-  function shaftTakeaway(frames, restEnd, until) {
+  function shaftTakeaway(frames, restEnd, until, tuning = TUNING) {
     const ref = frames[restEnd].club[0];
     const off = [];
     let start = restEnd;
@@ -435,7 +464,7 @@
       }
       return first;
     };
-    const d = TUNING.takeawayDegrees, first = staysOff(d), next = first >= 0 ? staysOff(d + 2) : -1;
+    const d = tuning.takeawayDegrees, first = staysOff(d), next = first >= 0 ? staysOff(d + 2) : -1;
     if (next <= first) return first;
     const t = frames[first].t - (frames[next].t - frames[first].t) * d / 2;
     let i = first;
@@ -486,6 +515,7 @@
    *   is found, an empty array with a `why` property: {reason, text, and the numbers behind it} (see noSwing).
    */
   function detect(frames, aspect, leadSide = "left", impactWindow = null, impactTime = null, options = {}) {
+    const tuning = tuningFor(options.bodyModel);
     const ms = metrics(frames, aspect, leadSide);
     // Impact must be in this window: around the ball leaving, else when the strike was heard,
     // else anywhere in the clip.
@@ -575,19 +605,19 @@
 
     // P3: the lead arm parallel to the ground going back (the forearm rising through level), then
     // P4, the top: where the hands start down, between P3 and impact.
-    let p3 = forearmLevel(ms, address + 1, pumps.length ? backTop : impact, true);
+    let p3 = forearmLevel(ms, address + 1, pumps.length ? backTop : impact, true, tuning.p3Degrees || 0);
     if (p3 < 0) p3 = armParallel(ms, address + 1, backTop);
     const downFrom = pumps.length ? ms[pumps[pumps.length - 1]].t : p3 >= 0 ? ms[p3].t : ms[address].t;
-    let turn = handsStartDown(frames, aspect, leadSide, downFrom, ms[impact].t);
-    if (turn != null && TUNING.topRuleWeight < 1) {
+    let turn = handsStartDown(frames, aspect, leadSide, downFrom, ms[impact].t, tuning);
+    if (turn != null && tuning.topRuleWeight < 1) {
       const slow = handsSlowest(frames, aspect, leadSide, Math.max(downFrom, turn - TOP_SLOW_WINDOW[0]),
-                                Math.min(ms[impact].t, turn + TOP_SLOW_WINDOW[1]));
-      if (slow != null) turn = slow + TUNING.topRuleWeight * (turn - slow);
+                                Math.min(ms[impact].t, turn + TOP_SLOW_WINDOW[1]), tuning);
+      if (slow != null) turn = slow + tuning.topRuleWeight * (turn - slow);
     }
     let clubTop = null;   // where the clubhead itself turns at the top: tempo's top (found.tempo)
-    if (turn != null && !pumps.length && TUNING.topTurnWeight > 0) {
+    if (turn != null && !pumps.length && tuning.topTurnWeight > 0) {
       const club = clubheadTurn(frames, turn);
-      if (club != null) { clubTop = club; turn += TUNING.topTurnWeight * (club - turn); }
+      if (club != null) { clubTop = club; turn += tuning.topTurnWeight * (club - turn); }
     }
     if (turn != null) top = nearest(ms, turn);
     if (!pumps.length) backTop = top;
@@ -603,7 +633,7 @@
     if (p3 >= backTop) p3 = armParallel(ms, address + 1, backTop);
 
     // P5: the lead arm parallel coming down (the forearm falling through level).
-    let p5 = forearmLevel(ms, top + 1, impact, false);
+    let p5 = forearmLevel(ms, top + 1, impact, false, tuning.p5Degrees || 0);
     if (p5 < 0) p5 = armParallel(ms, top + 1, impact);
 
     // P2, fallback when the shaft wasn't tracked: shaft parallel in the takeaway is roughly when the hands have travelled
@@ -656,14 +686,14 @@
       ? frames.map(f => (f.clubRay === undefined ? f : Object.assign({}, f, { club: f.clubRay })))
       : frames;
     const restEnd = shaftRestEnd(restFrames, until);
-    const moved = restEnd >= 0 ? shaftTakeaway(restFrames, restEnd, until) : -1;
+    const moved = restEnd >= 0 ? shaftTakeaway(restFrames, restEnd, until, tuning) : -1;
     let takeaway = moved >= 0 ? frames[moved].t : restEnd >= 0 ? frames[restEnd].t : ms[address].t;
     const shaftTakeawayT = takeaway;
     const onset = options.clubOnset;
     let fromClubhead = false;
     if (onset != null) {
       const dtl = options.angle === "dtl";
-      const lead = dtl ? TUNING.onsetLeadDtl : TUNING.onsetLead, pull = dtl ? TUNING.onsetPullDtl : TUNING.onsetPull;
+      const lead = dtl ? tuning.onsetLeadDtl : tuning.onsetLead, pull = dtl ? tuning.onsetPullDtl : tuning.onsetPull;
       const t = onset + lead;
       const at = nearestFrame(frames, t + Math.max(-pull, Math.min(pull, takeaway - t)));
       if (at >= 0) { takeaway = frames[at].t; fromClubhead = true; }

@@ -34,7 +34,7 @@ The tuned numbers are five, in `SwingPhases.TUNING`: `takeawayDegrees` 1 (i.e. a
 and `onsetPull` 0.01, and for the top's slowest moment `topSlowSeconds` 0.05 and `topRuleWeight` 0.5. The takeaway's extension back has no
 number of its own: the tracked angle moves in 2° steps, so the first step marks about 1° of turn
 and the next about 3°, and the line through them reaches 0° half the gap between them before the
-first. P3 and P5 have none.
+first. For RTMPose-m, P3 and P5 forearm level angles are 0° (`p3Degrees: 0`, `p5Degrees: 0`). For RTMW-l (the night pass, `SwingPhases.TUNING["rtmw-l"]`), P3 forearm level angle is tuned to -3° (`p3Degrees: -3`) because RTMW-l places the elbow landmark centrally in the joint articulation (5-10 px higher than RTMPose-m) and the wrist slightly lower, tilting the forearm downward relative to RTMPose-m when physically horizontal. P5 forearm level angle remains 0° (`p5Degrees: 0`).
 
 ## Before and after
 

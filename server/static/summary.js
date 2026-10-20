@@ -86,7 +86,7 @@
     const positions = Phases.detect(main.frames, main.aspect, leadSide, strikeWindow(main.name, main.strike),
                                     impactCheck(main) === null ? main.impact : null,
                                     { drill: main.drill || null, clubOnset: main.clubOnset ?? null,
-                                      angle: main.angle || null });
+                                      angle: main.angle || null, bodyModel: main.bodyModel || null });
     const metrics = main.angle === "dtl" ? null : Metrics.compute(main.frames, main.aspect, leadSide, positions, main.ball);
     const dtl = other || (main.angle === "dtl" ? main : null);
     const offset = other ? syncOffset(main, other) : 0;
