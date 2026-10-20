@@ -836,3 +836,45 @@ test("a short pump clip's numbers are not used: its video has no address to meas
   assert.strictEqual(v.text, "the hands came down clearly lower in your swings after the drill");
   assert.match(DrillSets.formatSet(s), /^Pump drill, Oct 9 \(6 swings, 7 iron, marked afterwards\): the videos start after the pumps, so no pump numbers\. Your swings after 4\.0 in \(your usual 5\.0 in\): the hands came down clearly lower/);
 });
+
+
+test("bestRep and bestRepOf on pump and rep drills", () => {
+  // 1. Rep drill with aim: more (leadHipP6)
+  const repMore = repsSession({
+    drill: "move:leadHipP6:more", metric: "leadHipP6",
+    before: [1.8, 1.9, 2.0], reps: [2.2, 2.8, 2.4], after: [2.1, 2.2, 2.3]
+  });
+  const [sMore] = DrillSets.sets(repMore.clips, repMore.records);
+  assert.deepStrictEqual(DrillSets.bestRep(sMore), { clip: "r1", value: 2.8, metric: "leadHipP6", aim: "more" });
+
+  // 2. Rep drill with aim: less (hipSway)
+  const repLess = repsSession({
+    drill: "move:hipSway:less", metric: "hipSway",
+    before: [5.0, 5.2, 5.1], reps: [4.5, 3.2, 4.0], after: [4.6, 4.7, 4.8]
+  });
+  const [sLess] = DrillSets.sets(repLess.clips, repLess.records);
+  assert.deepStrictEqual(DrillSets.bestRep(sLess), { clip: "r1", value: 3.2, metric: "hipSway", aim: "less" });
+
+  // 3. Pump drill (pumps bottom)
+  const clips = [], records = {};
+  for (let i = 0; i < 3; i++) {
+    clips.push(makeClip(`b${i}`, `2026-09-30T09:0${i}:00`, null, "I7"));
+    records[`b${i}`] = makeRecord(4.4);
+  }
+  for (let i = 0; i < 3; i++) {
+    clips.push(makeClip(`d${i}`, `2026-09-30T09:1${i}:00`, "pump", "I7"));
+    records[`d${i}`] = makeRecord(3.0, [{ t: 3.5, handsPlane: -0.5 * i, lag: 50 }]);
+  }
+  const [sPump] = DrillSets.sets(clips, records);
+  // Lowest handsPlane is for d2 at -1.0
+  assert.deepStrictEqual(DrillSets.bestRep(sPump), { clip: "d2", value: -1.0, metric: "handsPlane", aim: "less" });
+
+  // 4. bestRepOf across multiple sets
+  const best = DrillSets.bestRepOf([
+    { drill: "move:leadHipP6:more", bestRep: { clip: "c1", value: 2.5, metric: "leadHipP6", aim: "more" } },
+    { drill: "move:leadHipP6:more", bestRep: { clip: "c2", value: 3.1, metric: "leadHipP6", aim: "more" } },
+  ]);
+  assert.deepStrictEqual(best, { clip: "c2", value: 3.1, metric: "leadHipP6", aim: "more" });
+  assert.strictEqual(DrillSets.bestRepOf([]), null);
+  assert.strictEqual(DrillSets.bestRep(null), null);
+});

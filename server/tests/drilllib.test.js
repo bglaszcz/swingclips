@@ -181,3 +181,114 @@ test("the real coach: 42 drills, every name and how, no P-numbers on screen", ()
   }
   assert.strictEqual(m.groups.reduce((n, g) => n + g.drills.length, 0), 42);
 });
+
+
+test("bestRep is populated in build from sets, preferring furthest the drill's way", () => {
+  const sets = [
+    {
+      drill: "move:leadHipP6:more",
+      count: 10,
+      bestRep: { clip: "c1", value: 2.2, metric: "leadHipP6", aim: "more" },
+    },
+    {
+      drill: "move:leadHipP6:more",
+      count: 10,
+      bestRep: { clip: "c2", value: 2.9, metric: "leadHipP6", aim: "more" },
+    },
+    {
+      drill: "pump",
+      count: 5,
+      bestRep: { clip: "p_low", value: -1.5, metric: "handsPlane", aim: "less" },
+    },
+    {
+      drill: "pump",
+      count: 5,
+      bestRep: { clip: "p_high", value: 0.2, metric: "handsPlane", aim: "less" },
+    },
+  ];
+  const m = Lib.build(input({ sets }));
+  const hip = find(m, "move:leadHipP6:more");
+  assert.ok(hip.bestRep);
+  assert.strictEqual(hip.bestRep.clip, "c2");
+  assert.strictEqual(hip.bestRep.value, 2.9);
+
+  const pump = find(m, "pump");
+  assert.ok(pump.bestRep);
+  assert.strictEqual(pump.bestRep.clip, "p_low");
+  assert.strictEqual(pump.bestRep.value, -1.5);
+
+  const tempo = find(m, "move:tempo:more");
+  assert.strictEqual(tempo.bestRep, null);
+});
+
+test("render shows 'Watch your best rep' button when bestRep exists, and 'No rep of yours yet' when absent", () => {
+  function fakeDoc() {
+    function node(tag) {
+      let _text = "";
+      return {
+        tagName: tag.toUpperCase(),
+        className: "",
+        dataset: {},
+        children: [],
+        onclick: null,
+        type: "",
+        title: "",
+        attributes: {},
+        setAttribute(k, v) { this.attributes[k] = v; },
+        getAttribute(k) { return this.attributes[k]; },
+        appendChild(c) { this.children.push(c); return c; },
+        append(...kids) { for (const k of kids) if (k) this.children.push(k); },
+        get textContent() { return _text; },
+        set textContent(v) {
+          _text = v;
+          if (v === "") this.children = [];
+        }
+      };
+    }
+    return {
+      createElement(tag) { return node(tag); },
+      createTextNode(t) { return { nodeType: 3, textContent: t }; },
+    };
+  }
+
+  function findAllByClass(node, cls) {
+    const res = [];
+    function walk(n) {
+      if (!n) return;
+      if (n.className && n.className.split(" ").includes(cls)) res.push(n);
+      if (n.children) n.children.forEach(walk);
+    }
+    walk(node);
+    return res;
+  }
+
+  const doc = fakeDoc();
+  const box = doc.createElement("div");
+  box.ownerDocument = doc;
+
+  const sets = [
+    {
+      drill: "move:leadHipP6:more",
+      count: 10,
+      bestRep: { clip: "rep_hip_best", value: 3.0, metric: "leadHipP6", aim: "more" }
+    }
+  ];
+  const model = Lib.build(input({ sets, focus: { move: "tempo", aim: "more" } }));
+  let openedClip = null;
+  Lib.render(box, model, {
+    onOpen: clip => { openedClip = clip; }
+  });
+
+  const demoButtons = findAllByClass(box, "dl-demo");
+  assert.ok(demoButtons.length > 0);
+
+  // The one with bestRep has button text "Watch your best rep" and clickable onOpen
+  const hipDemo = demoButtons.find(b => b.tagName === "BUTTON" && b.textContent === "Watch your best rep");
+  assert.ok(hipDemo, "Watch your best rep button rendered");
+  hipDemo.onclick();
+  assert.strictEqual(openedClip, "rep_hip_best");
+
+  // The ones without bestRep render "No rep of yours yet"
+  const noRepDemos = demoButtons.filter(b => b.textContent === "No rep of yours yet");
+  assert.ok(noRepDemos.length > 0, "No rep of yours yet rendered for drills without reps");
+});

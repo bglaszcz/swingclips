@@ -245,11 +245,19 @@
         // On the owner's 20 of Oct 9, six clips gave pump numbers that way, all with "address" at 0.00 s.
         const allPumpHands = [];
         const allPumpLag = [];
+        let bestRep = null;
+        let bestPumpVal = Infinity;
         for (const s of drillSwings) {
           if (isShortClip(s.c)) continue;
           const pumps = s.rec && s.rec.drill && Array.isArray(s.rec.drill.pumps) ? s.rec.drill.pumps : [];
           for (const p of pumps) {
-            if (finite(p.handsPlane)) allPumpHands.push(p.handsPlane);
+            if (finite(p.handsPlane)) {
+              allPumpHands.push(p.handsPlane);
+              if (p.handsPlane < bestPumpVal) {
+                bestPumpVal = p.handsPlane;
+                bestRep = { clip: s.c.name, value: p.handsPlane, metric: "handsPlane", aim: "less" };
+              }
+            }
             if (finite(p.lag)) allPumpLag.push(p.lag);
           }
         }
@@ -260,6 +268,7 @@
         let drillLeftOut = 0;
         let markedCount = 0;
         let shortCount = 0;
+        let bestRepScore = -Infinity;
         for (const s of drillSwings) {
           const isShort = isPump && isShortClip(s.c);
           if (isShort) shortCount++;
@@ -268,8 +277,18 @@
           // A short pump clip's own number is against that same wrong line: not used, and not "left out".
           if (isShort) continue;
           const tRes = check(s);
-          if (tRes.valid) validDrillP6.push(tRes.value);
-          else drillLeftOut++;
+          if (tRes.valid) {
+            validDrillP6.push(tRes.value);
+            if (!isPump) {
+              const score = tr.aim === "less" ? -tRes.value : tRes.value;
+              if (score > bestRepScore) {
+                bestRepScore = score;
+                bestRep = { clip: s.c.name, value: tRes.value, metric: tr.metric, aim: tr.aim };
+              }
+            }
+          } else {
+            drillLeftOut++;
+          }
         }
 
         // Normal swings with matching club in this session
@@ -341,7 +360,8 @@
           short: shortCount,
           firstClip: firstItem.c.name,
           lastClip: lastItem.c.name,
-          clips: drillSwings.map(s => s.c.name)
+          clips: drillSwings.map(s => s.c.name),
+          bestRep,
         };
         if (isPump) {
           Object.assign(setObj, {
@@ -768,9 +788,31 @@
     return null;
   }
 
+  function bestRep(set) {
+    return (set && set.bestRep) || null;
+  }
+
+  function bestRepOf(sets, aim) {
+    let best = null, bestScore = -Infinity;
+    for (const s of sets || []) {
+      const br = s && s.bestRep;
+      if (br && typeof br.value === "number") {
+        const a = br.aim || aim || (s.drill === "pump" ? "less" : "more");
+        const score = a === "less" ? -br.value : br.value;
+        if (score > bestScore) {
+          bestScore = score;
+          best = br;
+        }
+      }
+    }
+    return best;
+  }
+
   const api = {
     sets,
     verdict,
+    bestRep,
+    bestRepOf,
     formatSet,
     thoughtFor,
     trained,

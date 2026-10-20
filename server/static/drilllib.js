@@ -66,6 +66,19 @@
             firstClip: newest.firstClip || null,
           };
         }
+        let bestRep = null;
+        let bestScore = -Infinity;
+        for (const s of mine) {
+          const br = s && (s.bestRep || (typeof s.best === "object" ? s.best : null));
+          if (br && br.clip && typeof br.value === "number") {
+            const a = br.aim || aim || (id === "pump" ? "less" : "more");
+            const score = a === "less" ? -br.value : br.value;
+            if (score > bestScore) {
+              bestScore = score;
+              bestRep = br;
+            }
+          }
+        }
         const m = momentOf(fields[move]) || { id: "rhythm", tag: "RHYTHM", name: "Rhythm" };
         drills.push({
           id, move, aim,
@@ -79,6 +92,7 @@
           sets: mine.length,
           reps: mine.reduce((n, s) => n + (Number(s.count) || 0), 0),
           last,
+          bestRep,
         });
       }
     }
@@ -145,6 +159,16 @@
     c.append(tr);
     c.append(el(doc, "div", "dl-how", d.how));
     if (d.thought) c.append(el(doc, "div", "dl-thought", `Swing thought: \u201c${d.thought}\u201d`));
+
+    if (d.bestRep && d.bestRep.clip) {
+      const bRep = el(doc, "button", "dl-demo", "Watch your best rep");
+      bRep.type = "button";
+      bRep.title = "Open your best rep with this drill";
+      bRep.onclick = () => { if (opts.onOpen && d.bestRep.clip) opts.onOpen(d.bestRep.clip); };
+      c.append(bRep);
+    } else {
+      c.append(el(doc, "div", "dl-demo dl-demo-none", "No rep of yours yet"));
+    }
 
     if (d.last) {
       const b = el(doc, "button", `dl-hist dl-${d.last.level || "few"}`, historyText(d));
