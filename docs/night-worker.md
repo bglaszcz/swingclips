@@ -42,8 +42,10 @@ worker, at}` first. **Nothing on the review page's numbers comes from these file
    the labels on 49% of 43 face-on swings, against the server's 70%. **Kept off (owner, Oct 19)**: the
    night pass is the skeleton only. On 127 paired swings it reads the hands at the top ~0.8 in higher and
    closer (about their swing-to-swing spread), the head 0.4 in less toward the ball, and the shoulder turn
-   and X-factor at the top differ ±12 deg swing by swing; a session's own swings would be on the server's
-   model until the night ran, against a history on the night's.
+   and X-factor at the top differed ±12 deg swing by swing; a session's own swings would be on the server's
+   model until the night ran, against a history on the night's. That shoulder gap was mostly RTMPose-m
+   swapping the shoulders past side-on (115° read as 65°); read past side-on since Oct 19
+   ([review-page.md](review-page.md), Swing numbers) the two agree within a median 2.6° (X-factor 3.7°).
 
 1. **Where the two disagree, a label teaches most.** The swing worker works out the key positions
    from the night files (the page's own JavaScript, as for the server's pose files) and keeps how far

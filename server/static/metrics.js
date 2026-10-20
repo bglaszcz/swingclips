@@ -3,7 +3,8 @@
 //
 // Pelvis and shoulder turn come from how much narrower the hips / shoulders look than at address
 // (a line turned by t looks cos(t) as wide), with the direction from the swing: closed going back,
-// open once they have come back past square. MediaPipe's own 3D estimate from one camera flattens
+// open once they have come back past square (the shoulders also past side-on to the camera: see
+// SIDE_ON_WIDEN). MediaPipe's own 3D estimate from one camera flattens
 // turns badly (shoulders ~40 at the top) and even gets the direction wrong at impact, so it's only
 // used for the forward bend and for scale. Turn *speeds* (a kinematic sequence) aren't attempted:
 // near square a tiny change in width is a big change in angle, so from face-on alone the peaks come
@@ -139,11 +140,29 @@
     });
   }
 
+  // Shoulders past side-on. Turned more than 90 degrees, the shoulder line points nearly at the camera
+  // and the lead shoulder shows on the trail side of the trail one. RTMPose-m often labels the two the
+  // other way round near the top, as for a golfer facing it (on the owner's stills the points are in
+  // the right places, only swapped), so the width reads as if turned back the other way: 180 minus
+  // the turn, 115 read as 65. It flips back and forth from frame to frame, and the pose smoothing
+  // blends a flipped frame with its neighbours into a width near 0 (90 degrees). Of 589 tops
+  // (Sep 23-Oct 9 2026) 229 read under 75 this way, whole sessions at a time, against 117 from the
+  // two cameras' 3D. So once the line has gone side-on going back (the shoulders' order flipped, or
+  // the width stopped shrinking and widened again by SIDE_ON_WIDEN of its address width before the
+  // top: in dim light the model never lines them up), each frame up to the way back through side-on
+  // is read past 90 whichever shoulder is where, and up to the top as the most turned reading so
+  // far: the turn grows to the top, and the mix-ups only ever take from it. A frame that looks
+  // SIDE_ON_BACK as wide as at address isn't past side-on (that would be a turn of 143 or more): it's
+  // read as it looks, and left out of the most so far.
+  const SIDE_ON_WIDEN = 0.15, SIDE_ON_BACK = 0.8;
+
   /**
    * Turn in degrees per frame from apparent widths: acos(width / width at address), positive
    * (closed) until the line comes back to square after the top, negative (open) from then on.
+   * sideOnFrom: for a line that can turn past side-on (the shoulders), the frame to look for it from
+   * going back (address, or a pump drill's last pump), read as above; null for the hips.
    */
-  function turns(widths, address, top) {
+  function turns(widths, address, top, sideOnFrom) {
     const w0 = widths[address];
     if (w0 == null || w0 <= 0) return widths.map(() => null);
     const ratio = widths.map(w => w == null ? null : Math.max(-1, Math.min(1, w / w0)));
@@ -156,8 +175,34 @@
         if (square < 0 || ratio[i] > ratio[square]) square = i;
       }
     }
+    // Past side-on from `from` going back until `until` coming down (the last flipped frame).
+    let from = -1, until = -1;
+    if (sideOnFrom != null && top != null) {
+      let narrow = -1;
+      for (let i = sideOnFrom; i <= top; i++) {
+        if (ratio[i] == null) continue;
+        if (ratio[i] <= 0) { from = i; break; }
+        if (narrow < 0 || ratio[i] < ratio[narrow]) narrow = i;
+      }
+      if (from < 0 && narrow >= 0) {
+        let widest = ratio[narrow];
+        for (let i = narrow; i <= top; i++) if (ratio[i] != null) widest = Math.max(widest, ratio[i]);
+        if (widest - ratio[narrow] >= SIDE_ON_WIDEN) from = narrow;
+      }
+      if (from >= 0) {
+        until = top;
+        for (let i = top; i < (square >= 0 ? square : ratio.length); i++) if (ratio[i] != null && ratio[i] <= 0) until = i;
+      }
+    }
+    let most = 0;
     return ratio.map((r, i) => {
       if (r == null) return null;
+      if (from >= 0 && i >= from && i <= until && Math.abs(r) < SIDE_ON_BACK) {
+        const past = 180 - Math.acos(Math.abs(r)) * DEG;
+        if (i > top) return past;
+        most = Math.max(most, past);
+        return most;
+      }
       const a = Math.acos(r) * DEG;
       return square >= 0 && i > square ? -a : a;
     });
@@ -183,7 +228,10 @@
     const top = p4 ? p4.index : null;
     const pelvisTurn = ai >= 0 ? turns(raw.map(v => v && v.hipWidth), ai, top) : [];
     const lag = smoothLag(raw);
-    const shoulderTurn = ai >= 0 ? turns(raw.map(v => v && v.shoulderWidth), ai, top) : [];
+    // A pump drill's pumps go back and forth through side-on: its last backswing starts at the last one.
+    const pumps = (positions && positions.pumps) || [];
+    const backFrom = pumps.length ? Math.max(ai, pumps[pumps.length - 1].index) : ai;
+    const shoulderTurn = ai >= 0 ? turns(raw.map(v => v && v.shoulderWidth), ai, top, backFrom) : [];
 
     // Turns and drift relative to address.
     const values = raw.map((v, i) => {

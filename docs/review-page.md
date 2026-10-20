@@ -32,7 +32,27 @@ What the server works out for each swing and what each part of the review page s
   shoulder tilt, head sway / rise, hip sway, and tempo (timed as TPI, Tour Tempo, Garmin and Blast do: from the
   clubhead's first movement to where the club changes direction at the top, then to impact; tour players ~3:1). Turns come from how much narrower the hips
   and shoulders look than at address; MediaPipe's 3D estimate (saved per frame as `w`) is only used
-  for forward bend and for scale. Overlays: hand path, head position vs address, and pelvis vs ball
+  for forward bend and for scale. **Shoulders past side-on** (Oct 19 2026, `metrics.js turns`):
+  turned more than 90°, the shoulder line points nearly at the face-on camera and RTMPose-m often
+  swaps the two shoulders near the top, as for a golfer facing it (on the stills the points are in the
+  right places, only swapped), so a 115° turn read as 65° (180 minus it): 229 of 589 tops (Sep 23-Oct 9)
+  read under 75°, whole sessions at a time, so the trend line followed the mix-up. The swaps flip from
+  frame to frame and the pose smoothing blends them into ~90°. Now, once the line has gone side-on going
+  back (the shoulders' order flipped, or in dim light the width stopped shrinking and widened again by
+  0.15 of its address width before the top), the width counts whichever shoulder is where, and the top
+  is the most turned reading since side-on (a pump drill: since its last pump; a frame looking 0.8 as
+  wide as at address isn't counted). Checked on the owner's swings: shoulder turn at the top spread (IQR)
+  54° → 6° over 589 swings (within a session and club 12.4° → 5.3°), median 97° → 120°; against the two
+  cameras' 3D thorax turn (75 Oct 6 swings, median 117°) the typical miss 18° → 4°, off by 20°+ on 37 →
+  2 (both full turns on the stills: the 3D's misses), median 1° above it; on the 127 swings paired with
+  the night pass (Gemini round 65) the two models agree within a median 2.6° (was 11°; 20°+ apart on
+  46 → 3), and RTMW-l, which had the same mix-up less often, spreads 5° (was 34°). X-factor's spread
+  46° → 10°; hip turn never goes past side-on and is unchanged. Still wrong: Sep 24 (night, every clip
+  dark, so shaky) mixes ~55° and ~125°: the model spread the shoulders across the shirt's outline and
+  never lined them up. A short swing that keeps narrowing to the top reads as before (Oct 8 gap wedges,
+  65° by the 3D too). With a session's spread now ~3° (X-factor ~5°) against ~2° (3°) standing still at
+  address, the noise floor below marks both shaky once the server has worked every swing out again.
+  Overlays: hand path, head position vs address, and pelvis vs ball
   at impact (Show > Impact, face-on). On the P7 impact frame and frames within ±2 of it, the Impact
   overlay draws a dotted vertical line through the ball, a marker (filled circle) at the pelvis's middle,
   and a translucent shaded target zone band calibrated from the owner's best low-point swings
