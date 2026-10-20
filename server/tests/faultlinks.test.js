@@ -87,19 +87,19 @@ test("Club confounding: A and B correlated only through club comes out NOT linke
 });
 
 test("Real within-club link comes out linked with Strong or Worth watching label", () => {
-  // A real within-club link: casting (P6) and early extension (P7) go together within clubs
+  // A real within-club link: casting (P5) and early extension (P7) go together within clubs
   const rows = [];
   // DR: 30 swings, strongly correlated
-  for (let i = 0; i < 15; i++) rows.push({ club: "DR", releaseArm: -15, earlyExt: 4.0 }); // both
-  for (let i = 0; i < 2; i++) rows.push({ club: "DR", releaseArm: -15, earlyExt: 1.0 });  // casting only
-  for (let i = 0; i < 2; i++) rows.push({ club: "DR", releaseArm: -30, earlyExt: 4.0 });  // EE only
-  for (let i = 0; i < 11; i++) rows.push({ club: "DR", releaseArm: -30, earlyExt: 1.0 }); // neither
+  for (let i = 0; i < 15; i++) rows.push({ club: "DR", lagP5: 60, earlyExt: 4.0 }); // both
+  for (let i = 0; i < 2; i++) rows.push({ club: "DR", lagP5: 60, earlyExt: 1.0 });  // casting only
+  for (let i = 0; i < 2; i++) rows.push({ club: "DR", lagP5: 85, earlyExt: 4.0 });  // EE only
+  for (let i = 0; i < 11; i++) rows.push({ club: "DR", lagP5: 85, earlyExt: 1.0 }); // neither
 
   // I7: 30 swings, strongly correlated
-  for (let i = 0; i < 15; i++) rows.push({ club: "I7", releaseArm: -15, earlyExt: 4.0 });
-  for (let i = 0; i < 2; i++) rows.push({ club: "I7", releaseArm: -15, earlyExt: 1.0 });
-  for (let i = 0; i < 2; i++) rows.push({ club: "I7", releaseArm: -30, earlyExt: 4.0 });
-  for (let i = 0; i < 11; i++) rows.push({ club: "I7", releaseArm: -30, earlyExt: 1.0 });
+  for (let i = 0; i < 15; i++) rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0 });
+  for (let i = 0; i < 2; i++) rows.push({ club: "I7", lagP5: 60, earlyExt: 1.0 });
+  for (let i = 0; i < 2; i++) rows.push({ club: "I7", lagP5: 85, earlyExt: 4.0 });
+  for (let i = 0; i < 11; i++) rows.push({ club: "I7", lagP5: 85, earlyExt: 1.0 });
 
   const results = FaultLinks.links(rows);
   const link = results.find(l => l.a.name === "casting" && l.b.name === "early extension");
@@ -114,14 +114,14 @@ test("Real within-club link comes out linked with Strong or Worth watching label
 test("Shaky and missing numbers are ignored", () => {
   const rows = [];
   // 20 valid swings
-  for (let i = 0; i < 10; i++) rows.push({ club: "I7", releaseArm: -15, earlyExt: 4.0 });
-  for (let i = 0; i < 10; i++) rows.push({ club: "I7", releaseArm: -30, earlyExt: 1.0 });
+  for (let i = 0; i < 10; i++) rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0 });
+  for (let i = 0; i < 10; i++) rows.push({ club: "I7", lagP5: 85, earlyExt: 1.0 });
 
   // Add rows with trust level none or shaky
-  rows.push({ club: "I7", releaseArm: -15, earlyExt: 4.0, trust: { releaseArm: { level: "none" } } });
-  rows.push({ club: "I7", releaseArm: -15, earlyExt: 4.0, trust: { earlyExt: { level: "shaky" } } });
-  rows.push({ club: "I7", releaseArm: null, earlyExt: 4.0 });
-  rows.push({ club: "I7", releaseArm: -15, earlyExt: undefined });
+  rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0, trust: { lagP5: { level: "none" } } });
+  rows.push({ club: "I7", lagP5: 60, earlyExt: 4.0, trust: { earlyExt: { level: "shaky" } } });
+  rows.push({ club: "I7", lagP5: null, earlyExt: 4.0 });
+  rows.push({ club: "I7", lagP5: 60, earlyExt: undefined });
 
   const all = FaultLinks.links(rows, null, { all: true });
   const link = all.find(l => l.a.name === "casting" && l.b.name === "early extension");
@@ -144,9 +144,9 @@ test("Head dip and head lift are never paired", () => {
 
 test("Fewer than enough swings yields nothing", () => {
   const rows = [
-    { club: "I7", releaseArm: -15, earlyExt: 4.0 },
-    { club: "I7", releaseArm: -15, earlyExt: 4.0 },
-    { club: "I7", releaseArm: -30, earlyExt: 1.0 },
+    { club: "I7", lagP5: 60, earlyExt: 4.0 },
+    { club: "I7", lagP5: 60, earlyExt: 4.0 },
+    { club: "I7", lagP5: 85, earlyExt: 1.0 },
   ];
   const results = FaultLinks.links(rows);
   assert.deepEqual(results, [], "Fewer than enough swings must return empty array");

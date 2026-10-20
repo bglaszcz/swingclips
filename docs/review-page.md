@@ -536,9 +536,17 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   ground-push drill ("stand up through the finish") instead of the chair drill, standing up "turn your
   chest up to the target" instead of chest down, over the top "turn the chest harder" instead of the pump
   drill, head toward the ball the stay-down drill instead of the headcover drill, head dip and head lift
-  each the other's, and casting the drag drill filed under casting itself instead of the 9-to-3 drill.
+  each the other's, and casting the drag drill filed under casting itself.
   Hip slide was already right. This reached the swing page's fault line, the session lists, Progress's
   most common fault, the habit watch, the fault links, the session story and Week for coach.
+  **Casting** is named when the wrist hinge (lead arm to shaft, face-on) is already under 70° with the lead
+  arm level coming down (`lagP5`; 46 of 504 normal swings, Sep 23-Oct 9), and gets the lag pump drill
+  ("Hands to the hip, then let it go"). Until Oct 20 2026 it came from the release point (the hinge going
+  under 70° with the lead arm less than 22° below level) and named 324 of 502 swings (65%): on an
+  ordinary swing the hinge goes between lead arm level and shaft level. On Gemini round 67's blind
+  panels none of the swings named that way showed the hinge gone at lead arm level (44 panels, and
+  Claude's own look at the 4 most "casting"); the 3 lowest hinge readings there (~61° against a median of
+  81°) show the club falling early. The release point itself stays a number on the page.
   **Arms-led downswing** (3D) is a *standing pattern*, not a per-swing fault (2026-10-07, `standing` in
   `faults.js`): it named 76 of the owner's 79 judged 3D swings; the 3D under-reads hip turn (32° at the top
   against 42° face-on; X-factor 71°), hips read -9° to +9° open at impact, and good shots were as common at

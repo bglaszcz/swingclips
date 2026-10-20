@@ -16,7 +16,7 @@ test("names, drills and swing thoughts come from coach.js", () => {
     { key: "headToBall", name: "head toward the ball", move: "headToBall", dir: "more", fix: "less" },
     { key: "hipSway", name: "hip slide", move: "hipSway", dir: "less", fix: "less" },
     { key: "headRise", name: "head dip", move: "headRise", dir: "less", fix: "more" },
-    { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more", fix: "less" },
+    { key: "lagP5", name: "casting", move: "lagP5", dir: "less", fix: "more" },
     { key: "headRise", name: "head lift", move: "headRise", dir: "more", fix: "less" },
     { key: "armsLed", name: "arms-led downswing", move: "armsLed", dir: "more", fix: "more" },
   ];
@@ -190,13 +190,15 @@ test("shaky and missing numbers are never named", () => {
   assert.equal(ee.top, true);
 });
 
-test("casting: the release point above -22 deg", () => {
-  assert.equal(Faults.faultsOf({ releaseArm: -22 }).length, 0);
-  assert.equal(Faults.faultsOf({ releaseArm: -30 }).length, 0);
-  const c = Faults.faultsOf({ releaseArm: -21.9 });
+test("casting: the wrist hinge under 70 deg with the lead arm level coming down", () => {
+  assert.equal(Faults.faultsOf({ lagP5: 70 }).length, 0);
+  assert.equal(Faults.faultsOf({ lagP5: 85 }).length, 0);
+  const c = Faults.faultsOf({ lagP5: 69.9 });
   assert.equal(c.length, 1);
   assert.equal(c[0].name, "casting");
-  assert.ok(c[0].drill && c[0].thought);
+  assert.equal(c[0].thought, "Hands to the hip, then let it go.");
+  // The release point no longer names it (it went off on 65% of the owner's swings).
+  assert.equal(Faults.faultsOf({ releaseArm: -15 }).length, 0);
 });
 
 test("sessionFaults top rule: at least 3 swings and 25% of readable ones", () => {

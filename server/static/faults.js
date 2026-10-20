@@ -32,9 +32,13 @@
     { key: "hipSway", name: "hip slide", move: "hipSway", dir: "less", fix: "less", threshold: 5.5, test: v => v > 5.5 },
     // Head dip: head height drops at impact vs address (in; negative = dropped) < -1.5
     { key: "headRise", name: "head dip", move: "headRise", dir: "less", fix: "more", threshold: -1.5, test: v => v < -1.5 },
-    // Casting: the wrist hinge goes with the lead arm still less than 22 deg below horizontal (release
-    // point, face-on; 22% of swings, more with the short irons)
-    { key: "releaseArm", name: "casting", move: "releaseArm", dir: "more", fix: "less", threshold: -22, test: v => v > -22 },
+    // Casting: the wrist hinge (lead arm to shaft, face-on) already under 70 deg with the lead arm level
+    // coming down: 46 of the owner's 504 normal swings (Sep 23-Oct 9 2026), the club visibly falling early
+    // on the lowest. Until Oct 20 it was the release point (the hinge going under 70 with the lead arm
+    // less than 22 deg below level), which named 324 of 502 (65%): on an ordinary swing the hinge goes
+    // between lead arm level and shaft level, and none of the swings named that way looked like casting
+    // at lead arm level (Gemini round 67, blind, and Claude's own look).
+    { key: "lagP5", name: "casting", move: "lagP5", dir: "less", fix: "more", threshold: 70, test: v => v < 70 },
     // Head lift: head height rises at impact vs address (in) > 1.0
     { key: "headRise", name: "head lift", move: "headRise", dir: "more", fix: "less", threshold: 1.0, test: v => v > 1.0 },
     // Arms-led downswing: from 3D (pelvis reaches peak speed after impact, hips under 20 deg open at impact).
