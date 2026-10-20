@@ -353,3 +353,137 @@ test("render: builds sentence, chips, grid, detail panel on tap with actions", (
   globalThis.document = originalDoc;
 });
 
+
+test("render: Tour ranges toggle is off by default, displays dashed band and detail panel line when on, and never sets focus or zone", () => {
+  function makeMockDoc() {
+    function createEl(tag) {
+      return {
+        tagName: tag.toUpperCase(),
+        className: "",
+        dataset: {},
+        style: {},
+        children: [],
+        hidden: false,
+        appendChild(child) { this.children.push(child); return child; },
+        replaceChildren(...kids) { this.children = [...kids]; },
+        setAttribute(k, v) { this[k] = v; },
+        getAttribute(k) { return this[k]; },
+        querySelectorAll(sel) {
+          const results = [];
+          function walk(node) {
+            if (sel === ".in-tile" && node.className && node.className.includes("in-tile")) results.push(node);
+            for (const c of (node.children || [])) walk(c);
+          }
+          walk(this);
+          return results;
+        },
+        classList: {
+          toggle(cls, val) {
+            const has = this._el.className.includes(cls);
+            if (val === undefined) val = !has;
+            if (val && !has) this._el.className += " " + cls;
+            else if (!val && has) this._el.className = this._el.className.replace(new RegExp("\\b" + cls + "\\b", "g"), "").trim();
+          },
+          add(cls) { if (!this._el.className.includes(cls)) this._el.className += " " + cls; },
+          remove(cls) { this._el.className = this._el.className.replace(new RegExp("\\b" + cls + "\\b", "g"), "").trim(); },
+        },
+      };
+    }
+    const doc = {
+      createElement(tag) {
+        const el = createEl(tag);
+        el.classList._el = el;
+        return el;
+      },
+      createElementNS(ns, tag) {
+        const el = createEl(tag);
+        el.classList._el = el;
+        return el;
+      },
+    };
+    return doc;
+  }
+
+  const originalDoc = globalThis.document;
+  const originalStorage = globalThis.localStorage;
+
+  const storage = {};
+  globalThis.localStorage = {
+    getItem: k => storage[k] ?? null,
+    setItem: (k, v) => { storage[k] = String(v); },
+  };
+  globalThis.document = makeMockDoc();
+
+  const fields = [
+    { key: "pelvisTop", label: "Pelvis turn at top", unit: "°", dec: 1, pos: "p4" },
+  ];
+  // User good shot range is 30..38. Latest median is 45 (high compared to user range).
+  // Tour range is 40..50 (latest median 45 is inside tour range, but outside user range).
+  const ranges = {
+    pelvisTop: { enough: true, reliable: true, q10: 25, q25: 30, q50: 34, q75: 38, q90: 42 },
+  };
+  const rows = Array.from({ length: 10 }, () => ({ pelvisTop: 45 }));
+  const sess = [{ key: "s1", start: 1000, rows }];
+
+  const a = Checkpoints.analyze(sess, { fields, ranges });
+  const box = globalThis.document.createElement("div");
+
+  let goalKey = null, goalAim = null;
+  Checkpoints.render(box, a, {
+    onGoal: (k, aim) => { goalKey = k; goalAim = aim; },
+  });
+
+  const chips = box.children[1];
+  const tourSwitch = chips.children.find(c => c.className === "cp-tour-switch");
+  assert.ok(tourSwitch, "Tour ranges switch must be present in chips");
+  const tourCb = tourSwitch.children.find(c => c.tagName === "INPUT");
+  assert.ok(tourCb, "checkbox must be in switch");
+  assert.equal(tourCb.checked, false, "Tour ranges must be off by default");
+
+  // Tile before turning tour on
+  const grid = box.children[2];
+  const tile = grid.children.find(c => c.dataset.key === "pelvisTop");
+  assert.ok(tile);
+  // User range judged it out/high
+  assert.equal(tile.dataset.zone, "out");
+
+  // Now turn on Tour ranges
+  tourCb.checked = true;
+  tourCb.onchange();
+
+  assert.equal(globalThis.localStorage.getItem("checkpoint-tour-ranges"), "1", "saved to localStorage");
+
+  // Re-check grid after refresh
+  const gridAfter = box.children[2];
+  const tileAfter = gridAfter.children.find(c => c.dataset.key === "pelvisTop");
+  // Tour ranges must NEVER change tile zone or user judge
+  assert.equal(tileAfter.dataset.zone, "out", "Tour range never changes user zone");
+
+  // Verify trackSvg has tour rect (.in-track-tour)
+  const track = tileAfter.children.find(c => (c.className || c["class"] || "").includes("in-track"));
+  assert.ok(track, "trackSvg exists");
+  const tourRect = track.children.find(c => (c.className || c["class"] || "").includes("in-track-tour"));
+  assert.ok(tourRect, "tour rect rendered behind user range on tile track");
+
+  // Tap tile to open panel
+  tileAfter.onclick();
+  const panel = box.children[3];
+  assert.equal(panel.hidden, false);
+
+  // Detail panel must have tour line
+  const tourLine = panel.children.find(c => c.className && c.className.includes("cp-panel-tour"));
+  assert.ok(tourLine, "cp-panel-tour line must exist in detail panel");
+  assert.match(tourLine.textContent, /Tour players \(Cheetham 2008\): 40 to 50°/);
+
+  // Focus action remains driven by user good-shot range (high -> less), not tour range
+  const actions = panel.children.find(c => c.className === "cp-panel-actions");
+  const focusBtn = actions.children.find(c => c.className.includes("cp-btn-focus"));
+  assert.ok(focusBtn);
+  focusBtn.onclick();
+  assert.equal(goalKey, "pelvisTop");
+  assert.equal(goalAim, "less", "focus aim is driven solely by user range");
+
+  // Restore globals
+  globalThis.document = originalDoc;
+  globalThis.localStorage = originalStorage;
+});

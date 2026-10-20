@@ -10,6 +10,10 @@
     ? SwingIndicators
     : (typeof require === "function" ? require("./indicators.js") : null);
 
+  const TourRangesAtLoad = typeof SwingTourRanges !== "undefined"
+    ? SwingTourRanges
+    : (typeof require === "function" ? (function () { try { return require("./tourranges.js"); } catch (e) { return null; } })() : null);
+
   function quantile(sorted, q) {
     if (!sorted || !sorted.length) return null;
     const i = (sorted.length - 1) * q, lo = Math.floor(i), hi = Math.ceil(i);
@@ -198,6 +202,7 @@
    */
   function render(box, analysis, opts = {}) {
     const Indicators = typeof SwingIndicators !== "undefined" ? SwingIndicators : IndicatorsAtLoad;
+    const TourRanges = typeof SwingTourRanges !== "undefined" ? SwingTourRanges : TourRangesAtLoad;
     if (!box) return;
     box.replaceChildren();
 
@@ -248,6 +253,14 @@
       }
     } catch {}
 
+    const TOUR_KEY = "checkpoint-tour-ranges";
+    let showTour = false;
+    try {
+      if (typeof localStorage !== "undefined") {
+        showTour = localStorage.getItem(TOUR_KEY) === "1";
+      }
+    } catch {}
+
     const chipsContainer = document.createElement("div");
     chipsContainer.className = "cp-chips";
 
@@ -267,8 +280,12 @@
       svg.setAttribute("viewBox", `0 0 ${barW} ${barH}`);
       svg.setAttribute("class", "cp-bar-svg");
 
+      const tour = (showTour && TourRanges) ? TourRanges.get(item.key, opts.club) : null;
       if (item.range) {
         const pts = [item.range.q10, item.range.q90, item.range.q25, item.range.q75];
+        if (tour && finite(tour.min) && finite(tour.max)) {
+          pts.push(tour.min, tour.max);
+        }
         if (item.q1 != null) pts.push(item.q1);
         if (item.q3 != null) pts.push(item.q3);
         if (item.latest.med != null) pts.push(item.latest.med);
@@ -285,6 +302,18 @@
           x: 0, y: 8, width: barW, height: 4,
           rx: 2, ry: 2, fill: "var(--line)",
         }, svg);
+
+        if (tour && finite(tour.min) && finite(tour.max)) {
+          const tx1 = Math.max(0, Math.min(barW, scale(tour.min)));
+          const tx2 = Math.max(0, Math.min(barW, scale(tour.max)));
+          const tLeft = Math.min(tx1, tx2);
+          const tWidth = Math.max(2, Math.abs(tx2 - tx1));
+          svgEl("rect", {
+            x: tLeft, y: 3, width: tWidth, height: 14,
+            rx: 2, ry: 2, fill: "var(--line)",
+            stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "3 2", opacity: 0.45,
+          }, svg);
+        }
 
         const rx10 = Math.max(0, Math.min(barW, scale(item.range.q10)));
         const rx90 = Math.max(0, Math.min(barW, scale(item.range.q90)));
@@ -439,6 +468,16 @@
       rowEl.appendChild(metaCol);
       panelContainer.appendChild(rowEl);
 
+      if (showTour && TourRanges && TourRanges.isSupported(item.key)) {
+        const tourText = TourRanges.formatTourText(item.key, opts.club);
+        if (tourText) {
+          const tourEl = document.createElement("div");
+          tourEl.className = "cp-panel-tour note";
+          tourEl.textContent = tourText;
+          panelContainer.appendChild(tourEl);
+        }
+      }
+
       // Actions row: See it over time, Swings outside, Make this my focus
       const actionsEl = document.createElement("div");
       actionsEl.className = "cp-panel-actions";
@@ -532,6 +571,27 @@
         chipsContainer.appendChild(btn);
       }
 
+      // Switch: Tour ranges (off by default, remembered)
+      const tourSwitch = document.createElement("label");
+      tourSwitch.className = "cp-tour-switch";
+      const tourCb = document.createElement("input");
+      tourCb.type = "checkbox";
+      tourCb.checked = showTour;
+      tourCb.onchange = () => {
+        showTour = tourCb.checked;
+        try {
+          if (typeof localStorage !== "undefined") {
+            localStorage.setItem(TOUR_KEY, showTour ? "1" : "0");
+          }
+        } catch {}
+        refresh();
+      };
+      tourSwitch.appendChild(tourCb);
+      const tourTextSpan = document.createElement("span");
+      tourTextSpan.textContent = " Tour ranges";
+      tourSwitch.appendChild(tourTextSpan);
+      chipsContainer.appendChild(tourSwitch);
+
       // Filter items
       let filtered = analysis.allItems;
       if (activeFilter === "favs") {
@@ -551,12 +611,14 @@
       filtered = [...filtered].sort((a, b) => moment(a) - moment(b));
       gridContainer.replaceChildren();
       for (const item of filtered) {
+        const tour = (showTour && TourRanges) ? TourRanges.get(item.key, opts.club) : null;
         const tileItem = {
           key: item.key,
           field: item.field,
           value: item.latest.med,
           range: item.range,
           shaky: item.shakyShare > 0.5,
+          tour,
         };
 
         if (Indicators && typeof Indicators.tile === "function") {
@@ -592,6 +654,7 @@
       <summary>How it's worked out</summary>
       <div class="note">
         <strong>Good-shot range:</strong> the solid band covers the middle 50% (25th to 75th percentile) and the faint band covers the middle 80% (10th to 90th percentile) of each number on your good shots with this club (seen in Analysis > Good-shot ranges). At least 8 good shots with a reliable reading are needed for a range.<br><br>
+        <strong>Tour ranges:</strong> faint grey dashed bands show published tour ranges (e.g. Tour Tempo, TPI, 3D kinematic studies) for comparison only. Tour ranges never affect tile colours, verdicts, coaching focus, or whether a move is judged good or bad — your good shots stay the only judge.<br><br>
         <strong>Your own swings:</strong> the range describes where you sit when you hit your best shots with this club, not a generic tour model.<br><br>
         <strong>Shaky numbers (~):</strong> marked when more than half of the swings had noisy or uncertain camera tracking on that number.<br><br>
         <strong>Camera placement:</strong> moving phone tripods between sessions shifts angle readings; keep cameras in their marked positions for consistent numbers.

@@ -1521,6 +1521,22 @@
   .lp-tipl { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
   #stages.labeling video { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: -2px; }
   /* round 69 */
+  .cp-tour-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    margin-left: auto;
+  }
+  .cp-tour-switch:hover { color: var(--text); }
+  .cp-panel-tour {
+    font-size: 13px;
+    color: var(--muted);
+    padding: 2px 0 6px 0;
+  }
   #coach-swing-box { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
   #coach-swing-box[hidden] { display: none; }
   #coach-swing-box .subtle-btn {
@@ -2669,6 +2685,7 @@
 <script src="/static/flightgrid.js"></script>
 <script src="/static/distro.js"></script>
 <script src="/static/consistency.js"></script>
+<script src="/static/tourranges.js"></script>
 <script src="/static/indicators.js"></script>
 <script src="/static/checkpoints.js"></script>
 <script src="/static/draw.js"></script>

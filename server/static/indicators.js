@@ -217,8 +217,35 @@
 
     if (isUsableRange(range)) {
       const q10 = range.q10, q25 = range.q25, q75 = range.q75, q90 = range.q90;
-      const span = q90 > q10 ? (q90 - q10) : 1;
-      const toX = v => xL + Math.max(0, Math.min(1, (v - q10) / span)) * wTrack;
+      const tour = item.tour || opts.tour;
+      let minVal = q10, maxVal = q90;
+      if (tour && finite(tour.min) && finite(tour.max)) {
+        minVal = Math.min(minVal, tour.min);
+        maxVal = Math.max(maxVal, tour.max);
+      }
+      const span = maxVal > minVal ? (maxVal - minVal) : (q90 > q10 ? (q90 - q10) : 1);
+      const toX = v => xL + Math.max(0, Math.min(1, (v - minVal) / span)) * wTrack;
+
+      // Faint grey dashed band for published tour range behind user range
+      if (tour && finite(tour.min) && finite(tour.max)) {
+        const tx1 = toX(tour.min);
+        const tx2 = toX(tour.max);
+        const tLeft = Math.min(tx1, tx2);
+        const tWidth = Math.max(2, Math.abs(tx2 - tx1));
+        const tourRect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
+        tourRect.setAttribute("class", "in-track-tour");
+        tourRect.setAttribute("x", String(tLeft));
+        tourRect.setAttribute("y", String(yBar - 2));
+        tourRect.setAttribute("width", String(tWidth));
+        tourRect.setAttribute("height", String(hBar + 4));
+        tourRect.setAttribute("rx", "2");
+        tourRect.setAttribute("fill", "var(--line)");
+        tourRect.setAttribute("stroke", "var(--muted)");
+        tourRect.setAttribute("stroke-width", "1");
+        tourRect.setAttribute("stroke-dasharray", "3 2");
+        tourRect.setAttribute("opacity", "0.45");
+        trackSvg.appendChild(tourRect);
+      }
 
       // Faint span q10..q90
       const faintRect = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
