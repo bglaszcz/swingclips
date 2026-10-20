@@ -245,10 +245,11 @@ are read: [docs/relay.md](docs/relay.md).
   0.9 let one phone's voice set the other one off; from 0.9 the other phone stops listening while
   it talks (`quiet` in `events.jsonl`). An upload marked `afterSpeech` there still means a voice
   got through.
-- **A phone "running hot"** (amber, said once a session): a warm phone's camera loses frames at
-  240 fps (the S23 Ultra about 1% cool, over a quarter hot; the S21 none). Take it off the charger
-  and out of its case, keep it out of the sun or a lamp's heat; a clip-on phone cooler helps most.
-  Its row also shows how warm it is and the frames it's losing (capture app 0.13).
+- **A phone "losing N% of frames"** (amber from 5%, said once a session): the S23 Ultra's own camera
+  software at 240 fps skips 4 frames at a time, from ~1% to over a quarter of them depending on the run;
+  the S21 none. No setting in the app changes it (see docs/phones.md "Lost frames"); the server uses each
+  frame's real time, so the clips still line up, with gaps of 17 ms. "Running hot" is Android's own heat
+  warning: take the phone off the charger or out of its case (capture app 0.13).
 - **Clips waiting on a phone** (amber from 3): the phone keeps them and retries until the server
   confirms; Wi-Fi or the server being down. They go up by themselves.
 - **Clips waiting for analysis** (amber from 3): during a session the face-on clips go first and

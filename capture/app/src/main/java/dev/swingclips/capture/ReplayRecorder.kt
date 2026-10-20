@@ -203,8 +203,11 @@ class ReplayRecorder(
     // camera lost it on the way to the encoder (onCaptureBufferLost), or the encoder dropped it (a
     // jump in the timestamps it puts out with the camera's frames in order). Logged every
     // COUNT_EVERY_US when any went missing; each clip also counts its own (save). On the S23 Ultra
-    // (Oct 2026) it's the camera: between two bursts of 8 frames it sometimes skips 4, ~1% of
-    // frames when the phone is cool and over 25% once it's hot (Android's "moderate" heat level).
+    // (Oct 2026) it's the camera: between two bursts it skips 4 frames, from ~1% to over 25% of them
+    // depending on the run. A system trace shows its camera software accepting the next requests
+    // 30-48 ms late (waiting for the image processor), not this app, the encoder or the preview.
+    // Nothing an app sets changed it (720p, 120 fps, shutter, noise reduction, MCTF, MFNR, dynamic
+    // FPS, session parameters, busy threads); it doesn't follow the phone's heat.
 
     private val frameUs = 1e6 / mode.fps
     /** The camera's frames, by the sensor's timestamps (camera thread). */

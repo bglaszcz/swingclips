@@ -18,22 +18,25 @@ How the capture app records, how the two angles pair, the shutter and clip quali
   Missed shots check (`Status.missed_check`: the loudest sound 3-20 s before each missed Square shot,
   and the lowest sensitivity, in steps of 5, whose threshold is at most 80% of the softest one).
 - Modes: 1080p/720p at 240, 120 or 30 fps.
-- **Lost frames and heat** (0.13): at 240 fps the camera delivers frames in bursts of 8, and the S23
-  Ultra's camera sometimes misses the start of the next burst: 4 frames in a row never taken (its own
-  frame timestamps jump; the frame numbers don't, nothing is lost on the way to the encoder). How
-  often depends on how hot the phone is: ~1% of frames when cool, over 25% at Android's "moderate"
-  heat level (Oct 19, on the desk: 25 minutes with the camera running on the charger took the skin to
-  43 C). 720p, a fixed shutter, the camera's noise reduction off, no capture results, and a busy
-  thread keeping the processor awake made no difference; Android's sustained-performance mode made it
-  worse. Over 145 clips from 5 long sessions the face-on phone lost a median 5-7% from the first
-  swings (already warm), the S21 down the line none. So the app keeps the phone cooler: while
-  recording the screen dims after 20 s without a touch (it faces away from the golfer; a touch brings
-  it back), and the display runs at 60 Hz (the preview is 30 fps). It counts lost frames
-  (`FrameGaps.kt`): each clip reports `frames` and `dropped`, and every 10 s it logs where any went
-  (`adb logcat -s SwingClips`, "frames: camera ... encoder ..."). Each poll reports `droppedPct` (the
-  last 10 s), `batteryTempC` and `thermal` (Android's heat level, 0 none, 1 light, 2 moderate...). Off
-  the charger, out of the case and out of the sun or a lamp's heat helps; a clip-on phone cooler
-  more.
+- **Lost frames** (0.13): at 240 fps the camera delivers frames in bursts, and the S23 Ultra's camera
+  sometimes misses the start of the next burst: 4 frames in a row never taken (its own frame
+  timestamps jump; the frame numbers don't, and nothing is lost on the way to the encoder). From ~1% to
+  over 25% of frames depending on the run (Oct 19, on the desk; 145 clips from 5 long sessions: a median
+  5-7% from the first swings), the S21 down the line none. A system trace (`adb shell atrace camera
+  gfx hal sched freq`) shows why: the camera service gathers each batch's buffers in under 2 ms (it never
+  waits on the preview or the encoder), but Samsung's camera software holds the next batch 30-48 ms
+  instead of 16.7 (`process_capture_request` waiting for its image processor), and the frames that
+  pass meanwhile have no request. It isn't the phone's heat (Android's heat level stays 0; runs at a
+  50-67 C chip lost less than one at 47 C), and nothing an app can set changed it: 720p, 120 fps (8-10%
+  lost), a fixed shutter, noise reduction / sharpening / stabilization off, Qualcomm's session settings
+  (MCTF and MFNR off, dynamicFPSConfig 240, the 240 fps range as a session parameter), no capture
+  results, busy threads. A preview-less session was worse. The app counts it (`FrameGaps.kt`): each clip
+  reports `frames` and `dropped`, every 10 s it logs where any went (`adb logcat -s SwingClips`, "frames:
+  camera ... encoder ..."; the S23 also floods the app's log with "frame number is a repeat", which
+  prunes those lines, so stream it), and each poll reports `droppedPct` (the last 10 s), `batteryTempC`
+  and `thermal` (Android's heat level). While recording the screen dims after 20 s without a touch (it
+  faces away from the golfer; a touch brings it back) and the display runs at 60 Hz, for less heat and
+  battery.
 - Test hook: `adb shell am start -n dev.swingclips.capture/.MainActivity --ei bitrateMbps 80` records
   at another bitrate until the app is closed.
 - Opens **not recording**; settings are locked while recording. Clips wait in an outbox and upload
@@ -201,8 +204,8 @@ review page starts them and one of them does the talking.
   each (it remembers open or closed):
   - **each phone**: connected, recording, mode, shutter setting and what the camera really used,
     battery (amber under 20% when not charging), clips waiting to upload (amber from 3), free
-    storage, how warm it is (from 38 C) and the frames it's losing (from 1%; amber "running hot" at
-    Android's moderate heat level or 5% lost, `status.HOT_THERMAL` / `DROPPED_WARN_PCT`), which phone speaks, and its **Start** / **Stop** with how the last command went
+    storage, how warm it is (from 38 C) and the frames it's losing (from 1%; amber from 5% lost,
+    `status.DROPPED_WARN_PCT`, or "running hot" at Android's moderate heat level, `HOT_THERMAL`), which phone speaks, and its **Start** / **Stop** with how the last command went
     ("Starting...", "Started", "Couldn't start: the camera isn't running yet", "no answer from the
     phone"). A phone seen in the last 12 hours is expected: Ready needs it recording.
   - **Square**: the laptop's heartbeat (the watcher), whether Square's app is running, the last shot.
@@ -243,8 +246,8 @@ review page starts them and one of them does the talking.
   "no clip", "the Square watcher isn't running"). After that only problems, once each until they
   clear: no Square shot on 2 swings in a row, a missing clip on 2 in a row, the same camera problem
   on 3 in a row, a phone that stops answering while recording, 3+ clips waiting on a phone, a
-  battery under 10%, a phone running hot and losing frames ("take it off the charger or out of its
-  case, out of the sun").
+  battery under 10%, a phone losing 5% or more of its frames, a phone running hot ("take it off the
+  charger or out of its case").
 - **No swing found**: said when key positions couldn't be found in a clip (phases.js). Why is on
   the swing page ("No swing found in this clip: ...") and in the **events log**
   (`D:\SwingClips\events.jsonl`, one JSON object per line), with the server window printing

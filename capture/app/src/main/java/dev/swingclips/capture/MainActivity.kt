@@ -398,9 +398,9 @@ class MainActivity : Activity() {
         runCatching { getSystemService(PowerManager::class.java).currentThermalStatus }.getOrNull() else null
 
     // ---- Keeping the phone cool ----
-    // A hot phone drops frames (see ReplayRecorder), and the screen is a big part of the heat. It faces
-    // away from the golfer while recording, so it dims after DIM_AFTER_MS without a touch (a touch
-    // brings it back), and it never needs more than 60 Hz: the preview is 30 frames a second.
+    // Less heat and battery: the screen faces away from the golfer while recording, so it dims after
+    // DIM_AFTER_MS without a touch (a touch brings it back), and it never needs more than 60 Hz: the
+    // preview is 30 frames a second. (The S23 Ultra's lost frames turned out not to follow its heat.)
 
     /** The display's 60 Hz mode at its current size, if it has one (else the phone's own choice). */
     private fun preferLowRefreshRate() {
@@ -453,7 +453,7 @@ class MainActivity : Activity() {
             "charging" to battery?.isCharging,
             "freeMb" to filesDir.usableSpace / 1_000_000,
             // Frames lost lately (%), how warm the battery is (degrees C), and Android's heat level
-            // (0 none, 1 light, 2 moderate: by then the S23 Ultra loses a quarter of its frames).
+            // (0 none, 1 light, 2 moderate...; the S23 Ultra's losses don't follow it).
             "droppedPct" to recorder?.recentDropped?.let { Math.round(it * 1000) / 10.0 },
             "batteryTempC" to batteryTempC(),
             "thermal" to thermal(),

@@ -65,9 +65,10 @@ LOW_BATTERY = 20
 LOW_BATTERY_SAY = 10
 # Clips waiting on a phone: amber (and spoken during a session) from this many.
 PENDING_WARN = 3
-# A phone running hot loses frames: the S23 Ultra's camera skips ~1% of them when cool and over a
-# quarter at Android's "moderate" heat level (Oct 2026). Amber (and spoken once during a session) from
-# this heat level (PowerManager.THERMAL_STATUS_MODERATE) or this share of its frames lost lately (%).
+# A phone losing frames: the S23 Ultra's camera drops 4 at a time between bursts, from ~1% to over a
+# quarter of them depending on the run (its own camera software falls behind; Android's heat level stays
+# 0, Oct 2026), the S21 none. Amber (and spoken once during a session) from this share of its frames lost
+# lately (%), or at this heat level (PowerManager.THERMAL_STATUS_MODERATE).
 HOT_THERMAL = 2
 DROPPED_WARN_PCT = 5.0
 # The battery's temperature is shown from this warm (degrees C).
@@ -173,9 +174,14 @@ def relay_name(hb: dict | None) -> str:
     return "the shot listener" if hb and hb.get("source") == LISTENER else "the Square watcher"
 
 
+def losing_frames(hb: dict) -> bool:
+    """A phone losing enough frames that its clips suffer (DROPPED_WARN_PCT)."""
+    return (hb.get("droppedPct") or 0) >= DROPPED_WARN_PCT
+
+
 def running_hot(hb: dict) -> bool:
-    """A phone hot enough (or losing enough frames) that its clips suffer (HOT_THERMAL, DROPPED_WARN_PCT)."""
-    return (hb.get("thermal") or 0) >= HOT_THERMAL or (hb.get("droppedPct") or 0) >= DROPPED_WARN_PCT
+    """Android says the phone is hot (HOT_THERMAL)."""
+    return (hb.get("thermal") or 0) >= HOT_THERMAL
 
 
 def clean(body: dict, fields: dict) -> dict:
@@ -1039,9 +1045,10 @@ class Status:
                 found[f"pending:{a}"] = f"{name} phone: {hb['pending']} clips waiting to upload."
             if hb.get("battery") is not None and hb["battery"] < LOW_BATTERY_SAY and not hb.get("charging"):
                 found[f"battery:{a}"] = f"{name} phone battery at {hb['battery']} percent."
+            if hb.get("recording") and losing_frames(hb):
+                found[f"frames:{a}"] = f"{name} phone is losing {round(hb['droppedPct'])} percent of its frames."
             if hb.get("recording") and running_hot(hb):
-                found[f"hot:{a}"] = (f"{name} phone is running hot and losing frames. Take it off the charger "
-                                     f"or out of its case, out of the sun.")
+                found[f"hot:{a}"] = f"{name} phone is running hot. Take it off the charger or out of its case."
         out = [text for key, text in found.items() if key not in self.phone_problems]
         self.phone_problems = set(found)
         return out
@@ -1159,10 +1166,12 @@ class Status:
             bits.append(f"{p['batteryTempC']:g} °C")
         if (p.get("droppedPct") or 0) >= 1:
             bits.append(f"losing {p['droppedPct']:g}% of frames")
+        if losing_frames(p):
+            level = "warn" if level == "ok" else level
+            problems.append(f"losing {p['droppedPct']:g}% of frames")
         if running_hot(p):
             level = "warn" if level == "ok" else level
-            problems.append("running hot: losing frames" if (p.get("droppedPct") or 0) >= DROPPED_WARN_PCT
-                            else "running hot")
+            problems.append("running hot")
         if p.get("freeMb") is not None and p["freeMb"] < 1000:
             bits.append(f"{p['freeMb']} MB free")
             level = "warn" if level == "ok" else level
