@@ -1521,6 +1521,39 @@
   .lp-tipl { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
   #stages.labeling video { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: -2px; }
   /* round 69 */
+  #coach-swing-box { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  #coach-swing-box[hidden] { display: none; }
+  #coach-swing-box .subtle-btn {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    align-self: flex-start;
+    transition: all 0.15s ease;
+  }
+  #coach-swing-box .subtle-btn:hover {
+    color: var(--text);
+    border-color: var(--muted);
+    background: var(--panel-2);
+  }
+  #coach-swing-box .subtle-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  #coach-swing-answer {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  #coach-swing-status {
+    font-size: 13px;
+    color: var(--muted);
+    font-style: italic;
+  }
   .cs-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
   .cs-row { display: flex; flex-direction: column; padding: 10px 14px; background: var(--panel); border-radius: 8px; cursor: pointer; transition: background 0.15s; }
   .cs-row:hover { background: var(--panel-2); }
@@ -1635,6 +1668,18 @@
     <div id="labelpanel" hidden></div>
     <!-- The swing in plain words (shotstory.js): what the ball did, why, what to try. -->
     <div id="coachcard" class="card" hidden></div>
+    <div id="coach-swing-box" class="card" hidden>
+      <div id="coach-swing-btn-wrap">
+        <button type="button" id="coach-swing-ask-btn" class="subtle-btn">Ask the coach about this swing</button>
+      </div>
+      <div id="coach-swing-status" class="muted" hidden></div>
+      <div id="coach-swing-answer-box" hidden>
+        <div id="coach-swing-answer"></div>
+        <div style="margin-top: 8px;">
+          <button type="button" id="coach-swing-again-btn" class="subtle-btn">Ask again</button>
+        </div>
+      </div>
+    </div>
     <div id="shotdata" hidden title="From the launch monitor, via the shot listener"></div>
     <!-- Everything marked adv-only shows only with Advanced data on (remembered per browser). -->
     <div id="advbar"><button id="adv-btn" class="small" aria-expanded="false" title="All of Square's numbers, the scorecard and the swing numbers">Advanced data ▸</button></div>
@@ -4267,7 +4312,7 @@ function formatFocusBodyValue(key, v) {
 function renderCoachCard() {
   const box = document.getElementById("coachcard");
   const c = current && clips.find(x => x.name === current);
-  if (!c || typeof SwingShotStory === "undefined") { box.hidden = true; return; }
+  if (!c || typeof SwingShotStory === "undefined") { box.hidden = true; if (typeof renderCoachSwingAI === "function") renderCoachSwingAI(null); return; }
   const club = c.shot ? c.shot.club : null, group = SwingGoodShots.groupOf(club);
   const shot = c.shot ? SwingSummary.shotNumbers(c.shot) : null;
   // The club's usual carry and smash, once the trend data is in (openGoodRanges loads it).
@@ -4443,6 +4488,135 @@ function renderCoachCard() {
   }
   if (focusLine) kids.push(focusLine);
   box.replaceChildren(...kids);
+  if (typeof renderCoachSwingAI === "function") renderCoachSwingAI(c);
+}
+
+let coachStatusCache = null;
+async function fetchCoachStatus() {
+  if (!coachStatusCache) {
+    try {
+      const res = await fetch("/api/coach/status");
+      if (res.ok) coachStatusCache = await res.json();
+    } catch {}
+  }
+  return coachStatusCache;
+}
+
+async function renderCoachSwingAI(c) {
+  const box = document.getElementById("coach-swing-box");
+  const askBtn = document.getElementById("coach-swing-ask-btn");
+  const statusEl = document.getElementById("coach-swing-status");
+  const ansBox = document.getElementById("coach-swing-answer-box");
+  const ansEl = document.getElementById("coach-swing-answer");
+  const againBtn = document.getElementById("coach-swing-again-btn");
+  if (!box) return;
+  if (!c) {
+    box.hidden = true;
+    return;
+  }
+
+  const st = await fetchCoachStatus();
+  if (!st || !st.ready) {
+    box.hidden = true;
+    return;
+  }
+
+  box.hidden = false;
+  statusEl.hidden = true;
+  askBtn.disabled = false;
+  againBtn.disabled = false;
+
+  const clipName = c.name;
+  try {
+    const kept = await fetch(`/api/coach/notes?session=${encodeURIComponent(clipName)}&kind=swing`)
+      .then(r => r.ok ? r.json() : null);
+    if (kept && kept.text && current === clipName) {
+      if (typeof SwingAICoach !== "undefined" && SwingAICoach.renderTake) {
+        SwingAICoach.renderTake(ansEl, kept.text);
+      } else {
+        ansEl.textContent = kept.text;
+      }
+      ansBox.hidden = false;
+      askBtn.hidden = true;
+    } else if (current === clipName) {
+      ansBox.hidden = true;
+      askBtn.hidden = false;
+    }
+  } catch (e) {
+    ansBox.hidden = true;
+    askBtn.hidden = false;
+  }
+
+  const handleAsk = async (isAgain) => {
+    askBtn.disabled = true;
+    againBtn.disabled = true;
+    statusEl.textContent = "Asking the coach…";
+    statusEl.hidden = false;
+
+    try {
+      const club = c.shot ? c.shot.club : c.club;
+      const shot = c.shot && typeof SwingSummary !== "undefined" && SwingSummary.shotNumbers
+        ? SwingSummary.shotNumbers(c.shot) : (c.shot || null);
+      const group = typeof SwingGoodShots !== "undefined" ? SwingGoodShots.groupOf(club) : null;
+      const loaded = typeof trendDataLoaded !== "undefined" && trendDataLoaded;
+      const cd = club && loaded && typeof goodShotData === "function" ? goodShotData().clubs[club] : null;
+      const settings = typeof goodSettings !== "undefined" && goodSettings ? goodSettings.settings : null;
+      const judged = cd && cd.baseline && shot && typeof SwingGoodShots !== "undefined"
+        ? SwingGoodShots.judgeShot(shot, cd.baseline, group, settings) : null;
+      const card = typeof SwingShotStory !== "undefined" && SwingShotStory.card
+        ? SwingShotStory.card({ shot, judged, baseline: cd ? cd.baseline : null, group, settings, ...(typeof coachBody !== "undefined" ? coachBody : {}) })
+        : null;
+      const rec = (typeof swingRecords !== "undefined" && swingRecords)
+        ? (swingRecords[c.name] || (c.partner && swingRecords[c.partner])) : null;
+      const body = rec ? rec.body : (typeof coachBody !== "undefined" && coachBody ? coachBody.body : {});
+      const trust = rec ? rec.trust : (typeof coachBody !== "undefined" && coachBody ? coachBody.trust : {});
+      const ranges = (cd && cd.ranges) || (typeof coachBody !== "undefined" && coachBody ? coachBody.ranges : {});
+      const faults = (typeof coachBody !== "undefined" && coachBody && coachBody.faults)
+        || (typeof SwingFaults !== "undefined" ? SwingFaults.faultsOf({ body, trust }, (r, k) => trust[k] && trust[k].level === "shaky") : []);
+      const focus = typeof journal !== "undefined" ? journal.focus : null;
+      let focusScope = null;
+      if (focus && focus.move && club && typeof SwingGoodShots !== "undefined") {
+        const grp = SwingGoodShots.groupOf(club);
+        focusScope = focus.scope ? (grp === focus.scope) : (!focus.club || focus.club === club);
+      }
+
+      const briefText = typeof SwingAICoach !== "undefined" && SwingAICoach.swingBrief
+        ? SwingAICoach.swingBrief({ club, shot, card, body, trust, ranges, faults, focus, focusScope })
+        : "";
+
+      const res = await fetch("/api/coach/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "swing", session: clipName, brief: briefText, again: !!isAgain })
+      }).then(r => r.ok ? r.json() : null);
+
+      if (res && res.text && current === clipName) {
+        statusEl.hidden = true;
+        if (typeof SwingAICoach !== "undefined" && SwingAICoach.renderTake) {
+          SwingAICoach.renderTake(ansEl, res.text);
+        } else {
+          ansEl.textContent = res.text;
+        }
+        ansBox.hidden = false;
+        askBtn.hidden = true;
+      } else if (res && res.error) {
+        statusEl.textContent = res.error;
+        statusEl.hidden = false;
+      } else {
+        statusEl.textContent = "The coach couldn't answer this one.";
+        statusEl.hidden = false;
+      }
+    } catch (err) {
+      statusEl.textContent = "Couldn't reach the server.";
+      statusEl.hidden = false;
+    } finally {
+      askBtn.disabled = false;
+      againBtn.disabled = false;
+    }
+  };
+
+  askBtn.onclick = () => handleAsk(false);
+  againBtn.onclick = () => handleAsk(true);
 }
 
 // Advanced data: Square's other numbers, the scorecard, key positions, the swing numbers and 3D.

@@ -299,3 +299,118 @@ describe("SwingAICoach.brief with focusGoal", () => {
     assert.doesNotMatch(brief, /camera moved/);
   });
 });
+
+describe("SwingAICoach.swingBrief", () => {
+  it("formats a complete single swing brief", () => {
+    const input = {
+      club: "I7",
+      shot: {
+        carry: 154,
+        offline: 2,
+        ballSpeed: 111.5,
+        clubSpeed: 81.2,
+        smash: 1.37,
+        path: 1.5,
+        faceToPath: -0.8,
+        attack: -3.6,
+        strikeV: 1.2,
+      },
+      card: {
+        verdict: { level: "good", text: "Good shot" },
+        what: "Straight, carry 154 yd.",
+        why: "Tempo and hip turn matched your best.",
+        tip: { thought: "Feel the hands drop", drill: "Pump drill" },
+      },
+      body: {
+        tempo: 3.2,
+        shoulderTop: 92.4,
+        hipSway: 3.2,
+        spineTiltImpact: 21.0,
+      },
+      trust: {
+        tempo: { level: "clean" },
+        shoulderTop: { level: "clean" },
+        hipSway: { level: "shaky" },
+        spineTiltImpact: { level: "clean" },
+        headRise: { level: "none" },
+      },
+      ranges: {
+        tempo: { min: 2.8, max: 3.4 },
+        shoulderTop: { min: 88, max: 96 },
+        spineTiltImpact: { min: 18, max: 24 },
+      },
+      faults: [
+        {
+          name: "Early extension",
+          thought: "Keep hips on the wall",
+          drill: "Chair drill",
+        },
+      ],
+      focus: {
+        move: "tempo",
+        aim: "less",
+        scope: "irons",
+        target: 3.0,
+        thought: "Smooth transition",
+        drill: "Pause at top",
+      },
+      focusScope: true,
+    };
+
+    const brief = AICoach.swingBrief(input);
+
+    assert.match(brief, /# Swing/);
+    assert.match(brief, /Club: 7 iron/);
+    assert.match(brief, /# Shot Numbers/);
+    assert.match(brief, /Carry: 154(\.0)? yd/);
+    assert.match(brief, /Club path: \+?1\.5°/);
+    assert.match(brief, /Face to path: -0\.8°/);
+    assert.match(brief, /Attack angle: -3\.6°/);
+    assert.match(brief, /Strike height \(face-centred\): \+1\.2 mm \(face-centred\)/);
+
+    assert.match(brief, /# Coaching Card/);
+    assert.match(brief, /Verdict: Good shot/);
+    assert.match(brief, /What happened: Straight, carry 154 yd\./);
+    assert.match(brief, /Why: Tempo and hip turn matched your best\./);
+    assert.match(brief, /Try this: “Feel the hands drop” \(Drill: Pump drill\)/);
+
+    assert.match(brief, /# Body Movements/);
+    assert.match(brief, /Tempo: 3\.2:1 \[in good range 2\.8:1 to 3\.4:1\]/);
+    assert.match(brief, /Shoulder turn at top of swing: 92\.4° \[in good range 88\.0° to 96\.0°\]/);
+    assert.match(brief, /Hip slide at impact: 3\.2 in \(shaky\)/);
+    // Missing / none trust left out
+    assert.doesNotMatch(brief, /Head height at impact/);
+
+    assert.match(brief, /# Named Faults/);
+    assert.match(brief, /Early extension \(Thought: “Keep hips on the wall”\) \(Drill: Chair drill\)/);
+
+    assert.match(brief, /# Current Focus/);
+    assert.match(brief, /Focus move: Tempo, aiming for less/);
+    assert.match(brief, /Focus swing thought: “Smooth transition”/);
+    assert.match(brief, /Focus drill: Pause at top/);
+    assert.match(brief, /Focus target: 3\.0:1/);
+
+    // No clip names or time of day
+    assert.doesNotMatch(brief, /\.mp4/);
+    assert.doesNotMatch(brief, /\d{1,2}:\d{2}/);
+  });
+
+  it("omits focus when swing is out of scope", () => {
+    const input = {
+      club: "DR",
+      focus: {
+        move: "tempo",
+        aim: "less",
+        scope: "irons",
+      },
+      focusScope: false,
+    };
+    const brief = AICoach.swingBrief(input);
+    assert.doesNotMatch(brief, /# Current Focus/);
+  });
+
+  it("handles empty or null input safely", () => {
+    assert.strictEqual(AICoach.swingBrief(null), "");
+    assert.strictEqual(AICoach.swingBrief({}), "# Swing");
+  });
+});

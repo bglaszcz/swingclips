@@ -32,6 +32,7 @@ PROMPT_FILES = {
     "session": Path(__file__).parent / "aicoach_prompt.md",
     "week": Path(__file__).parent / "aicoach_week_prompt.md",
     "question": Path(__file__).parent / "aicoach_question_prompt.md",
+    "swing": Path(__file__).parent / "aicoach_swing_prompt.md",
 }
 PROMPT_FILE = PROMPT_FILES["session"]
 MAX_TOKENS = 2000
@@ -379,7 +380,7 @@ def ask(
     http: Callable = _http,
 ) -> dict[str, Any]:
     """The coach's take on a session, a week review, or an answer to a question."""
-    if kind not in ("session", "week", "question"):
+    if kind not in ("session", "week", "question", "swing"):
         return {"error": f"Unknown kind: {kind}"}
     session_str = str(session).strip() if session is not None else ""
     if kind == "question":

@@ -332,6 +332,31 @@ class KindsAndPromptsTest(Base):
         self.assertFalse(res3["kept"])
         self.assertEqual(res3["text"], "Week review 2")
 
+    def test_swing_prompt_and_content(self):
+        client = FakeClient(FakeResponse([FakeBlock("What happened: 7 iron push fade.\nWhy: Open clubface at impact.\nOne thing to try: Feel lead wrist flat.")]))
+        res = self.ask(session="swing_face_1920x1080_240fps_1789000000_2000ms.mp4", brief="Swing brief for 7 iron.", kind="swing", client=client)
+        self.assertEqual(res["text"], "What happened: 7 iron push fade.\nWhy: Open clubface at impact.\nOne thing to try: Feel lead wrist flat.")
+        self.assertEqual(res["kind"], "swing")
+        call = client.messages.last_call
+        self.assertIn("What happened", call["system"])
+        self.assertIn("Why", call["system"])
+        self.assertIn("One thing to try", call["system"])
+        self.assertEqual(call["messages"], [{"role": "user", "content": "Swing brief for 7 iron."}])
+
+    def test_swing_reused_unless_again(self):
+        client1 = FakeClient(FakeResponse([FakeBlock("Swing review 1")]))
+        res1 = self.ask(session="swing_1.mp4", brief="Brief 1", kind="swing", client=client1)
+        self.assertFalse(res1["kept"])
+        never = FakeClient(exception=RuntimeError("must not call"))
+        res2 = self.ask(session="swing_1.mp4", brief="Brief 1", kind="swing", client=never)
+        self.assertTrue(res2["kept"])
+        self.assertEqual(res2["text"], "Swing review 1")
+        self.assertEqual(never.messages.call_count, 0)
+        client2 = FakeClient(FakeResponse([FakeBlock("Swing review 2")]))
+        res3 = self.ask(session="swing_1.mp4", brief="Brief 2", kind="swing", again=True, client=client2)
+        self.assertFalse(res3["kept"])
+        self.assertEqual(res3["text"], "Swing review 2")
+
     def test_question_never_reused(self):
         client = FakeClient(FakeResponse([FakeBlock("Answer A")]))
         res1 = aicoach.ask(

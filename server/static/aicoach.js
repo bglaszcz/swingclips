@@ -633,11 +633,183 @@
     return el;
   }
 
+  /**
+   * Builds the brief for a single swing:
+   * 1. Club
+   * 2. Square's numbers for the shot (worded as brief() does)
+   * 3. Coaching card: verdict + 3 lines (What happened, Why, Try this / Still there)
+   * 4. Body numbers with their trust (clean shown, shaky marked, no reading left out)
+   * 5. This swing's numbers against the club's good-shot ranges
+   * 6. Named faults from SwingFaults.faultsOf
+   * 7. The focus if the swing is in its scope
+   * No clip names, no times of day.
+   */
+  function swingBrief(input) {
+    if (!input) return "";
+    const lines = [];
+
+    // Club
+    const club = input.club || (input.shot && input.shot.club) || (input.c && input.c.shot && input.c.shot.club) || "";
+    const clubName = plainClubName(club);
+    lines.push("# Swing");
+    if (clubName) lines.push(`Club: ${clubName}`);
+
+    // Shot numbers (Square)
+    const rawShot = input.shot || (input.c && input.c.shot) || null;
+    let shotNums = null;
+    if (rawShot) {
+      if (typeof rawShot.carry === "number" || typeof rawShot.path === "number" || typeof rawShot.ballSpeed === "number") {
+        shotNums = rawShot;
+      } else if (root.SwingSummary && root.SwingSummary.shotNumbers) {
+        shotNums = root.SwingSummary.shotNumbers(rawShot);
+      }
+    }
+    if (shotNums) {
+      const shotParts = [];
+      const SHOT_KEYS = ["carry", "offline", "ballSpeed", "clubSpeed", "smash", "path", "face", "faceToPath", "attack", "loft", "launch", "spin", "strikeV", "strikeH"];
+      for (const k of SHOT_KEYS) {
+        const val = shotNums[k];
+        if (val != null && Number.isFinite(val)) {
+          const label = METRIC_LABELS[k] || k;
+          shotParts.push(`${label}: ${formatMetricValue(k, val).trim()}`);
+        }
+      }
+      if (shotParts.length > 0) {
+        lines.push("");
+        lines.push("# Shot Numbers");
+        for (const p of shotParts) lines.push(`  - ${p}`);
+      }
+    }
+
+    // Coaching card: verdict and the three lines
+    let card = input.card;
+    if (!card && root.SwingShotStory && root.SwingShotStory.card && input.shot) {
+      try {
+        card = root.SwingShotStory.card(input);
+      } catch (e) {
+        card = null;
+      }
+    }
+    if (card) {
+      lines.push("");
+      lines.push("# Coaching Card");
+      if (card.verdict) {
+        const vText = card.verdict.text || card.verdict.level || "";
+        lines.push(`Verdict: ${vText}`);
+      }
+      if (card.what) lines.push(`What happened: ${card.what}`);
+      if (card.why) lines.push(`Why: ${card.why}`);
+      if (card.tip) {
+        const thought = card.tip.thought ? `“${card.tip.thought.replace(/\.$/, "")}”` : "";
+        const drill = card.tip.drill ? ` (Drill: ${card.tip.drill})` : "";
+        lines.push(`Try this: ${thought}${drill}`.trim());
+      }
+      if (card.still) {
+        const thought = card.still.thought ? ` “${card.still.thought.replace(/\.$/, "")}”` : "";
+        const drill = card.still.drill ? ` (Drill: ${card.still.drill})` : "";
+        lines.push(`Still there: ${card.still.name}${thought}${drill}`.trim());
+      }
+    }
+
+    // Body numbers with trust and good-shot ranges
+    const body = input.body || (input.rec && input.rec.body) || {};
+    const trust = input.trust || (input.rec && input.rec.trust) || {};
+    const ranges = input.ranges || {};
+
+    const bodyLines = [];
+    const BODY_KEYS = Object.keys(METRIC_LABELS).filter(k => !["carry", "offline", "ballSpeed", "clubSpeed", "smash", "path", "face", "faceToPath", "attack", "loft", "launch", "direction", "spinAxis", "spin", "strikeH", "strikeV"].includes(k));
+
+    for (const k of BODY_KEYS) {
+      const val = body[k];
+      if (val == null || !Number.isFinite(val)) continue;
+      const t = trust[k];
+      const level = t ? t.level : (input.shaky && input.shaky[k] ? "shaky" : "clean");
+      if (level === "none") continue; // no reading left out
+
+      const isShaky = level === "shaky";
+      const lbl = METRIC_LABELS[k] || k;
+      const fmtVal = formatMetricValue(k, val).trim();
+      const statusNote = isShaky ? " (shaky)" : "";
+
+      // Range check
+      const r = ranges[k];
+      let rangeNote = "";
+      if (r && Number.isFinite(r.min) && Number.isFinite(r.max)) {
+        const rMin = formatMetricValue(k, r.min).trim();
+        const rMax = formatMetricValue(k, r.max).trim();
+        if (val < r.min) rangeNote = ` [below good range ${rMin} to ${rMax}]`;
+        else if (val > r.max) rangeNote = ` [above good range ${rMin} to ${rMax}]`;
+        else rangeNote = ` [in good range ${rMin} to ${rMax}]`;
+      }
+
+      bodyLines.push(`  - ${lbl}: ${fmtVal}${statusNote}${rangeNote}`);
+    }
+
+    if (bodyLines.length > 0) {
+      lines.push("");
+      lines.push("# Body Movements");
+      lines.push(...bodyLines);
+    }
+
+    // Named faults
+    let faults = input.faults;
+    if (!faults && root.SwingFaults && root.SwingFaults.faultsOf) {
+      try {
+        const isShakyFn = (rowObj, k) => {
+          const t = trust[k];
+          return t && t.level === "shaky";
+        };
+        faults = root.SwingFaults.faultsOf({ body, trust }, isShakyFn);
+      } catch (e) {
+        faults = null;
+      }
+    }
+    if (faults && faults.length > 0) {
+      lines.push("");
+      lines.push("# Named Faults");
+      for (const f of faults) {
+        const fName = f.name || f.key;
+        const th = f.thought ? ` (Thought: “${f.thought.replace(/\.$/, "")}”)` : "";
+        const dr = f.drill ? ` (Drill: ${f.drill})` : "";
+        lines.push(`  - ${fName}${th}${dr}`);
+      }
+    }
+
+    // Current focus if in scope
+    const focus = input.focus;
+    if (focus && focus.move) {
+      let inScope = input.focusScope != null ? input.focusScope : true;
+      if (input.focusScope == null && club) {
+        const GoodShots = root.SwingGoodShots || (typeof require !== "undefined" && (function() { try { return require("./goodshots.js"); } catch(e){ return null; } })());
+        const grp = GoodShots && GoodShots.groupOf ? GoodShots.groupOf(club) : null;
+        inScope = focus.scope ? (grp === focus.scope) : (!focus.club || focus.club === club);
+      }
+      if (inScope) {
+        lines.push("");
+        lines.push("# Current Focus");
+        const moveLabel = METRIC_LABELS[focus.move] || focus.move;
+        const aimStr = focus.aim ? `, aiming for ${focus.aim}` : "";
+        lines.push(`Focus move: ${moveLabel}${aimStr}`);
+        if (focus.thought) lines.push(`Focus swing thought: “${focus.thought.replace(/\.$/, "")}”`);
+        if (focus.drill) lines.push(`Focus drill: ${focus.drill}`);
+        if (focus.target != null && Number.isFinite(focus.target)) {
+          lines.push(`Focus target: ${formatMetricValue(focus.move, focus.target).trim()}`);
+        }
+      }
+    }
+
+    let result = lines.join("\n").trim();
+    result = result.replace(/swing_[a-zA-Z0-9_]+(?:\.mp4)?/g, "swing");
+    result = result.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, "");
+    return result;
+  }
+
   const api = {
     takeParts,
     renderTake,
     focusProgress,
     brief,
+    swingBrief,
     questionBrief,
     formatMetricValue,
     plainClubName,
