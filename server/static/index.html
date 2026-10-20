@@ -1521,6 +1521,17 @@
   .lp-tipl { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
   #stages.labeling video { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: -2px; }
   /* round 69 */
+  .opt-card { margin-top: 16px; padding: 14px 16px; background: var(--panel); border-radius: 8px; border: 1px solid var(--line); }
+  .opt-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+  .opt-title { font-size: 15px; font-weight: 700; margin: 0; color: var(--text); }
+  .opt-summary { font-size: 14px; line-height: 1.5; color: var(--text); margin-bottom: 12px; font-weight: 500; }
+  .opt-grid-box { overflow-x: auto; margin: 10px 0; }
+  .opt-grid-svg { display: block; max-width: 100%; height: auto; }
+  .opt-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; }
+  .opt-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+  .opt-dot-user { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--text, #fff); }
+  .opt-circle-usual { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--text, #fff); }
+  .opt-ring-best { display: inline-block; width: 10px; height: 10px; border-radius: 2px; border: 2px solid var(--warn, #f59e0b); }
   .cp-tour-switch {
     display: inline-flex;
     align-items: center;
@@ -2569,6 +2580,7 @@
         other views. Carry is the median with its middle half; score is the average of the four good-shot pass
         rates (as on Progress); strokes per shot is against a tour player (0 = tour level). Clubs with fewer than 5
         shots show their count only.</div>
+      <div id="a-optimize"></div>
     </details>
     <details class="t-card p-fold" id="p-gapping" data-fold="gapping">
       <summary><strong>Gapping</strong> <span id="p-gapping-status" class="note"></span></summary>
@@ -2690,6 +2702,7 @@
 <script src="/static/checkpoints.js"></script>
 <script src="/static/draw.js"></script>
 <script src="/static/tracer.js"></script>
+<script src="/static/optimize.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };

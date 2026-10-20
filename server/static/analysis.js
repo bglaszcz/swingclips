@@ -952,6 +952,21 @@ function renderBag() {
   thead.append(head);
   tbody.append(...body);
   document.getElementById("a-bag").replaceChildren(thead, tbody);
+
+  // Optimizer card for driver and fairway woods
+  const optBox = document.getElementById("a-optimize");
+  if (optBox) {
+    const pickedClub = aCtx.club || (typeof progressPick !== "undefined" ? progressPick.club : null);
+    if (typeof SwingOptimize !== "undefined" && pickedClub && SwingOptimize.isWoodOrDriver(pickedClub)) {
+      const clubRows = (by[pickedClub] || []).filter(r => r.carry > 0);
+      SwingOptimize.render(optBox, clubRows, pickedClub, {
+        tracer: typeof SwingTracer !== "undefined" ? SwingTracer : null,
+      });
+    } else {
+      optBox.replaceChildren();
+      optBox.hidden = true;
+    }
+  }
 }
 
 // ---- Swing checkpoints (checkpoints.js) ----
