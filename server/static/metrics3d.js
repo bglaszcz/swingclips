@@ -458,10 +458,10 @@
     const out = {};
     if (!result) return out;
     for (const p of positions || []) {
-      if (!["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"].includes(p.key)) continue;
+      if (!["p1", "p4", "p6", "p7"].includes(p.key)) continue;
       const i = nearest(doc.frames, p.t);
-      const within = ["p1", "p2", "p3", "p4"].includes(p.key) ? POSITION_FILL_SECONDS : POSITION_FAST_SECONDS;
-      if (Math.abs(doc.frames[i].t - p.t) <= Math.max(within, 0.01)) {
+      const within = p.key === "p1" || p.key === "p4" ? POSITION_FILL_SECONDS : POSITION_FAST_SECONDS;
+      if (Math.abs(doc.frames[i].t - p.t) < Math.max(within, 0.01)) {
         const v = Object.assign({}, result.values[i]);
         for (const k of ["pelvisTurn", "thoraxTurn", "separation", "pelvisSideBend", "thoraxSideBend", "thoraxBend", "pelvisSway", "thoraxSway", "pelvisThrust", "pelvisLift", "pelvisBall", "thoraxBall"]) {
           if (v[k] == null) {
@@ -493,22 +493,6 @@
     ["pelvisBallImpact", "p7", "pelvisBall"], ["thoraxBallImpact", "p7", "thoraxBall"],
     // Open at impact, + = open (the turn's sign flipped): good players' hips are ~30-45 open.
     ["pelvisOpenImpact", "p7", "pelvisTurn", -1], ["thoraxOpenImpact", "p7", "thoraxTurn", -1],
-    // Early backswing (P2, round 69)
-    ["pelvisBallP2", "p2", "pelvisBall"], ["thoraxBallP2", "p2", "thoraxBall"],
-    ["pelvisSwayP2", "p2", "pelvisSway"], ["thoraxSwayP2", "p2", "thoraxSway"],
-    ["pelvisThrustP2", "p2", "pelvisThrust"], ["pelvisLiftP2", "p2", "pelvisLift"],
-    ["thoraxSideBendP2", "p2", "thoraxSideBend"], ["thoraxBendP2", "p2", "thoraxBend"],
-    ["thoraxTurnP2", "p2", "thoraxTurn"], ["xFactorP2", "p2", "separation"],
-    // Early downswing (P5, round 69)
-    ["pelvisBallP5", "p5", "pelvisBall"], ["thoraxBallP5", "p5", "thoraxBall"],
-    ["pelvisSwayP5", "p5", "pelvisSway"], ["thoraxSwayP5", "p5", "thoraxSway"],
-    ["pelvisThrustP5", "p5", "pelvisThrust"], ["pelvisLiftP5", "p5", "pelvisLift"],
-    ["thoraxSideBendP5", "p5", "thoraxSideBend"], ["pelvisTurnP5", "p5", "pelvisTurn"],
-    // Follow-through (P8, round 69)
-    ["thoraxBallP8", "p8", "thoraxBall"], ["thoraxSwayP8", "p8", "thoraxSway"],
-    ["pelvisThrustP8", "p8", "pelvisThrust"], ["pelvisLiftP8", "p8", "pelvisLift"],
-    ["pelvisSideBendP8", "p8", "pelvisSideBend"], ["pelvisTurnP8", "p8", "pelvisTurn"],
-    ["thoraxTurnP8", "p8", "thoraxTurn"], ["xFactorP8", "p8", "separation"],
   ];
 
   /**
