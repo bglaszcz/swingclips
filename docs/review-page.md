@@ -310,7 +310,10 @@ What the server works out for each swing and what each part of the review page s
   **Real time** lines them up at impact only, both at real speed, so tempo differences show.
   Play, scrub, frame steps (← →) and positions (keys 1-8) move both. **Ghost** (G) draws the
   reference's skeleton, dashed, over this swing's video, lined up at address by the feet and hips
-  and scaled by body height. **Key positions** under the videos: both swings' scorecard tiles, a
+  and scaled by body height. **Overlay** (O, Oct 20 2026; V1's and Sportsbox's video overlay) lays the
+  reference's video itself over this one, 45% see-through, moved and scaled the same way, so the two golfers
+  stand on the same spot (remembered with the ghost; none where either swing's feet, hips or head weren't
+  found at address). **Key positions** under the videos: both swings' scorecard tiles, a
   column per position (this swing over the reference), each coloured against your good shots with this
   swing's club as on the swing page. Tapping a column (or keys 1-8) puts both swings there and
   shows that position's numbers for both, each on a bar against the middle 50% of your good shots

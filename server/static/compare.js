@@ -157,7 +157,7 @@
   let aName = null;         // the swing on the left ("this swing"), by its listed clip
   let cmp = null;           // the loaded comparison: {A, B, rows, anch, ghostT, master}
   let picking = false;
-  let mode = "keys", ghost = false, skel = true, cSpeed = 1;
+  let mode = "keys", ghost = false, overlay = false, skel = true, cSpeed = 1;
   let cardKey = null;       // the key position whose numbers show under the lined-up cards
   let trendTried = false;   // the picker has asked for the trends' data (good shots, the focus): once, so a failing server isn't asked in a loop
   const pick = { club: null, sort: "carry", period: "90", good: false };
@@ -165,12 +165,13 @@
     const saved = JSON.parse(localStorage.getItem("compare") || "{}");
     if (saved.mode === "impact") mode = "impact";
     ghost = !!saved.ghost;
+    overlay = !!saved.overlay;
     if (saved.sort) pick.sort = saved.sort;
     if (saved.period) pick.period = saved.period;
     pick.good = !!saved.good;
   } catch {}
   const remember = () => {
-    try { localStorage.setItem("compare", JSON.stringify({ mode, ghost, sort: pick.sort, period: pick.period, good: pick.good })); } catch {}
+    try { localStorage.setItem("compare", JSON.stringify({ mode, ghost, overlay, sort: pick.sort, period: pick.period, good: pick.good })); } catch {}
   };
 
   function el(tag, props = {}, ...children) {
@@ -467,6 +468,28 @@
     ctx.restore();
   }
 
+  // How see-through the reference's video is over this one.
+  const OVERLAY_ALPHA = 0.45;
+
+  /**
+   * The reference swing's video laid over this one, see-through (V1's and Sportsbox's video overlay):
+   * its picture moved and scaled the way the ghost is (feet and hips at address, body height), so the
+   * two golfers stand on the same spot. The reference video already plays in step beside it.
+   */
+  function drawOverlay(ctx, r, g) {
+    const T = cmp.ghostT[g], va = cmp.A.vids[g], vb = cmp.B.vids[g];
+    if (!T || !va.videoWidth || !vb.videoWidth || vb.readyState < 2) return;
+    const x0 = T.a.x - T.s * T.b.x, y0 = T.a.y - T.s * T.b.y;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.clip();
+    ctx.globalAlpha = OVERLAY_ALPHA;
+    ctx.drawImage(vb, r.x + x0 / va.videoWidth * r.w, r.y + y0 / va.videoHeight * r.h,
+                  T.s * vb.videoWidth / va.videoWidth * r.w, T.s * vb.videoHeight / va.videoHeight * r.h);
+    ctx.restore();
+  }
+
   /** One video's overlay at its own time t: skeleton, the ghost (this swing only), and its labels. */
   function drawStage(which, g, t) {
     if (!cmp) return;
@@ -484,9 +507,12 @@
     if (which === "A" && g === cmp.rows[0]) {
       box.querySelectorAll(".c-card").forEach(b => b.classList.toggle("here", !!key && b.dataset.key === key));
     }
+    if (which === "A" && overlay) drawOverlay(ctx, r, g);
     if (skel && f.lm) drawPose(ctx, f, r, false, p);
     // The reference at the moment this frame starts, as the others are lined up.
     if (which === "A" && ghost) drawGhost(ctx, r, g, f.t - S.offset[g]);
+    // Paused, this swing's picture only changes when the reference's frame does: draw it again.
+    if (which === "B" && overlay && cmp.A.vids[g] && cmp.A.vids[g].paused) drawStage("A", g, cmp.A.vids[g].currentTime);
   }
 
   function redrawAll() {
@@ -638,6 +664,8 @@
       chip("Skeleton", skel, () => { skel = !skel; renderControls(); redrawAll(); }, "Both swings' skeletons (S)"),
       chip("Ghost", ghost, () => { ghost = !ghost; remember(); renderControls(); redrawAll(); },
            "The reference swing's skeleton over this one, lined up at address by the feet and hips, scaled by height (G)"),
+      chip("Overlay", overlay, () => { overlay = !overlay; remember(); renderControls(); redrawAll(); },
+           "The reference swing's video over this one, see-through, lined up like the ghost (O)"),
       el("span", { className: "sep" }),
       ...SwingCompare.KEYS.map((k, n) => {
         const b = chip(POSITION_TAGS[k], false, () => jumpToPosition(k), `${k.toUpperCase()} (${n + 1})`);
@@ -646,8 +674,8 @@
       }));
     renderPlayButton();
     const note = box.querySelector("#c-sync-note");
-    const ghostNote = ghost && cmp.rows.some(g => !cmp.ghostT[g])
-      ? " No ghost where either swing's feet, hips or head couldn't be found at address." : "";
+    const ghostNote = (ghost || overlay) && cmp.rows.some(g => !cmp.ghostT[g])
+      ? ` No ${ghost && overlay ? "ghost or overlay" : ghost ? "ghost" : "overlay"} where either swing's feet, hips or head couldn't be found at address.` : "";
     if (note) {
       note.textContent = (mode === "keys"
         ? keysOk ? `Lined up at ${cmp.anch.length} key positions both swings have; the reference plays faster or slower between them.`
@@ -1090,6 +1118,7 @@
     else if (k === "ArrowLeft" || k === "ArrowRight") { handled(); stepFrames(k === "ArrowLeft" ? -1 : 1); }
     else if (k === "t") setMode(mode === "keys" ? "impact" : "keys");
     else if (k === "g") { ghost = !ghost; remember(); renderControls(); redrawAll(); }
+    else if (k === "o") { overlay = !overlay; remember(); renderControls(); redrawAll(); }
     else if (k === "s") { skel = !skel; renderControls(); redrawAll(); }
     else if (/^[1-8]$/.test(k)) jumpToPosition("p" + k);
   }, true);
