@@ -6,7 +6,9 @@
   const Coach = root.SwingCoach || (typeof require !== "undefined" && require("./coach.js"));
 
   // Arms-led downswing (from 3D): pelvis reaches peak speed after impact (bodyLate) and hips are under
-  // PELVIS_OPEN_IMPACT_MAX open at impact (the owner's first session was 0-9 deg open vs good players' 30-45 deg).
+  // PELVIS_OPEN_IMPACT_MAX (20 deg) open at impact. Round 73 check (Oct 21 2026, 268 swings): hips read median 22.8 deg
+  // open overall, but session medians shift (18.3 to 32.1 deg) with camera placement more than the swing does, naming
+  // 0% to 74% of swings by session, with no link to Square launch metrics (|r| <= 0.08).
   const PELVIS_OPEN_IMPACT_MAX = 20;
 
   // Thresholds: named on roughly the owner's worst quarter of swings or fewer (on his 178 swings to
@@ -49,10 +51,11 @@
     // Head lift: head height rises at impact vs address (in) > 1.0
     { key: "headRise", name: "head lift", move: "headRise", dir: "more", fix: "less", threshold: 1.0, test: v => v > 1.0 },
     // Arms-led downswing: from 3D (pelvis reaches peak speed after impact, hips under 20 deg open at impact).
-    // A standing pattern, not a per-swing fault (`standing`): on the owner's 79 judged 3D swings (Oct 2-7)
-    // it named 76; the 3D under-reads hip turn (top 32 deg against 42 face-on, X-factor 71), his hips read
-    // -9 to +9 open at impact, and good shots were as common at either end (7/26 vs 7/27). So the swing
-    // view, session lists and Progress leave it out; Today's plan and Week for coach ask for it.
+    // A standing pattern, not a per-swing fault (`standing`): named when pelvisOpenImpact < 20 and bodyLate is true.
+    // Round 73 check (Oct 21 2026, 268 swings after the Oct 19 far-side fix): hips read median 22.8 deg open overall,
+    // but day/session medians shift with calibration (18.3 deg on Oct 6-9, 32.1 deg on Oct 2), naming 0% to 74% of
+    // swings by session. Pelvis peak timing also shifts (-58 ms on Oct 2 to +100 ms on Oct 20). Neither correlates
+    // with Square launch metrics (|r| <= 0.08, all FDR p > 0.20). Today's plan and Week for coach ask for it.
     {
       key: "armsLed",
       standing: true,
