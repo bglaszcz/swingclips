@@ -481,7 +481,6 @@
       clip,
       shot: shot || clip.shot,
       card,
-      date: clip.recorded,
       club: (shot && shot.club) || (clip.shot && clip.shot.club) || clip.club,
       verdict: card && card.verdict
     });
@@ -537,7 +536,7 @@
       return { x: (W - vw * k) / 2, y: (H - vh * k) / 2, w: vw * k, h: vh * k };
     });
 
-    const loopStart = performance.now();
+    let recordedMs = 0;
     let cancelled = false;
 
     try {
@@ -548,6 +547,9 @@
         }
 
         const t = plan.times[k];
+        // Paused while seeking and drawing, so a slow seek doesn't stretch the video: each frame is
+        // recorded for exactly one frame's time.
+        if (recorder.state === "recording") recorder.pause();
         await awaitVideoSeek(video, t);
         if (hasPartner && toPartnerTime) {
           const t2 = toPartnerTime(t);
@@ -582,14 +584,13 @@
         // Panel
         drawPanel(offCtx, lay.panel, lines);
 
-        // Pace frames evenly
+        // Record this frame for one frame's time (timers run late: the running total evens it out).
+        if (recorder.state === "paused") recorder.resume();
+        const resumed = performance.now();
         const track = stream.getVideoTracks && stream.getVideoTracks()[0];
         if (track && track.requestFrame) track.requestFrame();
-
-        const targetElapsed = (k + 1) * (1000 / plan.fps);
-        const actualElapsed = performance.now() - loopStart;
-        const delay = Math.max(8, targetElapsed - actualElapsed);
-        await new Promise((r) => setTimeout(r, delay));
+        await new Promise((r) => setTimeout(r, Math.max(1, (k + 1) * (1000 / plan.fps) - recordedMs)));
+        recordedMs += performance.now() - resumed;
 
         onProgress({
           current: k + 1,
