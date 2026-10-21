@@ -1013,9 +1013,20 @@ function renderDispersion() {
   const model = SwingClubSpread.analyze(rows);
   document.getElementById("a-dp-status").textContent = model.status;
   const h = aHidden(), box = document.getElementById("a-dispersion");
+  const trendBox = document.getElementById("a-spread-trend");
+  function renderTrend() {
+    if (typeof SwingSpreadTrend !== "undefined" && trendBox) {
+      const allClubs = SwingClubSpread.bagOrder([...new Set(rows.map(r => r.club))]);
+      const clubSessions = {};
+      for (const c of allClubs) clubSessions[c] = progressSessions(c).filter(s => s.start >= since);
+      const trendModel = SwingSpreadTrend.analyze(clubSessions, { colors: opts.colors, nameOf: clubName });
+      SwingSpreadTrend.render(trendBox, trendModel, opts);
+    }
+  }
   const opts = { colors: aClubColors(), nameOf: clubName, hidden: h.set, dayOf, onOpen: openFromAnalysis,
-                 redraw: () => { h.save(); SwingClubSpread.renderSpread(box, model, opts); } };
+                 redraw: () => { h.save(); SwingClubSpread.renderSpread(box, model, opts); renderTrend(); } };
   SwingClubSpread.renderSpread(box, model, opts);
+  renderTrend();
 }
 
 document.getElementById("a-fl-session").onchange = e => { aPick.flSession = e.target.value; aSave(); renderClubFlights(); };

@@ -404,6 +404,24 @@
   .cs-view-h { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-top: 10px; }
   .cs-table-wrap { overflow-x: auto; margin-top: 12px; }
   .cs-table td:first-child { white-space: nowrap; }
+  /* round 71 */
+  .st-svg, .a-chart svg.st-svg { height: auto; display: block; max-width: 100%; }
+  .st-head { margin: 16px 0 6px; }
+  .st-head strong { font-size: 14px; }
+  .st-head .note { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .st-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .st-card { background: var(--panel, #1e222a); border: 1px solid var(--line, #333); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .st-card-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .st-card-name { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .st-sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+  .st-count { font-size: 11px; color: var(--muted); }
+  .st-verdict { font-size: 12px; font-weight: 500; }
+  .st-v-tight { color: #10b981; }
+  .st-v-wide { color: #f59e0b; }
+  .st-v-same { color: var(--text); }
+  .st-v-na { color: var(--muted); font-weight: normal; }
+  .st-card-note { font-size: 11px; color: var(--muted); margin-top: 2px; }
   .fg-chart, .fg-sess-chart { max-width: 640px; }
   /* Analysis: spread (distro.js) */
   .ds-sentence { font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
@@ -2633,6 +2651,7 @@
     <details class="t-card p-fold" data-fold="dispersion">
       <summary><strong>Every club's spread</strong> <span id="a-dp-status" class="note"></span></summary>
       <div id="a-dispersion"></div>
+      <div id="a-spread-trend"></div>
       <div class="note">Where each club's shots land in the period. A club's ring holds about two of its shots in
         three (shots far off its usual pattern are drawn faded and left out of the ring). The table's middle 80%
         leaves out each club's best and worst tenth both ways; width against carry says which club spreads most for
@@ -2760,6 +2779,7 @@
 <script src="/static/tracer.js"></script>
 <script src="/static/optimize.js"></script>
 <script src="/static/clubspread.js"></script>
+<script src="/static/spreadtrend.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
