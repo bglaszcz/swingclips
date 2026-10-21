@@ -1001,6 +1001,26 @@ toward the ball". The phones face away from you, so voice is the channel.
   with the reps switched on), **Make this my focus** on the rest (Progress's focus picker on that move):
   reps are measured against a focus's target, so a drill is done by working on its move. The menu's
   button shows once `drilllib.js` has loaded (it must load before `drills-view.js`).
+- **Yardage card** (Tools > Yardage card, `#yardage`; `static/yardage.js` builds and draws it, `static/yardage-view.js`
+  opens it and hands it the page's data; `/#yardage` links to it): the numbers a golfer takes to the sim to pick a club,
+  in bag order, over a period chosen by the user (30 days, 90 days [default], last year, or all). `SwingYardage.build(rows, opts)`
+  computes:
+  - **Stock carry**: the median carry distance across usable shots.
+  - **Carry window**: the middle 80% (10th to 90th percentile) of carry distance (needs at least 5 shots).
+  - **Left / right**: the middle 80% of offline dispersion.
+  - **Centre**: median offline distance (e.g. `4 yd left` or `on the line`).
+  - **Aim**: where to aim so the pattern's centre aligns with the target ("aim 6 yd right" or "aim 5 yd left"). Only
+    suggested when the centre is more than 3 yd off line AND a 90% bootstrap confidence interval of the median offline
+    leaves out zero (confirming the bias is not random chance); otherwise "at the target".
+  - **Usual shape**: the most frequent ball flight among the nine flights classified by `flightgrid.js` (start line and curvature)
+    and its share percentage, shown when a club has 10+ shots (e.g. "Draw (62%)").
+  - **Apex & landing angle**: median peak height in feet and descent landing angle in degrees reported by Square Golf; left
+    blank when Square gave none.
+  - **Overlap**: flagged under the table in one sentence per neighbouring club pair in bag order whose carry windows overlap
+    by more than half of the shorter window (e.g. "Your 5 iron and 6 iron land in the same window: 131-190 and 123-180 yd"),
+    describing rather than prescribing.
+  - **Print button & print styling**: black on white, navigation and tools hidden, formatted to fit neatly on one page.
+  The Tools menu button appears once `yardage.js` has loaded.
 - **Drill mode** (`drills.py`, `/api/drill`): when the focus drill is the pump drill, the plan's focus
   block turns it on (and a coach program's drill blocks turn theirs on). Drill sets (`drillsets.js`) are the
   pump drill's only. While it's on the phones (capture app 0.10) keep 6 s before the strike
