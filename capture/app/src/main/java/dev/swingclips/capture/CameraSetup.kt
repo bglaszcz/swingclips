@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -93,11 +95,34 @@ class CameraSetup(
     fun release() {
         stop()
         tts.shutdown()
+        tones?.release()
         thread.quitSafely()
     }
 
     /** Whether the text-to-speech engine started (say() is silent until then). */
     val canSpeak get() = speechReady
+
+    private val tones = runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, 100) }.getOrNull()
+
+    /**
+     * A rep's verdict as a tone (in: two quick beeps; near: one; out: a low buzz), then [words] if any. The tone
+     * counts as speaking, so the strike listener ignores it (a beep must not start a recording).
+     */
+    fun cue(tone: String, words: String?) {
+        val (kind, ms) = when (tone) {
+            "in" -> ToneGenerator.TONE_PROP_ACK to 260
+            "near" -> ToneGenerator.TONE_PROP_BEEP to 180
+            else -> ToneGenerator.TONE_SUP_ERROR to 450
+        }
+        val g = tones
+        if (g == null) { if (words != null) say(words); return }
+        if (pending.getAndIncrement() == 0) onSpeaking?.invoke(true)
+        g.startTone(kind, ms)
+        main.postDelayed({
+            if (words != null) say(words)
+            if (pending.updateAndGet { maxOf(0, it - 1) } == 0) onSpeaking?.invoke(false)
+        }, ms + TONE_GAP_MS)
+    }
 
     /** Say something outside the setup checks (e.g. what shutter the camera is really using). */
     fun say(text: String) {
@@ -208,6 +233,7 @@ class CameraSetup(
 
     companion object {
         private const val INTERVAL_MS = 1000L
+        private const val TONE_GAP_MS = 120L   // after a tone, before the words
         private const val STILL_SIZE = 960
         private const val QUALITY = 80
         private const val FULL_QUALITY = 90

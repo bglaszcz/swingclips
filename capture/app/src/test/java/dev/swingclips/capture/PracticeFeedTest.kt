@@ -70,4 +70,11 @@ class PracticeFeedTest {
         assertEquals(true, PracticeFeed.speaksByDefault("face"))
         assertEquals(false, PracticeFeed.speaksByDefault("dtl"))
     }
+
+    @Test fun resultsKeepTheirTone() {
+        val feed = PracticeFeed()
+        feed.take(100, emptyList())
+        val got = feed.takeResults(102, listOf(PracticeResult(101, "Pass.", 1.0, "in"), PracticeResult(102, "Setup", 1.0)))
+        assertEquals(listOf("in", null), got.map { it.tone })
+    }
 }

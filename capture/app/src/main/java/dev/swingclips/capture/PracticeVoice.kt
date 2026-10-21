@@ -15,7 +15,7 @@ class PracticeVoice(
     private val serverUrl: () -> String,
     private val angle: () -> String,
     private val enabled: () -> Boolean,
-    private val say: (String) -> Unit,
+    private val say: (String, String?) -> Unit,   // the sentence, and its tone (null: not a verdict)
     private val onStatus: (String) -> Unit,
 ) {
     // Bumped by each start and stop: a thread from an earlier start sees it and ends.
@@ -74,12 +74,13 @@ class PracticeVoice(
                 val list = body.optJSONArray("results")
                 val results = (0 until (list?.length() ?: 0)).map { i ->
                     val r = list!!.getJSONObject(i)
-                    PracticeResult(r.getLong("id"), r.optString("text"), r.optDouble("age", 0.0))
+                    PracticeResult(r.getLong("id"), r.optString("text"), r.optDouble("age", 0.0),
+                        if (r.has("tone")) r.optString("tone") else null)
                 }
-                for (text in feed.take(body.getLong("last"), results)) {
+                for (r in feed.takeResults(body.getLong("last"), results)) {
                     if (!live()) return
-                    Log.i(ReplayRecorder.TAG, "practice: $text")
-                    say(text)
+                    Log.i(ReplayRecorder.TAG, "practice: ${r.text}" + (r.tone?.let { " [$it]" } ?: ""))
+                    say(r.text, r.tone)
                 }
                 failures = 0
                 if (live()) status(if (body.optBoolean("on")) "Practice on: speaking each swing"

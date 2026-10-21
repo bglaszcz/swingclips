@@ -1,7 +1,7 @@
 package dev.swingclips.capture
 
 /** One spoken result from the server (GET /api/practice/latest): its id, the sentence, and its age (s). */
-data class PracticeResult(val id: Long, val text: String, val ageS: Double)
+data class PracticeResult(val id: Long, val text: String, val ageS: Double, val tone: String? = null)
 
 /**
  * What to say from each answer of the practice endpoint, each result once. Plain Kotlin (no Android)
@@ -27,18 +27,21 @@ class PracticeFeed(private val maxAgeS: Double = MAX_AGE_S) {
      * say, oldest first. Results too old to be useful (after a Wi-Fi drop: the golfer has hit
      * again by then) are skipped, and none is said twice.
      */
-    fun take(last: Long, results: List<PracticeResult>): List<String> {
+    fun take(last: Long, results: List<PracticeResult>): List<String> = takeResults(last, results).map { it.text }
+
+    /** As [take], with each result whole (its tone too). */
+    fun takeResults(last: Long, results: List<PracticeResult>): List<PracticeResult> {
         val from = since
         if (from == null || (results.isEmpty() && last < from)) {
             // First contact, or the server's ids went back (its log was cleared): start from now.
             since = last
             return emptyList()
         }
-        val out = mutableListOf<String>()
+        val out = mutableListOf<PracticeResult>()
         for (r in results.sortedBy { it.id }) {
             if (r.id <= from || r.id in said) continue
             remember(r.id)
-            if (r.ageS <= maxAgeS && r.text.isNotBlank()) out.add(r.text)
+            if (r.ageS <= maxAgeS && r.text.isNotBlank()) out.add(r)
         }
         since = maxOf(from, results.maxOfOrNull { it.id } ?: from)
         return out

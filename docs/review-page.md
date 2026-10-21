@@ -865,8 +865,11 @@ toward the ball". The phones face away from you, so voice is the channel.
 - **Tones** (round 69, the server's half; the sensor apps' beep): every spoken verdict carries `tone`: `"in"`,
   `"near"` (outside by no more than a quarter of the target's width; for a one-sided gate, a quarter of its value)
   or `"out"`, in the phone poll's `say` items (`status.py take`) and the practice feed's `results`
-  (`/api/practice/latest`, practice mode, games and programs); none on anything that isn't a verdict. Phones on
-  0.13 ignore it; the phone side (words, tone, or both) comes with the next capture app.
+  (`/api/practice/latest`, practice mode, games and programs); none on anything that isn't a verdict. Capture app
+  0.14 plays it (Settings > Rep feedback: tone + words, the default; tone; or words): in = two quick beeps
+  (ToneGenerator PROP_ACK), near = one beep, out = a low buzz (SUP_ERROR), then the words if set. The tone counts
+  as the phone speaking, so the strike listener ignores it. A sentence with no tone (setup, a block's start,
+  warnings) is always said. Phones on 0.13 ignore `tone` and keep saying the words.
 - **Coach program** (`programs.py`, `programs.json`, `/api/program*`, Start page "Coach program"): a coach's drill
   ladder as data: blocks in order, each with its drill (drill mode, so rehearsals stay out of the trends;
   a block without one, like the transfer block, counts as normal swings), ball or no ball, reps, and a gate

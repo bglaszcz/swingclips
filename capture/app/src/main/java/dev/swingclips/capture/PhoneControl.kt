@@ -4,7 +4,8 @@ package dev.swingclips.capture
 data class PhoneCommand(val id: Long, val action: String)
 
 /** Something the server wants this phone to say: the combined camera setup, or a session check. */
-data class PhoneSay(val id: Long, val text: String, val flush: Boolean)
+/** A sentence from the server; [tone] ("in", "near", "out") when it's a verdict on a swing (server round 69). */
+data class PhoneSay(val id: Long, val text: String, val flush: Boolean, val tone: String? = null)
 
 /** This phone's answer to a command, sent with its next poll. */
 data class CommandAck(val id: Long, val ok: Boolean, val error: String?)
@@ -84,6 +85,38 @@ object PhoneControl {
      */
     fun speaksOwnSetup(setting: String, serverCombines: Boolean) =
         setting == VOICE_OWN || (setting == VOICE_COMBINED && !serverCombines)
+
+    // ---- Rep feedback: words, a tone, or both (0.14) ----
+
+    const val FEEDBACK_WORDS = "words"
+    const val FEEDBACK_TONE = "tone"
+    const val FEEDBACK_BOTH = "both"
+
+    /** The saved setting, or the default: the tone, then the words. */
+    fun repFeedback(saved: String?) = if (saved == FEEDBACK_WORDS || saved == FEEDBACK_TONE) saved else FEEDBACK_BOTH
+
+    /** The next setting when its button is pressed: tone and words, tone only, words only. */
+    fun nextRepFeedback(setting: String) = when (setting) {
+        FEEDBACK_BOTH -> FEEDBACK_TONE
+        FEEDBACK_TONE -> FEEDBACK_WORDS
+        else -> FEEDBACK_BOTH
+    }
+
+    /** A tone the server sent that this app knows, else null. */
+    fun knownTone(tone: String?) = tone?.takeIf { it == "in" || it == "near" || it == "out" }
+
+    /**
+     * What to play for one sentence: (the tone or null, the words or null). A sentence with no tone (not a
+     * verdict: setup, warnings, a block's start) is always said; a verdict follows the setting.
+     */
+    fun feedback(text: String, tone: String?, setting: String): Pair<String?, String?> {
+        val t = knownTone(tone) ?: return Pair(null, text.ifBlank { null })
+        return when (setting) {
+            FEEDBACK_TONE -> Pair(t, null)
+            FEEDBACK_WORDS -> Pair(null, text.ifBlank { null })
+            else -> Pair(t, text.ifBlank { null })
+        }
+    }
 
     // ---- Talking to the server ----
 

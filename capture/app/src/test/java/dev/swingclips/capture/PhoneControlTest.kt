@@ -91,3 +91,24 @@ class PhoneControlTest {
         assertEquals("http://h:8000/api/phones/face/poll?wait=0", PhoneControl.url("http://h:8000", "face", 0))
     }
 }
+
+class RepFeedbackTest {
+    @org.junit.Test
+    fun defaultIsToneThenWordsAndTheButtonCycles() {
+        org.junit.Assert.assertEquals(PhoneControl.FEEDBACK_BOTH, PhoneControl.repFeedback(null))
+        org.junit.Assert.assertEquals(PhoneControl.FEEDBACK_BOTH, PhoneControl.repFeedback("junk"))
+        org.junit.Assert.assertEquals(PhoneControl.FEEDBACK_TONE, PhoneControl.nextRepFeedback(PhoneControl.FEEDBACK_BOTH))
+        org.junit.Assert.assertEquals(PhoneControl.FEEDBACK_WORDS, PhoneControl.nextRepFeedback(PhoneControl.FEEDBACK_TONE))
+        org.junit.Assert.assertEquals(PhoneControl.FEEDBACK_BOTH, PhoneControl.nextRepFeedback(PhoneControl.FEEDBACK_WORDS))
+    }
+
+    @org.junit.Test
+    fun verdictsFollowTheSettingOtherSentencesAreAlwaysSaid() {
+        org.junit.Assert.assertEquals(Pair("in", "Pass."), PhoneControl.feedback("Pass.", "in", PhoneControl.FEEDBACK_BOTH))
+        org.junit.Assert.assertEquals(Pair("out", null), PhoneControl.feedback("Miss: steeper.", "out", PhoneControl.FEEDBACK_TONE))
+        org.junit.Assert.assertEquals(Pair(null, "Tempo 3.1, in range"), PhoneControl.feedback("Tempo 3.1, in range", "near", PhoneControl.FEEDBACK_WORDS))
+        // No tone (not a verdict), or one this app doesn't know: the words, whatever the setting.
+        org.junit.Assert.assertEquals(Pair(null, "Block 2: flush line"), PhoneControl.feedback("Block 2: flush line", null, PhoneControl.FEEDBACK_TONE))
+        org.junit.Assert.assertEquals(Pair(null, "Pass."), PhoneControl.feedback("Pass.", "chime", PhoneControl.FEEDBACK_TONE))
+    }
+}

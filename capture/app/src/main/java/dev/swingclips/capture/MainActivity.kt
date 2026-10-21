@@ -65,6 +65,7 @@ class MainActivity : Activity() {
     private lateinit var practiceVoice: PracticeVoice
     private lateinit var phoneLink: PhoneLink
     private lateinit var setupVoiceButton: Button
+    private lateinit var feedbackButton: Button
     private lateinit var autoStartButton: Button
     /** Settings live in a sheet over the camera, so the main screen is only what a session needs. */
     private lateinit var settingsSheet: FrameLayout
@@ -146,12 +147,12 @@ class MainActivity : Activity() {
         phoneLink = PhoneLink(::serverUrl, ::angle,
             state = { onMain(1000) { linkState() } ?: linkState() },
             onCommand = { cmd -> onMain(3000) { doCommand(cmd) } ?: CommandAck(cmd.id, false, "the phone didn't answer in time") },
-            say = { s -> main.post { if (s.flush) cameraSetup.sayNow(s.text) else cameraSetup.say(s.text) } },
+            say = { s -> main.post { if (s.flush) cameraSetup.sayNow(s.text) else speakVerdict(s.text, s.tone) } },
             quiet = { s -> otherTalksUntil = System.nanoTime() + (s * 1e9).toLong() },
             pre = { s -> preS = s.coerceIn(PRE_S, PRE_MAX_S) },   // the next poll reports it
             sensitivity = { v -> main.post { setSensitivity(v) } },  // set on the Start page
         )
-        practiceVoice = PracticeVoice(::serverUrl, ::angle, ::practiceVoiceOn, { cameraSetup.say(it) }) { text ->
+        practiceVoice = PracticeVoice(::serverUrl, ::angle, ::practiceVoiceOn, { text, tone -> main.post { speakVerdict(text, tone) } }) { text ->
             main.post { practiceView.text = text }
         }
     }
@@ -701,6 +702,28 @@ class MainActivity : Activity() {
         phoneLink.poke()
     }
 
+    /** Rep feedback (0.14): how a swing's verdict is told: a tone, the words, or the tone then the words. */
+    private fun repFeedback() = PhoneControl.repFeedback(prefs.getString("rep_feedback", null))
+
+    private fun toggleRepFeedback() {
+        prefs.edit().putString("rep_feedback", PhoneControl.nextRepFeedback(repFeedback())).apply()
+        updateFeedbackButton()
+    }
+
+    private fun updateFeedbackButton() {
+        feedbackButton.text = when (repFeedback()) {
+            PhoneControl.FEEDBACK_TONE -> "Tone"
+            PhoneControl.FEEDBACK_WORDS -> "Words"
+            else -> "Tone + words"
+        }
+    }
+
+    /** A sentence from the server: a verdict (it has a tone) as the Rep feedback setting says, anything else said. */
+    private fun speakVerdict(text: String, tone: String?) {
+        val (t, words) = PhoneControl.feedback(text, tone, repFeedback())
+        if (t != null) cameraSetup.cue(t, words) else if (words != null) cameraSetup.say(words)
+    }
+
     private fun updateSetupVoiceButton() {
         setupVoiceButton.text = when (setupVoice()) {
             PhoneControl.VOICE_OWN -> "This phone"
@@ -963,6 +986,7 @@ class MainActivity : Activity() {
         // Not recording settings, so they stay usable while recording.
         practiceButton = button("") { togglePracticeVoice() }
         setupVoiceButton = button("") { toggleSetupVoice() }
+        feedbackButton = button("") { toggleRepFeedback() }
         autoStartButton = button("") { toggleAutoStart() }
         val voiceCheckButton = button("Test") { voiceCheck() }
         exposureView = TextView(this).apply { textSize = 12f; setTextColor(MUTED) }
@@ -1022,6 +1046,7 @@ class MainActivity : Activity() {
         setting("Address", null, serverButton)
         section("Voice")
         setting("Practice voice", "Says your practice number after each swing", practiceButton)
+        setting("Rep feedback", "How each swing's verdict is told: in range two beeps, close one beep, out a low buzz", feedbackButton)
         setting("Setup voice", "Say the camera check out loud (off: the Start page shows the cameras)", setupVoiceButton)
         setting("Auto-start", "Start recording once the camera check is good", autoStartButton)
         setting("Speaker", "Says a sample result at the media volume", voiceCheckButton)
@@ -1044,6 +1069,7 @@ class MainActivity : Activity() {
         setSensitivity(sensitivity())
         updateAngleButton()
         updatePracticeButton()
+        updateFeedbackButton()
         updateSetupVoiceButton()
         updateAutoStartButton()
         updateChips()

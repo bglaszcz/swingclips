@@ -121,7 +121,8 @@ class PhoneLink(
                 val says = reply.optJSONArray("say")
                 for (i in 0 until (says?.length() ?: 0)) {
                     val s = says!!.getJSONObject(i)
-                    if (live()) say(PhoneSay(s.getLong("id"), s.optString("text"), s.optBoolean("flush")))
+                    if (live()) say(PhoneSay(s.getLong("id"), s.optString("text"), s.optBoolean("flush"),
+                        if (s.has("tone")) s.optString("tone") else null))
                 }
                 val cmds = reply.optJSONArray("commands")
                 for (i in 0 until (cmds?.length() ?: 0)) {
