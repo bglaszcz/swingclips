@@ -25,6 +25,7 @@ const TYPES = {
   ".png": "image/png",
   ".ico": "image/x-icon",
   ".mp4": "video/mp4",
+  ".webm": "video/webm",
 };
 
 // Route mapping for standard /api/ paths to tools/demo/data/<name>.json
