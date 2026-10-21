@@ -458,10 +458,10 @@
     const out = {};
     if (!result) return out;
     for (const p of positions || []) {
-      if (!["p1", "p4", "p6", "p7"].includes(p.key)) continue;
+      if (!["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"].includes(p.key)) continue;
       const i = nearest(doc.frames, p.t);
-      const within = p.key === "p1" || p.key === "p4" ? POSITION_FILL_SECONDS : POSITION_FAST_SECONDS;
-      if (Math.abs(doc.frames[i].t - p.t) < Math.max(within, 0.01)) {
+      const within = ["p1", "p2", "p3", "p4"].includes(p.key) ? POSITION_FILL_SECONDS : POSITION_FAST_SECONDS;
+      if (Math.abs(doc.frames[i].t - p.t) <= Math.max(within, 0.01)) {
         const v = Object.assign({}, result.values[i]);
         for (const k of ["pelvisTurn", "thoraxTurn", "separation", "pelvisSideBend", "thoraxSideBend", "thoraxBend", "pelvisSway", "thoraxSway", "pelvisThrust", "pelvisLift", "pelvisBall", "thoraxBall"]) {
           if (v[k] == null) {
@@ -493,6 +493,24 @@
     ["pelvisBallImpact", "p7", "pelvisBall"], ["thoraxBallImpact", "p7", "thoraxBall"],
     // Open at impact, + = open (the turn's sign flipped): good players' hips are ~30-45 open.
     ["pelvisOpenImpact", "p7", "pelvisTurn", -1], ["thoraxOpenImpact", "p7", "thoraxTurn", -1],
+    // Early backswing (P2, round 70)
+    ["pelvisSwayP2", "p2", "pelvisSway"], ["thoraxSwayP2", "p2", "thoraxSway"],
+    ["pelvisThrustP2", "p2", "pelvisThrust"], ["pelvisLiftP2", "p2", "pelvisLift"],
+    ["thoraxSideBendP2", "p2", "thoraxSideBend"], ["thoraxBendP2", "p2", "thoraxBend"],
+    ["xFactorP2", "p2", "separation"],
+    // Backswing (P3, round 70)
+    ["pelvisSwayP3", "p3", "pelvisSway"], ["thoraxSwayP3", "p3", "thoraxSway"],
+    ["pelvisThrustP3", "p3", "pelvisThrust"], ["pelvisLiftP3", "p3", "pelvisLift"],
+    ["thoraxBendP3", "p3", "thoraxBend"], ["xFactorP3", "p3", "separation"],
+    // Early downswing (P5, round 70)
+    ["pelvisSwayP5", "p5", "pelvisSway"], ["thoraxSwayP5", "p5", "thoraxSway"],
+    ["pelvisLiftP5", "p5", "pelvisLift"], ["pelvisSideBendP5", "p5", "pelvisSideBend"],
+    ["thoraxSideBendP5", "p5", "thoraxSideBend"], ["thoraxBendP5", "p5", "thoraxBend"],
+    ["xFactorP5", "p5", "separation"],
+    // Follow-through (P8, round 70)
+    ["pelvisSwayP8", "p8", "pelvisSway"], ["thoraxSwayP8", "p8", "thoraxSway"],
+    ["pelvisThrustP8", "p8", "pelvisThrust"], ["pelvisLiftP8", "p8", "pelvisLift"],
+    ["pelvisSideBendP8", "p8", "pelvisSideBend"], ["xFactorP8", "p8", "separation"],
   ];
 
   /**
