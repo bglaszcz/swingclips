@@ -164,29 +164,42 @@ was waiting, not working. Since Oct 21 2026:
 On the dev PC (Ryzen 5800X3D, 8 workers, quick pass), one real swing uploaded (Oct 20 2026, 3
 wood): the numbers were ready 48 s after the upload before (analysis started at 16 s), 27 s after
 (started at 0.1 s), and the same 27 s for a swing uploaded while the last one's quality was being
-measured. What's left is the analysis itself: the face-on clip (~14 s there), then the
-down-the-line one (~11 s); a swing's numbers wait for both. So a body number is ready ~25-30 s
-after the strike, around practice.py's `SAY_WITHIN_STRIKE_S` (25 s): later than that it's shown,
-not said.
+measured. (These test servers ran with D:\SwingClips-dev as the working folder and were asked for the
+clip list 8 times a second, which put ~2.8 s and ~3-4 s on each clip: see "Timing it yourself" below.
+Before and after were run the same way, so the difference holds; the times themselves are high.)
+What's left is the analysis itself: the face-on clip, then the down-the-line one; a swing's numbers
+wait for both. So a body number is ready ~25 s after the strike, around practice.py's
+`SAY_WITHIN_STRIKE_S` (25 s): later than that it's shown, not said.
 
 **Pump drill reps.** The phones keep 6 s before the strike while it's on, so a rep is two ~1,970
 frame clips, twice a usual swing: on the dev PC 40 s a rep of analysis (39 reps; face-on ~20 s,
-down the line ~21 s), 50 s in the running server. A rep's hands to plane needs both clips (the
-swing worker waits for both), and reps came ~45 s apart (Oct 20 2026), so the server fell behind
-during a set. Two things since Oct 21 2026:
+down the line ~21 s; the running server takes the same when it runs from its own folder). A rep's
+hands to plane needs both clips (the swing worker waits for both), and reps came ~45 s apart (Oct 20
+2026), so the server fell behind during a set (with 15 s more a clip before c6928be). Two things
+since Oct 21 2026:
 - **One rep at a time** (`app.next_to_analyze`): a drill rep's down-the-line clip whose face-on clip
   is done goes before the next rep's face-on clip. Before, face-on clips went first, newest first, so
-  the next rep's clips could both go ahead of it. Two pump reps uploaded 10 s apart on the dev PC:
-  the first one's numbers 104 s after its upload before, 53 s now; the second's 69 s before, 95 s now
-  (it waits for the first). Reps come back in the order they were hit.
+  the next rep's clips could both go ahead of it. Two pump reps uploaded 10 s apart on the dev PC
+  (a test server as above, so the times are high): the first one's numbers 104 s after its upload
+  before, 53 s now; the second's 69 s before, 95 s now (it waits for the first). Reps come back in
+  the order they were hit.
 - **Tried and not used: a lighter quick pass for pump reps** (the body model on every 4th frame,
   MediaPipe and the shaft search on every 3rd in the swing). 29 s a rep instead of 40, but against
   the careful (deep) pass on all 39 six-second pump reps (Sep 30, Oct 8, Oct 20), hands to plane at
   P6 read 0.47 in low (median) against today's quick pass's 0.26 in low, median miss 0.47 in against
   0.32: past the bar set before the check (no more than 0.15 in worse either way). Also: with
   `SWINGCLIPS_SHAFT_STRIDE=2` hands to plane at P6 and at the top come out empty.
-So a pump set still outruns the server when reps are less than ~50 s apart; analyzing one angle on a
-second PC would be the next step.
+So with the server as fast as the dev PC, a pump rep's numbers come ~45 s after the strike (upload
+~4 s, then ~40 s), and a set at a rep every ~45 s about keeps up; quicker reps than that still get
+ahead of it. Not measured on the home server (i5-12400) itself.
+
+**Timing it yourself.** Run the server (or a test script) from `server\`, as `Start server.cmd`
+does. From D:\SwingClips-dev, the dev PC's working folder, MediaPipe takes ~2.8 s to set up its pose
+model in each worker for every clip (`PoseLandmarker.create_from_options`, waiting, not computing:
+no CPU is used meanwhile), against ~0.15 s from `server\`, the repository's root or a temp folder
+(Oct 21 2026: why that folder isn't known). And don't ask the server for `/api/clips` and
+`/api/swings` many times a second while timing: 8 a second put ~3-4 s more on a pump clip. With
+both out of the way, a clip took as long in the server as on its own (pose.analyze in a script).
 
 ### Using a GPU (off by default)
 Only the ONNX models can go on a GPU: RTMPose and the club model (`models.py`, through ONNX
