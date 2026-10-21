@@ -212,7 +212,8 @@ launcher buttons work. Nothing starts at Windows sign-in.
 `Start golf.cmd` still works as before for manual one-click starting. The Square watcher reads each new
 shot from Square Golf's own shot database and sends it to the server, which pairs it with the swing by
 time (Square saves a shot ~13 s after the clip's start, 6-17 s seen; a clip only one phone recorded
-is the last choice, so a stray sound just after a swing doesn't take its shot). What the scripts do is logged in
+is the last choice, so a stray sound just after a swing doesn't take its shot). The time is the server's
+own arrival time, so the sim laptop's clock being off doesn't matter (2026-10-20 it ran 6 s fast). What the scripts do is logged in
 `golf-launcher-log.txt`, `golf-agent-log.txt` and `start-golf-log.txt` next to them. The GSPro-connector option and how shots
 are read: [docs/relay.md](docs/relay.md).
 

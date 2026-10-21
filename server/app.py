@@ -1473,6 +1473,23 @@ def recentre_strike(shot: dict) -> dict:
     return shot
 
 
+# A shot is timed by this server's clock (serverReceived), the clock the clips are compared on, when
+# it came in within PROMPT_S of the sender's stamp: the sim laptop's clock drifts (2026-10-20: 5.8 s
+# fast, so Square's usual 13 s read as 18-21 s and 10 of 81 shots fell past the pairing window). A
+# shot that came in later than that was a retry (the watcher retries every 15 s), so the sender's
+# stamp is the true time.
+SHOT_PROMPT_S = 10.0
+
+
+def shot_time(s: dict) -> float:
+    sent = datetime.fromisoformat(s["received"]).timestamp()
+    try:
+        here = datetime.fromisoformat(s["serverReceived"]).timestamp()
+    except (KeyError, TypeError, ValueError):
+        return sent
+    return here if here - sent <= SHOT_PROMPT_S else sent
+
+
 def load_shots() -> list[dict]:
     if not SHOTS_FILE.exists():
         return []
@@ -1480,7 +1497,7 @@ def load_shots() -> list[dict]:
     for line in SHOTS_FILE.read_text(encoding="utf-8").splitlines():
         try:
             s = json.loads(line)
-            s["_t"] = datetime.fromisoformat(s["received"]).timestamp()
+            s["_t"] = shot_time(s)
             shots.append(recentre_strike(s))
         except (ValueError, KeyError):
             continue

@@ -136,6 +136,18 @@ class Pairing(unittest.TestCase):
             app.load_shots = orig
         self.assertEqual(list(got), ["swing"])
 
+    def test_shot_timed_by_server_clock(self):
+        """2026-10-20: the sim laptop's clock ran 5.8 s fast, so a driver shot stamped 21.0 s after
+        the swing came in here 15.2 s after it; a retry 40 s late keeps the sender's stamp."""
+        import app
+        prompt = {"received": "2026-10-20T21:40:53.000-05:00", "serverReceived": "2026-10-20T21:40:47.200-05:00"}
+        retry = {"received": "2026-10-20T21:40:53.000-05:00", "serverReceived": "2026-10-20T21:41:33.000-05:00"}
+        old = {"received": "2026-10-20T21:40:53.000-05:00"}
+        sent = datetime.fromisoformat(prompt["received"]).timestamp()
+        self.assertAlmostEqual(app.shot_time(prompt), sent - 5.8, places=3)
+        self.assertEqual(app.shot_time(retry), sent)
+        self.assertEqual(app.shot_time(old), sent)
+
 
 if __name__ == "__main__":
     unittest.main()
