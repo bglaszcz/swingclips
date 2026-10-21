@@ -97,7 +97,9 @@ def generate_demo_data() -> None:
                 + [("I7", "i7_before_drill")] * 4
                 + [("I7", "pump_drill_live")] * 8
                 + [("I7", "i7_after_drill")] * 6
-                + [("DR", "normal")] * 8
+                + [("I5", "normal")] * 3
+                + [("W3", "normal")] * 3
+                + [("DR", "normal")] * 6
             )
             num_normal_i7 = 10
         elif sess_idx == sess_before_last_idx:
@@ -106,7 +108,9 @@ def generate_demo_data() -> None:
                 + [("I9", "normal")] * 3
                 + [("I7", "pump_drill_marked")] * 10
                 + [("I7", "i7_normal_lower")] * 12
-                + [("DR", "normal")] * 8
+                + [("I5", "normal")] * 3
+                + [("W3", "normal")] * 3
+                + [("DR", "normal")] * 6
             )
             num_normal_i7 = 12
         elif sess_idx == sess_reps_idx:
@@ -116,14 +120,18 @@ def generate_demo_data() -> None:
                 + [("I7", "i7_before_reps")] * 8
                 + [("I7", "focus_reps")] * 10
                 + [("I7", "i7_after_reps")] * 10
-                + [("DR", "normal")] * 8
+                + [("I5", "normal")] * 3
+                + [("W3", "normal")] * 3
+                + [("DR", "normal")] * 6
             )
             num_normal_i7 = 0
         elif is_latest_sess:
             swing_specs = (
                 [("PW", "normal")] * 3
                 + [("I9", "normal")] * 3
-                + [("DR", "normal")] * 8
+                + [("I5", "normal")] * 4
+                + [("W3", "normal")] * 3
+                + [("DR", "normal")] * 6
                 + [("I7", "normal")] * 12
                 + [("I7", "i7_rehearsal_check")] * 2
             )
@@ -133,7 +141,9 @@ def generate_demo_data() -> None:
                 [("PW", "normal")] * 3
                 + [("I9", "normal")] * 3
                 + [("I7", "normal")] * 14
-                + [("DR", "normal")] * 8
+                + [("I5", "normal")] * 3
+                + [("W3", "normal")] * 3
+                + [("DR", "normal")] * 6
             )
             num_normal_i7 = 14
 
@@ -247,6 +257,36 @@ def generate_demo_data() -> None:
                 strike_h = round(random.normalvariate(0.0, 2.4), 2)
                 strike_v = round(random.normalvariate(0.0, 2.0), 2)
 
+            elif club == "I5":
+                club_speed = round(random.normalvariate(88.0, 0.9), 2)
+                smash = round(1.34 + 0.03 * delta_hip + random.normalvariate(0, 0.005), 2)
+                ball_speed = round(club_speed * smash, 2)
+                carry = round(174.0 + 4.5 * delta_hip + random.normalvariate(0, 1.5), 1)
+                total = round(carry + 4.0, 1)
+                attack = round(random.normalvariate(-3.2, 0.35), 2)
+                loft = round(random.normalvariate(24.0, 0.5), 2)
+                path = round(random.normalvariate(-1.0, 0.5), 2)
+                face = round(random.normalvariate(0.2, 0.4), 2)
+                vla = round(random.normalvariate(17.5, 0.5), 2)
+                spin = int(random.normalvariate(5400, 160))
+                strike_h = round(random.normalvariate(0.0, 2.5), 2)
+                strike_v = round(random.normalvariate(0.0, 2.0), 2)
+
+            elif club == "W3":
+                club_speed = round(random.normalvariate(95.0, 1.0), 2)
+                smash = round(1.40 + 0.02 * delta_hip + random.normalvariate(0, 0.005), 2)
+                ball_speed = round(club_speed * smash, 2)
+                carry = round(208.0 + 4.0 * delta_hip + random.normalvariate(0, 2.0), 1)
+                total = round(carry + 12.0, 1)
+                attack = round(random.normalvariate(-0.5, 0.4), 2)
+                loft = round(random.normalvariate(15.5, 0.5), 2)
+                path = round(random.normalvariate(-1.0, 0.5), 2)
+                face = round(random.normalvariate(0.3, 0.4), 2)
+                vla = round(random.normalvariate(15.0, 0.5), 2)
+                spin = int(random.normalvariate(3600, 150))
+                strike_h = round(random.normalvariate(0.2, 2.5), 2)
+                strike_v = round(random.normalvariate(0.2, 2.0), 2)
+
             else:  # DR
                 club_speed = round(random.normalvariate(101.5, 1.2), 2)
                 smash = round(1.44 + 0.025 * delta_hip + random.normalvariate(0, 0.006), 2)
@@ -340,8 +380,8 @@ def generate_demo_data() -> None:
                     "carry": carry,
                     "total": total,
                     "side": offline,
-                    "apexFt": 95 if club != "DR" else 105,
-                    "landingAngle": 48 if club != "DR" else 38,
+                    "apexFt": 105 if club == "DR" else (96 if club == "W3" else (88 if club == "I5" else 95)),
+                    "landingAngle": 38 if club == "DR" else (43 if club == "W3" else (45 if club == "I5" else 48)),
                 },
                 "clubData": {
                     "speed": club_speed,

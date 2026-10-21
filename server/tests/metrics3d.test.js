@@ -326,3 +326,177 @@ test("separation at thoraxTop: uses synchronous pelvis turn from the peak moment
   assert.ok(at.p4.separation <= 65, `separation at top (${at.p4.separation}) must not be inflated`);
 });
 
+
+test("atPositions extracts numbers at key positions P1 through P8", () => {
+  const doc = makeDoc({});
+  const positions = [
+    { key: "p1", t: 1.0 },
+    { key: "p2", t: 1.3 },
+    { key: "p3", t: 1.45 },
+    { key: "p4", t: 1.6 },
+    { key: "p5", t: 1.675 },
+    { key: "p6", t: 1.75 },
+    { key: "p7", t: 1.8 },
+    { key: "p8", t: 1.875 },
+  ];
+  const r = M.compute(doc, positions);
+  assert.ok(r, "compute returned result");
+  const at = M.atPositions(r, doc, positions);
+  for (const pos of ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"]) {
+    assert.ok(at[pos], `atPositions should contain ${pos}`);
+    assert.equal(typeof at[pos].t, "number", `${pos} should have timestamp t`);
+    assert.equal(typeof at[pos].pelvisTurn, "number", `${pos} should have pelvisTurn`);
+  }
+});
+
+test("SUMMARY includes the 15 held-up numbers at P2, P3, P5, P8 and not the others", () => {
+  const doc = makeDoc({});
+  const positions = [
+    { key: "p1", t: 1.0 },
+    { key: "p2", t: 1.3 },
+    { key: "p3", t: 1.45 },
+    { key: "p4", t: 1.6 },
+    { key: "p5", t: 1.675 },
+    { key: "p6", t: 1.75 },
+    { key: "p7", t: 1.8 },
+    { key: "p8", t: 1.875 },
+  ];
+  const fi = { name: "test_face.mp4", frames: [], rotation: 0 };
+  const di = { name: "test_dtl.mp4", frames: [], rotation: 0 };
+  const mockSummary = {
+    aspectOf: () => "landscape",
+    analyze: () => ({ positions }),
+  };
+  global.SwingSummary = mockSummary;
+  const s3d = M.summarize3d(fi, di, "left", doc, "I7");
+  assert.ok(s3d && s3d.numbers, "summarize3d returned numbers");
+
+  for (const k of ["thoraxSwayP2", "pelvisLiftP2"]) {
+    assert.ok(k in s3d.numbers, `numbers should have P2 key ${k}`);
+  }
+  for (const k of ["thoraxSwayP3", "pelvisThrustP3", "pelvisLiftP3", "thoraxBendP3", "xFactorP3"]) {
+    assert.ok(k in s3d.numbers, `numbers should have P3 key ${k}`);
+  }
+  for (const k of ["pelvisSwayP5", "thoraxSwayP5"]) {
+    assert.ok(k in s3d.numbers, `numbers should have P5 key ${k}`);
+  }
+  for (const k of ["pelvisSwayP8", "thoraxSwayP8", "pelvisThrustP8", "pelvisLiftP8", "pelvisSideBendP8"]) {
+    assert.ok(k in s3d.numbers, `numbers should have P8 key ${k}`);
+  }
+  // Dropped in review: the setup moved them by half their spread or more.
+  for (const k of ["pelvisSwayP2", "pelvisThrustP2", "thoraxSideBendP2", "thoraxBendP2", "xFactorP2", "pelvisSwayP3", "pelvisLiftP5", "pelvisSideBendP5", "thoraxSideBendP5", "thoraxBendP5", "xFactorP5", "xFactorP8"]) {
+    assert.ok(!(k in s3d.numbers), `numbers should not have ${k}`);
+  }
+});
+
+test("View3D.table renders only held-up numbers at new positions and muted dot for others", () => {
+  function makeMockDoc() {
+    function createEl(tag) {
+      return {
+        tagName: tag.toUpperCase(),
+        attributes: {},
+        children: [],
+        textContent: "",
+        setAttribute(k, v) { this.attributes[k] = v; },
+        getAttribute(k) { return this.attributes[k]; },
+        append(...kids) {
+          for (const k of kids) {
+            if (typeof k === "string") {
+              this.children.push({ nodeType: 3, textContent: k });
+            } else {
+              this.children.push(k);
+            }
+          }
+        },
+      };
+    }
+    return {
+      createElement(tag) { return createEl(tag); },
+      createTextNode(text) { return { nodeType: 3, textContent: text }; },
+    };
+  }
+
+  const origDoc = global.document;
+  global.document = makeMockDoc();
+  global.SwingShotStory = require("../static/shotstory.js");
+  global.SwingMetrics3D = M;
+  require("../static/view3d.js");
+  const V = global.View3D;
+
+  const doc = makeDoc({});
+  const positions = [
+    { key: "p1", t: 1.0, label: "Setup" },
+    { key: "p2", t: 1.3, label: "Early backswing" },
+    { key: "p3", t: 1.45, label: "Backswing" },
+    { key: "p4", t: 1.6, label: "Top of swing" },
+    { key: "p5", t: 1.675, label: "Early downswing" },
+    { key: "p6", t: 1.75, label: "Downswing" },
+    { key: "p7", t: 1.8, label: "Impact" },
+    { key: "p8", t: 1.875, label: "Follow-through" },
+  ];
+  const r = M.compute(doc, positions);
+  const tbl = V.table(r, doc, positions, null, null);
+  assert.ok(tbl, "table returned element");
+  assert.equal(tbl.tagName, "TABLE");
+
+  // Check headers: first th is blank corner, then all 8 phase headers
+  const headerRow = tbl.children[0];
+  assert.equal(headerRow.children.length, 9, "9 columns (1 label + 8 positions)");
+  const headerTexts = headerRow.children.slice(1).map(th => th.textContent);
+  assert.deepEqual(headerTexts, [
+    "Setup", "Early backswing", "Backswing", "Top of swing",
+    "Early downswing", "Downswing", "Impact", "Follow-through",
+  ]);
+
+  // Check rows: for each row, index 2 corresponds to P2 column (col index 1 is p1, 2 is p2)
+  // Rows:
+  // 0: Hip turn ("pelvisTurn") -> NOT held up at P2 -> should be muted dot "·"
+  // 1: Shoulder turn ("thoraxTurn") -> NOT held up at P2 -> muted dot "·"
+  // 2: Shoulders turned past hips ("separation") -> NOT held up at P2 -> muted dot
+  // 3: Chest bend toward ball ("thoraxBend") -> NOT held up at P2 -> muted dot
+  // 4: Shoulder tilt ("thoraxSideBend") -> NOT held up at P2 -> muted dot
+  // 5: Hip tilt ("pelvisSideBend") -> NOT held up at P2 -> muted dot "·"
+  // 6: Hip slide ("pelvisSway") -> NOT held up at P2 -> muted dot
+  // 7: Hips toward ball ("pelvisThrust") -> NOT held up at P2 -> muted dot
+  // 8: Hip lift ("pelvisLift") -> HELD UP at P2 -> formatted number
+  // 9: Chest slide ("thoraxSway") -> HELD UP at P2 -> formatted number
+  const dataRows = tbl.children.slice(1);
+  assert.equal(dataRows.length, 10, "10 rows of metrics");
+
+  // Row 0: Hip turn
+  const p2HipTurnTd = dataRows[0].children[2];
+  assert.equal(p2HipTurnTd.children[0].textContent, "·", "Hip turn at P2 should be muted dot");
+  assert.equal(p2HipTurnTd.children[0].attributes["class"], "muted");
+
+  // Row 1: Shoulder turn
+  const p2ShoulderTurnTd = dataRows[1].children[2];
+  assert.equal(p2ShoulderTurnTd.children[0].textContent, "·", "Shoulder turn at P2 should be muted dot");
+
+  // Row 2: Separation
+  const p2SepTd = dataRows[2].children[2];
+  assert.equal(p2SepTd.children[0].textContent, "·", "Separation at P2 should be muted dot");
+
+  // Row 3: Chest bend
+  const p2ChestBendTd = dataRows[3].children[2];
+  assert.equal(p2ChestBendTd.children[0].textContent, "·", "Chest bend at P2 should be muted dot");
+
+  // Rows 8 and 9: hip lift and chest slide held up at P2
+  assert.notEqual(dataRows[8].children[2].children[0] && dataRows[8].children[2].children[0].textContent, "·", "Hip lift at P2 is shown");
+  assert.notEqual(dataRows[9].children[2].children[0] && dataRows[9].children[2].children[0].textContent, "·", "Chest slide at P2 is shown");
+
+  // Row 5: Hip tilt at P2
+  const p2HipTiltTd = dataRows[5].children[2];
+  assert.equal(p2HipTiltTd.children[0].textContent, "·", "Hip tilt at P2 should be muted dot");
+
+  // Check column suppression when no numbers held up
+  // If a position has no held-up metrics, it should not have a column
+  const posWithEmpty = [
+    { key: "p1", t: 1.0 },
+    { key: "p9", t: 1.9 }, // Unknown position not in HELD_UP
+  ];
+  const tblSuppressed = V.table(r, doc, posWithEmpty, null, null);
+  // Only p1 should be in the columns
+  assert.equal(tblSuppressed.children[0].children.length, 2, "Only label + P1 column");
+
+  global.document = origDoc;
+});

@@ -413,6 +413,104 @@
   .cs-med { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
   .cs-hitrow { fill: transparent; cursor: pointer; }
   .cs-hitrow:hover, .cs-hitrow:focus-visible { fill: var(--text); fill-opacity: 0.05; outline: none; }
+  /* round 71 */
+  .st-svg, .a-chart svg.st-svg { height: auto; display: block; max-width: 100%; }
+  .st-head { margin: 16px 0 6px; }
+  .st-head strong { font-size: 14px; }
+  .st-head .note { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .st-legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .st-card { background: var(--panel, #1e222a); border: 1px solid var(--line, #333); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .st-card-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .st-card-name { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .st-sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+  .st-count { font-size: 11px; color: var(--muted); }
+  .st-verdict { font-size: 12px; font-weight: 500; }
+  .st-v-tight { color: var(--accent); }
+  .st-v-wide { color: var(--warn); }
+  .st-v-same { color: var(--text); }
+  .st-v-na { color: var(--muted); font-weight: normal; }
+  .st-card-note { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  /* round 71: yardage card */
+  #yardage { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 1000px; margin: 0 auto; width: 100%; }
+  #yardage[hidden] { display: none; }
+  #yardage .note { color: var(--muted); font-size: 13px; }
+  .y-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
+  .y-period-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .y-period-select { background: var(--panel); border: 1px solid var(--line); color: var(--text); padding: 4px 8px; border-radius: 4px; font-family: inherit; font-size: 13px; }
+  .y-summary { font-size: 13px; color: var(--muted); }
+  .y-table-wrap { overflow-x: auto; margin-top: 4px; }
+  .y-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .y-table th, .y-table td { padding: 8px 10px; text-align: left; }
+  .y-table th { color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
+  .y-table td { border-bottom: 1px solid var(--line); }
+  .y-club-cell { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+  .y-aim-bias { font-weight: 600; color: var(--accent); }
+  .y-overlaps { margin-top: 12px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .y-overlap-item { margin: 4px 0; font-size: 13px; color: var(--text); }
+  .y-fold { margin-top: 12px; }
+
+  @media print {
+    body > header, #side, nav, #tools-btn, .menu-pop, #yardage-close, #yardage-print, .y-toolbar, .y-fold, #ready {
+      display: none !important;
+    }
+    body, main, #yardage {
+      background: #fff !important;
+      color: #000 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      width: 100% !important;
+      max-width: 100% !important;
+    }
+    #yardage .t-head {
+      border-bottom: 2px solid #000;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+    }
+    #yardage .t-head strong {
+      font-size: 18px;
+      color: #000;
+    }
+    #yardage .t-head .note {
+      color: #444 !important;
+    }
+    #yardage .y-table {
+      color: #000 !important;
+      border-collapse: collapse !important;
+      width: 100% !important;
+    }
+    #yardage th, #yardage td {
+      color: #000 !important;
+      border: 1px solid #ccc !important;
+      padding: 4px 6px !important;
+      font-size: 11px !important;
+    }
+    #yardage .y-club-cell {
+      color: #000 !important;
+    }
+    #yardage .y-aim-bias {
+      color: #000 !important;
+      font-weight: 700 !important;
+    }
+    #yardage .cs-sw {
+      border: 1px solid #000 !important;
+    }
+    #yardage .y-overlaps {
+      margin-top: 12px;
+      color: #000 !important;
+      background: none !important;
+      border: 1px solid #ccc !important;
+      padding: 6px 10px;
+    }
+    #yardage .y-overlap-item {
+      color: #000 !important;
+      font-size: 11px !important;
+    }
+    @page {
+      size: portrait;
+      margin: 10mm;
+    }
+  }
   .fg-chart, .fg-sess-chart { max-width: 640px; }
   /* Analysis: spread (distro.js) */
   .ds-sentence { font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
@@ -1653,6 +1751,7 @@
         <button id="setup-btn" class="small" title="Check both cameras before you start: live pictures from the phones">Check cameras</button>
         <button class="small" data-page="/tripods" title="Find the tripod spots: live pictures, framing meters, level and alignment-stick tools, saved spots">Tripod setup</button>
         <button id="drills-btn" class="small" hidden title="Every drill the coach has: what it trains, how to do it, and what your own reps of it did">Drills</button>
+        <button id="yardage-btn" class="small" hidden title="Yardage card: stock carry, windows, aim and ball flight for every club">Yardage card</button>
         <button id="week-btn" class="small" title="Week for coach: one page a week for the coach with practice, ball flight, focus move, faults, and games">Week for coach</button>
         <button id="aicoach-btn" class="small" title="The AI coach: status, how to add an API key, the brief sent for your latest session, and kept notes">AI coach</button>
         <button id="update-btn" class="small" title="Get the latest version from GitHub; the server restarts itself when the change needs it">Update the server</button>
@@ -2082,6 +2181,18 @@
       <button id="drills-close" class="small" type="button" style="margin-left: auto;">Close</button>
     </div>
     <div id="drills-body"></div>
+  </section>
+  <!-- Yardage card (yardage-view.js opens it; yardage.js builds and draws it into #yardage-body). -->
+  <section id="yardage" hidden>
+    <div class="t-head">
+      <strong>Yardage card</strong>
+      <span class="note">Stock carry, windows, aim and ball flight for every club</span>
+      <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
+        <button id="yardage-print" class="small" type="button">Print</button>
+        <button id="yardage-close" class="small" type="button">Close</button>
+      </div>
+    </div>
+    <div id="yardage-body"></div>
   </section>
   <section id="aicoach" class="aicoach-view" hidden>
     <div class="t-head" style="flex-wrap: wrap; gap: 8px; align-items: center;">
@@ -2645,6 +2756,7 @@
     <details class="t-card p-fold" data-fold="dispersion">
       <summary><strong>Every club's spread</strong> <span id="a-dp-status" class="note"></span></summary>
       <div id="a-dispersion"></div>
+      <div id="a-spread-trend"></div>
       <div class="note">Where each club's shots land in the period. A club's ring holds about two of its shots in
         three (shots far off its usual pattern are drawn faded and left out of the ring). The table's middle 80%
         leaves out each club's best and worst tenth both ways; width against carry says which club spreads most for
@@ -2783,6 +2895,7 @@
 <script src="/static/tracer.js"></script>
 <script src="/static/optimize.js"></script>
 <script src="/static/clubspread.js"></script>
+<script src="/static/spreadtrend.js"></script>
 <script>
 const SPEEDS = [1, 0.25, 0.125, 0.0625];
 const POSE_LABELS = { done: "", processing: "analyzing…", queued: "waiting for analysis", failed: "analysis failed" };
@@ -6135,7 +6248,7 @@ async function refresh() {
     try { wanted = pair ? wanted : decodeURIComponent(wanted); } catch {}
     // A link to a Tools view (#labels, #clubcheck, #p4check, #nightreport, #week: the Start page's "Since last time")
     // opens it over the newest swing (read before open() puts the swing's name in the address).
-    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", p4check: "p4check-btn", nightreport: "nightreport-btn", week: "week-btn", wristcheck: "wristcheck-btn", aicoach: "aicoach-btn", drills: "drills-btn" }[location.hash.slice(1)];
+    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", p4check: "p4check-btn", nightreport: "nightreport-btn", week: "week-btn", wristcheck: "wristcheck-btn", aicoach: "aicoach-btn", drills: "drills-btn", yardage: "yardage-btn" }[location.hash.slice(1)];
     open(clips.some(c => c.name === wanted) ? wanted : (filteredClips()[0] || shownClips()[0]).name);
     if (pair && clips.some(c => c.name === pair[0])) Compare.show(pair[0], pair[1]);
     if (view) setTimeout(() => document.getElementById(view)?.click(), 0);
@@ -6244,6 +6357,8 @@ setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 <script src="/static/aicoach-view.js"></script>
 <script src="/static/drilllib.js"></script>
 <script src="/static/drills-view.js"></script>
+<script src="/static/yardage.js"></script>
+<script src="/static/yardage-view.js"></script>
 <script src="/static/compare.js"></script>
 <script src="/static/update.js"></script>
 </body>

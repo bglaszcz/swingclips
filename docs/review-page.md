@@ -1019,6 +1019,28 @@ toward the ball". The phones face away from you, so voice is the channel.
   with the reps switched on), **Make this my focus** on the rest (Progress's focus picker on that move):
   reps are measured against a focus's target, so a drill is done by working on its move. The menu's
   button shows once `drilllib.js` has loaded (it must load before `drills-view.js`).
+- **Yardage card** (Tools > Yardage card, `#yardage`; `static/yardage.js` builds and draws it, `static/yardage-view.js`
+  opens it and hands it the page's data; `/#yardage` links to it): the numbers a golfer takes to the sim to pick a club,
+  in bag order, over a period chosen by the user (30 days, 90 days [default], last year, or all). `SwingYardage.build(rows, opts)`
+  computes:
+  - **Stock carry**: the median carry distance across usable shots.
+  - **Carry window**: the middle 80% (10th to 90th percentile) of carry distance (needs at least 5 shots).
+  - **Left / right**: the middle 80% of offline dispersion.
+  - **Centre**: median offline distance (e.g. `4 yd left` or `on the line`).
+  - **Aim**: where to aim so the pattern's centre aligns with the target ("aim 6 yd right" or "aim 5 yd left"). Only
+    suggested when the centre is more than 3 yd off line AND a 90% bootstrap confidence interval of the median offline
+    leaves out zero (confirming the bias is not random chance); otherwise "at the target".
+  - **Usual shape**: the most frequent ball flight among the nine flights classified by `flightgrid.js` (start line and curvature)
+    and its share percentage, shown when a club has 10+ shots (e.g. "Draw (62%)").
+  - **Apex & landing angle**: median peak height in feet and descent landing angle in degrees reported by Square Golf; left
+    blank when Square gave none.
+  - **Overlap**: flagged under the table in one sentence per neighbouring club pair in bag order whose middle halves of
+    carry (25th to 75th percentile) overlap by more than half of the shorter one (e.g. "Your 5 iron and 6 iron usually
+    land in the same window: the middle half of their carries is 160-184 and 161-177 yd"), describing rather than
+    prescribing. (The 80% windows flagged 7 of the owner's 10 neighbouring pairs, Oct 20: a 10 to 15 yd gap is narrower
+    than either window; the middle halves flag 3.) A club with fewer than 5 shots shows no aim.
+  - **Print button & print styling**: black on white, navigation and tools hidden, formatted to fit neatly on one page.
+  The Tools menu button appears once `yardage.js` has loaded.
 - **Drill mode** (`drills.py`, `/api/drill`): when the focus drill is the pump drill, the plan's focus
   block turns it on (and a coach program's drill blocks turn theirs on). Drill sets (`drillsets.js`) are the
   pump drill's only. While it's on the phones (capture app 0.10) keep 6 s before the strike
@@ -1098,6 +1120,10 @@ toward the ball". The phones face away from you, so voice is the channel.
 - **Start page bay feedback ("Last swing" and "End of session")** (`start.html`, `static/swingrow.js`, `static/shotstory.js`, `static/sessionstory.js`):
   At the top of the swings area during normal recording (any mode except running a coach program), the bay screen shows a golfer-friendly "Last swing" card (`#bay-card`) built from the coach's findings: verdict chip (Good shot / Playable / Miss), What happened (flight in plain English), Why (why it worked on a good shot, or the top body fault), Try this (the coach's swing thought in large type and drill in smaller type), and Still there when another fault showed up. Font sizes are kept large for viewing across the bay (>= 22 px desktop, >= 18 px at 390 px) and a link opens the swing on the review page (`/#<name>`). Swings and good-shot data are rate-limited to at most every 20 seconds.
   When the owner presses Stop and the session had 10+ swings with a shot, an end-of-session card appears at the top of the swings area with `SwingSessionStory.story`: headline comparing good shots against previous sessions, best and worst clubs, the session's top fault with its swing thought, and a "Watch my best swing" link (`/#<name>`). The card stays visible until the next Start. Plain words only, calm colors, never red.
+- **Start page "This session's pattern"** (round 71, `start.html` `renderPatternCard`, `#pattern-card`; uses
+  `clubspread.js`): while recording, the landing spots of this session's shots with the club being hit now (the
+  latest shot's club) over that club's usual ring from the 90 days before (today's session left out, swings left
+  out of the trends too), and "7 iron today: 9 shots, 6 inside your usual ring". Redrawn only when a shot arrives.
 - **Start page focus card** (`start.html`, `static/goal.js`, `#focus-card`):
   Positioned near the top of the hitting screen (above `#bay-card`), the focus card keeps your current goal in view while hitting:
   - Focus move name and club or club group in plain words (e.g. "Work on the lead hip getting to the target in the downswing · 7 iron").

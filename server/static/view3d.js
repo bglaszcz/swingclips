@@ -147,14 +147,30 @@
     }
   }
 
+  // Which 3D numbers held up across camera setups (round 70, reviewed: the setup moved the median by less
+  // than half the swing-to-swing spread) at the intermediate positions.
+  // Original positions (p1, p4, p6, p7) show their full columns; new positions show only held-up keys.
+  const HELD_UP = {
+    p2: new Set(["thoraxSway", "pelvisLift"]),
+    p3: new Set(["thoraxSway", "pelvisThrust", "pelvisLift", "thoraxBend", "separation"]),
+    p5: new Set(["pelvisSway", "thoraxSway"]),
+    p8: new Set(["pelvisSway", "thoraxSway", "pelvisThrust", "pelvisLift", "pelvisSideBend"]),
+  };
+  const ORIGINAL_POSITIONS = new Set(["p1", "p4", "p6", "p7"]);
+  const ORDER = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
+
   function table(result, doc, positions, metrics2d, blankedKeys) {
-    const cols = ["p1", "p4", "p6", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
+    const cols = ORDER
+      .map(k => positions && positions.find(p => p.key === k))
+      .filter(p => p && (ORIGINAL_POSITIONS.has(p.key) || (HELD_UP[p.key] && HELD_UP[p.key].size > 0)));
     const at = SwingMetrics3D.atPositions(result, doc, positions);
     const t = el("table");
     const head = el("tr");
     head.append(el("th"));
+    const phases = (root.SwingShotStory && root.SwingShotStory.PHASES)
+      || (typeof SwingShotStory !== "undefined" && SwingShotStory.PHASES) || {};
     for (const p of cols) {
-      const name = SwingShotStory.PHASES[p.key] || p.label;
+      const name = phases[p.key] || p.label || p.key;
       head.append(el("th", { title: p.tag }, name[0].toUpperCase() + name.slice(1)));
     }
     t.append(head);
@@ -163,15 +179,21 @@
       tr.append(el("td", {}, label));
       const isBlanked = blankedKeys && blankedKeys.has(key);
       for (const p of cols) {
-        const v3 = at[p.key] && at[p.key][key];
-        const v2 = key2 && metrics2d && metrics2d.values[p.index] ? metrics2d.values[p.index][key2] : null;
+        const isOrig = ORIGINAL_POSITIONS.has(p.key);
+        const heldUp = isOrig || (HELD_UP[p.key] && HELD_UP[p.key].has(key));
         const td = el("td");
-        if (isBlanked && v3 == null) {
-          td.append(el("span", { class: "muted" }, "not at setup"));
+        if (!heldUp) {
+          td.append(el("span", { class: "muted" }, "·"));
         } else {
-          td.append(document.createTextNode(fmt(v3, unit)));
+          const v3 = at[p.key] && at[p.key][key];
+          const v2 = key2 && metrics2d && metrics2d.values[p.index] ? metrics2d.values[p.index][key2] : null;
+          if (isBlanked && v3 == null) {
+            td.append(el("span", { class: "muted" }, "not at setup"));
+          } else {
+            td.append(document.createTextNode(fmt(v3, unit)));
+          }
+          if (key2) td.append(el("span", { class: "v2" }, ` (2D ${fmt(v2, unit)})`));
         }
-        if (key2) td.append(el("span", { class: "v2" }, ` (2D ${fmt(v2, unit)})`));
         tr.append(td);
       }
       t.append(tr);
@@ -442,5 +464,5 @@
     draw(t);
   }
 
-  root.View3D = { show, draw: drawAt, setupExplanation, firstBodyTime };
+  root.View3D = { show, draw: drawAt, setupExplanation, firstBodyTime, table, HELD_UP };
 })(typeof window !== "undefined" ? window : globalThis);
