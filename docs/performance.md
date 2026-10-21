@@ -175,23 +175,41 @@ wait for both. So a body number is ready ~25 s after the strike, around practice
 frame clips, twice a usual swing: on the dev PC 40 s a rep of analysis (39 reps; face-on ~20 s,
 down the line ~21 s; the running server takes the same when it runs from its own folder). A rep's
 hands to plane needs both clips (the swing worker waits for both), and reps came ~45 s apart (Oct 20
-2026), so the server fell behind during a set (with 15 s more a clip before c6928be). Two things
+2026), so the server fell behind during a set (with 15 s more a clip before c6928be). Three things
 since Oct 21 2026:
+- **A lighter quick pass for pump reps** (`app.long_drill`, `pose.quick_profile(long_drill=True)`):
+  the body model on every 3rd frame instead of every 2nd (`pose.DRILL_BODY_STRIDE`,
+  `SWINGCLIPS_DRILL_BODY_STRIDE`), the rest as the quick pass. Only for a drill with a longer
+  lead-in (drills.py "pre", today the pump drill); the deep pass redoes those clips after the
+  session as usual. Checked before it was used, against the careful (deep) pass on all 39
+  six-second pump reps (Sep 30 10, Oct 8 18, Oct 20 11), with the bar set beforehand (no number
+  lost; median miss and median lean each no more than 0.15 in worse than the quick pass):
+
+  | Against the careful pass | Quick pass | Lighter (pump reps) |
+  |---|---|---|
+  | Hands to plane at P6: median miss | 0.32 in | 0.36 in |
+  | Hands to plane at P6: median lean | -0.26 in | -0.32 in |
+  | Pumps' hands to plane: median miss / lean | 0.37 / -0.32 in | 0.34 / -0.34 in |
+  | Reps or pumps with no number | 0 | 0 (one pump found 0.15 s from the careful pass's time, the quick pass 0.14 s) |
+  | Analysis a rep, dev PC (39 reps, script) | 40.2 s | 31.4 s |
+  | Analysis a rep, running server (2 + 2 reps alternated) | 46 s | 37 s |
+
+  The running server's times were from a busier moment on the dev PC (every clip 20-30% slower than
+  in the script); the two kinds of rep were alternated in the same run. (The quick pass itself reads
+  the hands at the top ~2.4 in low against the careful pass on these reps: not changed here.)
 - **One rep at a time** (`app.next_to_analyze`): a drill rep's down-the-line clip whose face-on clip
   is done goes before the next rep's face-on clip. Before, face-on clips went first, newest first, so
   the next rep's clips could both go ahead of it. Two pump reps uploaded 10 s apart on the dev PC
   (a test server as above, so the times are high): the first one's numbers 104 s after its upload
   before, 53 s now; the second's 69 s before, 95 s now (it waits for the first). Reps come back in
   the order they were hit.
-- **Tried and not used: a lighter quick pass for pump reps** (the body model on every 4th frame,
-  MediaPipe and the shaft search on every 3rd in the swing). 29 s a rep instead of 40, but against
-  the careful (deep) pass on all 39 six-second pump reps (Sep 30, Oct 8, Oct 20), hands to plane at
-  P6 read 0.47 in low (median) against today's quick pass's 0.26 in low, median miss 0.47 in against
-  0.32: past the bar set before the check (no more than 0.15 in worse either way). Also: with
-  `SWINGCLIPS_SHAFT_STRIDE=2` hands to plane at P6 and at the top come out empty.
-So with the server as fast as the dev PC, a pump rep's numbers come ~45 s after the strike (upload
-~4 s, then ~40 s), and a set at a rep every ~45 s about keeps up; quicker reps than that still get
-ahead of it. Not measured on the home server (i5-12400) itself.
+- **Tried and not used: lighter still** (the body model on every 4th frame, MediaPipe and the shaft
+  search on every 3rd in the swing): 28.6 s a rep, but hands to plane at P6 read 0.47 in low
+  (median miss 0.47 in), past the bar. Also: with `SWINGCLIPS_SHAFT_STRIDE=2` hands to plane at P6
+  and at the top come out empty.
+So with the server as fast as the dev PC, a pump rep's numbers come ~35 s after the strike (upload
+~4 s, then ~31 s), and a set at a rep every ~45 s keeps up. Not measured on the home server
+(i5-12400) itself.
 
 **Timing it yourself.** Run the server (or a test script) from `server\`, as `Start server.cmd`
 does. From D:\SwingClips-dev, the dev PC's working folder, MediaPipe takes ~2.8 s to set up its pose

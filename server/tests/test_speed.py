@@ -274,6 +274,20 @@ class QuickProfileTest(unittest.TestCase):
                 mock.patch.dict(os.environ, {"SWINGCLIPS_QUICK": "", "SWINGCLIPS_QUICK_MP_STRIDE": ""}):
             self.assertIsNone(pose.quick_profile())
 
+    def test_lighter_body_model_for_a_long_drill_rep(self):
+        deep = {"bodyStride": 1, "clubModel": None, "rayTakeaway": True}
+        clear = {"SWINGCLIPS_QUICK": "", "SWINGCLIPS_QUICK_MP_STRIDE": "", "SWINGCLIPS_DRILL_BODY_STRIDE": ""}
+        with mock.patch.object(pose, "deep_profile", return_value=deep), \
+                mock.patch.object(pose, "body_stride", return_value=2):
+            with mock.patch.dict(os.environ, clear):
+                self.assertEqual(pose.quick_profile(long_drill=True), {"mpStrideSwing": 2, "bodyStride": 3})
+                self.assertEqual(pose.quick_profile(), {"mpStrideSwing": 2})
+            # Never heavier than the usual quick pass.
+            with mock.patch.dict(os.environ, dict(clear, SWINGCLIPS_DRILL_BODY_STRIDE="1")):
+                self.assertEqual(pose.quick_profile(long_drill=True), {"mpStrideSwing": 2, "bodyStride": 2})
+            with mock.patch.dict(os.environ, dict(clear, SWINGCLIPS_QUICK="off")):
+                self.assertIsNone(pose.quick_profile(long_drill=True))
+
 
 class SplitTest(unittest.TestCase):
     @staticmethod

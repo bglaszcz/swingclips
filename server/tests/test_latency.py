@@ -100,6 +100,12 @@ class DrillReps(unittest.TestCase):
         with self.as_drill("pump"):
             self.assertEqual(app.next_to_analyze(self.todo + [app.CLIPS_DIR / self.rep1_face]).name, self.rep2_face)
 
+    def test_only_long_lead_in_drills_are_lighter(self):
+        clip = app.CLIPS_DIR / self.rep2_face
+        for drill, long in (("pump", True), ("move:handsPlaneP6:less", False), ("toetap", False), (None, False)):
+            with self.as_drill(drill):
+                self.assertEqual(app.long_drill(clip), long, drill)
+
     def test_a_marked_none_rep_is_a_usual_swing(self):
         # Marked "not a drill" afterwards (drills.NOT_A_DRILL): clip_drill says no drill.
         with self.as_drill(None):

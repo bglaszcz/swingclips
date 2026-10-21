@@ -1179,10 +1179,16 @@ def deep_profile() -> dict | None:
 # (fill_skipped, and club.track as for blurred frames). Enough for the spoken checks and practice
 # numbers; the deep pass after the session analyzes every clip again the careful way.
 QUICK_MP_STRIDE = 2
+# Lighter for a rep of a drill with a long lead-in (app.long_drill: the pump drill's 6 s before the
+# strike, twice a usual clip's frames): the body model on every DRILL_BODY_STRIDE-th frame
+# (SWINGCLIPS_DRILL_BODY_STRIDE) in place of body_stride(). docs/performance.md has the check against
+# the careful pass on the owner's 39 pump reps.
+DRILL_BODY_STRIDE = 3
 
 
-def quick_profile() -> dict | None:
-    """The quick pass's settings, as analyze's `quick`: {"mpStrideSwing": n}. None when it's off
+def quick_profile(long_drill: bool = False) -> dict | None:
+    """The quick pass's settings, as analyze's `quick`: {"mpStrideSwing": n}, and for a long drill rep
+    "bodyStride" too (the body model's, in place of body_stride()). None when it's off
     (SWINGCLIPS_QUICK=off, or SWINGCLIPS_QUICK_MP_STRIDE=1), or when no deep pass follows to redo the
     clips (deep_profile() is None)."""
     if os.environ.get("SWINGCLIPS_QUICK", "on").strip().lower() == "off":
@@ -1190,6 +1196,9 @@ def quick_profile() -> dict | None:
     n = _count("SWINGCLIPS_QUICK_MP_STRIDE", QUICK_MP_STRIDE)
     if n <= 1 or deep_profile() is None:
         return None
+    if long_drill:
+        return {"mpStrideSwing": n,
+                "bodyStride": max(body_stride(), _count("SWINGCLIPS_DRILL_BODY_STRIDE", DRILL_BODY_STRIDE))}
     return {"mpStrideSwing": n}
 
 
@@ -1202,8 +1211,9 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
     .onnx path or None} in place of SWINGCLIPS_BODY_STRIDE and SWINGCLIPS_CLUB_BACKEND/_MODEL, and the
     result says so ("pass": "deep").
 
-    `quick`, the server's pass during a session (quick_profile()): {"mpStrideSwing": n}; the result
-    says so ("pass": "quick"). Not with `deep`."""
+    `quick`, the server's pass during a session (quick_profile()): {"mpStrideSwing": n}, and for a long
+    drill rep "bodyStride" in place of body_stride(); the result says so ("pass": "quick", "quick": it).
+    Not with `deep`."""
     if deep is not None:
         quick = None
     mp_swing = quick["mpStrideSwing"] if quick else 1
@@ -1233,7 +1243,7 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
         keys = [0]
     _, strike = clip_facts(path)
     body_until = strike + BODY_AFTER_STRIKE if strike is not None else None
-    stride = (deep["bodyStride"] if deep is not None else body_stride()) if body else 1
+    stride = (deep["bodyStride"] if deep is not None else (quick or {}).get("bodyStride") or body_stride()) if body else 1
     if speed["split"] in ("frames", "cost") and pts:
         costs = job_costs(pts, tb, body_until, speed["mpStrideAfter"], stride, speed["shaftStride"], body, clubm,
                           bg is not None, mp_swing)

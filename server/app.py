@@ -565,6 +565,13 @@ def drill_rep(p: Path) -> str | None:
     return clip_drill(p.name, None, recorded_at(p))[0] if SWING_NAME.match(p.name) else None
 
 
+def long_drill(p: Path) -> bool:
+    """Whether a clip is a rep of a drill the phones keep a longer lead-in for (drills.py "pre": the pump
+    drill's 6 s), twice a usual clip's frames: its quick pass is lighter (pose.quick_profile)."""
+    drill = drill_rep(p)
+    return bool(drill) and drills.info(drill)["pre"] > drills.PRE_S
+
+
 def next_to_analyze(todo: list[Path]) -> Path:
     """Which clip to analyze next: face-on clips first, newest first (the phones' spoken checks and
     practice numbers mostly need them; the down-the-line ones catch up between sets). But a drill rep's
@@ -608,16 +615,17 @@ def pose_worker(stop: threading.Event):
             busy = session_on()
             waiting = busy and DURING_SESSION == "wait"
             deep = None if busy else deep_profile()
-            # During a session, new clips the quick way (when a deep pass will redo them after it).
-            quick = pose.quick_profile() if busy else None
             deep_club = deep and deep_club_stamp(deep)
             pose_deep_left = 0 if deep is None else sum(
                 1 for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done"
                 and needs_deep(p.name, deep_club))
             if todo and not waiting:
-                # After a session a new clip goes straight to the deep pass. A quality measure running carries
-                # on beside it.
-                pool = analyze_clip(next_to_analyze(todo), pool, deep=deep, quick=quick)
+                # After a session a new clip goes straight to the deep pass; during one, the quick way (when a
+                # deep pass will redo it after), lighter for a pump drill rep (long_drill). A quality measure
+                # running carries on beside it.
+                clip = next_to_analyze(todo)
+                quick = pose.quick_profile(long_drill=long_drill(clip)) if busy else None
+                pool = analyze_clip(clip, pool, deep=deep, quick=quick)
                 continue
             if not busy and quality_job is None:
                 # Analyze again, newest first, a clip whose pose came from another body model (after

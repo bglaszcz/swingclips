@@ -189,6 +189,7 @@ set SWINGCLIPS_POSE_WORKERS=8
 | `SWINGCLIPS_ORT_DEVICE` | `0` | GPU device index for `dml` or `cuda`. |
 | `SWINGCLIPS_POSE_WORKERS` | half of logical CPUs, at most 6 (8 recommended on the server) | Background worker processes for clip analysis. |
 | `SWINGCLIPS_BODY_STRIDE` | `2` on CPU (`1` on GPU) | Body model stride during session (1 = every frame, 2 = every other). |
+| `SWINGCLIPS_DRILL_BODY_STRIDE` | `3` | Body model stride during a session for pump drill reps (the 6 s clips), so a set keeps up; never below `SWINGCLIPS_BODY_STRIDE`. docs/performance.md, "Pump drill reps". |
 | `SWINGCLIPS_DURING_SESSION` | `quick` | `quick` = quick analysis during a session, deep pass after; `wait` = pause analysis until 10 min after the session ends. |
 | `SWINGCLIPS_DEEP` | `on` | Set to `off` to disable the background deep pass after a session. |
 | `SWINGCLIPS_QUICK` | `on` | Set to `off` to disable quick pass optimizations during a session. |
