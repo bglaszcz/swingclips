@@ -98,11 +98,12 @@ class HeartbeatTest(unittest.TestCase):
         self.s.heartbeat("face", hb(recording=True, batteryTempC=41.2, thermal=2, droppedPct=27.0))
         self.assertEqual(face()["level"], "warn")
         self.assertIn("41.2 °C", face()["text"])
-        self.assertEqual(face()["problem"], "losing 27% of frames, running hot")
+        self.assertEqual(face()["problem"], "running hot")   # lost frames are shown, not a problem
+        self.assertIn("losing 27% of frames", face()["text"])
         self.s.heartbeat("face", hb(recording=True, batteryTempC=39.0, thermal=2, droppedPct=1.0))
         self.assertEqual(face()["problem"], "running hot")
-        self.s.heartbeat("face", hb(recording=True, thermal=0, droppedPct=6.0))   # cool, but losing frames
-        self.assertEqual(face()["level"], "warn")
+        self.s.heartbeat("face", hb(recording=True, thermal=0, droppedPct=6.0))   # cool, losing frames: not a warning
+        self.assertEqual(face()["level"], "ok")
 
     def test_a_phone_never_seen_isnt_needed(self):
         self.s.heartbeat("face", hb(recording=True))
@@ -611,8 +612,8 @@ class HealthTest(unittest.TestCase):
         self.assertIn("The face-on phone isn't answering.", [x["text"] for x in self.s.take("dtl")["say"]])
         # Running hot: said once.
         self.s.heartbeat("dtl", hb(recording=True, thermal=2, droppedPct=20.0))
-        self.assertEqual(self.s.health_step([swing(1, t)]), ["Down the line phone is losing 20 percent of its frames.",
-                                                             "Down the line phone is running hot. Take it off the charger or out of its case."])
+        # Lost frames are never spoken (the owner can't do anything about them); running hot is.
+        self.assertEqual(self.s.health_step([swing(1, t)]), ["Down the line phone is running hot. Take it off the charger or out of its case."])
         self.assertEqual(self.s.health_step([swing(1, t)]), [])
 
     def test_swings_from_before_the_session_arent_checked(self):
