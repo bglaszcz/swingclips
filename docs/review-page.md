@@ -411,6 +411,13 @@ What the server works out for each swing and what each part of the review page s
   stood in the same places.
 - **Leave out**: a swing that isn't yours (a friend hitting while the phones listen) is left out of
   Trends and Progress with the swing's Leave out button (`excluded.json`).
+- **Practice game swings** (since Oct 21 2026; the owner: "I'm not always hitting 100%"): a swing hit
+  while a game was in play (games-log.jsonl's start to end, or the game in play) is labeled with it in
+  the list and on the swing ("Combine game"), and left out of the trends like a drill swing, except
+  Driving's (`games.STOCK_SWING_GAMES`: full driver swings, counted). The swing's button then says
+  "Combine swing: left out of trends (put back)"; putting one back keeps it in `included.json`. Labeled
+  from the games already played too: 69 swings left out (Combine Oct 8 and Oct 20, Distance control
+  Oct 21), the 15 of Driving on Oct 21 labeled and counted.
 - **Swings to check, and leaving out many at once** (`static/review.js`; Oct 10, the owner: a drill hit
   without the drill switched on skewed a whole session). A swing far from that club's own usual is marked
   **check** on the list (hover for why): a backswing 1.5 times as long and at least 0.4 s longer (the pump

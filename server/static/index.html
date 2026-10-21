@@ -6216,10 +6216,12 @@ function focusDrill() {
   return f && f.move && f.aim ? SwingCoach.drillId(f.move, f.aim) : null;
 }
 
-/** Why a swing doesn't count in the trends: a drill swing (app.py /api/drill), or left out by hand. */
+/** Why a swing doesn't count in the trends: a drill swing (app.py /api/drill), a practice game's swing
+ *  (games.py STOCK_SWING_GAMES: all but Driving), or left out by hand. A game's swing is named either way. */
 function leftOutText(c, short) {
   // The list's line is narrow: there a drill swing says its drill only (drill swings are always left out).
   if (c.drill) return short ? (c.drill.startsWith("move:") ? "Drill reps" : drillName(c.drill)) : `${drillName(c.drill)}${c.drillMarked ? ", marked afterwards" : ""} · left out of trends`;
+  if (c.game) return short ? c.game.name : `${c.game.name} game${c.excluded ? " · left out of trends" : ""}`;
   return c.excluded ? "left out of trends" : "";
 }
 
@@ -6228,7 +6230,9 @@ function updateExcludeButton() {
   renderSwingHead();
   const c = clips.find(c => c.name === current), b = document.getElementById("exclude");
   b.classList.toggle("on", !!(c && c.excluded));
-  b.textContent = c && c.drill ? "Drill swing: left out of trends" : c && c.excluded ? "Left out of trends (put back)" : "Leave out";
+  b.textContent = c && c.drill ? "Drill swing: left out of trends"
+    : c && c.excluded ? (c.game ? `${c.game.name} swing: left out of trends (put back)` : "Left out of trends (put back)")
+    : "Leave out";
   b.disabled = !!(c && c.drill);
   const m = document.getElementById("drill-mark");
   m.hidden = !c || !!c.calib;

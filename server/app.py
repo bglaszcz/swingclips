@@ -1359,6 +1359,7 @@ def listed_clips(with_shots: bool = True, since: float | None = None) -> list[di
     pair_angles(swing_clips)
     by_name = {c["name"]: c for c in clips}
     excluded = set(load_excluded())
+    included = set(load_included())
     reviewed = set(load_reviewed())
     for c in clips:
         # A drill swing (drills.py) is a rehearsal, not the usual swing: out of the trends too.
@@ -1368,7 +1369,14 @@ def listed_clips(with_shots: bool = True, since: float | None = None) -> list[di
         # a drill though one was left on), rather than the time it was recorded.
         c["drill"], c["drillMarked"] = (clip_drill(c["name"], c["partner"], c["_t"])
                                         if SWING_NAME.match(c["name"]) and not c["calib"] else (None, False))
-        c["excluded"] = c["name"] in excluded or (c["partner"] or "") in excluded or bool(c["drill"] or c["calib"])
+        # A swing hit during a practice game: labeled with it, and out of the trends unless it's a game of
+        # the usual full swing (games.STOCK_SWING_GAMES) or was put back by hand.
+        c["game"] = (games_state.game_at(c["_t"]) if SWING_NAME.match(c["name"]) and not c["calib"] and not c["drill"]
+                     else None)
+        game_out = bool(c["game"]) and not c["game"]["inTrends"] and not (
+            c["name"] in included or (c["partner"] or "") in included)
+        c["excluded"] = (c["name"] in excluded or (c["partner"] or "") in excluded or bool(c["drill"] or c["calib"])
+                         or game_out)
         c["reviewed"] = c["name"] in reviewed or (c["partner"] or "") in reviewed
     if not with_shots:
         for c in clips:
@@ -1765,6 +1773,24 @@ def load_excluded() -> list[str]:
         return []
 
 
+# Practice game swings put back in the trends by hand (games left out of them: games.STOCK_SWING_GAMES).
+INCLUDED_FILE = Path(os.environ.get("SWINGCLIPS_INCLUDED", CLIPS_DIR.parent / "included.json"))
+
+
+def load_included() -> list[str]:
+    try:
+        return json.loads(INCLUDED_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def _save_names(path: Path, names: set[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(sorted(names), indent=1), encoding="utf-8")
+    tmp.replace(path)
+
+
 class Exclusion(BaseModel):
     names: list[str]
     exclude: bool
@@ -1772,16 +1798,22 @@ class Exclusion(BaseModel):
 
 @app.post("/api/exclude")
 def set_excluded(body: Exclusion):
-    """Leaves these swings out of the trends, or puts them back."""
+    """Leaves these swings out of the trends, or puts them back. A practice game swing that's left out
+    of them by its game (games.STOCK_SWING_GAMES) is put back in included.json."""
     with files_lock:
-        names = set(load_excluded())
+        names, included = set(load_excluded()), set(load_included())
         for name in body.names:
-            if Path(name).name == name:
-                (names.add if body.exclude else names.discard)(name)
-        EXCLUDED_FILE.parent.mkdir(parents=True, exist_ok=True)
-        tmp = EXCLUDED_FILE.with_suffix(".tmp")
-        tmp.write_text(json.dumps(sorted(names), indent=1), encoding="utf-8")
-        tmp.replace(EXCLUDED_FILE)
+            if Path(name).name != name:
+                continue
+            (names.add if body.exclude else names.discard)(name)
+            m = UNIX_TIME_SUFFIX.search(Path(name).stem)
+            game = games_state.game_at(float(m.group(1))) if m and SWING_NAME.match(name) else None
+            if body.exclude or not (game and not game["inTrends"]):
+                included.discard(name)
+            else:
+                included.add(name)
+        _save_names(EXCLUDED_FILE, names)
+        _save_names(INCLUDED_FILE, included)
     return {"ok": True}
 
 

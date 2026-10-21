@@ -97,6 +97,12 @@ def shot_of(shot: dict | None) -> dict:
 # What a game's "green" is, for the summary: a fairway, or the shape that was called.
 HIT_WORDS = {"driving": "in the fairway", "shaping": "shaped as called", "distance": "within 5 yards", "holes": "on the green"}
 
+# Swings hit during a game are labeled with it (app.listed_clips). Games of the golfer's usual full
+# swing count in the trends like any other swing; the others' (partial distances to a target, curves
+# on purpose) are left out of them, as drill swings are, since they'd skew the numbers (the owner,
+# Oct 21 2026: "I'm not always hitting 100%"). A swing can be put back by hand (app.py INCLUDED_FILE).
+STOCK_SWING_GAMES = {"driving"}
+
 
 class Games:
     """The game in play, finished games, and what the phone should say. Thread-safe."""
@@ -107,6 +113,26 @@ class Games:
         self.lock = threading.Lock()
         self.game: dict | None = swings.load(state_file) or None
         self.said: list[dict] = []
+        self._periods: tuple | None = None   # (log file's stamp, [(start, end, id, name)]) of finished games
+
+    def game_at(self, t: float) -> dict | None:
+        """The game in play when a swing was struck (unix s): {"id", "name", "inTrends"}, or None. A game
+        runs from its start to its end (its last shot scored, stopped, or given up as idle)."""
+        try:
+            stamp = self.log_file.stat().st_mtime_ns
+        except OSError:
+            stamp = None
+        if self._periods is None or self._periods[0] != stamp:
+            self._periods = (stamp, [(g["started"], g["ended"], g["id"], g.get("name") or g["id"]) for g in self._log()
+                                     if isinstance(g.get("started"), (int, float)) and isinstance(g.get("ended"), (int, float))])
+        periods = list(self._periods[1])
+        g = self.game
+        if g:
+            periods.append((g["started"], math.inf, g["id"], g["name"]))
+        for start, end, gid, name in periods:
+            if start - PAIR_SLACK_S <= t <= end + PAIR_SLACK_S:
+                return {"id": gid, "name": name, "inTrends": gid in STOCK_SWING_GAMES}
+        return None
 
     # ---- Starting and stopping ----
 
