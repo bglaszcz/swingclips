@@ -298,7 +298,16 @@ What the server works out for each swing and what each part of the review page s
     the side (height against distance) and from above (left drawn up, as seen from behind the ball). Carry only,
     no roll. Hover a flight for its numbers, tap it to open the swing; a table gives each club's median carry,
     apex and landing side.
-  - Club colours on both: eight colours in a fixed order by the club's place among every club ever hit (so a
+  - **One number, every club** (`static/clubspread.js`, under Bag): any number Spread offers (launch monitor or
+    body), one row per club in bag order: the middle half as a box, the 10th to 90th percentile as a line, the
+    median as a tick and every value as a faint dot; behind a body number, the middle half of that club's good
+    shots in grey (goodshots.js). For carry, ball speed, club speed, launch, spin and loft, which run one way down
+    the bag, two neighbouring clubs of the same kind (woods, hybrids, irons and wedges: a hybrid is built to
+    launch higher than the iron after it) the wrong way round are named when both have 8 values and the medians
+    differ by more than twice their standard error (1.253 x the middle half / 1.349 / root n each). For other
+    numbers the sentence names the widest and narrowest middle half. Mishits are left out of launch monitor
+    numbers only. A tap on a club opens Spread for that club and number. A table repeats the rows.
+  - Club colours on all three: eight colours in a fixed order by the club's place among every club ever hit (so a
     club's colour is the same in every period and session); a ninth club and on reuse them hollow and dashed,
     and every club is named on the chart. Tapping a club's chip hides it on both cards (kept in the browser).
   - **Ball flight** (`static/flightgrid.js`): the nine ball flights from start line (left, straight, right beyond 2°)

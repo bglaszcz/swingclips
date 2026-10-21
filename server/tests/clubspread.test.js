@@ -112,3 +112,55 @@ test("a session's flights: clubs in bag order, unflyable shots counted", () => {
   assert.equal(s.skipped, 1);
   assert.equal(s.flights.length, 3);
 });
+
+test("one number, every club: quantiles per club in bag order, mishits left out for shot numbers", () => {
+  const rows = [];
+  for (let i = 0; i < 11; i++) rows.push(Object.assign(shot("I7", 150, 0), { spin: 6000 + 100 * i }));
+  for (let i = 0; i < 6; i++) rows.push(Object.assign(shot("DR", 230, 0), { spin: 2500 + 50 * i }));
+  rows.push(Object.assign(shot("I7", 0, 0), { spin: 99999 }));       // a mishit
+  rows.push(Object.assign(shot("PW", 110, 0), { spin: 9000 }));      // too few
+  const m = CS.analyzeNumber(rows, "spin", { shot: true });
+  assert.deepEqual(m.clubs.map(c => c.club), ["DR", "I7", "PW"]);
+  const i7 = m.clubs[1];
+  assert.equal(i7.n, 11);
+  assert.equal(i7.q50, 6500);
+  assert.equal(i7.q10, 6100);
+  assert.equal(m.clubs[2].enough, false);
+  assert.equal(m.flips.length, 0);
+});
+
+test("one number, every club: a club out of the bag's order is named only when it's clear", () => {
+  const r = rng(5), rows = [];
+  const add = (club, n, med, sd) => { for (let i = 0; i < n; i++) rows.push(Object.assign(shot(club, med + sd * normal(r), 0), {})); };
+  add("I5", 40, 166, 8);
+  add("I6", 40, 176, 8);   // carries 10 yd further than the 5 iron: out of order
+  add("I7", 40, 160, 8);
+  const m = CS.analyzeNumber(rows, "carry", { shot: true });
+  assert.equal(m.flips.length, 1);
+  assert.equal(m.flips[0].a, "I5");
+  assert.equal(m.flips[0].b, "I6");
+  // Two clubs 1 yd apart the wrong way, 10 shots each: chance, not named.
+  const r2 = rng(9), close = [];
+  for (let i = 0; i < 10; i++) close.push(shot("I8", 140 + 8 * normal(r2), 0), shot("I9", 141 + 8 * normal(r2), 0));
+  assert.equal(CS.analyzeNumber(close, "carry", { shot: true }).flips.length, 0);
+});
+
+test("one number, every club: body numbers keep swings whatever the shot, numbers with no order aren't judged", () => {
+  const rows = [];
+  for (let i = 0; i < 6; i++) rows.push({ club: "I7", name: `a${i}`, tempo: 2.8 + 0.1 * i, carry: null, offline: null });
+  for (let i = 0; i < 6; i++) rows.push({ club: "DR", name: `b${i}`, tempo: 3.2 + 0.2 * i, carry: null, offline: null });
+  const m = CS.analyzeNumber(rows, "tempo");
+  assert.equal(m.clubs.length, 2);
+  assert.equal(m.way, 0);
+  assert.equal(m.widest.club, "DR");
+  assert.equal(m.narrowest.club, "I7");
+});
+
+test("one number, every club: a hybrid launching higher than the next iron isn't named", () => {
+  const r = rng(13), rows = [];
+  for (let i = 0; i < 40; i++) rows.push(Object.assign(shot("H4", 180, 0), { launch: 19 + normal(r) }));
+  for (let i = 0; i < 40; i++) rows.push(Object.assign(shot("I5", 170, 0), { launch: 15 + normal(r) }));
+  for (let i = 0; i < 40; i++) rows.push(Object.assign(shot("I6", 160, 0), { launch: 13 + normal(r) }));   // lower than the 5 iron
+  const m = CS.analyzeNumber(rows, "launch", { shot: true });
+  assert.deepEqual(m.flips.map(x => [x.a, x.b]), [["I5", "I6"]]);
+});

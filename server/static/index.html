@@ -404,6 +404,15 @@
   .cs-view-h { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-top: 10px; }
   .cs-table-wrap { overflow-x: auto; margin-top: 12px; }
   .cs-table td:first-child { white-space: nowrap; }
+  .cs-rowname { fill: var(--text); font-size: 12px; font-weight: 600; }
+  .cs-band { fill: var(--muted); fill-opacity: 0.18; }
+  .cs-val { fill: var(--c); fill-opacity: 0.35; }
+  .cs-whisk { stroke: var(--c); stroke-width: 2; stroke-linecap: round; }
+  .cs-box { fill: var(--c); fill-opacity: 0.35; stroke: var(--c); stroke-width: 2; }
+  .cs-box.alt { fill: var(--panel); stroke-dasharray: 4 3; }
+  .cs-med { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
+  .cs-hitrow { fill: transparent; cursor: pointer; }
+  .cs-hitrow:hover, .cs-hitrow:focus-visible { fill: var(--text); fill-opacity: 0.05; outline: none; }
   .fg-chart, .fg-sess-chart { max-width: 640px; }
   /* Analysis: spread (distro.js) */
   .ds-sentence { font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
@@ -2443,6 +2452,7 @@
         <div class="a-h">Bag</div>
         <button data-card="bag">Every club</button>
         <button data-card="dispersion" hidden>Every club's spread</button>
+        <button data-card="bagnumber" hidden>One number, every club</button>
         <button data-card="gapping">Gapping</button>
         <button data-card="wedges">Wedge matrix</button>
         <button data-card="hcp">Handicap</button>
@@ -2637,6 +2647,17 @@
         three (shots far off its usual pattern are drawn faded and left out of the ring). The table's middle 80%
         leaves out each club's best and worst tenth both ways; width against carry says which club spreads most for
         its length. Mishits are left out. Tap a club to hide it, a shot to open its swing.</div>
+    </details>
+    <details class="t-card p-fold" data-fold="bagnumber">
+      <summary><strong>One number, every club</strong> <span id="a-bn-status" class="note"></span></summary>
+      <div class="t-filters"><label>Number <select id="a-bn-metric"></select></label></div>
+      <div id="a-bagnumber"></div>
+      <div class="note">Any number for every club in the period, one row each: the box is the middle half, the line
+        the 10th to 90th percentile, the tick the median, the faint dots every value. Behind a body number, in grey,
+        the middle half of that club's good shots. For carry, ball and club speed, launch, spin and loft, two
+        neighbouring clubs the wrong way round are named when the medians differ by more than twice their standard
+        error and each club has 8 values. Mishits are left out of the launch monitor numbers. Tap a club to see
+        this number session by session in Spread.</div>
     </details>
     <details class="t-card p-fold" id="p-gapping" data-fold="gapping">
       <summary><strong>Gapping</strong> <span id="p-gapping-status" class="note"></span></summary>

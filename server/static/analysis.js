@@ -6,7 +6,7 @@
 // One club at a time, or one club type (irons with irons, woods with woods: never the two together).
 
 const aPick = { x: "handsPlaneP6", y: "carry", mode: "raw", color: "good", scope: "club", ot: "carry", seq: "carry",
-                spread: "carry", sort: "order", dir: 1, bagSort: "bag", bagDir: 1, flSession: null, hideClubs: [] };
+                spread: "carry", sort: "order", dir: 1, bagSort: "bag", bagDir: 1, flSession: null, hideClubs: [], bagNumber: "spin" };
 try { Object.assign(aPick, JSON.parse(localStorage.getItem("analysis") || "{}")); } catch {}
 const aSave = () => { try { localStorage.setItem("analysis", JSON.stringify(aPick)); } catch {} };
 
@@ -76,7 +76,7 @@ function aRenderCard() {
   if (!analysisOpen) return;
   const draw = { explore: renderExplore, links: renderLinks, overtime: renderOverTimeCard, session: renderSessionCard,
                  flight: renderFlight, spread: renderSpread, consistency: renderConsistency, target: renderTarget, bag: renderBag,
-                 checkpoints: renderCheckpoints, dispersion: renderDispersion, flights: renderClubFlights }[analysisCard];
+                 checkpoints: renderCheckpoints, dispersion: renderDispersion, flights: renderClubFlights, bagnumber: renderBagNumber }[analysisCard];
   if (draw) draw();
 }
 
@@ -86,7 +86,7 @@ document.querySelector('#a-rail button[data-card="flight"]').hidden = typeof Swi
 document.querySelector('#a-rail button[data-card="spread"]').hidden = typeof SwingDistro === "undefined";
 document.querySelector('#a-rail button[data-card="consistency"]').hidden = typeof SwingConsistency === "undefined";
 document.querySelector('#a-rail button[data-card="checkpoints"]').hidden = typeof SwingCheckpoints === "undefined";
-for (const card of ["dispersion", "flights"]) document.querySelector(`#a-rail button[data-card="${card}"]`).hidden = typeof SwingClubSpread === "undefined";
+for (const card of ["dispersion", "flights", "bagnumber"]) document.querySelector(`#a-rail button[data-card="${card}"]`).hidden = typeof SwingClubSpread === "undefined";
 for (const h of document.querySelectorAll("#a-rail .a-h")) {
   let any = false;
   for (let el = h.nextElementSibling; el && !el.classList.contains("a-h"); el = el.nextElementSibling) any = any || !el.hidden;
@@ -995,7 +995,7 @@ function renderBag() {
   }
 }
 
-// ---- Every club's spread and Flights by club (clubspread.js) ----
+// ---- Every club's spread, Flights by club and One number, every club (clubspread.js) ----
 
 // Each club's colour comes from its place among every club ever hit, so it is the same in every period and session.
 const aClubColors = () => SwingClubSpread.colors(shownClips().filter(c => !c.excluded && c.shot).map(c => c.shot.club));
@@ -1044,6 +1044,25 @@ function renderClubFlights() {
   const opts = { colors: aClubColors(), nameOf: clubName, hidden: h.set, onOpen: openFromAnalysis,
                  redraw: () => { h.save(); SwingClubSpread.renderFlights(box, model, opts); } };
   SwingClubSpread.renderFlights(box, model, opts);
+}
+
+document.getElementById("a-bn-metric").onchange = e => { aPick.bagNumber = e.target.value; aSave(); renderBagNumber(); };
+/** One number for every club: the same choices as Spread, every club in the period. */
+function renderBagNumber() {
+  if (typeof SwingClubSpread === "undefined") return;
+  let f = aField(aPick.bagNumber);
+  if (f.key === "order" || f.session || f.spread) f = aField("spin");
+  fillSelect(document.getElementById("a-bn-metric"), [["Launch monitor", aShotFields()], ...byGroup(["Face-on", "Down the line"])], f.key);
+  const rows = aGroupSessions("*").flatMap(s => s.rows);
+  const model = SwingClubSpread.analyzeNumber(rows, f.key, { shot: !!f.shot });
+  document.getElementById("a-bn-status").textContent = model.status;
+  SwingClubSpread.renderNumber(document.getElementById("a-bagnumber"), model, {
+    field: { label: f.label, unit: f.unit, dec: f.dec }, fmt: v => aNum(f, v), plain: v => aNum({ ...f, unit: "" }, v),
+    colors: aClubColors(), nameOf: clubName,
+    ranges: f.shot ? null : club => goodRange(club, f.key),
+    // A club's row: that club, this number, in Spread (one club, session by session).
+    onPick: club => { progressPick.club = club; savePicks(); aPick.spread = f.key; aSave(); analysisCard = "spread"; renderProgress(); selectAnalysisCard("spread"); },
+  });
 }
 
 // ---- Swing checkpoints (checkpoints.js) ----

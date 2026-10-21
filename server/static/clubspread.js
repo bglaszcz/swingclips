@@ -11,6 +11,10 @@
 // colours in a fixed order; a ninth club and on take the same colours again with hollow dots and dashed
 // flights, and every club is labelled on the chart, so colour is never the only way to tell them apart.
 // Mishits (no carry, or Square marked them invalid) are left out, as in Gapping.
+// Any number, every club ("One number, every club", Bag): any launch monitor or body number, a row per club
+// (its middle half, its 10th to 90th percentile, its median and every shot), with the good shots' middle half
+// behind a body number, and the neighbouring clubs whose order breaks the bag's (a 6 iron that carries
+// further than the 5 iron) when the difference is bigger than chance.
 //
 // Works in the browser (window.SwingClubSpread) and in Node (module.exports).
 (function (root) {
@@ -490,7 +494,176 @@
     if (model.skipped) box.appendChild(hel("div", "note", `${model.skipped} shot${model.skipped === 1 ? "" : "s"} not drawn (a mishit, or no launch numbers).`));
   }
 
-  const api = { MIN_SHOTS, RING_K, SLOTS, bagOrder, colors, usable, ring, ringPoints, analyze, sideWords, leanWords,
+  // ---- One number, every club ----
+
+  // Numbers that go one way down the bag (driver first): -1 smaller with each club, +1 bigger. A pair of
+  // neighbouring clubs the other way round is worth a line.
+  const BAG_WAY = { carry: -1, ballSpeed: -1, clubSpeed: -1, launch: 1, spin: 1, loft: 1 };
+  const MIN_PAIR = 8;          // shots each club needs before its order against a neighbour is judged
+  // Only clubs of one kind are held to the order: a hybrid is built to launch higher and spin less than the iron
+  // after it, and a 3 wood can carry like a 4 hybrid.
+  const kindOf = c => /^(DR|W\d|\dW)$/i.test(c) ? "wood" : /^(H\d|\dH)$/i.test(c) ? "hybrid" : "iron";
+
+  /**
+   * One number for every club: {key, clubs: [{club, n, values, q10, q25, q50, q75, q90}], flips: [{a, b, ...}],
+   * widest, narrowest, status}. `rows`: swing rows of every club in the period; a club needs MIN_SHOTS values.
+   */
+  function analyzeNumber(rows, key, opts = {}) {
+    const by = {};
+    for (const r of rows || []) {
+      if (!r || !r.club) continue;
+      if (BAG_WAY[key] != null || opts.shot) { if (!usable(r)) continue; }
+      const v = r[key];
+      if (!finite(v)) continue;
+      (by[r.club] = by[r.club] || []).push(v);
+    }
+    const clubs = bagOrder(Object.keys(by)).map(club => {
+      const v = sorted(by[club]), n = v.length;
+      const out = { club, n, values: v, enough: n >= MIN_SHOTS };
+      if (out.enough) for (const [k, q] of [["q10", 0.1], ["q25", 0.25], ["q50", 0.5], ["q75", 0.75], ["q90", 0.9]]) out[k] = quantile(v, q);
+      return out;
+    });
+    const ok = clubs.filter(c => c.enough);
+    // Neighbours out of the bag's order: the medians differ the wrong way by more than twice their standard
+    // error (a median's is about 1.25 standard deviations over the root of n; the SD from the middle half).
+    const flips = [];
+    const way = BAG_WAY[key];
+    if (way) {
+      const se = c => 1.253 * ((c.q75 - c.q25) / 1.349) / Math.sqrt(c.n);
+      const judged = clubs.filter(c => c.enough && c.n >= MIN_PAIR);
+      for (let i = 1; i < judged.length; i++) {
+        const a = judged[i - 1], b = judged[i];        // a comes before b in the bag
+        if (kindOf(a.club) !== kindOf(b.club)) continue;
+        const wrong = (b.q50 - a.q50) * way;           // > 0: b goes the bag's way
+        const z = -wrong / Math.max(1e-9, Math.hypot(se(a), se(b)));
+        if (wrong < 0 && z > 2) flips.push({ a: a.club, b: b.club, aMed: a.q50, bMed: b.q50, aN: a.n, bN: b.n, z });
+      }
+    }
+    const w = c => c.q75 - c.q25;
+    const widest = ok.length >= 2 ? ok.reduce((x, y) => w(y) > w(x) ? y : x) : null;
+    const narrowest = ok.length >= 2 ? ok.reduce((x, y) => w(y) < w(x) ? y : x) : null;
+    const n = clubs.reduce((k, c) => k + c.n, 0);
+    return { key, clubs, flips, widest, narrowest, way: way || 0,
+             status: clubs.length ? `${clubs.length} club${clubs.length === 1 ? "" : "s"} · ${n} values` : "" };
+  }
+
+  /** The words for a flip: "Your 6 iron carries further than your 5 iron". */
+  const FLIP_WORDS = {
+    carry: ["carries further than", "yd"], ballSpeed: ["has more ball speed than", "mph"], clubSpeed: ["swings faster than", "mph"],
+    launch: ["launches lower than", "°"], spin: ["spins less than", "rpm"], loft: ["delivers less loft than", "°"],
+  };
+
+  /**
+   * The rows and the table. opts: {field: {label, unit, dec}, fmt(v), colors, nameOf, ranges(club) -> good-shot
+   * range or null, onPick(club)}.
+   */
+  function renderNumber(box, model, opts = {}) {
+    box.replaceChildren();
+    const nameOf = opts.nameOf || (c => c);
+    const cmap = opts.colors || colors(model.clubs.map(c => c.club));
+    const f = opts.field || { label: model.key, unit: "", dec: 1 };
+    const fmt = opts.fmt || (v => `${v.toFixed(f.dec ?? 1)}${f.unit ? " " + f.unit : ""}`);
+    const plain = opts.plain || (v => (v).toFixed(f.dec ?? 1));
+    const ok = model.clubs.filter(c => c.enough);
+    if (!ok.length) { box.appendChild(hel("p", "note", `No club has ${MIN_SHOTS} values of this number in the period yet.`)); return; }
+
+    const say = hel("div", "pb-say");
+    if (model.flips.length) {
+      const words = FLIP_WORDS[model.key] || ["is out of order against", ""];
+      model.flips.forEach((x, i) => {
+        if (i) say.append(" ");
+        say.append("Your ", hel("b", null, `${nameOf(x.b)} ${words[0]} your ${nameOf(x.a)}`),
+          `: ${plain(x.bMed)} against ${plain(x.aMed)}${words[1] ? " " + words[1] : ""} (medians, ${x.bN} and ${x.aN} shots).`);
+      });
+    } else if (model.way) {
+      say.textContent = `Every club's ${f.label.toLowerCase()} is in bag order against the next club of its kind (woods, hybrids, irons), or too close to tell apart.`;
+    } else if (model.widest && model.narrowest && model.widest !== model.narrowest) {
+      const w = c => c.q75 - c.q25;
+      say.append("Middle half widest with the ", hel("b", null, nameOf(model.widest.club)), ` (${fmt(w(model.widest))}), narrowest with the `,
+        hel("b", null, nameOf(model.narrowest.club)), ` (${fmt(w(model.narrowest))}).`);
+    }
+    box.appendChild(say);
+
+    const rowH = 30, m = { l: 74, r: 16, t: 10, b: 30 };
+    const W = Math.max(300, box.clientWidth || 640), H = m.t + m.b + rowH * ok.length;
+    const { svg, show, hide } = chartBox(box, W, H, `${f.label} for every club`, m);
+    // The middle 96% of every value sets the scale (one wild reading doesn't squash the rest); good-shot bands too.
+    const all = sorted(ok.flatMap(c => c.values));
+    let lo = quantile(all, 0.02), hi = quantile(all, 0.98);
+    const bands = {};
+    for (const c of ok) {
+      const g = opts.ranges ? opts.ranges(c.club) : null;
+      if (g && g.enough && finite(g.q25) && finite(g.q75)) { bands[c.club] = g; lo = Math.min(lo, g.q25); hi = Math.max(hi, g.q75); }
+    }
+    for (const c of ok) { lo = Math.min(lo, c.q10); hi = Math.max(hi, c.q90); }
+    const pad = (hi - lo) * 0.05 || 1;
+    lo -= pad; hi += pad;
+    const sx = v => m.l + (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (W - m.l - m.r);
+    for (const t of ticks(lo, hi, 6)) {
+      el("line", { x1: sx(t), x2: sx(t), y1: m.t, y2: H - m.b, class: "cs-grid" }, svg);
+      axisText(svg, sx(t), H - m.b + 16, `${t}`);
+    }
+    if (lo < 0 && hi > 0) el("line", { x1: sx(0), x2: sx(0), y1: m.t, y2: H - m.b, class: "cs-target" }, svg);
+    axisText(svg, W - m.r, H - 4, `${f.label}${f.unit ? ` (${f.unit})` : ""}`, "end", "cs-title");
+    ok.forEach((c, i) => {
+      const y = m.t + rowH * i + rowH / 2, col = colorVar(cmap, c.club), alt = isAlt(cmap, c.club);
+      axisText(svg, m.l - 10, y + 4, nameOf(c.club), "end", "cs-rowname");
+      const g = bands[c.club];
+      if (g) el("rect", { x: sx(g.q25), y: y - 12, width: Math.max(1, sx(g.q75) - sx(g.q25)), height: 24, class: "cs-band" }, svg);
+      // Every value as a faint dot, spread up and down a little so they don't sit on one another.
+      c.values.forEach((v, k) => {
+        const jitter = ((k * 0.618034) % 1 - 0.5) * 14;
+        const d = el("circle", { cx: sx(v), cy: y + jitter, r: 1.8, class: "cs-val" }, svg);
+        d.style.setProperty("--c", col);
+      });
+      const wl = el("line", { x1: sx(c.q10), x2: sx(c.q90), y1: y, y2: y, class: "cs-whisk" }, svg);
+      wl.style.setProperty("--c", col);
+      const bx = el("rect", { x: sx(c.q25), y: y - 7, width: Math.max(2, sx(c.q75) - sx(c.q25)), height: 14, rx: 3, class: "cs-box" + (alt ? " alt" : "") }, svg);
+      bx.style.setProperty("--c", col);
+      el("line", { x1: sx(c.q50), x2: sx(c.q50), y1: y - 9, y2: y + 9, class: "cs-med" }, svg);
+      const hit = el("rect", { x: m.l, y: y - rowH / 2, width: W - m.l - m.r, height: rowH, class: "cs-hitrow", tabindex: 0, role: "button" }, svg);
+      const lines = [`${nameOf(c.club)} · ${c.n} values`, `Median ${fmt(c.q50)}`, `Middle half ${plain(c.q25)} to ${fmt(c.q75)}`,
+                     `10th to 90th ${plain(c.q10)} to ${fmt(c.q90)}`, g ? `Good shots' middle half ${plain(g.q25)} to ${fmt(g.q75)}` : ""].filter(Boolean);
+      hit.setAttribute("aria-label", lines.join(", "));
+      hit.addEventListener("pointerenter", e => show(e, lines));
+      hit.addEventListener("pointermove", e => show(e, lines));
+      hit.addEventListener("pointerleave", hide);
+      if (opts.onPick) {
+        hit.addEventListener("click", () => opts.onPick(c.club));
+        hit.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); opts.onPick(c.club); } });
+      }
+    });
+
+    const tbl = hel("table", "a-table cs-table");
+    const thead = hel("thead"), tbody = hel("tbody"), head = hel("tr");
+    const hasBand = Object.keys(bands).length > 0;
+    for (const h of ["Club", "Values", "Median", "Middle half", "10th to 90th", ...(hasBand ? ["Good shots' middle half"] : [])]) head.appendChild(hel("th", null, h));
+    thead.appendChild(head);
+    for (const c of model.clubs) {
+      const tr = hel("tr"), name = hel("td"), sw = hel("i", "cs-sw" + (isAlt(cmap, c.club) ? " alt" : ""));
+      sw.style.setProperty("--c", colorVar(cmap, c.club));
+      name.append(sw, nameOf(c.club));
+      tr.append(name, hel("td", c.enough ? null : "dim", `${c.n}`));
+      if (!c.enough) {
+        const td = hel("td", "dim", `needs ${MIN_SHOTS}`);
+        td.colSpan = hasBand ? 4 : 3;
+        tr.appendChild(td);
+      } else {
+        const g = bands[c.club];
+        tr.append(hel("td", null, fmt(c.q50)), hel("td", null, `${plain(c.q25)} to ${fmt(c.q75)}`), hel("td", null, `${plain(c.q10)} to ${fmt(c.q90)}`));
+        if (hasBand) tr.appendChild(hel("td", g ? null : "dim", g ? `${plain(g.q25)} to ${fmt(g.q75)}` : "–"));
+      }
+      if (opts.onPick && c.enough) { tr.style.cursor = "pointer"; tr.onclick = () => opts.onPick(c.club); }
+      tbody.appendChild(tr);
+    }
+    tbl.append(thead, tbody);
+    const wrap = hel("div", "cs-table-wrap");
+    wrap.appendChild(tbl);
+    box.appendChild(wrap);
+  }
+
+  const api = { MIN_SHOTS, RING_K, SLOTS, BAG_WAY, bagOrder, colors, usable, ring, ringPoints, analyze, sideWords, leanWords,
+                analyzeNumber, renderNumber,
                 flight, sessionFlights, renderSpread, renderFlights };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingClubSpread = api;
