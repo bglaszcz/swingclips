@@ -4,7 +4,8 @@
 // on Practice and on the Start page, so it needs nothing but goal.js: the page hands it the words.
 //
 // SwingGoalLive.render(box, model, opts)
-//   model: SwingGoal.live(rows, focus, target), with `target` set on it
+//   model: SwingGoal.live(rows, focus, target), with `target` set on it; or SwingGoalLive.fromLog(...) for
+//          practice mode, whose target is a range with two ends ({lo, hi}: the band between them)
 //   opts: {title, label (the move in plain words), fmt(v) (a value with its unit), onOpen(row),
 //          thought (the swing thought, shown when the last swing was out), waiting (the latest
 //          swing's numbers aren't worked out yet)}
@@ -43,11 +44,13 @@
     document.head.append(Object.assign(document.createElement("style"), { id: "gl-style", textContent: CSS }));
   }
   const WORDS = { in: "in your target", near: "just outside", out: "outside your target" };
+  const RANGE_WORDS = { in: "in your range", near: "just outside", out: "outside your range" };
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const svgEl = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.append(e); return e; };
 
   function render(box, model, opts = {}) {
     const t = model.target, last = model.last, fmt = opts.fmt || (v => String(v));
+    const WORDS = t && Number.isFinite(t.lo) && Number.isFinite(t.hi) ? RANGE_WORDS : api.WORDS;
     style();
     box.classList.add("gl");
     box.replaceChildren();
@@ -61,7 +64,7 @@
     top.append(tile);
     const stat = (value, label) => { const d = el("div", "gl-stat"); d.append(el("b", null, value), el("span", null, label)); return d; };
     top.append(stat(`${model.n}`, model.n === 1 ? "swing" : "swings"),
-      stat(model.rate == null ? "–" : `${Math.round(model.rate * 100)}%`, "in your target"),
+      stat(model.rate == null ? "–" : `${Math.round(model.rate * 100)}%`, WORDS.in),
       stat(model.minutes >= 60 ? `${Math.floor(model.minutes / 60)} h ${model.minutes % 60} min` : `${model.minutes} min`, "so far"));
     box.append(top);
     if (last && last.zone !== "in" && opts.thought && !opts.waiting) box.append(el("div", "gl-thought", `Swing thought: “${opts.thought}”`));
@@ -76,15 +79,27 @@
     // The scale from the middle of the swings and the target, so one wild swing doesn't flatten the rest.
     const vs = model.points.map(p => p.v).sort((a, b) => a - b);
     const q = p => { const i = (vs.length - 1) * p, lo = Math.floor(i), hi = Math.ceil(i); return vs[lo] + (vs[hi] - vs[lo]) * (i - lo); };
-    const reach = Math.max((q(0.9) - q(0.1)) * 0.6, (t.spread || 0) * 0.75, Math.abs(t.bound) * 0.05, 1e-6);
-    let lo = Math.min(q(0.05), t.bound) - reach, hi = Math.max(q(0.95), t.bound) + reach;
+    const two = Number.isFinite(t.lo) && Number.isFinite(t.hi);
+    const tLo = two ? t.lo : t.bound, tHi = two ? t.hi : t.bound;
+    const reach = Math.max((q(0.9) - q(0.1)) * 0.6, (t.spread || 0) * 0.75, (tHi - tLo) * 0.5, Math.abs(tHi) * 0.05, 1e-6);
+    let lo = Math.min(q(0.05), tLo) - reach, hi = Math.max(q(0.95), tHi) + reach;
     const sy = v => H - m.b - (Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo) * (H - m.t - m.b);
     const n = Math.max(model.n, 8), sx = i => m.l + (i - 0.5) / n * (W - m.l - m.r);
-    const below = t.side === "below";
-    svgEl("rect", { x: m.l, y: below ? sy(t.bound) : m.t, width: W - m.l - m.r, height: below ? H - m.b - sy(t.bound) : sy(t.bound) - m.t, class: "gl-band" }, svg);
-    svgEl("line", { x1: m.l, x2: W - m.r, y1: sy(t.bound), y2: sy(t.bound), class: "gl-bound" }, svg);
-    svgEl("text", { x: m.l - 6, y: sy(t.bound) + 4, "text-anchor": "end", class: "gl-axis" }, svg).textContent = fmt(t.bound);
-    svgEl("text", { x: W - m.r - 4, y: below ? H - m.b - 6 : m.t + 12, "text-anchor": "end", class: "gl-axis" }, svg).textContent = "in your target";
+    if (two) {
+      // A range: the band between its ends, each end drawn and labelled.
+      svgEl("rect", { x: m.l, y: sy(tHi), width: W - m.l - m.r, height: Math.max(2, sy(tLo) - sy(tHi)), class: "gl-band" }, svg);
+      for (const b of [tLo, tHi]) {
+        svgEl("line", { x1: m.l, x2: W - m.r, y1: sy(b), y2: sy(b), class: "gl-bound" }, svg);
+        svgEl("text", { x: m.l - 6, y: sy(b) + 4, "text-anchor": "end", class: "gl-axis" }, svg).textContent = fmt(b);
+      }
+      svgEl("text", { x: W - m.r - 4, y: sy(tLo) - 6, "text-anchor": "end", class: "gl-axis" }, svg).textContent = "in your range";
+    } else {
+      const below = t.side === "below";
+      svgEl("rect", { x: m.l, y: below ? sy(t.bound) : m.t, width: W - m.l - m.r, height: below ? H - m.b - sy(t.bound) : sy(t.bound) - m.t, class: "gl-band" }, svg);
+      svgEl("line", { x1: m.l, x2: W - m.r, y1: sy(t.bound), y2: sy(t.bound), class: "gl-bound" }, svg);
+      svgEl("text", { x: m.l - 6, y: sy(t.bound) + 4, "text-anchor": "end", class: "gl-axis" }, svg).textContent = fmt(t.bound);
+      svgEl("text", { x: W - m.r - 4, y: below ? H - m.b - 6 : m.t + 12, "text-anchor": "end", class: "gl-axis" }, svg).textContent = "in your target";
+    }
     const every = Math.ceil(n / Math.max(1, Math.floor((W - m.l - m.r) / 28)));
     for (const p of model.points) {
       svgEl("line", { x1: sx(p.i), x2: sx(p.i), y1: m.t, y2: H - m.b, class: "gl-grid" }, svg);
@@ -111,7 +126,56 @@
     box.append(legend);
   }
 
-  const api = { render, WORDS };
+  /**
+   * Practice mode's latest session for the number being practised, from the practice log (server/practice.py),
+   * in the same shape as SwingGoal.live: the entries of the log's latest session (a gap of `gapMs` starts a new
+   * one) with this metric and range, in the order hit (the log is in the order spoken: a swing worked out again
+   * is spoken late; one entry per swing, the latest). When that session has none with the current setting
+   * (practice was switched to another number after it), the number and range practised last in it.
+   * Returns the model with {metric, min, max, current: whether that's the current setting}. Each swing's zone is the one the phone played (`tone`), or
+   * worked out the same way for older entries: in the range, "near" within a quarter of its width outside it,
+   * else "out". A swing with no reading is left out, as on the focus card. Null when the latest session has
+   * none with this target.
+   * @param log [{t (s), metric, min, max, value, status, tone?, clip}] oldest first
+   * @param config {metric, min, max}
+   */
+  function fromLog(log, config, gapMs) {
+    config = config || {};
+    const byClip = new Map();
+    for (const e of log || []) if (e && !e.test && Number.isFinite(e.t)) byClip.set(e.clip || `t${e.t}`, e);
+    const entries = [...byClip.values()].sort((a, b) => a.t - b.t);
+    if (!entries.length) return null;
+    // The latest session: back from the newest entry while the gaps stay short.
+    let from = entries.length - 1;
+    while (from > 0 && (entries[from].t - entries[from - 1].t) * 1000 < gapMs) from--;
+    const session = entries.slice(from);
+    const current = session.some(e => e.metric === config.metric && e.min === config.min && e.max === config.max);
+    // Not the current setting: the one used last in that session.
+    const used = current ? config : session.reduce((a, b) => (b.made ?? b.t) >= (a.made ?? a.t) ? b : a);
+    const metric = used.metric, lo = used.min, hi = used.max, span = hi - lo;
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
+    const zoneOf = e => {
+      if (e.tone === "in" || e.tone === "near" || e.tone === "out") return e.tone;
+      if (e.status === "in") return "in";
+      const off = e.value < lo ? lo - e.value : e.value - hi;
+      return off <= 0.25 * span + 1e-6 ? "near" : "out";
+    };
+    const mine = session.filter(e => e.metric === metric && e.min === lo && e.max === hi);
+    if (!mine.length) return null;
+    const points = [];
+    for (const e of mine) {
+      if (e.status === "none" || !Number.isFinite(e.value)) continue;
+      points.push({ i: points.length + 1, v: e.value, zone: zoneOf(e), row: { name: e.clip, t: e.t * 1000 } });
+    }
+    const k = points.filter(p => p.zone === "in").length;
+    const times = mine.map(e => e.t);
+    return { points, n: points.length, k, rate: points.length ? k / points.length : null, last: points[points.length - 1] || null,
+             minutes: times.length > 1 ? Math.round((Math.max(...times) - Math.min(...times)) / 60) : 0,
+             start: Math.min(...times) * 1000, skipped: mine.length - points.length,
+             target: { lo, hi, bound: lo, spread: span }, metric, min: lo, max: hi, current };
+  }
+
+  const api = { render, fromLog, WORDS, RANGE_WORDS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingGoalLive = api;
 })(typeof window !== "undefined" ? window : globalThis);

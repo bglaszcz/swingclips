@@ -417,6 +417,7 @@
   <section id="sec-swings" hidden>
     <h2>Swings and Square shots</h2>
     <div id="drill-nudge" class="dn-card" hidden></div>
+    <div id="practice-live" class="focus-card" hidden></div>
     <div id="focus-card" class="focus-card" hidden></div>
     <div id="bay-card" class="bay-card" hidden></div>
     <p class="hint">Hit in Square's driving range as usual. Each swing gets its Square numbers 6-16 s after the strike.</p>
@@ -1963,6 +1964,41 @@ function stepControls(blocks, idx) {
   return act;
 }
 
+// ---- Practice mode, swing by swing ----
+// While practice mode is on (Practice on the review page: one number and a range, the phone says each swing),
+// the number swing by swing against the range: the same picture as the focus card and the review page's
+// Practice view (goal-live.js fromLog, from the practice log). Redrawn only when it changes.
+let practiceLiveSig = null;
+async function renderPracticeLive() {
+  const box = $("practice-live");
+  if (!box || typeof SwingGoalLive === "undefined" || !SwingGoalLive.fromLog) return;
+  const pr = await getJson("/api/practice");
+  if (!pr) return;
+  practiceConfig = pr.config;
+  const c = pr.config;
+  const model = c && c.on ? SwingGoalLive.fromLog(pr.log, c, 45 * 60 * 1000) : null;
+  // Only the setting that's on now, and only a session still going (its last swing within the session gap).
+  const m = model && model.current && (pr.metrics || []).find(x => x.key === model.metric);
+  const going = model && model.points.length && Date.now() - model.points[model.points.length - 1].row.t < 45 * 60 * 1000;
+  const show = !!(m && going);
+  const sig = JSON.stringify(show ? [c.metric, c.min, c.max, c.cue, model.points.map(p => [p.v, p.zone]), model.minutes, box.clientWidth > 0] : null);
+  if (sig === practiceLiveSig) return;
+  practiceLiveSig = sig;
+  box.hidden = !show;
+  if (!show) { box.replaceChildren(); return; }
+  const plain = s => (typeof SwingShotStory !== "undefined" && SwingShotStory.plain) ? SwingShotStory.plain(s) : s;
+  const unit = m.unit === ":1" ? ": 1" : (m.unit || "");
+  const fmt = v => `${v.toFixed(m.dec)}${unit ? (unit === ": 1" ? unit : " " + unit) : ""}`;
+  const inner = document.createElement("div");
+  box.replaceChildren(inner);
+  SwingGoalLive.render(inner, model, {
+    title: `Practice, swing by swing · ${plain(m.label)} ${c.min.toFixed(m.dec)} to ${c.max.toFixed(m.dec)}${unit ? (unit === ": 1" ? "" : " " + unit) : ""}`,
+    label: plain(m.label).replace(/^./, ch => ch.toLowerCase()),
+    fmt,
+    thought: c.cue || null,
+  });
+}
+
 async function loadPlanData() {
   const [j, c, pr, s, st] = await Promise.all([
     getJson("/api/journal"),
@@ -2804,6 +2840,7 @@ async function pollSwings() {
   if (isDemoStop && !lastEndedSessionStory) {
     await checkEndOfSession();
   }
+  await renderPracticeLive();
   renderFocusCard();
   renderDrillNudge();
   renderWeekPlan();

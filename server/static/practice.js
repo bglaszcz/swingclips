@@ -1,7 +1,8 @@
 // Practice (button at the top): pick one number and a range; after each swing the speaking phone says
 // the number and whether it was in range (server/practice.py makes the sentence). The range can
 // start from the middle half of your recent swings with a club, or from the middle 50% of your good
-// shots with it (goodshots.js), which sets the club too. Below it, the log of what was said, per
+// shots with it (goodshots.js), which sets the club too. Below it, the latest session swing by swing
+// against the range (goal-live.js, the picture the focus card draws), then the log of what was said, per
 // session, with the share in range.
 // Uses the page's globals: showView, closeTrendView, loadTrendData, swingRow, quantile, goodShotData,
 // trendDataLoaded (trends.js), clips, shownClips, clubName, open, renderList, SESSION_GAP_MS.
@@ -38,6 +39,7 @@ async function loadPractice() {
     prForm = { metric: c.metric, club: c.club ?? undefined, min: c.min, max: c.max, streak: c.streak, cue: c.cue || "" };
   }
   renderPracticeForm();
+  renderPracticeLive();
   renderPracticeLog();
 }
 
@@ -286,6 +288,40 @@ function usePracticeSuggestion(newMetric) {
   prEl("pr-min").value = prForm.min ?? "";
   prEl("pr-max").value = prForm.max ?? "";
   renderPracticeForm();
+}
+
+// ---- Swing by swing ----
+
+let prLiveSig = null;
+/**
+ * The number being practised, swing by swing: the log's latest session with the current number and range,
+ * each swing a dot against the range, coloured as the phone's tone was. Redrawn only when it changes.
+ */
+function renderPracticeLive() {
+  const card = prEl("pr-live-card"), box = prEl("pr-live");
+  if (!prState || typeof SwingGoalLive === "undefined" || !SwingGoalLive.fromLog) { card.hidden = true; return; }
+  const c = prState.config;
+  let model = SwingGoalLive.fromLog(prState.log, c, SESSION_GAP_MS);
+  const m = model && prMetric(model.metric);
+  if (!m) model = null;
+  const sig = JSON.stringify([c.cue, model && [model.metric, model.min, model.max, model.current], model && model.points.map(p => [p.v, p.zone]), model && model.minutes,
+                              box.clientWidth > 0]);
+  if (sig === prLiveSig) return;
+  prLiveSig = sig;
+  card.hidden = !model;
+  if (!model) { box.replaceChildren(); return; }
+  const start = new Date(model.start), today = start.toDateString() === new Date().toDateString();
+  const when = today ? "Today" : start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  const unit = prUnit(m);
+  SwingGoalLive.render(box, model, {
+    title: `${when}, swing by swing · ${SwingShotStory.plain(m.label)} ${prFmt(m, model.min)} to ${prFmt(m, model.max)}${unit ? " " + unit : ""}`,
+    label: SwingShotStory.plain(m.label).replace(/^./, ch => ch.toLowerCase()),
+    fmt: v => `${prFmt(m, v)}${unit ? (unit === ": 1" ? unit : " " + unit) : ""}`,
+    thought: model.current ? c.cue || null : null,
+    onOpen: row => { if (row.name && clips.some(x => x.name === row.name)) open(row.name); },
+  });
+  if (model.skipped) box.append(Object.assign(document.createElement("div"), { className: "muted",
+    textContent: `${model.skipped} swing${model.skipped === 1 ? "" : "s"} with no reading left out.` }));
 }
 
 // ---- Log ----

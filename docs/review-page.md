@@ -805,6 +805,15 @@ On **Progress**, first card (`static/focus.js`, drawn by `renderFocus` in `trend
 Pick one thing to work on and a range; after each swing the phone says the number and whether it
 was in range: "Tempo 3.2, in range", "Club path minus 4, too far left", "Early extension 2, too far
 toward the ball". The phones face away from you, so voice is the channel.
+- **Swing by swing** (2026-10-20, `static/goal-live.js fromLog`): above the Log, the practice log's latest
+  session for the number being practised drawn as the focus card draws it: the last swing's number big with
+  where it sat, the count, the share in range and the minutes, and every swing as a dot against the range
+  (a band with both ends drawn), coloured as the phone's tone was (in, just outside = within a quarter of the
+  range's width, outside; older entries without a tone get the same rule). In the order hit (the log is in
+  the order spoken: a swing worked out again is spoken late), one entry per swing; swings with no reading are
+  counted apart. If practice was switched to another number since, it shows the one practised last in that
+  session. The Start page shows the same card above the focus card while practice is on and the session is
+  going (its last swing within 45 min). Tests: `tests/goallive.test.js`.
 - **Practice my #1 priority** (first card, 2026-10-07): the focus, else Progress's first move over every
   club (`topPriority()` in `trends.js`), with its swing thought and drill and one button, **Start practicing
   this**: the number, the range ("better than my usual" from the median of the latest 30 swings, as the
