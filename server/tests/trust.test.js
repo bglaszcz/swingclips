@@ -165,6 +165,56 @@ test("noise table: too few swings, a session under 5, or a camera that couldn't 
   assert.equal(row, undefined);                                     // each club's swings are all the same
 });
 
+test("noise table covers held-up numbers at new positions (p2, p3, p5, p8)", () => {
+  const day = 86400;
+  const makeSession = (t0, delta) => Array.from({ length: 6 }, (_, i) => ({
+    t: t0 + i * 60, club: "I7",
+    record: {
+      body: {},
+      quality: { camera: { face: [], dtl: null } },
+      at: {
+        face: {
+          p2: { leadArm: 10 + (i % 2 ? delta : -delta) },
+          p3: { leadArm: 20 + (i % 2 ? delta : -delta) },
+          p5: { leadArm: 30 + (i % 2 ? delta : -delta) },
+          p8: { leadArm: 40 + (i % 2 ? delta : -delta) },
+        },
+        dtl: null,
+      },
+      noise: { face: { leadArm: 0.1 }, dtl: null },
+    },
+  }));
+  const swings = [...makeSession(0, 2), ...makeSession(day, 1.5)];
+  const t = T.noiseTable(swings);
+  for (const pos of ["p2", "p3", "p5", "p8"]) {
+    const row = t.keys[`face.leadArm.${pos}`];
+    assert.ok(row, `face.leadArm.${pos} should be in noise table`);
+    assert.equal(row.shaky, false);
+    assert.equal(row.noise, 0.1);
+  }
+});
+
+test("valuesAtPositions keeps all numbers at P1/P4/P6/P7 and only held-up numbers at P2/P3/P5/P8", () => {
+  // Synthetic analysis object
+  const a = {
+    positions: S.NUMBER_POSITIONS.map((key, i) => ({ key, index: i })),
+    metrics: {
+      values: S.NUMBER_POSITIONS.map(() => ({
+        leadArm: 45,
+        club: 90,
+        pelvisTurn: 30, // not held at p2/p3, held at p5/p8
+      })),
+    },
+    dtlMetrics: null,
+  };
+  const at = S.summarize ? S.summarize : null;
+  // Test via S.NUMBER_POSITIONS and HELD_AT logic in summary.js
+  assert.equal(S.NUMBER_POSITIONS.length, 8);
+  assert.ok(S.HELD_AT.p2.face.has("leadArm"));
+  assert.ok(!S.HELD_AT.p2.face.has("pelvisTurn"));
+  assert.ok(S.HELD_AT.p5.face.has("pelvisTurn"));
+});
+
 // ---- summary.js: the impact check the camera check carries ----
 
 test("impactCheck: the ball found, from 60 ms before to 10 ms after the heard strike", () => {

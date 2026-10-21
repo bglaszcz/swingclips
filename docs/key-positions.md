@@ -463,3 +463,146 @@ Across all 502 swings, the waggle filter moved the overall tempo ratio from **3.
 (tour references: Tour Tempo 3:1, Garmin 3.0, Blast 2.5-3.1, TPI 3.2).
 89 swings (17.7%) changed ratio by more than 0.2, and 303 swings (60.4%) changed by more than 0.1.
 
+## Camera numbers at P2, P3, P5 and P8 (Oct 21 2026)
+
+Which 2D camera numbers hold up at the intermediate key positions (**P2**, **P3**, **P5**, and **P8**), evaluated on the owner's hand-labeled clips (`GET /api/labels`, `GET /api/labels/<clip>`: 94 labeled clips, 49 face-on and 45 down the line, across 50 unique swings) and the address noise floor (`trust.js`, `noise.json`).
+
+### Evaluation rules
+
+For each body number given by `metrics.js` / `BODY` on its own camera (14 face-on, 8 down-the-line):
+1. **Timing test**: On the hand-labeled clips, the number is sampled at the owner's labeled timestamp (`idx_labeled = frameIndexAt(frames, t_labeled)`) and at the detector's placed timestamp (`p_detected.index`). It holds up on timing when the **median absolute difference** is under **half the number's swing-to-swing standard deviation** at that position (within-club spread: the median of the per-club standard deviations over swings with that number, clubs with 8+ swings).
+2. **Noise test**: `trust.js`'s noise floor rule: the address noise floor (`noise.json`, measured standing still at address) is at most **half the swing-to-swing spread** (`NOISE_SHARE = 0.5`).
+
+A number holds up at a position only when **both** pass.
+
+### Results at P2, P3, P5 and P8
+
+| Number | View | Position | n labeled | Timing diff | Spread | Address noise | Timing check | Noise check | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| Pelvis turn (`pelvisTurn`) | face | P2 | 49 | 0.40 ° | 3.84 ° | 2.14 ° | pass (< 0.5 spread) | fail (> 0.5 spread) | **FAIL** |
+| Shoulder turn (`shoulderTurn`) | face | P2 | 49 | 0.64 ° | 3.49 ° | 1.83 ° | pass (< 0.5 spread) | fail (> 0.5 spread) | **FAIL** |
+| X-factor (`separation`) | face | P2 | 49 | 0.40 ° | 3.81 ° | 2.70 ° | pass (< 0.5 spread) | fail (> 0.5 spread) | **FAIL** |
+| Lead arm (`leadArm`) | face | P2 | 49 | 0.68 ° | 3.54 ° | 0.12 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shaft (`club`) | face | P2 | 49 | 1.10 ° | 0.45 ° | 0.00 ° | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Spine tilt (`spineTilt`) | face | P2 | 49 | 0.08 ° | 0.87 ° | 0.09 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Forward bend (`spineForward`) | face | P2 | 11 | 0.07 ° | 2.91 ° | 0.47 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hip tilt (`pelvisTilt`) | face | P2 | 49 | 0.09 ° | 0.67 ° | 0.30 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shoulder tilt (`shoulderTilt`) | face | P2 | 49 | 0.49 ° | 2.39 ° | 0.19 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head sway (`headSway`) | face | P2 | 49 | 0.01 in | 0.21 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head rise (`headRise`) | face | P2 | 49 | 0.01 in | 0.19 in | 0.02 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hip sway (`hipSway`) | face | P2 | 49 | 0.00 in | 0.38 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hands to ball (`handsBall`) | face | P2 | 49 | 0.19 in | 1.94 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Wrist hinge (`lag`) | face | P2 | 40 | 0.36 ° | 5.11 ° | 0.14 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Forward bend (`bend`) | dtl | P2 | 43 | 0.20 ° | 1.34 ° | 0.28 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Bend vs address (`bendChange`) | dtl | P2 | 43 | 0.20 ° | 1.39 ° | 0.28 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hips to ball (`hipDepth`) | dtl | P2 | 43 | 0.06 in | 0.28 in | 0.05 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head to ball (`headDepth`) | dtl | P2 | 43 | 0.02 in | 0.33 in | 0.06 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hand height (`handHeight`) | dtl | P2 | 43 | 0.30 in | 1.23 in | 0.06 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hand depth (`handDepth`) | dtl | P2 | 43 | 0.18 in | 1.00 in | 0.05 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hands to plane (`handsPlane`) | dtl | P2 | 43 | 0.06 in | 0.69 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shaft to plane (`shaftPlane`) | dtl | P2 | 20 | 11.0 ° | 5.91 ° | 0.24 ° | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Pelvis turn (`pelvisTurn`) | face | P3 | 49 | 0.00 ° | 3.67 ° | 2.14 ° | pass (< 0.5 spread) | fail (> 0.5 spread) | **FAIL** |
+| Shoulder turn (`shoulderTurn`) | face | P3 | 49 | 0.00 ° | 1.50 ° | 1.83 ° | pass (< 0.5 spread) | fail (> 0.5 spread) | **FAIL** |
+| X-factor (`separation`) | face | P3 | 49 | 0.00 ° | 2.50 ° | 2.70 ° | pass (< 0.5 spread) | fail (> 0.5 spread) | **FAIL** |
+| Lead arm (`leadArm`) | face | P3 | 49 | 0.00 ° | 1.21 ° | 0.12 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shaft (`club`) | face | P3 | 49 | 0.00 ° | 6.01 ° | 0.00 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Spine tilt (`spineTilt`) | face | P3 | 49 | 0.00 ° | 1.14 ° | 0.09 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Forward bend (`spineForward`) | face | P3 | 0 | — ° | — ° | 0.47 ° | fail | fail | **FAIL** |
+| Hip tilt (`pelvisTilt`) | face | P3 | 49 | 0.00 ° | 0.93 ° | 0.30 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shoulder tilt (`shoulderTilt`) | face | P3 | 49 | 0.00 ° | 2.94 ° | 0.19 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head sway (`headSway`) | face | P3 | 49 | 0.00 in | 0.33 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head rise (`headRise`) | face | P3 | 49 | 0.00 in | 0.25 in | 0.02 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hip sway (`hipSway`) | face | P3 | 49 | 0.00 in | 0.41 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hands to ball (`handsBall`) | face | P3 | 49 | 0.00 in | 1.22 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Wrist hinge (`lag`) | face | P3 | 48 | 0.00 ° | 6.39 ° | 0.14 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Forward bend (`bend`) | dtl | P3 | 43 | 0.13 ° | 0.98 ° | 0.28 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Bend vs address (`bendChange`) | dtl | P3 | 43 | 0.13 ° | 1.83 ° | 0.28 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hips to ball (`hipDepth`) | dtl | P3 | 43 | 0.04 in | 0.23 in | 0.05 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head to ball (`headDepth`) | dtl | P3 | 43 | 0.07 in | 0.39 in | 0.06 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hand height (`handHeight`) | dtl | P3 | 43 | 1.17 in | 1.54 in | 0.06 in | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Hand depth (`handDepth`) | dtl | P3 | 43 | 0.74 in | 1.14 in | 0.05 in | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Hands to plane (`handsPlane`) | dtl | P3 | 43 | 0.36 in | 0.81 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shaft to plane (`shaftPlane`) | dtl | P3 | 10 | 0.00 ° | 12.0 ° | 0.24 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Pelvis turn (`pelvisTurn`) | face | P5 | 49 | 0.00 ° | 4.88 ° | 2.14 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shoulder turn (`shoulderTurn`) | face | P5 | 49 | 0.00 ° | 5.37 ° | 1.83 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| X-factor (`separation`) | face | P5 | 49 | 0.00 ° | 6.75 ° | 2.70 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Lead arm (`leadArm`) | face | P5 | 49 | 0.00 ° | 1.34 ° | 0.12 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shaft (`club`) | face | P5 | 49 | 0.00 ° | 4.90 ° | 0.00 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Spine tilt (`spineTilt`) | face | P5 | 49 | 0.00 ° | 1.46 ° | 0.09 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Forward bend (`spineForward`) | face | P5 | 1 | 0.00 ° | 2.98 ° | 0.47 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hip tilt (`pelvisTilt`) | face | P5 | 49 | 0.00 ° | 0.96 ° | 0.30 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shoulder tilt (`shoulderTilt`) | face | P5 | 49 | 0.00 ° | 1.59 ° | 0.19 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head sway (`headSway`) | face | P5 | 49 | 0.00 in | 0.88 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head rise (`headRise`) | face | P5 | 49 | 0.00 in | 0.39 in | 0.02 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hip sway (`hipSway`) | face | P5 | 49 | 0.00 in | 0.40 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hands to ball (`handsBall`) | face | P5 | 49 | 0.00 in | 0.95 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Wrist hinge (`lag`) | face | P5 | 49 | 0.00 ° | 5.84 ° | 0.14 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Forward bend (`bend`) | dtl | P5 | 44 | 0.96 ° | 1.18 ° | 0.28 ° | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Bend vs address (`bendChange`) | dtl | P5 | 44 | 0.96 ° | 2.14 ° | 0.28 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hips to ball (`hipDepth`) | dtl | P5 | 44 | 0.11 in | 0.40 in | 0.05 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head to ball (`headDepth`) | dtl | P5 | 44 | 0.27 in | 0.45 in | 0.06 in | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Hand height (`handHeight`) | dtl | P5 | 44 | 4.51 in | 0.72 in | 0.06 in | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Hand depth (`handDepth`) | dtl | P5 | 44 | 2.28 in | 1.34 in | 0.05 in | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Hands to plane (`handsPlane`) | dtl | P5 | 44 | 1.04 in | 0.85 in | 0.03 in | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Shaft to plane (`shaftPlane`) | dtl | P5 | 0 | — ° | — ° | 0.24 ° | fail | fail | **FAIL** |
+| Pelvis turn (`pelvisTurn`) | face | P8 | 49 | 0.91 ° | 4.44 ° | 2.14 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shoulder turn (`shoulderTurn`) | face | P8 | 49 | 1.32 ° | 5.42 ° | 1.83 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| X-factor (`separation`) | face | P8 | 49 | 0.03 ° | 3.44 ° | 2.70 ° | pass (< 0.5 spread) | fail (> 0.5 spread) | **FAIL** |
+| Lead arm (`leadArm`) | face | P8 | 49 | 2.43 ° | 5.82 ° | 0.12 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shaft (`club`) | face | P8 | 49 | 3.20 ° | 1.23 ° | 0.00 ° | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Spine tilt (`spineTilt`) | face | P8 | 49 | 0.06 ° | 1.76 ° | 0.09 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Forward bend (`spineForward`) | face | P8 | 0 | — ° | — ° | 0.47 ° | fail | fail | **FAIL** |
+| Hip tilt (`pelvisTilt`) | face | P8 | 49 | 0.08 ° | 2.17 ° | 0.30 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Shoulder tilt (`shoulderTilt`) | face | P8 | 49 | 0.68 ° | 5.26 ° | 0.19 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head sway (`headSway`) | face | P8 | 49 | 0.01 in | 1.14 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head rise (`headRise`) | face | P8 | 49 | 0.02 in | 0.76 in | 0.02 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hip sway (`hipSway`) | face | P8 | 49 | 0.03 in | 0.65 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hands to ball (`handsBall`) | face | P8 | 49 | 0.13 in | 1.47 in | 0.03 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Wrist hinge (`lag`) | face | P8 | 0 | — ° | — ° | 0.14 ° | fail | fail | **FAIL** |
+| Forward bend (`bend`) | dtl | P8 | 44 | 0.68 ° | 2.79 ° | 0.28 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Bend vs address (`bendChange`) | dtl | P8 | 44 | 0.68 ° | 3.51 ° | 0.28 ° | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hips to ball (`hipDepth`) | dtl | P8 | 44 | 0.15 in | 0.65 in | 0.05 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Head to ball (`headDepth`) | dtl | P8 | 44 | 0.05 in | 0.70 in | 0.06 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hand height (`handHeight`) | dtl | P8 | 44 | 2.66 in | 3.04 in | 0.06 in | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Hand depth (`handDepth`) | dtl | P8 | 44 | 0.32 in | 1.61 in | 0.05 in | pass (< 0.5 spread) | pass (<= 0.5 spread) | **PASS** |
+| Hands to plane (`handsPlane`) | dtl | P8 | 44 | 1.92 in | 2.21 in | 0.03 in | fail (>= 0.5 spread) | pass (<= 0.5 spread) | **FAIL** |
+| Shaft to plane (`shaftPlane`) | dtl | P8 | 0 | — ° | — ° | 0.24 ° | fail | fail | **FAIL** |
+
+### Correction: down-the-line timing (review, Oct 21 2026)
+
+The table above times the down-the-line numbers at the DTL clip's own detected positions (the DTL
+clip analyzed alone). The page doesn't read them that way: a two-phone swing's DTL numbers are read at
+the face-on clip's position, synced across (`summary.js` `dtlIndex`). Redone that way on the same 45
+labeled DTL clips (face clip as main, DTL as partner; spread over the cached swings, clubs with 8+),
+the timing error at P3 and P5 is near zero (median 0.0-0.2 in or deg; P3 hand height 0.23 in vs
+spread 0.57, P5 hand height 0.00 vs 1.04), so hand height, hand depth and hands to plane hold up at
+P3 and P5, and forward bend and head to ball at P5. P2 and P8 come out as in the table (P8 hand
+height 1.44 vs 2.62 and hands to plane 1.01 vs 1.86 still fail). The lists below are the result.
+
+### Held-up numbers per position
+
+- **P2 (early backswing)** — 17 numbers:
+  - Face-on (10): Lead arm (`leadArm`), Spine tilt (`spineTilt`), Forward bend (`spineForward`), Hip tilt (`pelvisTilt`), Shoulder tilt (`shoulderTilt`), Head sway (`headSway`), Head rise (`headRise`), Hip sway (`hipSway`), Hands to ball (`handsBall`), Wrist hinge (`lag`).
+  - Down the line (7): Forward bend (`bend`), Bend vs address (`bendChange`), Hips to ball (`hipDepth`), Head to ball (`headDepth`), Hand height (`handHeight`), Hand depth (`handDepth`), Hands to plane (`handsPlane`).
+  - *Failed*: Pelvis and shoulder turns and X-factor fail the noise check (early backswing turn is small relative to ~2° address noise); Shaft and shaft to plane fail timing.
+- **P3 (backswing lead arm parallel)** — 17 numbers:
+  - Face-on (10): Lead arm (`leadArm`), Shaft (`club`), Spine tilt (`spineTilt`), Hip tilt (`pelvisTilt`), Shoulder tilt (`shoulderTilt`), Head sway (`headSway`), Head rise (`headRise`), Hip sway (`hipSway`), Hands to ball (`handsBall`), Wrist hinge (`lag`).
+  - Down the line (7): Forward bend (`bend`), Bend vs address (`bendChange`), Hips to ball (`hipDepth`), Head to ball (`headDepth`), Hand height (`handHeight`), Hand depth (`handDepth`), Hands to plane (`handsPlane`).
+  - *Failed*: Body turns and X-factor fail noise floor; shaft to plane is read too rarely at P3 for a spread (no club with 8 readings).
+- **P5 (early downswing lead arm parallel)** — 21 numbers:
+  - Face-on (14): All 14 numbers pass (P5 detector is tuned directly to owner labels, timing error is 0 ms, and downswing turns have spread > 4° well above noise floor).
+  - Down the line (7): Forward bend (`bend`), Bend vs address (`bendChange`), Hips to ball (`hipDepth`), Head to ball (`headDepth`), Hand height (`handHeight`), Hand depth (`handDepth`), Hands to plane (`handsPlane`).
+  - *Failed*: shaft to plane (not read at P5).
+- **P8 (follow-through shaft parallel)** — 15 numbers:
+  - Face-on (10): Pelvis turn (`pelvisTurn`), Shoulder turn (`shoulderTurn`), Lead arm (`leadArm`), Spine tilt (`spineTilt`), Hip tilt (`pelvisTilt`), Shoulder tilt (`shoulderTilt`), Head sway (`headSway`), Head rise (`headRise`), Hip sway (`hipSway`), Hands to ball (`handsBall`).
+  - Down the line (5): Forward bend (`bend`), Bend vs address (`bendChange`), Hips to ball (`hipDepth`), Head to ball (`headDepth`), Hand depth (`handDepth`).
+  - *Failed*: X-factor fails noise; Shaft fails timing; DTL hand height and plane fail timing in rapid follow-through.
+
+### Sanity check against P1, P4, P6, and P7
+
+On the original four positions:
+- **P7 (impact)**: 100% of numbers pass both timing and noise checks (22 of 22). Impact is exact to the frame, and spreads across swings comfortably beat address noise.
+- **P6 (downswing shaft parallel)**: 16 of 22 numbers pass. DTL hand numbers fail timing as the hands plummet into impact.
+- **P4 (top)**: 16 of 22 numbers pass. Turns and tilts pass comfortably; DTL hand height is slightly noisy.
+- **P1 (setup/address)**: Absolute angles (lead arm, spine tilt, hip tilt, shoulder tilt, forward bend, DTL bend) pass cleanly. Measurements defined *relative to address* (turns, sways, depths, bend change, plane distances) are identically zero at setup by definition (swing-to-swing spread = 0), matching `trust.js` line 245 ("A number that's the same on every swing by definition has nothing to judge").
+

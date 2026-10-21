@@ -63,6 +63,14 @@ swing is tagged with the Square Omni's numbers for that shot.
 - **The ball's flight in the video**  
   On swings with 3D, a shot tracer draws the flight into the down-the-line video from Square's launch numbers and the calibrated camera, from your ball to where it landed. Draw your own lines, angles, circles and boxes on either video (D), lay a reference swing's video over yours in Compare (O), and see every key position as a strip of frames under the swing.
 
+- **Save this swing as a video**  
+  Save your swing (one or two synchronized videos) with drawing overlays, club, date, launch numbers, and coaching card verdict as a WebM video from the ⋯ menu (`Save as video`). Choose real speed (1x) or smooth slow motion (1/4x, or 1/8x for 240 fps clips).
+  <br><img src="docs/img/save-video.png" alt="Save as video" width="550">
+
+- **Body numbers at 8 key positions**  
+  Intermediate key positions (P2 early backswing, P3 backswing lead arm parallel, P5 early downswing, P8 follow-through) alongside setup, top, downswing, and impact, showing held-up numbers and muted dots for noise-filtered ones in the swing view and Compare.
+  <br><img src="docs/img/positions-2d.png" alt="Body numbers at 8 key positions" width="600">
+
 - **Where on the face?**  
   A strike heat map on the club face for each club: where your strikes land, your usual spot, and the latest session's shots.
   <br><img src="docs/img/strike-map.png" alt="Strike heat map" width="550">

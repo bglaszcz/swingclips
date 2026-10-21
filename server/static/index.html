@@ -450,6 +450,72 @@
   .y-overlap-item { margin: 4px 0; font-size: 13px; color: var(--text); }
   .y-fold { margin-top: 12px; }
 
+  /* round 72: save as video */
+  dialog#save-video-dialog {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--panel);
+    color: var(--text);
+    padding: 0;
+    width: min(440px, calc(100vw - 32px));
+    box-shadow: var(--shadow-lg);
+  }
+  dialog#save-video-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+  }
+  .export-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px 10px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .export-head strong { font-size: 16px; font-weight: 700; }
+  .export-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .export-sub { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .export-speeds { display: flex; gap: 8px; }
+  .export-speed-btn {
+    flex: 1;
+    padding: 8px 10px;
+    font-size: 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+    text-align: center;
+  }
+  .export-speed-btn:hover { background: var(--panel-2); }
+  .export-speed-btn.on {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .export-note { font-size: 12px; color: var(--muted); }
+  .export-progress-bar {
+    width: 100%;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--line);
+    overflow: hidden;
+  }
+  .export-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.1s linear;
+  }
+  .export-status { font-size: 13px; color: var(--muted); }
+  .export-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 20px 16px;
+    border-top: 1px solid var(--line);
+  }
+
   @media print {
     body > header, #side, nav, #tools-btn, .menu-pop, #yardage-close, #yardage-print, .y-toolbar, .y-fold, #ready {
       display: none !important;
@@ -1824,6 +1890,7 @@
       <span class="menu">
         <button class="menu-btn" id="more-btn" title="More for this swing">⋯</button>
         <span class="menu-pop" hidden>
+          <button id="save-video-btn" title="Save this swing as a WebM video with its numbers">Save as video</button>
           <button id="hand" title="Which hand you swing with - sets the lead arm"></button>
           <button id="exclude" title="Leave this swing out of the trends and progress (someone else's swing, a practice waggle…)">Leave out</button>
           <button id="drill-mark" title="A pump drill hit without the drill switched on: mark it, and it gets the drill's own numbers and goes under Drill sets. Or a normal swing recorded with a drill left on: not a drill."></button>
@@ -2850,6 +2917,26 @@
   <div id="update-body"></div>
   <div class="update-foot"><button id="update-go" class="primary" hidden>Update</button></div>
 </dialog>
+<dialog id="save-video-dialog" aria-labelledby="export-title">
+  <div class="export-head"><strong id="export-title">Save as video</strong><button class="icon-btn" id="export-close-btn" aria-label="Close">✕</button></div>
+  <div class="export-body">
+    <div class="export-sub">Speed</div>
+    <div class="export-speeds">
+      <button type="button" class="export-speed-btn" data-speed="1">Real speed (1x)</button>
+      <button type="button" class="export-speed-btn on" data-speed="1/4">1/4 speed</button>
+      <button type="button" class="export-speed-btn" data-speed="1/8">1/8 speed</button>
+    </div>
+    <div class="export-note hint">From 0.5 s before takeaway to 0.6 s after impact, with skeletons and numbers.</div>
+    <div class="export-progress-bar">
+      <div class="export-progress-fill"></div>
+    </div>
+    <div class="export-status">Ready to export</div>
+  </div>
+  <div class="export-foot">
+    <button type="button" id="export-cancel-btn">Cancel</button>
+    <button type="button" id="export-go-btn" class="primary">Save video</button>
+  </div>
+</dialog>
 <script src="/static/find.js"></script>
 <script src="/static/phases.js"></script>
 <script src="/static/metrics.js"></script>
@@ -2892,6 +2979,7 @@
 <script src="/static/indicators.js"></script>
 <script src="/static/checkpoints.js"></script>
 <script src="/static/draw.js"></script>
+<script src="/static/clipexport.js"></script>
 <script src="/static/tracer.js"></script>
 <script src="/static/optimize.js"></script>
 <script src="/static/clubspread.js"></script>
@@ -4400,7 +4488,7 @@ function openGoodRanges(tp, facts) {
 /** Tempo, and the numbers at address, the top, P6 and impact: face-on, then down the line. */
 function showNumbers() {
   const box = document.getElementById("numbers");
-  const cols = ["p1", "p4", "p6", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
+  const cols = ((typeof SwingSummary !== "undefined" && SwingSummary.NUMBER_POSITIONS) || ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"]).map(k => positions.find(p => p.key === k)).filter(Boolean);
   box.hidden = !(metrics || dtlMetrics) || !cols.length;
   if (box.hidden) {
     document.getElementById("scorecard").hidden = document.getElementById("drillcard").hidden = true;
@@ -4459,9 +4547,11 @@ function showNumbers() {
   head.innerHTML = "<th></th>";
   for (const p of cols) {
     const th = document.createElement("th");
-    const plainName = (typeof SwingScorecard !== "undefined" && SwingScorecard.PHASE_NAMES && SwingScorecard.PHASE_NAMES[p.key]) || p.label;
+    const phases = (typeof SwingShotStory !== "undefined" && SwingShotStory.PHASES) || {};
+    const rawName = phases[p.key] || ((typeof SwingScorecard !== "undefined" && SwingScorecard.PHASE_NAMES && SwingScorecard.PHASE_NAMES[p.key]) || p.label);
+    const plainName = rawName ? rawName[0].toUpperCase() + rawName.slice(1) : p.key;
     th.textContent = `${plainName}${p.estimated ? " ~" : ""}`;
-    th.title = `${p.tag}${p.estimated ? " ~" : ""}`;
+    th.title = `${p.tag || p.key.toUpperCase()}${p.estimated ? " ~" : ""}`;
     head.append(th);
   }
   if (good.any) head.append(Object.assign(document.createElement("th"), { className: "gs-text", textContent: `vs my good shots (${clubName(good.club)})` }));
@@ -4489,6 +4579,18 @@ function showNumbers() {
       tr.append(name);
       const said = [];
       idx.forEach((i, c) => {
+        const posKey = cols[c].key;
+        const isOrig = ["p1", "p4", "p6", "p7"].includes(posKey);
+        const heldUp = isOrig || (typeof SwingSummary !== "undefined" && SwingSummary.HELD_AT && SwingSummary.HELD_AT[posKey] && SwingSummary.HELD_AT[posKey][view] && SwingSummary.HELD_AT[posKey][view].has(key));
+        if (!heldUp) {
+          const td = document.createElement("td");
+          const span = document.createElement("span");
+          span.className = "muted";
+          span.textContent = "·";
+          td.append(span);
+          tr.append(td);
+          return;
+        }
         const v = m.values[i];
         const j = facts && SwingTrust.judge({ view, value: key, pos: cols[c].key }, facts, v ? v[key] : null, noiseTable, unit);
         if (j && j.level === "shaky") shaky++;
@@ -6325,6 +6427,42 @@ if (window.SwingDraw) SwingDraw.attach({
   ],
   redraw,
   canDraw: () => !document.getElementById("stages").classList.contains("labeling"),
+});
+
+// Save swing as video (clipexport.js).
+if (window.SwingClipExport) SwingClipExport.attach({
+  button: document.getElementById("save-video-btn"),
+  dialog: document.getElementById("save-video-dialog"),
+  video,
+  video2,
+  canvas,
+  canvas2,
+  draw,
+  draw2,
+  fitRect,
+  toPartnerTime,
+  getPose: () => pose,
+  getPartnerPose: () => (partner && partner.pose),
+  getPositions: () => positions,
+  getShot: () => {
+    const c = current && clips.find(x => x.name === current);
+    return c ? c.shot : null;
+  },
+  getClip: () => {
+    const c = current && clips.find(x => x.name === current);
+    return c || {};
+  },
+  getCard: () => {
+    const c = current && clips.find(x => x.name === current);
+    if (!c || typeof SwingShotStory === "undefined") return null;
+    const club = c.shot ? c.shot.club : null, group = (typeof SwingGoodShots !== "undefined" && club) ? SwingGoodShots.groupOf(club) : null;
+    const shot = c.shot && typeof SwingSummary !== "undefined" ? SwingSummary.shotNumbers(c.shot) : null;
+    const loaded = typeof trendDataLoaded !== "undefined" && trendDataLoaded;
+    const cd = club && loaded && typeof goodShotData === "function" ? goodShotData().clubs[club] : null;
+    const settings = typeof goodSettings !== "undefined" && goodSettings ? goodSettings.settings : null;
+    const judged = cd && cd.baseline && shot && typeof SwingGoodShots !== "undefined" ? SwingGoodShots.judgeShot(shot, cd.baseline, group, settings) : null;
+    return SwingShotStory.card({ shot, judged, baseline: cd ? cd.baseline : null, group, settings, ...(typeof coachBody !== "undefined" && coachBody ? coachBody : {}) });
+  }
 });
 
 // Pick up new clips and finished analyses without a manual reload; the noise floor now and then.

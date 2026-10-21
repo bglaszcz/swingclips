@@ -27,8 +27,10 @@ What the server works out for each swing and what each part of the review page s
   `tune_positions.py` to score them again after labeling more). This assumes a face-on camera (see
   "Two angles" in [phones.md](phones.md) for the down-the-line one). Newer clips carry the heard strike's exact time, which
   narrows the impact search to ±0.15 s around it.
-- Swing numbers (`static/metrics.js`), on the video (Angles) and in a table at address / top /
-  P6 / impact: pelvis and shoulder turn, X-factor, lead arm, shaft, spine tilt, forward bend, hip and
+- Swing numbers (`static/metrics.js`), on the video (Angles) and in a table at all 8 key positions
+  (Setup, Early backswing, Backswing, Top of swing, Early downswing, Downswing, Impact, Follow-through;
+  P2, P3, P5, P8 show held-up numbers with a muted dot for noise-filtered ones): pelvis and shoulder turn,
+  X-factor, lead arm, shaft, spine tilt, forward bend, hip and
   shoulder tilt, head sway / rise, hip sway, and tempo (timed as TPI, Tour Tempo, Garmin and Blast do: from the
   clubhead's first movement to where the club changes direction at the top, then to impact; tour players ~3:1). Turns come from how much narrower the hips
   and shoulders look than at address; MediaPipe's 3D estimate (saved per frame as `w`) is only used
@@ -95,6 +97,17 @@ What the server works out for each swing and what each part of the review page s
   A kinematic
   sequence isn't attempted: from face-on alone the turn speeds come out in the wrong order (with
   both phones calibrated, the 3D panel has one: see [3d.md](3d.md)).
+- **Save as video** (under the ⋯ menu; `static/clipexport.js`, Oct 21 2026): saves the swing as a
+  WebM video with drawing overlays, date, club, Square's 7 launch numbers, and coaching verdict panel.
+  Choose real speed (1x) or slow motion (1/4x or 1/8x at 240 fps); frame-by-frame offline canvas stepping
+  produces smooth output without dropped frames. Downloaded as `swing-<date>-<club>.webm`.
+  <br><img src="img/save-video.png" alt="Save as video" width="550">
+- **Body numbers at 8 key positions** (the swing view's numbers table and Compare; Oct 21 2026):
+  extends beyond the original four positions (Setup, Top, Downswing, Impact) to include P2 (early backswing),
+  P3 (backswing lead arm parallel), P5 (early downswing lead arm parallel), and P8 (follow-through shaft parallel).
+  Each new position displays only the numbers that held up to both the timing test against hand labels and the
+  address noise floor test, with muted dots for the others.
+  <br><img src="img/positions-2d.png" alt="Body numbers at 8 key positions" width="600">
 - **Draw** (the button under the video, or D; `static/draw.js`, Oct 20 2026, from the feature pass against
   V1, OnForm and CoachNow): Line (with its angle to level, in the picture's real pixels), Angle (drag the
   first arm, then tap where the second ends; the angle at the vertex), Circle, Box and Free hand, in yellow,

@@ -94,7 +94,7 @@ class Records(unittest.TestCase):
 
     def test_values_at_key_positions_and_noise(self):
         rec = self.summarize()
-        self.assertEqual(sorted(rec["at"]["face"]), ["p1", "p4", "p6", "p7"])
+        self.assertEqual(sorted(rec["at"]["face"]), ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"])
         self.assertAlmostEqual(rec["at"]["face"]["p7"]["spineTilt"], rec["body"]["spineTiltImpact"], places=2)
         # The made-up golfer stands perfectly still at address. (It has no 3D points, so no inches.)
         self.assertLess(rec["noise"]["face"]["spineTilt"], 0.01)
