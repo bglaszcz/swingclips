@@ -145,7 +145,7 @@
 
   const box = document.getElementById("compare");
   const ANGLES = [["face", "Face-on"], ["dtl", "Down the line"]];
-  const NUMBER_POSITIONS = ["p1", "p4", "p6", "p7"];
+  const NUMBER_POSITIONS = (root.SwingSummary && root.SwingSummary.NUMBER_POSITIONS) || ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
   const GHOST_COLOR = "rgba(232, 121, 249, 0.8)", GHOST_JOINT = "rgba(232, 121, 249, 0.9)";
   const SORTS = [
     ["newest", "Newest", null], ["carry", "Carry", -1], ["ballSpeed", "Ball speed", -1],
@@ -870,17 +870,33 @@
       const table = el("table", { className: "c-table" });
       const h1 = el("tr", {}, el("th"));
       const h2 = el("tr", {}, el("th"));
+      const phases = (root.SwingShotStory && root.SwingShotStory.PHASES)
+        || (typeof SwingShotStory !== "undefined" && SwingShotStory.PHASES) || {};
       for (const k of cols) {
         const est = A.estimated[k] || B.estimated[k] ? " ~" : "";
-        h1.append(el("th", { colSpan: 3, className: "c-poshead", textContent: POSITION_TAGS[k] + est, title: k.toUpperCase() }));
+        const rawName = phases[k] || POSITION_TAGS[k] || k;
+        const plainName = rawName ? rawName[0].toUpperCase() + rawName.slice(1) : k.toUpperCase();
+        h1.append(el("th", { colSpan: 3, className: "c-poshead", textContent: plainName + est, title: k.toUpperCase() }));
         h2.append(el("th", { textContent: "This" }), el("th", { textContent: "Ref" }), el("th", { textContent: "Δ" }));
       }
       table.append(h1, h2);
+      const heldMap = (root.SwingSummary && root.SwingSummary.HELD_AT) || (typeof SwingSummary !== "undefined" && SwingSummary.HELD_AT);
+      const origSet = new Set(["p1", "p4", "p6", "p7"]);
       for (const [g, title, readout] of sections) {
         table.append(el("tr", { className: "group" }, el("th", { colSpan: cols.length * 3 + 1, textContent: title })));
         for (const [label, key, unit] of readout) {
           const tr = el("tr", {}, el("td", { textContent: plainBodyLabel(key, label) }));
           for (const k of cols) {
+            const heldUp = origSet.has(k) || (heldMap && heldMap[k] && heldMap[k][g] && heldMap[k][g].has(key));
+            if (!heldUp) {
+              const dot = () => {
+                const td = el("td");
+                td.append(el("span", { className: "muted" }, "·"));
+                return td;
+              };
+              tr.append(dot(), dot(), dot());
+              continue;
+            }
             const va = valuesAt(A, g, k), vb = valuesAt(B, g, k);
             const x = va && va[key], y = vb && vb[key];
             const d = finite(x) && finite(y) ? { [key]: x - y, clubSeen: va.clubSeen !== false && vb.clubSeen !== false } : null;

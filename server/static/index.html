@@ -4488,7 +4488,7 @@ function openGoodRanges(tp, facts) {
 /** Tempo, and the numbers at address, the top, P6 and impact: face-on, then down the line. */
 function showNumbers() {
   const box = document.getElementById("numbers");
-  const cols = ["p1", "p4", "p6", "p7"].map(k => positions.find(p => p.key === k)).filter(Boolean);
+  const cols = ((typeof SwingSummary !== "undefined" && SwingSummary.NUMBER_POSITIONS) || ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"]).map(k => positions.find(p => p.key === k)).filter(Boolean);
   box.hidden = !(metrics || dtlMetrics) || !cols.length;
   if (box.hidden) {
     document.getElementById("scorecard").hidden = document.getElementById("drillcard").hidden = true;
@@ -4547,9 +4547,11 @@ function showNumbers() {
   head.innerHTML = "<th></th>";
   for (const p of cols) {
     const th = document.createElement("th");
-    const plainName = (typeof SwingScorecard !== "undefined" && SwingScorecard.PHASE_NAMES && SwingScorecard.PHASE_NAMES[p.key]) || p.label;
+    const phases = (typeof SwingShotStory !== "undefined" && SwingShotStory.PHASES) || {};
+    const rawName = phases[p.key] || ((typeof SwingScorecard !== "undefined" && SwingScorecard.PHASE_NAMES && SwingScorecard.PHASE_NAMES[p.key]) || p.label);
+    const plainName = rawName ? rawName[0].toUpperCase() + rawName.slice(1) : p.key;
     th.textContent = `${plainName}${p.estimated ? " ~" : ""}`;
-    th.title = `${p.tag}${p.estimated ? " ~" : ""}`;
+    th.title = `${p.tag || p.key.toUpperCase()}${p.estimated ? " ~" : ""}`;
     head.append(th);
   }
   if (good.any) head.append(Object.assign(document.createElement("th"), { className: "gs-text", textContent: `vs my good shots (${clubName(good.club)})` }));
@@ -4577,6 +4579,18 @@ function showNumbers() {
       tr.append(name);
       const said = [];
       idx.forEach((i, c) => {
+        const posKey = cols[c].key;
+        const isOrig = ["p1", "p4", "p6", "p7"].includes(posKey);
+        const heldUp = isOrig || (typeof SwingSummary !== "undefined" && SwingSummary.HELD_AT && SwingSummary.HELD_AT[posKey] && SwingSummary.HELD_AT[posKey][view] && SwingSummary.HELD_AT[posKey][view].has(key));
+        if (!heldUp) {
+          const td = document.createElement("td");
+          const span = document.createElement("span");
+          span.className = "muted";
+          span.textContent = "·";
+          td.append(span);
+          tr.append(td);
+          return;
+        }
         const v = m.values[i];
         const j = facts && SwingTrust.judge({ view, value: key, pos: cols[c].key }, facts, v ? v[key] : null, noiseTable, unit);
         if (j && j.level === "shaky") shaky++;

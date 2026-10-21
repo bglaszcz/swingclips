@@ -177,6 +177,16 @@ const server = http.createServer((req, res) => {
   }
 
   // Fallback: check if direct data file matches /api/<name>
+  if (pathname.startsWith("/api/pose/")) {
+    const direct = pathname.slice(10) + ".json";
+    const poseFile = fs.existsSync(path.join(DATA, direct)) ? direct : "sample.pose.json";
+    const content = readDataFile(poseFile);
+    if (content !== null) {
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+      return res.end(content);
+    }
+  }
+
   if (pathname.startsWith("/api/")) {
     const sub = pathname.slice(5).replace(/\//g, "-") + ".json";
     const content = readDataFile(sub);
@@ -189,7 +199,15 @@ const server = http.createServer((req, res) => {
     return res.end("{}");
   }
 
-  // 5. Video clips (/clips/*) - return 404 in demo mode
+  // 5. Video clips (/clips/*) - serve sample.webm if available, else 404
+  if (pathname.startsWith("/clips/")) {
+    const sampleVideo = path.join(DATA, "sample.webm");
+    if (fs.existsSync(sampleVideo)) {
+      const data = fs.readFileSync(sampleVideo);
+      res.writeHead(200, { "content-type": "video/webm", "cache-control": "no-store" });
+      return res.end(data);
+    }
+  }
   res.writeHead(404);
   res.end();
 });

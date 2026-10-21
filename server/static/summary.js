@@ -355,24 +355,50 @@
   }
 
   // Key positions whose numbers the review page shows (the swing numbers table, Compare).
-  const NUMBER_POSITIONS = ["p1", "p4", "p6", "p7"];
+  const ORIGINAL_POSITIONS = ["p1", "p4", "p6", "p7"];
+  const NUMBER_POSITIONS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
+  // Numbers that held up against hand labels (timing test) and address noise floor (noise test)
+  // at P2, P3, P5, and P8. The original four (p1, p4, p6, p7) keep all numbers.
+  const HELD_AT = {
+    p2: {
+      face: new Set(["leadArm", "spineTilt", "spineForward", "pelvisTilt", "shoulderTilt", "headSway", "headRise", "hipSway", "handsBall", "lag"]),
+      dtl: new Set(["bend", "bendChange", "hipDepth", "headDepth", "handHeight", "handDepth", "handsPlane"]),
+    },
+    p3: {
+      face: new Set(["leadArm", "club", "spineTilt", "pelvisTilt", "shoulderTilt", "headSway", "headRise", "hipSway", "handsBall", "lag"]),
+      dtl: new Set(["bend", "bendChange", "hipDepth", "headDepth", "handsPlane", "shaftPlane"]),
+    },
+    p5: {
+      face: new Set(["pelvisTurn", "shoulderTurn", "separation", "leadArm", "club", "spineTilt", "spineForward", "pelvisTilt", "shoulderTilt", "headSway", "headRise", "hipSway", "handsBall", "lag"]),
+      dtl: new Set(["bendChange", "hipDepth"]),
+    },
+    p8: {
+      face: new Set(["pelvisTurn", "shoulderTurn", "leadArm", "spineTilt", "pelvisTilt", "shoulderTilt", "headSway", "headRise", "hipSway", "handsBall"]),
+      dtl: new Set(["bend", "bendChange", "hipDepth", "headDepth", "handDepth"]),
+    },
+  };
   const round3 = x => Math.round(x * 1000) / 1000;
 
   /** {face: {p1: {key: number}}, dtl: {...}} of an analyzed swing: its per-frame numbers at NUMBER_POSITIONS. */
   function valuesAtPositions(a) {
     const out = { face: null, dtl: null };
-    const pick = v => {
+    const pick = (v, held) => {
       if (!v) return null;
       const r = {};
-      for (const [k, x] of Object.entries(v)) if (typeof x === "number" && Number.isFinite(x)) r[k] = round3(x);
+      for (const [k, x] of Object.entries(v)) {
+        if (held && !held.has(k)) continue;
+        if (typeof x === "number" && Number.isFinite(x)) r[k] = round3(x);
+      }
       return r;
     };
     for (const key of NUMBER_POSITIONS) {
       const p = a.positions.find(q => q.key === key);
       if (!p) continue;
-      if (a.metrics) (out.face = out.face || {})[key] = pick(a.metrics.values[p.index]);
+      const heldFace = ORIGINAL_POSITIONS.includes(key) ? null : (HELD_AT[key] ? HELD_AT[key].face : null);
+      const heldDtl = ORIGINAL_POSITIONS.includes(key) ? null : (HELD_AT[key] ? HELD_AT[key].dtl : null);
+      if (a.metrics) (out.face = out.face || {})[key] = pick(a.metrics.values[p.index], heldFace);
       const i = a.dtlMetrics ? a.dtlIndex(key) : null;
-      if (i != null) (out.dtl = out.dtl || {})[key] = pick(a.dtlMetrics.values[i]);
+      if (i != null) (out.dtl = out.dtl || {})[key] = pick(a.dtlMetrics.values[i], heldDtl);
     }
     return out;
   }
@@ -510,7 +536,7 @@
     return { from, to, ...stillSpread(input.frames, m, from, to) };
   }
 
-  const api = { BODY, SHOT, NUMBER_POSITIONS, IMPACT_WINDOW, STRIKE_FALLBACK, frameIndexAt, syncOffset, aspectOf,
+  const api = { BODY, SHOT, NUMBER_POSITIONS, HELD_AT, IMPACT_WINDOW, STRIKE_FALLBACK, frameIndexAt, syncOffset, aspectOf,
                 strikeWindow, impactCheck, noAddress, NO_ADDRESS_S, analyze, bodyNumbers, drillNumbers,
                 shotNumbers, correlation, summarize, cameras, setupAdvice, positionTimes, frameAngles, noiseFloor,
                 cameraMoved };
