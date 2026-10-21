@@ -6,7 +6,7 @@
 // One club at a time, or one club type (irons with irons, woods with woods: never the two together).
 
 const aPick = { x: "handsPlaneP6", y: "carry", mode: "raw", color: "good", scope: "club", ot: "carry", seq: "carry",
-                spread: "carry", sort: "order", dir: 1, bagSort: "bag", bagDir: 1 };
+                spread: "carry", sort: "order", dir: 1, bagSort: "bag", bagDir: 1, flSession: null, hideClubs: [] };
 try { Object.assign(aPick, JSON.parse(localStorage.getItem("analysis") || "{}")); } catch {}
 const aSave = () => { try { localStorage.setItem("analysis", JSON.stringify(aPick)); } catch {} };
 
@@ -76,7 +76,7 @@ function aRenderCard() {
   if (!analysisOpen) return;
   const draw = { explore: renderExplore, links: renderLinks, overtime: renderOverTimeCard, session: renderSessionCard,
                  flight: renderFlight, spread: renderSpread, consistency: renderConsistency, target: renderTarget, bag: renderBag,
-                 checkpoints: renderCheckpoints }[analysisCard];
+                 checkpoints: renderCheckpoints, dispersion: renderDispersion, flights: renderClubFlights }[analysisCard];
   if (draw) draw();
 }
 
@@ -86,6 +86,7 @@ document.querySelector('#a-rail button[data-card="flight"]').hidden = typeof Swi
 document.querySelector('#a-rail button[data-card="spread"]').hidden = typeof SwingDistro === "undefined";
 document.querySelector('#a-rail button[data-card="consistency"]').hidden = typeof SwingConsistency === "undefined";
 document.querySelector('#a-rail button[data-card="checkpoints"]').hidden = typeof SwingCheckpoints === "undefined";
+for (const card of ["dispersion", "flights"]) document.querySelector(`#a-rail button[data-card="${card}"]`).hidden = typeof SwingClubSpread === "undefined";
 for (const h of document.querySelectorAll("#a-rail .a-h")) {
   let any = false;
   for (let el = h.nextElementSibling; el && !el.classList.contains("a-h"); el = el.nextElementSibling) any = any || !el.hidden;
@@ -992,6 +993,57 @@ function renderBag() {
       optBox.hidden = true;
     }
   }
+}
+
+// ---- Every club's spread and Flights by club (clubspread.js) ----
+
+// Each club's colour comes from its place among every club ever hit, so it is the same in every period and session.
+const aClubColors = () => SwingClubSpread.colors(shownClips().filter(c => !c.excluded && c.shot).map(c => c.shot.club));
+// Clubs tapped off on either chart stay off on both (kept with the other Analysis picks).
+const aHidden = () => {
+  const set = new Set(aPick.hideClubs || []);
+  const save = () => { aPick.hideClubs = [...set]; aSave(); };
+  return { set, save };
+};
+
+function renderDispersion() {
+  if (typeof SwingClubSpread === "undefined") return;
+  const since = aSince(), rows = [];
+  for (const s of progressSessions("*")) if (s.start >= since) rows.push(...s.rows);
+  const model = SwingClubSpread.analyze(rows);
+  document.getElementById("a-dp-status").textContent = model.status;
+  const h = aHidden(), box = document.getElementById("a-dispersion");
+  const opts = { colors: aClubColors(), nameOf: clubName, hidden: h.set, dayOf, onOpen: openFromAnalysis,
+                 redraw: () => { h.save(); SwingClubSpread.renderSpread(box, model, opts); } };
+  SwingClubSpread.renderSpread(box, model, opts);
+}
+
+document.getElementById("a-fl-session").onchange = e => { aPick.flSession = e.target.value; aSave(); renderClubFlights(); };
+function renderClubFlights() {
+  if (typeof SwingClubSpread === "undefined") return;
+  const since = aSince();
+  const sessions = progressSessions("*").filter(s => s.start >= since).reverse();   // newest first
+  const sel = document.getElementById("a-fl-session");
+  const box = document.getElementById("a-flights");
+  sel.replaceChildren(...sessions.map(s => {
+    const o = document.createElement("option");
+    o.value = s.key;
+    o.textContent = `${dayOf(s.start)} · ${s.rows.length} shot${s.rows.length === 1 ? "" : "s"}`;
+    return o;
+  }));
+  const s = sessions.find(x => x.key === aPick.flSession) || sessions[0];
+  if (!s) {
+    document.getElementById("a-fl-status").textContent = "";
+    box.replaceChildren(pEl("p", "note", "No sessions in this period."));
+    return;
+  }
+  sel.value = s.key;
+  const model = SwingClubSpread.sessionFlights(s.rows);
+  document.getElementById("a-fl-status").textContent = `${model.flights.length} flight${model.flights.length === 1 ? "" : "s"} · ${model.clubs.length} club${model.clubs.length === 1 ? "" : "s"}`;
+  const h = aHidden();
+  const opts = { colors: aClubColors(), nameOf: clubName, hidden: h.set, onOpen: openFromAnalysis,
+                 redraw: () => { h.save(); SwingClubSpread.renderFlights(box, model, opts); } };
+  SwingClubSpread.renderFlights(box, model, opts);
 }
 
 // ---- Swing checkpoints (checkpoints.js) ----

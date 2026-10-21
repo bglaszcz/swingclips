@@ -1821,7 +1821,8 @@ function drawPattern(sessions) {
   }
 }
 
-/** The 1-standard-deviation ellipse of points (xs, ys): center, half-axes and angle; null if too few. */
+/** The ellipse of points (xs, ys) holding about two in three of them (1.48 standard deviations: a 1-SD ellipse
+ *  holds only ~39% in two dimensions): center, half-axes and angle; null if too few. */
 function ellipse(xs, ys) {
   const n = xs.length;
   if (n < 5) return null;
@@ -1830,7 +1831,8 @@ function ellipse(xs, ys) {
   for (let i = 0; i < n; i++) { sxx += (xs[i] - mx) ** 2; syy += (ys[i] - my) ** 2; sxy += (xs[i] - mx) * (ys[i] - my); }
   sxx /= n - 1; syy /= n - 1; sxy /= n - 1;
   const tr = (sxx + syy) / 2, det = Math.sqrt(((sxx - syy) / 2) ** 2 + sxy ** 2);
-  return { cx: mx, cy: my, a: Math.sqrt(tr + det), b: Math.sqrt(Math.max(0, tr - det)), th: 0.5 * Math.atan2(2 * sxy, sxx - syy) };
+  const k = Math.sqrt(-2 * Math.log(1 / 3));
+  return { cx: mx, cy: my, a: k * Math.sqrt(tr + det), b: k * Math.sqrt(Math.max(0, tr - det)), th: 0.5 * Math.atan2(2 * sxy, sxx - syy) };
 }
 
 function getStrikeToeSign() {

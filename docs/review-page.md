@@ -284,6 +284,23 @@ What the server works out for each swing and what each part of the review page s
     distance from the target are also numbers on the explorer ("Scoring" chip), Over time and One session.
   - **Every club**: each club in the period as a sortable table (shots, carry and its middle half, smash,
     offline spread, good shots, score, strokes per shot); tap a row to pick that club for the other views.
+  - **Every club's spread** (`static/clubspread.js`, under Bag): where every club's shots land in the period on one
+    map (carry up, left / right across), each club in its own colour with a ring holding about two of its shots in
+    three (1.48 standard deviations of carry and offline together; shots beyond 3 robust standard deviations in
+    either are drawn faded and left out of the ring), and a table in bag order: the middle 80% of carry and of
+    left / right, their widths, the centre (median offline) and the side it leans to (60% or more of shots one
+    side). The sentence names the club that spreads widest and tightest for its length (width / median carry). A
+    club needs 5 shots for its ring and numbers; mishits are left out as in Gapping. The map's scales are set by
+    the middle shots (98% across, 1% from the bottom up): a wild or topped shot sits on the edge.
+  - **Flights by club** (`static/clubspread.js`, under Results): one session's shots (pick the session; newest
+    first), each flown by tracer.js's copy of the server's flight model from Square's ball speed, launch,
+    direction, spin and spin axis, then stretched to land exactly where Square said and to Square's apex, from
+    the side (height against distance) and from above (left drawn up, as seen from behind the ball). Carry only,
+    no roll. Hover a flight for its numbers, tap it to open the swing; a table gives each club's median carry,
+    apex and landing side.
+  - Club colours on both: eight colours in a fixed order by the club's place among every club ever hit (so a
+    club's colour is the same in every period and session); a ninth club and on reuse them hollow and dashed,
+    and every club is named on the chart. Tapping a club's chip hides it on both cards (kept in the browser).
   - **Ball flight** (`static/flightgrid.js`): the nine ball flights from start line (left, straight, right beyond 2°)
     against sideways curve (left, straight, right beyond 2.5% of carry). A plain sentence describes your usual flight
     and how the latest session compared; a 3x3 grid of buttons displays each flight's name, share, count, and miniature
