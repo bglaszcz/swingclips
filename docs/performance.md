@@ -39,6 +39,33 @@ During a session the server's first job is taking the clips in; the careful anal
   (face-on / down the line) against 44% / 61%, its face-on angle 4.7° off against 3.5°. Check it on
   the server with `bench_models.py` (its verdict has a "During a session" line).
   `SWINGCLIPS_QUICK=off` analyzes during a session as before; `eval.py --rerun --quick` scores it.
+- **The shaft at address down the line, from the club model** (quick pass, since Oct 21 2026). Hands
+  to plane is measured from the plane line: the down-the-line shaft at address, through the hands.
+  The quick pass's shaft is the ray-cast search's, and it read that shaft ~4° off: against the
+  owner's labeled grip and clubhead on 25 address frames from 22 clips, ray-cast median +4.3°
+  (every frame the same way), club model +0.4° (-0.5° on the 7 frames it didn't train on). So the
+  quick pass read hands to plane low against the deep pass's numbers (which come from the club
+  model): at P6 by a median 0.40 in on 52 normal swings (13 days) and 0.26 in on 39 pump reps, at
+  the top by 2.3 and 2.4 in (swapping only the deep file's down-the-line shaft for its ray-cast one
+  gave the same; the clubhead onset and the face-on clip made no difference). Now the server works
+  out when the down-the-line clip is at address before analyzing it (`app.dtl_address_time`: the
+  face-on clip's P1, moved by the two heard strikes as summary.js syncOffset does) and the club model
+  (the deep pass's, `club-deep.onnx`) looks at that one frame in the worker that decodes it
+  (`pose.analyze` `shaft_at`, ~0.5 s in one of 8 workers: the clip took no longer). Its angle goes on
+  the frames within `pose.SHAFT_AT_SPREAD_S` as `clubAddr`, which metrics.js computeDTL and the
+  page's plane line use when the model is sure of it (else the frame's own shaft, as before). No
+  club model, no face-on clip yet: as before. Against the deep pass after:
+
+  | Hands to plane, quick pass against deep | 52 normal swings, before -> after | 39 pump reps, before -> after |
+  |---|---|---|
+  | P6: median lean / median miss | -0.40 / 0.40 in -> +0.11 / 0.21 in | -0.26 / 0.32 in -> +0.05 / 0.11 in |
+  | Top: median lean / median miss | -2.27 / 2.27 in -> +0.04 / 0.18 in | -2.41 / 2.41 in -> 0.00 / 0.06 in |
+  | Swings with no number | 1 -> 0 | 0 -> 0 |
+
+  What's left at P6 (+0.11 in on normal swings) is when P6 is (the face-on clip's shaft, ray-cast in
+  the quick pass): the quick face-on clip with the deep down-the-line one gave +0.10. The deep pass's
+  numbers don't change (2,077 body numbers of these 91 swings worked out again: all the same). The
+  check's scripts were run from the dev PC's scratchpad (acc_*/fix_*/decompose.py, Oct 21 2026).
 
 ### Keeping up during a session
 A clip took ~35 s with RTMPose (a swing, two clips, comes every ~20 s), so a 40-swing session left

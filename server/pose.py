@@ -507,6 +507,10 @@ def run_chunk(args):
     ran = []                                 # per frame: whether the body model placed its points
     mp_ran = []                              # per frame: whether MediaPipe ran
     clubber = models.load_club(clubm) if clubm else None
+    # The quick pass down the line (analyze's shaft_at): the club model on the one frame at address,
+    # the first this job has with the golfer found from shaft_at's time to SHAFT_AT_LATE_S after it,
+    # in timing["addressShaft"].
+    shaft_at = opts.get("shaft_at")
     timing = {"frames": 0, "decoded": 0, "shaft_frames": 0, "start": 0.0, "decode": 0.0, "convert": 0.0,
               "mediapipe": 0.0, "body": 0.0, "club": 0.0, "shaft": 0.0}
     lm = PoseLandmarker.create_from_options(PoseLandmarkerOptions(
@@ -609,6 +613,18 @@ def run_chunk(args):
                         shaft = shaft_scores(f, rotation, landmarks, res.segmentation_masks[0].numpy_view(), bg)
                         timing["shaft"] += time.perf_counter() - clock
                         timing["shaft_frames"] += 1
+                    if (shaft_at is not None and "addressShaft" not in timing
+                            and shaft_at[0] - 0.5 / 240 <= t <= shaft_at[0] + SHAFT_AT_LATE_S):
+                        clock = time.perf_counter()
+                        img = picture()
+                        found = models.load_club(shaft_at[1]).find(img, landmarks)
+                        # As the deep pass's shaft at address: hands to clubhead (club.backswing_scores).
+                        sc = club.model_scores(found, landmarks, img.shape[1], img.shape[0], hands_first=True)
+                        if sc is not None and sc.max() > 0:      # else the next frame, while still in time
+                            timing["addressShaft"] = [round(float(t), 6),
+                                                      round(float(np.degrees(club.ANGLES[int(np.argmax(sc))])), 1),
+                                                      round(float(sc.max()), 2)]
+                        timing["club"] += time.perf_counter() - clock
                 else:
                     if tracker is not None:
                         tracker.frame(None, None)        # lost: the next crop comes from MediaPipe
@@ -633,6 +649,17 @@ def run_chunk(args):
 
 # run_chunk's speed settings when a job doesn't give them: everything as before them.
 RUN_DEFAULTS = {"mp_after": 1, "convert": "full", "shaft_stride": 1, "threads": None, "ray_too": False, "mp_swing": 1}
+
+# The shaft at address down the line, in the quick pass (analyze's shaft_at). Hands to plane is measured
+# from the shaft's line at address. The quick pass's own shaft (the ray-cast search) read it ~4 deg off
+# against the owner's labels on 25 address frames from 22 clips (club model: ~0.4 deg), which put hands
+# to plane ~0.4 in low at P6 and ~2.3 in low at the top against the deep pass's numbers (52 swings).
+# So the club model looks at the one frame at address: the first with the golfer found from the time
+# given to SHAFT_AT_LATE_S after it. Its angle goes on every frame within SHAFT_AT_SPREAD_S of that one
+# ("clubAddr"), since that time is worked out before the clip is (app.dtl_address_time, from the
+# face-on clip and the heard strikes, within ~50 ms) and the club is still at address.
+SHAFT_AT_LATE_S = 0.05
+SHAFT_AT_SPREAD_S = 0.1
 
 # OpenCV's BT.601 YUV -> RGB (studio range, as its I420 conversion: the same constants, / 2^20),
 # as a matrix on (Y, U, V, 1).
@@ -1203,7 +1230,7 @@ def quick_profile(long_drill: bool = False) -> dict | None:
 
 
 def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None = None, deep: dict | None = None,
-            quick: dict | None = None):
+            quick: dict | None = None, shaft_at: tuple | None = None):
     """Pose for every frame of the clip, plus the ball, impact and club shaft, as a JSON-ready dict.
     `timing`, if given, gets where the time went (parts(), and the steps in this process).
 
@@ -1213,9 +1240,15 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
 
     `quick`, the server's pass during a session (quick_profile()): {"mpStrideSwing": n}, and for a long
     drill rep "bodyStride" in place of body_stride(); the result says so ("pass": "quick", "quick": it).
-    Not with `deep`."""
+    Not with `deep`.
+
+    `shaft_at`, with `quick` down the line: (clip seconds at address, the club model's .onnx path), for
+    the shaft at address from the club model (SHAFT_AT_SPREAD_S): the frames there get "clubAddr", and
+    the result "addressShaft": {"t", "club"}."""
     if deep is not None:
         quick = None
+    if quick is None:
+        shaft_at = None
     mp_swing = quick["mpStrideSwing"] if quick else 1
     started = time.perf_counter()
     backend = models.backend()
@@ -1256,6 +1289,8 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
             "threads": decode_threads(), "mp_swing": mp_swing}
     if deep is not None and clubm and deep.get("rayTakeaway"):
         opts["ray_too"] = True
+    if shaft_at is not None:
+        opts["shaft_at"] = (float(shaft_at[0]), str(shaft_at[1]))
     clock = time.perf_counter()
     chunks = list(pool.map(run_chunk, [j + (bg, body, clubm, (body_until, stride), opts) for j in jobs]))
     stages["workers"] = time.perf_counter() - clock
@@ -1326,6 +1361,14 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
         # The speed settings the clip was analyzed with, when any isn't as before them (the output
         # as before otherwise).
         out["speed"] = speed
+    seen = [tm["addressShaft"] for tm in timings if tm.get("addressShaft")]
+    if seen:
+        # The club model's shaft at address (shaft_at): on every frame near it, for hands to plane.
+        at, deg, conf = min(seen, key=lambda a: a[0])
+        out["addressShaft"] = {"t": at, "club": [deg, conf]}
+        for fr in out["frames"]:
+            if abs(fr["t"] - at) <= SHAFT_AT_SPREAD_S:
+                fr["clubAddr"] = [deg, conf]
     if clubm:
         # clubhead: [x, y, confidence 0-1] in picture units where the club model is sure of it, else
         # null. Straight from the model, per frame: not smoothed or tracked (the shaft angle is).

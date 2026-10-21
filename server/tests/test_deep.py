@@ -25,9 +25,9 @@ import status  # noqa: E402
 from test_providers import MODELS, NO_SETTINGS, fake_models, needs_ort  # noqa: E402
 
 
-def analyze(path, deep=None) -> dict:
+def analyze(path, deep=None, quick=None, shaft_at=None) -> dict:
     with fakes.mediapipe(), mock.patch("builtins.print"), contextlib.redirect_stderr(io.StringIO()):
-        out = pose.analyze(str(path), fakes.Pool(), 2, deep=deep)
+        out = pose.analyze(str(path), fakes.Pool(), 2, deep=deep, quick=quick, shaft_at=shaft_at)
     out.pop("seconds")
     out.pop("msPerFrame", None)
     return out
@@ -58,6 +58,30 @@ class DeepAnalyzeTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {**env}):
             text = json.dumps(analyze(self.clip, {"bodyStride": 1, "clubModel": None}), separators=(",", ":"))
         self.assertIn('"pass":"deep"', text[:400])
+
+    def test_quick_shaft_at_address(self):
+        """The quick pass with shaft_at: the club model's look at the shaft on the frames near that
+        time ("clubAddr", for hands to plane's line), and nothing else changed."""
+        env = {**NO_SETTINGS, **fake_models()}
+        club_file = MODELS / models.CLUB_FILE
+        quick = {"mpStrideSwing": 2}
+        with mock.patch.dict(os.environ, env), mock.patch.object(pose, "BODY_STRIDE", 2):
+            plain = analyze(self.clip, quick=quick)
+            at = plain["frames"][20]["t"]
+            got = analyze(self.clip, quick=quick, shaft_at=(at, club_file))
+            deep = analyze(self.clip, {"bodyStride": 1, "clubModel": club_file}, shaft_at=(at, club_file))
+        shaft = got.pop("addressShaft")
+        self.assertLessEqual(at - 0.5 / 240, shaft["t"])
+        self.assertLessEqual(shaft["t"], at + pose.SHAFT_AT_LATE_S)
+        self.assertGreater(shaft["club"][1], 0)
+        near = [f for f in got["frames"] if abs(f["t"] - shaft["t"]) <= pose.SHAFT_AT_SPREAD_S]
+        self.assertTrue(near)
+        for f in got["frames"]:
+            self.assertEqual(f.pop("clubAddr", None), shaft["club"] if f in near else None)
+        self.assertEqual(json.dumps(got), json.dumps(plain))     # the rest as without it
+        # Not in the deep pass: its shaft is the club model's everywhere already.
+        self.assertNotIn("addressShaft", deep)
+        self.assertFalse(any("clubAddr" in f for f in deep["frames"]))
 
 
 class SessionTest(unittest.TestCase):

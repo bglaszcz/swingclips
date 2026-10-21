@@ -124,7 +124,7 @@ class PoseWorker(unittest.TestCase):
         self.analyzed = []
         running = Future()   # a quality measure that never finishes while the test runs
 
-        def analyze(path, pool, workers, deep=None, quick=None):
+        def analyze(path, pool, workers, deep=None, quick=None, shaft_at=None):
             self.analyzed.append((Path(path).name, time.time()))
             return {"frames": [], "impact": None, "seconds": 0.0}
 

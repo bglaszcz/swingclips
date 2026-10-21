@@ -404,8 +404,11 @@
       };
     });
     const base = raw[address];
-    // The plane line: the shaft at address, through the hands.
-    const plane = f0.club && f0.club[1] >= SHAFT_SEEN ? { at: base.hands, a: f0.club[0] / DEG } : null;
+    // The plane line: the shaft at address, through the hands. The quick pass's own shaft reads it a few
+    // degrees off there, so it also has the club model's look at address (pose.py SHAFT_AT_SPREAD_S,
+    // "clubAddr"): that one when it's sure of it. The deep pass's shaft is the club model's already.
+    const shaft0 = f0.clubAddr && f0.clubAddr[1] >= SHAFT_SEEN ? f0.clubAddr : f0.club;
+    const plane = shaft0 && shaft0[1] >= SHAFT_SEEN ? { at: base.hands, a: shaft0[0] / DEG } : null;
 
     const values = raw.map(v => {
       if (!v) return null;

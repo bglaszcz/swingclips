@@ -508,9 +508,10 @@ def add_hip_edges(clip: dict, pool: ProcessPoolExecutor, summarizer: swings.Summ
 
 
 def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False,
-                 deep: dict | None = None, quick: dict | None = None) -> ProcessPoolExecutor:
+                 deep: dict | None = None, quick: dict | None = None, shaft_at: tuple | None = None) -> ProcessPoolExecutor:
     """Runs pose on one clip and saves the result (the deep pass's way with `deep`, deep_profile(); the
-    quick pass's with `quick`, pose.quick_profile()); returns the pool (a fresh one if a worker died)."""
+    quick pass's with `quick`, pose.quick_profile(), and pose.analyze's `shaft_at`); returns the pool (a
+    fresh one if a worker died)."""
     global pose_busy
     with files_lock:
         if not clip.exists() or clip.name in pending_trash:
@@ -519,7 +520,7 @@ def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False,
     how = (" deep" if deep else " quick" if quick else "") + (" again, with " + body_model() if again else "")
     print(f"Pose: {clip.name} ...{how}", flush=True)
     try:
-        result = pose.analyze(str(clip), pool, POSE_WORKERS, deep=deep, quick=quick)
+        result = pose.analyze(str(clip), pool, POSE_WORKERS, deep=deep, quick=quick, shaft_at=shaft_at)
         tmp = pose_file(clip.name).with_suffix(".tmp")
         tmp.write_bytes(gzip.compress(json.dumps(result, separators=(",", ":")).encode()))
         tmp.replace(pose_file(clip.name))
@@ -563,6 +564,35 @@ def ready_for_pose(queued: list[Path], now: float) -> list[Path]:
 def drill_rep(p: Path) -> str | None:
     """The drill a clip is a rep of (clip_drill; a mark made on its other angle only counts once listed)."""
     return clip_drill(p.name, None, recorded_at(p))[0] if SWING_NAME.match(p.name) else None
+
+
+def dtl_address_time(clip: Path, summarizer: swings.Summarizer) -> float | None:
+    """When the golfer is at address (P1) in a down-the-line clip, worked out before it's analyzed (for
+    the club model's look at the shaft there: pose.analyze's shaft_at): its face-on clip's P1 (analyzed
+    first), moved by the two phones' heard strikes as summary.js syncOffset does without the
+    down-the-line ball, within ~50 ms of where the page puts it. None for a face-on clip, or when its
+    face-on clip isn't analyzed."""
+    m = SWING_NAME.match(clip.name)
+    if not m or m.group(1) != "dtl" or not m.group(2):
+        return None
+    t = recorded_at(clip)
+    faces = [p for p in clip_paths() if (fm := SWING_NAME.match(p.name)) and fm.group(1) == "face" and fm.group(2)
+             and abs(recorded_at(p) - t) <= PAIR_SLACK_S and pose_state(p.name) == "done"]
+    if not faces:
+        return None
+    face = min(faces, key=lambda p: abs(recorded_at(p) - t))
+    face_clip = {"name": face.name, "strike": int(SWING_NAME.match(face.name).group(2)) / 1000, "angle": "face",
+                 "drill": drill_rep(face)}
+    try:
+        inp = swings.pose_input(face_clip, analysis_pose_file(face.name))
+        p1 = summarizer.call("positionTimes", inp, None, swings.LEAD_SIDE)["main"]["times"].get("p1")
+        if p1 is None:
+            return None
+        return p1 + summarizer.call("syncOffset", {"impact": inp.get("impact"), "strike": inp["strike"]},
+                                    {"impact": None, "strike": int(m.group(2)) / 1000})
+    except Exception:
+        traceback.print_exc()
+        return None
 
 
 def long_drill(p: Path) -> bool:
@@ -625,7 +655,15 @@ def pose_worker(stop: threading.Event):
                 # running carries on beside it.
                 clip = next_to_analyze(todo)
                 quick = pose.quick_profile(long_drill=long_drill(clip)) if busy else None
-                pool = analyze_clip(clip, pool, deep=deep, quick=quick)
+                # Down the line, the club model's look at the shaft at address (hands to plane's line).
+                shaft_at = None
+                club_model = quick is not None and (pose.deep_profile() or {}).get("clubModel")
+                if club_model:
+                    if summarizer is None:
+                        summarizer = swings.Summarizer(STATIC_DIR)
+                    at = dtl_address_time(clip, summarizer)
+                    shaft_at = None if at is None else (at, club_model)
+                pool = analyze_clip(clip, pool, deep=deep, quick=quick, shaft_at=shaft_at)
                 continue
             if not busy and quality_job is None:
                 # Analyze again, newest first, a clip whose pose came from another body model (after

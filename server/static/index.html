@@ -3689,11 +3689,13 @@ function drawImpact(ctx, frame, i, r, lineWidth) {
  */
 function drawPlane(ctx, r, lineWidth, p) {
   const f = p.frames[positionIndex("p1", p) ?? -1];
-  if (!f || !f.lm || !f.club) return;
+  // The club model's shaft at address in the quick pass, as hands to plane uses it (metrics.js computeDTL).
+  const shaft = f && (f.clubAddr && f.clubAddr[1] >= 0.35 ? f.clubAddr : f.club);
+  if (!f || !f.lm || !shaft) return;
   const lm = f.lm;
   const gx = r.x + (lm[L_INDEX * 3] + lm[R_INDEX * 3]) / 2 * r.w;
   const gy = r.y + (lm[L_INDEX * 3 + 1] + lm[R_INDEX * 3 + 1]) / 2 * r.h;
-  const a = f.club[0] * Math.PI / 180, far = r.w + r.h;
+  const a = shaft[0] * Math.PI / 180, far = r.w + r.h;
   ctx.save();
   ctx.beginPath();
   ctx.rect(r.x, r.y, r.w, r.h);
