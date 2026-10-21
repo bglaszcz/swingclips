@@ -15,12 +15,14 @@
     --bg: #f3f5f3; --panel: #ffffff; --panel-2: #f7f9f7; --text: #111a14; --muted: #5a685f;
     --line: #e0e6e2; --accent: #16803f; --accent-text: #ffffff; --accent-soft: #e4f4ea; --good: #16803f;
     --warn: #b45309; --warn-soft: #fdf1e3; --bad: #dc2626; --bad-soft: #fde8e8; --radius: 12px;
+    --cs1: #2a78d6; --cs2: #eb6834; --cs3: #1baf7a; --cs4: #eda100; --cs5: #e87ba4; --cs6: #008300; --cs7: #6250d6; --cs8: #e34948;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0b100d; --panel: #131a16; --panel-2: #17201a; --text: #e7ede8; --muted: #8e9f95;
       --line: #223029; --accent: #34c26f; --accent-text: #04130a; --accent-soft: #143322; --good: #34c26f;
       --warn: #f59e0b; --warn-soft: #2d2110; --bad: #f87171; --bad-soft: #2d1414;
+      --cs1: #3987e5; --cs2: #d95926; --cs3: #199e70; --cs4: #c98500; --cs5: #d55181; --cs6: #008300; --cs7: #9085e9; --cs8: #e66767;
     }
   }
   * { box-sizing: border-box; }
@@ -221,6 +223,12 @@
   .dn-warn-msg { font-size: 13px; color: var(--warn); margin-top: 2px; }
   .dn-active-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 15px; }
   .dn-active-line button { padding: 4px 14px; font-size: 14px; border-radius: 6px; cursor: pointer; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+  .pattern-card { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .pattern-card .bay-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .pattern-card .bay-card-top strong { font-size: 16px; }
+  .pattern-chart { width: 100%; max-width: 420px; margin: 0 auto; }
+  .pattern-svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .pattern-line { font-size: 14px; font-weight: 500; text-align: center; color: var(--text); padding-top: 4px; }
   .focus-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 12px; }
   .focus-card[hidden] { display: none; }
   /* Today's plan, the guided part: what the reps did, and the result line once they are behind you. */
@@ -268,6 +276,8 @@
 <script src="/static/games.js"></script>
 <script src="/static/coach.js"></script>
 <script src="/static/gapping.js"></script>
+<script src="/static/tracer.js"></script>
+<script src="/static/clubspread.js"></script>
 <script src="/static/wedges.js"></script>
 <script src="/static/phases.js"></script>
 <script src="/static/metrics.js"></script>
@@ -418,6 +428,7 @@
     <h2>Swings and Square shots</h2>
     <div id="drill-nudge" class="dn-card" hidden></div>
     <div id="focus-card" class="focus-card" hidden></div>
+    <div id="pattern-card" class="bay-card pattern-card" hidden></div>
     <div id="bay-card" class="bay-card" hidden></div>
     <p class="hint">Hit in Square's driving range as usual. Each swing gets its Square numbers 6-16 s after the strike.</p>
     <div class="sum" id="sum"></div>
@@ -870,6 +881,177 @@ function dnClubName(code) {
   if (names[code]) return names[code];
   const m = code.match(/^([WHI])(\d)$/);
   return m ? `${m[2]}${{ W: " wood", H: " hybrid", I: " iron" }[m[1]]}` : code;
+}
+
+// ---- 4c. This session's pattern card (clubspread.js) ----
+let lastPatternSig = null;
+
+function renderPatternCard(latestWithShot) {
+  const card = $("pattern-card");
+  if (!card) return;
+
+  if (typeof SwingClubSpread === "undefined") {
+    card.hidden = true;
+    lastPatternSig = null;
+    return;
+  }
+
+  const isProgramRunning = Boolean(typeof programState !== "undefined" && programState && programState.program);
+  if (isProgramRunning || !isBayRecording() || !latestWithShot || !latestWithShot.shot || !latestWithShot.shot.club) {
+    card.hidden = true;
+    lastPatternSig = null;
+    return;
+  }
+
+  const club = latestWithShot.shot.club;
+  const clipsList = (allClips && allClips.length) ? allClips : (recentClips || []);
+  const allSessions = typeof SwingRow !== "undefined" ? SwingRow.sessionsOf(clipsList) : [];
+  const sessionClips = allSessions.length ? allSessions[0].clips : recentClips.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
+
+  const toRow = c => {
+    const s = c.shot, b = (s && s.ball) || {};
+    return {
+      club: s ? s.club : null,
+      carry: b.carry,
+      offline: b.side,
+      t: new Date(c.recorded).getTime(),
+      name: c.name,
+      c,
+    };
+  };
+
+  const primarySession = sessionClips.filter(c => !(c.partner && c.angle !== "face"));
+  const todayShots = primarySession.map(toRow).filter(r => r.club === club && SwingClubSpread.usable(r));
+
+  if (!todayShots.length) {
+    card.hidden = true;
+    lastPatternSig = null;
+    return;
+  }
+
+  // Redraw only when a new shot arrives (avoid redraws on every poll tick)
+  const sig = `${club}|${todayShots.length}|${todayShots[todayShots.length - 1].name}|${latestWithShot.name}`;
+  if (sig === lastPatternSig) {
+    card.hidden = false;
+    return;
+  }
+  lastPatternSig = sig;
+
+  // 90-day history for the club's usual ring
+  let maxDate = -Infinity;
+  for (const c of clipsList) {
+    const t = new Date(c.recorded).getTime();
+    if (t > maxDate) maxDate = t;
+  }
+  if (!Number.isFinite(maxDate) || maxDate <= 0) maxDate = Date.now();
+  const since90 = maxDate - 90 * 86400000;
+
+  const historyRows = clipsList
+    .filter(c => !(c.partner && c.angle !== "face"))
+    .map(toRow)
+    .filter(r => r.club === club && r.t >= since90 && SwingClubSpread.usable(r));
+
+  const spreadModel = SwingClubSpread.analyze(historyRows);
+  const clubData = spreadModel && spreadModel.clubs ? spreadModel.clubs.find(c => c.club === club) : null;
+  const ring = clubData && clubData.ring;
+
+  let insideCount = 0;
+  if (ring && ring.a > 0 && ring.b > 0) {
+    const cos = Math.cos(ring.th), sin = Math.sin(ring.th);
+    for (const r of todayShots) {
+      const dx = r.offline - ring.cx, dy = r.carry - ring.cy;
+      const u = dx * cos + dy * sin, v = -dx * sin + dy * cos;
+      if ((u * u) / (ring.a * ring.a) + (v * v) / (ring.b * ring.b) <= 1.0) {
+        insideCount++;
+      }
+    }
+  }
+
+  const cName = typeof dnClubName === "function" ? dnClubName(club) : club;
+  const lineText = ring
+    ? `${cName} today: ${todayShots.length} shot${todayShots.length === 1 ? "" : "s"}, ${insideCount} inside your usual ring`
+    : `${cName} today: ${todayShots.length} shot${todayShots.length === 1 ? "" : "s"}`;
+
+  const allClubsEver = [...new Set(clipsList.filter(c => c.shot && c.shot.club).map(c => c.shot.club))];
+  const cmap = SwingClubSpread.colors(allClubsEver.length ? allClubsEver : [club]);
+  const slot = (cmap[club] ? cmap[club].slot : 0) + 1;
+  const colorVar = `var(--cs${slot})`;
+
+  const W = 360, H = 220;
+  const m = { l: 42, r: 16, t: 16, b: 24 };
+
+  const xVals = todayShots.map(s => s.offline);
+  const yVals = todayShots.map(s => s.carry);
+  if (ring) {
+    const rPts = SwingClubSpread.ringPoints(ring);
+    for (const p of rPts) {
+      xVals.push(p[0]);
+      yVals.push(p[1]);
+    }
+  }
+
+  const minX = Math.min(-12, ...xVals);
+  const maxX = Math.max(12, ...xVals);
+  const spanX = Math.max(16, (maxX - minX) * 0.55);
+  const midX = ring ? ring.cx : (minX + maxX) / 2;
+  const xLo = midX - spanX, xHi = midX + spanX;
+
+  const minY = Math.min(...yVals);
+  const maxY = Math.max(...yVals);
+  const spanY = Math.max(12, (maxY - minY) * 0.6);
+  const midY = ring ? ring.cy : (minY + maxY) / 2;
+  const yLo = Math.max(0, Math.floor((midY - spanY) / 5) * 5);
+  const yHi = Math.ceil((midY + spanY) / 5) * 5;
+
+  const sx = v => m.l + ((v - xLo) / (xHi - xLo)) * (W - m.l - m.r);
+  const sy = v => H - m.b - ((v - yLo) / (yHi - yLo)) * (H - m.t - m.b);
+
+  let svgHtml = `<svg viewBox="0 0 ${W} ${H}" class="pattern-svg" style="--c: ${colorVar};">`;
+
+  // Carry grid lines
+  const yStep = Math.max(5, Math.round((yHi - yLo) / 3 / 5) * 5);
+  for (let y = Math.ceil(yLo / yStep) * yStep; y <= yHi; y += yStep) {
+    const yPos = sy(y).toFixed(1);
+    svgHtml += `<line x1="${m.l}" y1="${yPos}" x2="${W - m.r}" y2="${yPos}" stroke="var(--line)" stroke-width="1" />`;
+    svgHtml += `<text x="${m.l - 4}" y="${(sy(y) + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">${y}</text>`;
+  }
+
+  // Target line
+  if (xLo <= 0 && xHi >= 0) {
+    const xZero = sx(0).toFixed(1);
+    svgHtml += `<line x1="${xZero}" y1="${m.t}" x2="${xZero}" y2="${H - m.b}" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="3,3" />`;
+    svgHtml += `<text x="${xZero}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--muted)">target</text>`;
+  }
+
+  // Usual ring drawn behind landing spots
+  if (ring) {
+    const pts = SwingClubSpread.ringPoints(ring);
+    const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${sx(p[0]).toFixed(1)} ${sy(p[1]).toFixed(1)}`).join(" ") + " Z";
+    svgHtml += `<path d="${d}" fill="var(--c)" fill-opacity="0.14" stroke="var(--c)" stroke-width="2" stroke-dasharray="5,4"><title>Usual ring (last 90 days)</title></path>`;
+  }
+
+  // Today's shots drawn in front
+  for (const r of todayShots) {
+    const cx = sx(r.offline).toFixed(1), cy = sy(r.carry).toFixed(1);
+    const title = `${r.carry.toFixed(0)} yd carry, ${typeof SwingClubSpread.sideWords === "function" ? SwingClubSpread.sideWords(r.offline) : r.offline.toFixed(0) + " yd"}`;
+    svgHtml += `<circle cx="${cx}" cy="${cy}" r="5" fill="var(--c)" stroke="var(--panel)" stroke-width="1.5"><title>${esc(title)}</title></circle>`;
+  }
+
+  svgHtml += `</svg>`;
+
+  card.innerHTML = `
+    <div class="bay-card-top">
+      <strong>This session's pattern</strong>
+      <span class="note" style="display:flex;align-items:center;gap:6px;">
+        <i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--c);"></i>
+        ${esc(cName)}
+      </span>
+    </div>
+    <div class="pattern-chart">${svgHtml}</div>
+    <div class="pattern-line">${esc(lineText)}</div>
+  `;
+  card.style.setProperty("--c", colorVar);
+  card.hidden = false;
 }
 
 let dnMarkWarning = false, dnSig = null;
@@ -2798,6 +2980,7 @@ async function pollSwings() {
   }
   renderPelvisCard(recentClips);
   await maybeFetchBayData();
+  if (!allClips) allClips = await getJson("/api/clips");
   const swings = recentClips.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face"));
   const demoSwings = isDemoLast && allClips ? allClips.filter(c => /^swing_/.test(c.name) && !(c.partner && c.angle !== "face")) : [];
   const latestWithShot = swings.find(c => c.shot && c.shot.club) || demoSwings.find(c => c.shot && c.shot.club);
@@ -2810,6 +2993,9 @@ async function pollSwings() {
   if (planStep && (planStep.block === "focus" || planStep.block === "carry")) renderPlan();
   if (!lastEndedSessionStory && !isDemoStop) {
     renderLastSwingCard(latestWithShot);
+    renderPatternCard(latestWithShot);
+  } else {
+    renderPatternCard(null);
   }
   swingTimer = setTimeout(pollSwings, document.hidden ? 20000 : 4000);
 }
