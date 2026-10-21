@@ -872,10 +872,12 @@ toward the ball". The phones face away from you, so voice is the channel.
   picture or your hands left it at the top (`quality.camera`: `out`, `hands`), a P6 number where P6
   was only estimated, or a number that couldn't be measured is **"no reading"** instead. Square's
   numbers don't depend on the cameras.
-- **When it speaks**: body numbers once the swing is analyzed (the upload settles for 15 s, then
-  pose and the numbers: usually 30-60 s after the strike; given up after 4 minutes as "no
-  reading"). A down-the-line number waits up to 90 s for the down-the-line clip if it hasn't come
-  in. Square's numbers once the shot pairs, about 15 s after the strike; with no shot by 25 s it
+- **When it speaks**: body numbers once both clips are analyzed and the numbers worked out (about
+  25-30 s after the strike since Oct 21 2026, 45-60 s before: docs/performance.md "From the strike
+  to the numbers"; a result ready more than 25 s after its strike is shown but not said; given up
+  after 4 minutes as "no reading"). A down-the-line number waits up to 90 s for the down-the-line
+  clip if it hasn't come in. Square's numbers once the shot pairs, about 13 s after the strike
+  (wedges sooner, the driver later: Square's app sends it after its ball flight); with no shot by 25 s it
   says "Club path, no shot". Each swing is spoken once, even if its face-on clip arrives after the
   down-the-line one.
 - **Which phone speaks**: a setting on each phone, **Practice voice: on / off**. Until changed by

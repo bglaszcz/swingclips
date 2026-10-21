@@ -90,7 +90,9 @@ SESSION_QUIET_S = 600
 DURING_SESSION = os.environ.get("SWINGCLIPS_DURING_SESSION", "quick").strip().lower() or "quick"
 if DURING_SESSION not in ("quick", "wait"):
     raise SystemExit(f"SWINGCLIPS_DURING_SESSION={DURING_SESSION!r}: use quick or wait")
-# A clip still being copied in keeps changing; wait until it has been left alone this long.
+# A clip still being copied in by hand keeps changing; wait until it has been left alone this long.
+# Clips the capture app uploads are written under another name and renamed once whole (POST
+# /api/upload), so they go at once (uploaded_whole): the wait put 15 s on every spoken body number.
 SETTLE_SECONDS = 15
 
 # Clips end in _<unix seconds>.mp4 (e.g. c0_1920x1080_240_hs_1789123456.mp4), capture app clips in
@@ -202,6 +204,16 @@ records_lock = threading.Lock()
 
 # Name of the clip the worker is on right now, if any.
 pose_busy: str | None = None
+# The clip whose quality is being measured beside the pose worker's loop, if any, and its job
+# (start_quality: {"clip", "future", "pool", "positions", "started", and "took" once measured}).
+quality_busy: str | None = None
+quality_job: dict | None = None
+# Clips the capture app finished uploading since the server started: whole, so no settling wait.
+uploaded_whole: set[str] = set()
+# Something new for a worker: a clip uploaded or a quality measure done (pose worker), a clip analyzed
+# or a shot in (swing worker). They wait on these, at most 5 s, rather than look every 5 s.
+pose_wake = threading.Event()
+swing_wake = threading.Event()
 # Clips waiting for pose, as the worker last counted them (the Ready panel shows it).
 pose_queued = 0
 # Analyzed clips still waiting for the deep pass (0 while a session is on, or with it off).
@@ -532,7 +544,20 @@ def analyze_clip(clip: Path, pool: ProcessPoolExecutor, again: bool = False,
     finally:
         with files_lock:
             pose_busy = None
+        swing_wake.set()   # its swing's numbers (and 3D) can be worked out now
     return pool
+
+
+def ready_for_pose(queued: list[Path], now: float) -> list[Path]:
+    """The queued clips that are whole: uploaded (renamed only once complete), or left alone SETTLE_SECONDS."""
+    out = []
+    for p in queued:
+        try:
+            if p.name in uploaded_whole or now - p.stat().st_mtime > SETTLE_SECONDS:
+                out.append(p)
+        except OSError:
+            pass   # just moved to the trash
+    return out
 
 
 def pose_worker(stop: threading.Event):
@@ -545,10 +570,14 @@ def pose_worker(stop: threading.Event):
     summarizer = None
     try:
         while not stop.is_set():
+            # Anything that comes in from here on cuts the wait at the end of this round short.
+            pose_wake.clear()
+            if quality_job is not None and quality_job["future"].done():
+                pool = finish_quality(pool)
             retry_pending_trash()
             queued = [p for p in clip_paths() if pose_state(p.name) == "queued"]
             pose_queued = len(queued)
-            todo = [p for p in queued if time.time() - p.stat().st_mtime > SETTLE_SECONDS]
+            todo = ready_for_pose(queued, time.time())
             busy = session_on()
             waiting = busy and DURING_SESSION == "wait"
             deep = None if busy else deep_profile()
@@ -561,11 +590,11 @@ def pose_worker(stop: threading.Event):
             if todo and not waiting:
                 # Face-on clips first: the phones' spoken checks and practice numbers mostly need them, and
                 # during a session the down-the-line ones catch up between sets. After a session a new
-                # clip goes straight to the deep pass.
+                # clip goes straight to the deep pass. A quality measure running carries on beside it.
                 pool = analyze_clip(max(todo, key=lambda p: ("_face_" in p.name, recorded_at(p))), pool, deep=deep,
                                     quick=quick)
                 continue
-            if not busy:
+            if not busy and quality_job is None:
                 # Analyze again, newest first, a clip whose pose came from another body model (after
                 # SWINGCLIPS_POSE_BACKEND changed), so every swing is measured the same way.
                 model = body_model()
@@ -608,17 +637,20 @@ def pose_worker(stop: threading.Event):
                     pool = add_hip_edges(max(hips, key=lambda c: c["recorded"]), pool, summarizer)
                     continue
             if waiting:
-                stop.wait(5)
+                pose_wake.wait(5)
                 continue
-            # Then measure a clip's quality (new ones first, then older clips).
-            try:
-                if summarizer is None:
-                    summarizer = swings.Summarizer(STATIC_DIR)
-                measured = quality_step(pool, summarizer)
-            except BrokenProcessPool:
-                pool, measured = new_pool(), True
-            if not measured:
-                stop.wait(5)
+            # Then measure a clip's quality (new ones first, then older clips), beside this loop: a measure
+            # decodes the whole clip (~6 s), and a clip uploaded meanwhile shouldn't wait for it.
+            if quality_job is None:
+                try:
+                    if summarizer is None:
+                        summarizer = swings.Summarizer(STATIC_DIR)
+                    started = start_quality(pool, summarizer)
+                except BrokenProcessPool:
+                    pool, started = new_pool(), True
+                if started:
+                    continue
+            pose_wake.wait(5)
     except KeyboardInterrupt:
         # Ctrl+C reaches the pool's processes too, and comes back here out of the clip they were on.
         # Nothing half done was saved: that clip is simply analyzed (or measured) again at the next start.
@@ -628,9 +660,10 @@ def pose_worker(stop: threading.Event):
         summarizer.close()
 
 
-def quality_step(pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> bool:
-    """Measures the newest analyzed clip without a quality record (quality.py). False if there was none."""
-    global pose_busy
+def start_quality(pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> bool:
+    """Starts measuring the newest analyzed clip without a quality record (quality.py) in the pool, as
+    quality_job; finish_quality saves it once done (the pose worker is woken then). False if there was none."""
+    global quality_busy, quality_job
     clips = {c["name"]: c for c in listed_clips(with_shots=False)}
     # Measured against an older pose file (its key positions may have moved): measured again.
     todo = [c for c in clips.values() if c["pose"] == "done" and not quality_error_file(c["name"]).exists()
@@ -643,26 +676,64 @@ def quality_step(pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> bo
         with files_lock:
             if c["name"] in pending_trash or not (CLIPS_DIR / c["name"]).exists():
                 continue
-            pose_busy = c["name"]
+            quality_busy = c["name"]
         try:
-            measure_quality(c, other if other and other["pose"] == "done" else None, pool, summarizer)
-        except BrokenProcessPool:
-            raise
-        except FileNotFoundError:
-            pass  # just deleted
-        except Exception:
-            quality_error_file(c["name"]).write_text(traceback.format_exc())
-            print(f"Quality: {c['name']} FAILED - see {quality_error_file(c['name'])}", flush=True)
-        finally:
+            job = submit_quality(c, other if other and other["pose"] == "done" else None, pool, summarizer)
+        except Exception as e:
             with files_lock:
-                pose_busy = None
+                quality_busy = None
+            if isinstance(e, BrokenProcessPool):
+                raise
+            if not isinstance(e, FileNotFoundError):   # FileNotFoundError: just deleted
+                quality_error_file(c["name"]).write_text(traceback.format_exc())
+                print(f"Quality: {c['name']} FAILED - see {quality_error_file(c['name'])}", flush=True)
+            return True
+        quality_job = job
+
+        def measured(_):
+            job["took"] = time.perf_counter() - job["started"]
+            pose_wake.set()
+        job["future"].add_done_callback(measured)
         return True
     return False
 
 
-def measure_quality(clip: dict, other: dict | None, pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> dict:
-    """Measures one clip's quality and saves it beside its pose file. `other` is its other angle, if
-    analyzed: a down-the-line clip's key positions are the face-on clip's, carried across."""
+def finish_quality(pool: ProcessPoolExecutor) -> ProcessPoolExecutor:
+    """Saves the quality record of quality_job (its measure done) beside the clip's pose file. Returns
+    the pool (a fresh one if a worker died)."""
+    global quality_busy, quality_job
+    job = quality_job
+    name = job["clip"]
+    try:
+        record = job["future"].result()
+        record["poseVersion"] = pose.VERSION
+        record["poseModel"] = pose_made(name)
+        record["positions"] = {k: round(v, 4) for k, v in job["positions"].items() if k in quality.SHARP_KEYS}
+        tmp = quality_file(name).with_suffix(".tmp")
+        tmp.write_text(json.dumps(record, separators=(",", ":")))
+        tmp.replace(quality_file(name))
+        warn = ", ".join(record["warnings"]) or "fine"
+        took = job.get("took", time.perf_counter() - job["started"])
+        print(f"Quality: {name} in {took:.1f} s: {warn}", flush=True)
+    except BrokenProcessPool:
+        # A worker died, under this measure or the pose analysis beside it: measured again next time.
+        # A pool the analysis has already replaced isn't replaced again.
+        if job["pool"] is pool:
+            pool = new_pool()
+    except FileNotFoundError:
+        pass  # just deleted
+    except Exception:
+        quality_error_file(name).write_text(traceback.format_exc())
+        print(f"Quality: {name} FAILED - see {quality_error_file(name)}", flush=True)
+    finally:
+        with files_lock:
+            quality_busy = quality_job = None
+    return pool
+
+
+def submit_quality(clip: dict, other: dict | None, pool: ProcessPoolExecutor, summarizer: swings.Summarizer) -> dict:
+    """Hands one clip's quality measure to the pool; returns its job for finish_quality. `other` is its
+    other angle, if analyzed: a down-the-line clip's key positions are the face-on clip's, carried across."""
     inp = swings.pose_input(clip, pose_file(clip["name"]))
     if clip["angle"] == "dtl" and other is not None:
         times = summarizer.call("positionTimes", swings.pose_input(other, pose_file(other["name"])), inp,
@@ -678,17 +749,8 @@ def measure_quality(clip: dict, other: dict | None, pool: ProcessPoolExecutor, s
         o = swings.pose_input(other, pose_file(other["name"]))
         timing.insert(0, {"angle": other["angle"], "impact": o.get("impact"), "strike": other["strike"]})
     started = time.perf_counter()
-    record = pool.submit(quality.measure, str(CLIPS_DIR / clip["name"]), frames, positions, timing,
-                         clip.get("camera")).result()
-    record["poseVersion"] = pose.VERSION
-    record["poseModel"] = pose_made(clip["name"])
-    record["positions"] = {k: round(v, 4) for k, v in positions.items() if k in quality.SHARP_KEYS}
-    tmp = quality_file(clip["name"]).with_suffix(".tmp")
-    tmp.write_text(json.dumps(record, separators=(",", ":")))
-    tmp.replace(quality_file(clip["name"]))
-    warn = ", ".join(record["warnings"]) or "fine"
-    print(f"Quality: {clip['name']} in {time.perf_counter() - started:.1f} s: {warn}", flush=True)
-    return record
+    future = pool.submit(quality.measure, str(CLIPS_DIR / clip["name"]), frames, positions, timing, clip.get("camera"))
+    return {"clip": clip["name"], "future": future, "pool": pool, "positions": positions, "started": started}
 
 
 def swing_record_stale(old: dict | None, c: dict, other: dict | None, made_by: list) -> bool:
@@ -712,6 +774,8 @@ def swing_worker(stop: threading.Event):
     noise_at = 0.0
     try:
         while not stop.is_set():
+            # A clip analyzed or a shot in from here on cuts the wait at the end of this round short.
+            swing_wake.clear()
             clips = {c["name"]: c for c in listed_clips(with_shots=False)}
             done = 0
             for c in clips.values():
@@ -743,18 +807,7 @@ def swing_worker(stop: threading.Event):
                 with records_lock:
                     swings.save(SWINGS_FILE, swing_records)
                 print(f"Swings: worked out the numbers of {done} swing(s)", flush=True)
-            if done or noise_table.get("code") != swings_code or time.time() - noise_at > NOISE_EVERY_S:
-                try:
-                    noise_table = work_out_noise(summarizer)
-                    swings.save(NOISE_FILE, noise_table)
-                except Exception:
-                    traceback.print_exc()
-                noise_at = time.time()
-            if not stop.is_set():
-                try:
-                    night_compare(clips, summarizer, stop)
-                except Exception:
-                    traceback.print_exc()
+            # The 3D straight after the numbers it needs, before the noise table and the night files.
             if calib_runs.pending_job("body") and not stop.is_set():
                 place_cameras(clips, summarizer)
             if calib.enabled() and not stop.is_set():
@@ -767,7 +820,19 @@ def swing_worker(stop: threading.Event):
                     with records_lock:
                         swings.save(SWINGS_FILE, swing_records)
                     print(f"3D: triangulated {made} swing(s)", flush=True)
-            stop.wait(5)
+            if done or noise_table.get("code") != swings_code or time.time() - noise_at > NOISE_EVERY_S:
+                try:
+                    noise_table = work_out_noise(summarizer)
+                    swings.save(NOISE_FILE, noise_table)
+                except Exception:
+                    traceback.print_exc()
+                noise_at = time.time()
+            if not stop.is_set():
+                try:
+                    night_compare(clips, summarizer, stop)
+                except Exception:
+                    traceback.print_exc()
+            swing_wake.wait(5)
     finally:
         summarizer.close()
 
@@ -931,6 +996,11 @@ def work_out_noise(summarizer: swings.Summarizer) -> dict:
     return table
 
 
+# A new swing's 3D waits this long for its Square shot (the club), which Square's app sends 9-17 s
+# after the strike; with none by then it's made without one. (Analyzing both clips used to take longer.)
+SHOT_WAIT_3D_S = 25.0
+
+
 def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threading.Event) -> int:
     """Triangulates the swings filmed from both angles whose 3D is missing or out of date (a new
     calibration, a camera moved, new JavaScript or pose files). Returns how many were made."""
@@ -969,6 +1039,11 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
         rec = records.get(name)
         if not rec or rec.get("code") != swings_code or "error" in rec:
             continue  # its 2D numbers (and framing) first
+        if time.time() - times[name] < SHOT_WAIT_3D_S:
+            if shots is None:
+                shots = {x["name"]: x.get("shot") for x in listed_clips()}
+            if not shots.get(name):
+                continue  # its club (the hands-to-clubhead length) comes with the Square shot: wait for it
         session, why = swing3d.session_for(name, times, all_sessions)
         if session is not None:
             modes = {session["cameras"][k].get("mode") for k in ("face", "dtl")}
@@ -1090,7 +1165,7 @@ def practice_tick() -> list[dict]:
 
 def try_trash(name: str) -> None:
     """Moves a pending clip to the trash if nothing has it open. Call with files_lock held."""
-    if name == pose_busy:
+    if name in (pose_busy, quality_busy):
         return
     try:
         move_clip(name, to_trash=True)
@@ -1133,6 +1208,8 @@ async def lifespan(app: FastAPI):
     start_square_watch(stop)
     yield
     stop.set()
+    pose_wake.set()
+    swing_wake.set()
     worker.join(timeout=5)  # lets it close its JavaScript engine, which otherwise holds up the exit
     camera_setup.close()
     practice.close_rules()
@@ -1347,6 +1424,8 @@ async def upload(name: str, request: Request, shutter: str | None = Query(None, 
         # The camera info first, so the clip never shows up without it.
         save_camera(name, *camera)
         part.replace(final)
+        uploaded_whole.add(name)
+        pose_wake.set()   # analyzed now, not after a settling wait
     finally:
         part.unlink(missing_ok=True)
     shot = f", {exposure} 1/{round(1e9 / exposure_ns)} s ISO {iso}" if exposure_ns else ""
@@ -1447,6 +1526,7 @@ def record_shot(shot: dict) -> dict:
         if square:
             recent_square_shots.append(number)   # only once written: a failed write can be sent again
     last_shot_at = time.time()
+    swing_wake.set()   # a swing's 3D may be waiting for its club
     calc = " (calculated)" if shot["ball"].get("computed") else ""
     print(f"Shot: {shot.get('club')} ball {shot['ball'].get('speed')} mph, carry {shot['ball'].get('carry')} yd{calc}", flush=True)
     return {"ok": True}

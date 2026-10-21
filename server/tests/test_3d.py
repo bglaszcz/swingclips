@@ -350,6 +350,28 @@ class SwingWorkerTest(unittest.TestCase):
         # Nothing new: nothing done again.
         self.assertEqual(self.app.pass_3d(clips, self.js, mock.Mock(is_set=lambda: False)), 0)
 
+    def test_new_swing_waits_for_its_shot(self):
+        # Both clips analyzed a few seconds after the strike: the club (from the Square shot) isn't in yet.
+        import time
+        _, face, dtl = render_swing(seed=7)
+        face_name, _ = self.add_swing(int(time.time()) - 5, face, dtl)
+        clips = self.records()
+        self.session(1788999000)
+        stop = mock.Mock(is_set=lambda: False)
+        self.assertEqual(self.app.pass_3d(clips, self.js, stop), 0)
+        self.assertNotIn("key3d", self.app.swing_records[face_name])
+        # The shot comes in: made, with its club.
+        real = self.app.listed_clips
+        with_shot = lambda *a, **k: [dict(c, shot={"club": "I7"}) if c["name"] == face_name else c for c in real(*a, **k)]
+        with mock.patch.object(self.app, "listed_clips", with_shot):
+            self.assertEqual(self.app.pass_3d(clips, self.js, stop), 1)
+        self.assertEqual(json.loads(self.app.file_3d(face_name).read_text(encoding="utf-8"))["club"], "I7")
+        self.assertIsNone(self.app.swing_records[face_name]["why3d"])
+        # No shot by SHOT_WAIT_3D_S: made without one.
+        self.app.swing_records[face_name].pop("key3d")
+        with mock.patch.object(self.app, "SHOT_WAIT_3D_S", 0):
+            self.assertEqual(self.app.pass_3d(clips, self.js, stop), 1)
+
     def test_camera_moved(self):
         _, face, dtl = render_swing(seed=8)
         face["ball"], dtl["ball"] = {"x": 0.5, "y": 0.86, "r": 0.008}, {"x": 0.5, "y": 0.74, "r": 0.006}

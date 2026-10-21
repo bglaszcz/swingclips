@@ -140,6 +140,35 @@ and run it again to find the one. To try a setting that changes more, set it fir
 Clips already analyzed keep their results; the settings apply to new ones (the pose version is the
 same, so nothing is analyzed again).
 
+### From the strike to the numbers
+Measured on the owner's sessions (Oct 20 2026: 60 swings; Sep 30 for a body number): a clip is on
+the server 3.5 s after the strike (2 s still recorded after it, then the upload); Square's shot
+12.9 s after it (sand wedge ~10 s, driver ~14.6 s: Square's app saves it once its ball flight has
+played), and a Square number is spoken ~0.7 s after the shot comes in. A body number took a median
+55 s (43 s at best), and a swing was done (both clips, the shot, clip quality) at 67 s. Most of that
+was waiting, not working. Since Oct 21 2026:
+- **No settling wait for uploads.** A clip copied into the clips folder by hand is left 15 s
+  (`SETTLE_SECONDS`) in case it is still being written. The capture app's uploads are written under
+  another name and renamed once whole (`POST /api/upload`), so they're analyzed at once.
+- **Woken, not polled.** The pose worker looked for new clips every 5 s and the swing worker (the
+  numbers, the 3D) every 5 s; now an upload wakes the pose worker, and an analyzed clip or a new
+  shot wakes the swing worker. 5 s stays as the fallback.
+- **Clip quality beside the analysis.** Measuring a clip's quality decodes the whole clip (~6 s on
+  one core) and held up a clip uploaded meanwhile; it now runs in the pool beside the pose worker's
+  loop (`start_quality` / `finish_quality`), so a new clip starts at once (it costs that clip under
+  a second).
+- **The 3D straight after the numbers**, before the noise table and the night files. A new swing's
+  3D waits up to `SHOT_WAIT_3D_S` (25 s) for its Square shot, which brings the club (the
+  hands-to-clubhead length).
+
+On the dev PC (Ryzen 5800X3D, 8 workers, quick pass), one real swing uploaded (Oct 20 2026, 3
+wood): the numbers were ready 48 s after the upload before (analysis started at 16 s), 27 s after
+(started at 0.1 s), and the same 27 s for a swing uploaded while the last one's quality was being
+measured. What's left is the analysis itself: the face-on clip (~14 s there), then the
+down-the-line one (~11 s); a swing's numbers wait for both. So a body number is ready ~25-30 s
+after the strike, around practice.py's `SAY_WITHIN_STRIKE_S` (25 s): later than that it's shown,
+not said.
+
 ### Using a GPU (off by default)
 Only the ONNX models can go on a GPU: RTMPose and the club model (`models.py`, through ONNX
 Runtime's DirectML or CUDA). MediaPipe (~17 ms a frame), the club shaft search (~18 ms, less since

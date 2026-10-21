@@ -25,8 +25,8 @@ from swings import Summarizer
 # app reports 6-16 s after the strike (~11 s typical; app.py SHOT_DELAY_S, SHOT_SLACK_S).
 SHOT_GIVE_UP_S = 25.0
 # Body numbers: a swing whose numbers haven't been worked out by then (pose stuck, or failed on a
-# clip the list doesn't show as failed yet) gets "no reading". Pose waits 15 s for the upload to
-# settle and then takes some seconds per clip.
+# clip the list doesn't show as failed yet) gets "no reading". Pose starts as soon as a clip is
+# uploaded and takes some seconds per clip.
 BODY_GIVE_UP_S = 240.0
 # A down-the-line number worked out before the down-the-line clip arrived is waited on this long
 # for the record that has it.

@@ -237,6 +237,26 @@ class Worker(unittest.TestCase):
         if camera:
             app.save_camera(name, *camera)
 
+    def measure_next(self, summ):
+        """What the pose worker does: start a measure beside its loop, then save it once done."""
+        app.pose_wake.clear()
+        if not app.start_quality(self.pool, summ):
+            return False
+        name = app.quality_job["clip"]
+        self.assertEqual(app.quality_busy, name)
+        # Being read: a delete waits for the measure, as it does for the pose analysis.
+        with app.files_lock:
+            app.pending_trash.add(name)
+            app.try_trash(name)
+            app.pending_trash.discard(name)
+        self.assertTrue((app.CLIPS_DIR / name).exists())
+        app.quality_job["future"].result(timeout=120)
+        self.assertTrue(app.pose_wake.wait(5))     # the worker is woken to save it
+        self.assertIs(app.finish_quality(self.pool), self.pool)
+        self.assertIsNone(app.quality_job)
+        self.assertIsNone(app.quality_busy)
+        return True
+
     def test_worker_and_listing(self):
         old = "swing_face_320x180_240fps_1789200000_2000ms.mp4"     # before capture app 0.4
         new = "swing_face_320x180_240fps_1789200100_2000ms.mp4"
@@ -244,9 +264,9 @@ class Worker(unittest.TestCase):
         self.write_swing(new, ("1/1000", "manual", 1_000_000, 1600, 4_166_666))
         summ = app.swings.Summarizer(app.STATIC_DIR)
         try:
-            self.assertTrue(app.quality_step(self.pool, summ))
-            self.assertTrue(app.quality_step(self.pool, summ))
-            self.assertFalse(app.quality_step(self.pool, summ))      # both done
+            self.assertTrue(self.measure_next(summ))
+            self.assertTrue(self.measure_next(summ))
+            self.assertFalse(self.measure_next(summ))      # both done
         finally:
             summ.close()
         listed = {c["name"]: c for c in app.listed_clips(with_shots=False)}
