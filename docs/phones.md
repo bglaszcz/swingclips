@@ -39,6 +39,14 @@ How the capture app records, how the two angles pair, the shutter and clip quali
   battery.
 - Test hook: `adb shell am start -n dev.swingclips.capture/.MainActivity --ei bitrateMbps 80` records
   at another bitrate until the app is closed.
+- **Leaving the app ends recording** (it stops the camera); coming back needs another Start. Except
+  after a **phone call** (0.15, `CallResume.kt`; Oct 21 2026 a call stopped the down-the-line phone
+  mid-session and it stayed off): if the app was recording when the call screen covered it (Android's
+  audio mode said a call was ringing or on, read without any permission), then once the app is back on
+  screen and the call is over, recording starts again by itself, as Start would, and the phone says
+  "Call over. Recording again." Back on screen during the call, it says so on the status line and waits.
+  Not after a call that kept it away over 30 minutes. Android normally brings the app back when the
+  call ends; if it doesn't, opening it does the same. Not tried with a real call yet.
 - Opens **not recording**; settings are locked while recording. Clips wait in an outbox and upload
   to `POST /api/upload`, retrying until the server confirms. Named
   `swing_<angle>_WxH_FPSfps_<unix>_<strike>ms.mp4`: angle `face` or `dtl`, the unix time of the

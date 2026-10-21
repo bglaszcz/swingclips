@@ -75,6 +75,9 @@ class MainActivity : Activity() {
     private lateinit var angleChip: TextView
     private lateinit var modeChip: TextView
     private val autoStart = AutoStart()
+    /** Recording a phone call cut off starts again by itself when the call is over (CallResume). */
+    private val callResume = CallResume()
+    private val audio by lazy { getSystemService(AudioManager::class.java) }
     /** A settings dialog is open: the review page's Start is refused until it's closed. */
     @Volatile private var settingOpen = false
     // This phone is talking (reported to the server), and until when (System.nanoTime()) the other
@@ -168,12 +171,19 @@ class MainActivity : Activity() {
         practiceVoice.start()
         autoStart.reset()
         phoneLink.start()
+        main.removeCallbacks(watchForCall)
+        checkCallResume()
     }
 
     override fun onPause() {
         resumed = false
-        // Leaving the app ends recording; coming back needs another Start.
+        // Leaving the app ends recording; coming back needs another Start, unless a phone call was the
+        // reason: then it starts again by itself once the call is over (CallResume).
+        val wasRecording = armed
         setArmed(false)
+        callResume.left(wasRecording, inCall(), android.os.SystemClock.elapsedRealtime())
+        main.removeCallbacks(resumeAfterCall)
+        if (wasRecording) main.postDelayed(watchForCall, 1000)
         cameraSetup.stop()
         practiceVoice.stop()
         phoneLink.stop()
@@ -311,6 +321,7 @@ class MainActivity : Activity() {
         armed = on
         wake()
         if (on) autoStart.started()
+        if (on) callResume.done()   // recording, however it started: no call to wait out
         if (::phoneLink.isInitialized) phoneLink.poke()   // the review page hears of it now
         // Setup checks (and speech) only run while not recording; start the next setup fresh.
         if (::cameraSetup.isInitialized && !on) cameraSetup.reset()
@@ -369,6 +380,44 @@ class MainActivity : Activity() {
         if (d.ok) d.say?.let { cameraSetup.say(it) }
         else cameraSetup.say("Can't ${cmd.action}: ${d.error}")
         return CommandAck(cmd.id, d.ok, d.error)
+    }
+
+    /** A call ringing or on (Android's audio mode: no permission needed). */
+    private fun inCall(): Boolean = CallResume.isCall(audio.mode)
+
+    /** While the app is away after leaving mid-recording: whether a call is the reason (it can ring in a moment later). */
+    private val watchForCall: Runnable = Runnable {
+        if (resumed) return@Runnable
+        if (inCall()) callResume.sawCall()
+        else if (callResume.watching(android.os.SystemClock.elapsedRealtime())) main.postDelayed(watchForCall, 1000)
+    }
+
+    private val resumeAfterCall = Runnable { checkCallResume() }
+
+    /**
+     * Back on screen after a call cut recording off: once the call is over and the camera's running,
+     * recording starts again as the Start button would start it, and the phone says so.
+     */
+    private fun checkCallResume() {
+        if (!resumed) return
+        when (callResume.back(inCall(), android.os.SystemClock.elapsedRealtime())) {
+            CallResume.Action.NOTHING -> return
+            CallResume.Action.WAIT -> setStatus("Recording starts again when the call ends", Color.WHITE)
+            CallResume.Action.RESUME -> {
+                val d = PhoneControl.decide(PhoneControl.START, phoneNow())
+                if (d.arm == true) {
+                    setArmed(true)
+                    cameraSetup.say(CALL_RESUMED)
+                    return
+                }
+                if (d.ok) {   // already recording
+                    callResume.done()
+                    return
+                }
+                // The camera isn't running yet (it starts again with the app), or a setting is open: soon.
+            }
+        }
+        main.postDelayed(resumeAfterCall, 1000)
     }
 
     /** The camera check held good and "Start recording when the camera check is good" is on. */
@@ -1119,6 +1168,8 @@ class MainActivity : Activity() {
         private const val DIM_AFTER_MS = 20_000L
         private const val DIM_BRIGHTNESS = 0.02f
         private const val POST_S = 2.0
+        // Said when recording starts again by itself after a phone call (CallResume).
+        private const val CALL_RESUMED = "Call over. Recording again."
         // Android can't look up Windows PC names, so the home server's LAN address.
         private const val DEFAULT_SERVER = "http://192.168.86.250:8000"
         // Camera angles, by the key that goes in clip names. With a phone at each, the server pairs

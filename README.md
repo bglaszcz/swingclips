@@ -186,13 +186,15 @@ and drill from `coach.js`. Keys `1`–`8` jump between key positions (setup, top
 - **Tools**: everyday tools first (Start a session, Tripod setup, Week for coach, AI coach, Update server),
   tracking and setup checks below (3D calibration, Labels, Club check, P4 check, Wrist check, Night report, Shutter test).
 
-**Capture app (0.14)**: the camera fills the screen with which angle and mode it is and whether
+**Capture app (0.15)**: the camera fills the screen with which angle and mode it is and whether
 it's recording; below it the status, the server, one big Start / Stop, and the strike trigger
 (level bar and sensitivity; also set from the Start page, recording or not, from 0.12). Everything
 else (angle, mode, shutter, server, voices, auto-start) is under **Settings**; the camera ones are
 locked while recording. From 0.14, **Rep feedback** (Settings) tells each swing's verdict as a tone (two quick
 beeps in range, one beep close, a low buzz out), the words, or the tone then the words (the default). From 0.13 the screen dims while recording (a touch brings it back), and each
-clip reports the frames it lost (the S23 Ultra's camera loses 1-28% at 240 fps, the S21 none).
+clip reports the frames it lost (the S23 Ultra's camera loses 1-28% at 240 fps, the S21 none). From
+0.15, recording that a phone call cut off starts again by itself once the call is over ("Call over.
+Recording again."); leaving the app any other way still stops it.
 
 ## Common commands
 
