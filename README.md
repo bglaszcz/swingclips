@@ -44,6 +44,18 @@ swing is tagged with the Square Omni's numbers for that shot.
   The nine ball flights from start line against curve, your usual flight, every shot from above, and session-by-session trends.
   <br><img src="docs/img/analysis-flight.png" alt="Ball flight grid and shot curves" width="600">
 
+- **Every club's spread**  
+  Where every club's shots land in the period on one map with an ellipse holding about two shots in three, middle-80% carry and offline windows, and small-multiple spread trends over time comparing recent sessions against earlier ones.
+  <br><img src="docs/img/club-spread.png" alt="Every club's spread" width="600">
+
+- **Flights by club**  
+  One session's ball flights flown by the server's flight model and stretched to Square's landing spot and apex, seen from the side (height vs distance) and from above (left/right vs distance), with each club in its own colour.
+  <br><img src="docs/img/flights-by-club.png" alt="Flights by club" width="600">
+
+- **Yardage card for the sim**  
+  Tools > Yardage card brings the numbers a golfer takes to the sim to pick a club: stock carry, middle-80% carry window, offline window, centre, aim advice, usual flight shape, apex, landing angle, and overlap warnings for neighbouring clubs.
+  <br><img src="docs/img/yardage-card.png" alt="Yardage card" width="600">
+
 - **What goes with what**  
   Chart any delivery or body move against any result over every session, against that day's usual, with thirds and ranked links.
   <br><img src="docs/img/analysis-explore.png" alt="What goes with what analysis" width="600">
@@ -78,6 +90,10 @@ swing is tagged with the Square Omni's numbers for that shot.
 - **Do the drill, rep by rep**  
   The focus card on the Start page (and on Practice) has **Do the drill**: each rep shows as a dot against your target while you hit, the reps stay out of your trends, and **Done** hands over to normal swings to see whether they keep it.
   <br><img src="docs/img/start-reps.png" alt="Start page focus card in reps mode" width="600">
+
+- **This session's pattern live**  
+  Live card on the Start page showing the landing spots of today's shots for the club being hit now against that club's usual 90-day ring, with a live summary of shots inside the ring.
+  <br><img src="docs/img/start-pattern.png" alt="Start page this session's pattern" width="550">
 
 - **Every drill, and what yours did**  
   Tools > Drills lists the coach's 42 drills by the part of the swing they train: how to do each one, its swing thought, and your own sets with it and what they did. Your focus's drill starts from there; any other is one tap from being your focus.
