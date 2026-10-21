@@ -60,6 +60,53 @@ class UploadWakes(unittest.TestCase):
         self.assertEqual([p.name for p in app.ready_for_pose([app.CLIPS_DIR / name], time.time())], [name])
 
 
+class DrillReps(unittest.TestCase):
+    """A drill rep is finished (both clips) before the next rep is started."""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp(dir=TMP))
+        for d in ("clips", "pose"):
+            (self.dir / d).mkdir()
+        self.patches = [mock.patch.object(app, "CLIPS_DIR", self.dir / "clips"),
+                        mock.patch.object(app, "POSE_DIR", self.dir / "pose")]
+        for p in self.patches:
+            p.start()
+        now = time.time()
+        # Rep 1's face-on clip analyzed, its down-the-line one waiting; rep 2's face-on clip just in.
+        self.rep1_face, self.rep1_dtl = clip_name(now - 50), clip_name(now - 49, "dtl")
+        self.rep2_face = clip_name(now - 5)
+        for n in (self.rep1_face, self.rep1_dtl, self.rep2_face):
+            (app.CLIPS_DIR / n).write_bytes(b"video")
+        app.pose_file(self.rep1_face).write_bytes(b"done")
+        self.todo = [app.CLIPS_DIR / n for n in (self.rep1_dtl, self.rep2_face)]
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+
+    def as_drill(self, drill):
+        return mock.patch.object(app, "clip_drill", lambda name, partner, t: (drill, False))
+
+    def test_usual_swings_face_on_first(self):
+        with self.as_drill(None):
+            self.assertEqual(app.next_to_analyze(self.todo).name, self.rep2_face)
+
+    def test_a_drill_rep_is_finished_first(self):
+        for drill in ("pump", "move:handsPlaneP6:less"):
+            with self.as_drill(drill):
+                self.assertEqual(app.next_to_analyze(self.todo).name, self.rep1_dtl, drill)
+        # Not while its face-on clip is still waiting: face-on first, as usual.
+        app.pose_file(self.rep1_face).unlink()
+        with self.as_drill("pump"):
+            self.assertEqual(app.next_to_analyze(self.todo + [app.CLIPS_DIR / self.rep1_face]).name, self.rep2_face)
+
+    def test_a_marked_none_rep_is_a_usual_swing(self):
+        # Marked "not a drill" afterwards (drills.NOT_A_DRILL): clip_drill says no drill.
+        with self.as_drill(None):
+            self.assertIsNone(app.drill_rep(app.CLIPS_DIR / self.rep1_dtl))
+        self.assertIsNone(app.drill_rep(app.CLIPS_DIR / "not_a_swing.mp4"))
+
+
 class PoseWorker(unittest.TestCase):
     """The worker loop itself, with the analysis stubbed out: a clip that comes in while a quality
     measure is running is analyzed within a moment of its upload."""

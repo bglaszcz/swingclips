@@ -169,6 +169,25 @@ down-the-line one (~11 s); a swing's numbers wait for both. So a body number is 
 after the strike, around practice.py's `SAY_WITHIN_STRIKE_S` (25 s): later than that it's shown,
 not said.
 
+**Pump drill reps.** The phones keep 6 s before the strike while it's on, so a rep is two ~1,970
+frame clips, twice a usual swing: on the dev PC 40 s a rep of analysis (39 reps; face-on ~20 s,
+down the line ~21 s), 50 s in the running server. A rep's hands to plane needs both clips (the
+swing worker waits for both), and reps came ~45 s apart (Oct 20 2026), so the server fell behind
+during a set. Two things since Oct 21 2026:
+- **One rep at a time** (`app.next_to_analyze`): a drill rep's down-the-line clip whose face-on clip
+  is done goes before the next rep's face-on clip. Before, face-on clips went first, newest first, so
+  the next rep's clips could both go ahead of it. Two pump reps uploaded 10 s apart on the dev PC:
+  the first one's numbers 104 s after its upload before, 53 s now; the second's 69 s before, 95 s now
+  (it waits for the first). Reps come back in the order they were hit.
+- **Tried and not used: a lighter quick pass for pump reps** (the body model on every 4th frame,
+  MediaPipe and the shaft search on every 3rd in the swing). 29 s a rep instead of 40, but against
+  the careful (deep) pass on all 39 six-second pump reps (Sep 30, Oct 8, Oct 20), hands to plane at
+  P6 read 0.47 in low (median) against today's quick pass's 0.26 in low, median miss 0.47 in against
+  0.32: past the bar set before the check (no more than 0.15 in worse either way). Also: with
+  `SWINGCLIPS_SHAFT_STRIDE=2` hands to plane at P6 and at the top come out empty.
+So a pump set still outruns the server when reps are less than ~50 s apart; analyzing one angle on a
+second PC would be the next step.
+
 ### Using a GPU (off by default)
 Only the ONNX models can go on a GPU: RTMPose and the club model (`models.py`, through ONNX
 Runtime's DirectML or CUDA). MediaPipe (~17 ms a frame), the club shaft search (~18 ms, less since

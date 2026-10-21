@@ -560,6 +560,33 @@ def ready_for_pose(queued: list[Path], now: float) -> list[Path]:
     return out
 
 
+def drill_rep(p: Path) -> str | None:
+    """The drill a clip is a rep of (clip_drill; a mark made on its other angle only counts once listed)."""
+    return clip_drill(p.name, None, recorded_at(p))[0] if SWING_NAME.match(p.name) else None
+
+
+def next_to_analyze(todo: list[Path]) -> Path:
+    """Which clip to analyze next: face-on clips first, newest first (the phones' spoken checks and
+    practice numbers mostly need them; the down-the-line ones catch up between sets). But a drill rep's
+    down-the-line clip whose face-on clip is done goes before the next rep's face-on clip: a rep's numbers
+    need both (the swing worker waits for both), so each rep is finished before the next is started. A
+    pump drill rep is twice a usual clip's frames (6 s before the strike), so reps 45 s apart can get
+    ahead of the server (~40 s a rep on the dev PC)."""
+    faces = [(recorded_at(f), f.name) for f in clip_paths() if (m := SWING_NAME.match(f.name)) and m.group(1) == "face"]
+    started = []
+    for p in todo:
+        m = SWING_NAME.match(p.name)
+        if not m or m.group(1) != "dtl" or not drill_rep(p):
+            continue
+        t = recorded_at(p)
+        face = min((f for f in faces if abs(f[0] - t) <= PAIR_SLACK_S), key=lambda f: abs(f[0] - t), default=None)
+        if face is not None and pose_state(face[1]) in ("done", "failed"):
+            started.append(p)
+    if started:
+        return max(started, key=recorded_at)
+    return max(todo, key=lambda p: ("_face_" in p.name, recorded_at(p)))
+
+
 def pose_worker(stop: threading.Event):
     """Forever: find clips without pose results, newest first, and analyze them one at a time. While a
     session is on, only new clips (or none, SWINGCLIPS_DURING_SESSION=wait); after it, the heavy work."""
@@ -588,11 +615,9 @@ def pose_worker(stop: threading.Event):
                 1 for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done"
                 and needs_deep(p.name, deep_club))
             if todo and not waiting:
-                # Face-on clips first: the phones' spoken checks and practice numbers mostly need them, and
-                # during a session the down-the-line ones catch up between sets. After a session a new
-                # clip goes straight to the deep pass. A quality measure running carries on beside it.
-                pool = analyze_clip(max(todo, key=lambda p: ("_face_" in p.name, recorded_at(p))), pool, deep=deep,
-                                    quick=quick)
+                # After a session a new clip goes straight to the deep pass. A quality measure running carries
+                # on beside it.
+                pool = analyze_clip(next_to_analyze(todo), pool, deep=deep, quick=quick)
                 continue
             if not busy and quality_job is None:
                 # Analyze again, newest first, a clip whose pose came from another body model (after
