@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -114,6 +115,22 @@ class JudgeTest(unittest.TestCase):
         info = {"swings": {"train": ["a", "b"], "val": ["c"]},
                 "images": [{"split": "train"}, {"split": "train"}, {"split": "val"}]}
         self.assertEqual(night_improve.counts(info), {"swings": 2, "valSwings": 1, "frames": 2})
+
+    def test_sync_leaves_out_a_clip_gone_from_the_server(self):
+        cache = Path(tempfile.mkdtemp(dir=TMP))
+        (cache / "labels").mkdir()
+        (cache / "labels" / "old.mp4.json").write_text("{}")
+
+        def get(server, path, timeout=60):
+            if path == "/clips/gone.mp4":
+                raise urllib.error.HTTPError(server + path, 404, "Not Found", None, None)
+            return b"{}" if path.startswith("/api/labels/") else b"video"
+        said = []
+        with mock.patch.object(night_improve, "get", get):
+            labels, clips = night_improve.sync("http://s", ["a.mp4", "gone.mp4"], cache, said.append)
+        self.assertEqual(sorted(f.name for f in labels.glob("*.json")), ["a.mp4.json"])
+        self.assertEqual(sorted(f.name for f in clips.iterdir()), ["a.mp4"])
+        self.assertIn("1 no longer on the server", said[-1])
 
 
 def swing(t, angle="face", club_rows=(), head_rows=(), **events):
@@ -347,9 +364,14 @@ class ImproveApiTest(unittest.TestCase):
         self.labels = self.dir / "labels"
         self.labels.mkdir()
         (self.labels / "a.mp4.json").write_text("{}")
+        (self.labels / "gone.mp4.json").write_text("{}")  # its clip was trashed: not one to fetch
+        self.clips = self.dir / "clips"
+        self.clips.mkdir()
+        (self.clips / "a.mp4").write_bytes(b"v")
         stamp = lambda p: "club-deep@" + Path(p).read_bytes().decode()
         patches = [mock.patch.object(app, "improve_store", improve.Store(self.dir / "improve")),
-                   mock.patch.object(app, "LABELS_DIR", self.labels), mock.patch.object(app, "TRASH_DIR", self.dir / "trash"),
+                   mock.patch.object(app, "LABELS_DIR", self.labels), mock.patch.object(app, "CLIPS_DIR", self.clips),
+                   mock.patch.object(app, "TRASH_DIR", self.dir / "trash"),
                    mock.patch.object(app, "club_in_use", lambda: (self.model, stamp(self.model))),
                    mock.patch.object(app.models, "club_stamp", stamp), mock.patch.object(app, "deep_left", lambda s: 7),
                    mock.patch.object(app, "log_event")]

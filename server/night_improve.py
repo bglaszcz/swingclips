@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 import traceback
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -65,19 +66,25 @@ def sync(server: str, names: list[str], cache: Path, say) -> tuple[Path, Path]:
     labels, clips = cache / "labels", cache / "clips"
     labels.mkdir(parents=True, exist_ok=True)
     clips.mkdir(parents=True, exist_ok=True)
-    keep = set()
+    keep, gone = set(), 0
     for name in names:
         q = urllib.parse.quote(name)
-        (labels / f"{name}.json").write_bytes(get(server, f"/api/labels/{q}?pass=1"))
-        keep.add(f"{name}.json")
         if not (clips / name).is_file():
             tmp = clips / (name + ".part")
-            tmp.write_bytes(get(server, f"/clips/{q}", timeout=300))
+            try:
+                tmp.write_bytes(get(server, f"/clips/{q}", timeout=300))
+            except urllib.error.HTTPError as e:
+                if e.code != 404:
+                    raise
+                gone += 1  # trashed on the server since the list was made: train without it
+                continue
             tmp.replace(clips / name)
+        (labels / f"{name}.json").write_bytes(get(server, f"/api/labels/{q}?pass=1"))
+        keep.add(f"{name}.json")
     for f in labels.glob("*.json"):
         if f.name not in keep:
             f.unlink()
-    say(f"{len(names)} labeled clips in {cache}")
+    say(f"{len(keep)} labeled clips in {cache}" + (f" ({gone} no longer on the server, left out)" if gone else ""))
     return labels, clips
 
 

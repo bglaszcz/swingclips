@@ -3367,7 +3367,8 @@ def improve_next():
     club-labeled frames new since the last scored try), the labeled clips to fetch, and the models to
     score against."""
     sig = improve.labels_sig(LABELS_DIR)
-    labeled = list_labels()["1"]
+    # A trashed clip keeps its labels (a restore brings them back), but there's no video to fetch.
+    labeled = [n for n in list_labels()["1"] if (CLIPS_DIR / n).is_file()]
     _, stamp = club_in_use()
     progress = improve_store.progress(improve.club_frames(LABELS_DIR), sig)
     new = progress["newFrames"]
