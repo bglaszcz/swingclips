@@ -683,7 +683,10 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   Casting comes from two face-on numbers (`metrics.js`): **Wrist hinge at P5**, the angle between the
   lead arm and the shaft (90 = an L) with the lead arm parallel coming down, and **Release point**,
   the lead arm's angle to horizontal when that hinge first drops under 70 degrees coming down (higher
-  = an earlier release). Named casting when the release point is above -22 degrees.
+  = an earlier release). Named casting when the wrist hinge at P5 is under 70° (until Oct 20 2026: the release
+  point above -22°). What its coaching text says the ball does is the owner's own (Oct 21 2026, within club, ~450
+  iron swings): less hinge went with a steeper strike (r +0.40), less carry and a lower launch, not the textbook
+  "high, thin, shallow" it said before; the release point showed no link to the ball, so its text makes no ball claim.
   **Club short of parallel at top** (face-on, `clubShort` in `metrics.js`, degrees, + = short of parallel,
   - = past it): the club model's shaft at the top, pointing toward the target; a half swing reads 90 or more.
   Backswing length, not a fault either way (the owner went past parallel on 1 of 268 swings, Oct 2026; irons

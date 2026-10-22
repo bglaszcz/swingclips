@@ -199,21 +199,24 @@
         drill: "Chest-over-ball drill: half swings with 70% of your weight on the lead foot, chest over the ball at impact. 10 balls.",
         thought: "Chest over the ball." },
     },
+    // Ball effects from the owner's swings (Oct 21 2026, within club, 447-455 iron swings; rounds 68 and 73): less
+    // hinge here went with a steeper attack (r +0.40), less carry (r +0.11) and a lower launch (r +0.15). Not the
+    // textbook "high, thin, shallow" these texts said before. The release point showed no link to any of them.
     lagP5: {
       what: "wrist hinge (lead arm to shaft) with the lead arm parallel coming down",
       more: { name: "holding your wrist hinge longer (lag)",
-        how: "The angle between the lead arm and the shaft stays near an L until the hands are past the trail hip: the clubhead comes in late and from above.",
+        how: "The angle between the lead arm and the shaft stays near an L until the hands are past the trail hip: the clubhead comes in late, with a shallower strike and a little more carry.",
         drill: "Pump drill: from the top, pull the hands down to the trail hip keeping the L between lead arm and shaft, pump twice, then swing through. 10 balls.",
         thought: "Hands to the hip, then let it go." },
       less: { name: "losing your wrist hinge early (casting)", fault: true,
-        how: "The wrists unhinge from the top, throwing the clubhead out early: weak, high or thin shots and a flip at impact.",
+        how: "The wrists unhinge from the top, throwing the clubhead out early: a steeper strike and less carry.",
         drill: "Towel drill: tuck a towel under the lead armpit and make half swings holding the hinge until the hands pass the trail thigh. 10 balls.",
         thought: "Butt of the club to the ball." },
     },
     releaseArm: {
       what: "how high the lead arm still is when the wrist hinge goes coming down (higher = earlier)",
       more: { name: "releasing early, with the arms still high (casting)", fault: true,
-        how: "The club is let go from the top, before the hands get down: it reaches the bottom too early and comes up into the ball (shallow or upward strike).",
+        how: "The club is let go from the top, before the hands get down: the clubhead catches up with the hands early.",
         drill: "Drag drill: start at the top, drag the grip down toward the ball with the hands leading to hip height before the clubhead passes them. Half speed, 10 balls.",
         thought: "Drag the handle." },
       less: { name: "a later release, with the hands down low first",
