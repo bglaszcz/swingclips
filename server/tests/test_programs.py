@@ -100,6 +100,42 @@ class ProgramsTest(unittest.TestCase):
     def block(self):
         return self.p.state()["program"]["blocks"][self.p.state()["program"]["block"]]["id"]
 
+    def test_warm_up_before_the_first_block(self):
+        # Oct 22: the warm-up wedges went into the trends as normal swings. Now Start begins with a warm-up:
+        # drill mode "warmup" (out of the trends), its swings counted for the page but not filed or capped.
+        self.assertTrue(programs.wants_warmup(self.p.programs["ballpractice"]))
+        self.assertFalse(programs.wants_warmup(self.p.programs["balltest"]))     # cold test: the first balls count
+        self.assertFalse(programs.wants_warmup(self.p.programs["sequence1"]))    # no ball, nothing records
+        st = self.p.warm_up("ballpractice")
+        self.assertEqual(self.drills, [programs.WARMUP_DRILL])
+        self.assertTrue(self.p.busy)
+        self.assertIsNone(self.p.run)
+        self.assertEqual(st["warmup"]["swings"], 0)
+        self.assertEqual(st["block"], 0)
+        self.assertIn("Warm-up for Ball plan: practice day", self.said()[-1])
+        for _ in range(3):
+            self.assertEqual(self.hit(shot(club="PW")), [])
+        self.assertEqual(self.p.state()["program"]["warmup"]["swings"], 3)
+        # Kept across a restart of the server.
+        again = programs.Programs(Path(self.dir.name) / "program.json", Path(self.dir.name) / "programs-log.jsonl",
+                                  lambda: next(self.ids), self.clock)
+        self.assertEqual(again.warm["swings"], 3)
+        # Warm-up done: block 1 starts; the warm-up's swings aren't its reps and don't count toward the cap.
+        run = self.p.start("ballpractice")
+        self.assertNotIn("warmup", run)
+        self.assertEqual(run["used"], 0)
+        self.assertEqual(self.drills[-1], "toetap")
+        self.p.step(self.swings)
+        self.assertEqual(self.p.state()["program"]["used"], 0)
+        self.assertEqual(self.p.drill_of_clip(self.swings[0]["name"]), (False, None))
+
+    def test_stop_during_the_warm_up(self):
+        self.p.warm_up("ballpractice")
+        self.assertIsNone(self.p.stop())
+        self.assertFalse(self.p.busy)
+        self.assertEqual(self.drills, [programs.WARMUP_DRILL, None])
+        self.assertIsNone(self.p.state()["program"])
+
     def old_3d_gates(self):
         """The programs as they gated before Oct 21 2026, on the 3D hips (retired then: docs/3d.md). The
         3D-waiting machinery stays for any block that checks the 3D; these tests keep it honest."""

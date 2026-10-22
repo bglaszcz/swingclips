@@ -18,16 +18,17 @@ end).
 
 1. **Phones**: open **SwingClips** on both (on their tripods, on the tape marks). Nothing to press.
 2. **Laptop**: double-click the **Golf** icon on the desktop and press what you're doing (**Driving
-   range**, **GSPro connector**, **Drills, no ball**). It starts only what that needs and opens the
-   Start page. (First time: double-click `Golf launcher.cmd` in `Dropbox\SwingClips` and press "Put an
+   range**, **Drills with the ball**, **GSPro connector**, **Drills, no ball**). It starts only what that
+   needs and opens the Start page (**Drills with the ball**: Square Golf, then the Start page at Drills). (First time: double-click `Golf launcher.cmd` in `Dropbox\SwingClips` and press "Put an
    icon on the desktop".) In Square's app, pick the **driving range**. (The server runs by itself; nothing to do there.)
 3. **Start page, 1 Get ready**: "Since last time" checks the previous session and the night worker
    (camera misses, Square pairing, false triggers, camera moves), and "This week" shows your weekly
    sessions, focus drill sets, and Combine check. Every check green, both camera pictures
    framed with the skeleton on you. Fix what it says if not. (Both fold to one line once both phones record.)
-4. **2 What are you doing?**: pick one. Only what it needs shows below it (the launcher's **Drills, no
-   ball** button picks "Drills, no ball" for you).
+4. **2 What are you doing?**: pick one. Only what it needs shows below it (the launcher's **Drills with
+   the ball** and **Drills, no ball** buttons pick for you).
 5. **3 Record: Start recording.** Each phone says "Recording". (A phone that joins late starts by itself.)
+   For Drills and the 4-week ball plan there's nothing to press here: their **Start** does it.
 6. **Hit one ball.** "Swings and Square shots" at the bottom lists it with "both" and its Square
    shot; about a minute later the phone says "First swing: both cameras saw you, Square paired" (or what's wrong).
 
@@ -35,22 +36,23 @@ end).
 
 | You picked... | What shows | What you do |
 |---|---|---|
-| 4-week ball plan | Record, today's session, the last session's check, the scoreboard | While the plan runs (Oct 22 - Nov 18 2026) it comes first. **Start** on today's session (a practice day or the test day, picked for you; the practice day works on your biggest iron miss of the last two weeks). After it, the check says what went well and what struggled, with the drill and swing thought for the miss. Week by week: Progress. |
+| 4-week ball plan | Record, today's session, the last session's check, the scoreboard | While the plan runs (Oct 22 - Nov 18 2026) it comes first. **Start** on today's session (both cameras start, then the warm-up, as for Drills) (a practice day or the test day, picked for you; the practice day works on your biggest iron miss of the last two weeks). After it, the check says what went well and what struggled, with the drill and swing thought for the miss. Week by week: Progress. |
 | Just hit balls | Record, focus card, swings | Hit. Everything is recorded and analyzed. The focus card tracks today's progress score against your goal and gives swing-by-swing feedback. |
 | Today's plan | Record, the plan | **Start** on the first block, hit its balls, **Next**. With a focus set, its drill is a block of reps (each one shows against your target, out of your trends), then 10 normal swings, then what the reps did. |
-| Coach program | Record, the program | Pick it, **Start program**. Follow the block on screen: no-ball reps, tap **Pass / Miss**; ball shots, listen for the verdict (flush line: tap where the mark started). Blocks move on by themselves. |
+| Drills | Record, the drill | Today's ball plan session is picked; or pick one from the library. **Start**: both cameras start recording and the warm-up begins (easy swings, recorded but left out of your numbers; not on a test day). Green **Warm-up done** starts block 1. Follow the block on screen: no-ball reps, tap **Pass / Miss**; ball shots, listen for the verdict (flush line: tap where the mark started). Blocks move on by themselves at their gate, or press the green **Next** in the block. |
 | Play a game | Record, the game | Pick it, **Start game**; the phone says each target. |
-| Drills, no ball | The program only (no phones, no Square) | A no-ball program is picked; **Start program**, do the block's reps, then tap **All N passed** (or how many passed) once. |
+| Drills, no ball | The program only (no phones, no Square) | A no-ball program is picked; **Start**, do the block's reps, then tap **All N passed** (or how many passed) once. |
 
 Doing the pump drill outside Today's plan: switch it on from the card, or mark the swings afterwards on the review page.
 Working on your focus: **Do the drill** on the focus card records your reps as drill reps (each one shows against your target, and they stay out of your trends); **Done** when you've had enough, then hit 10 normal swings and see whether they keep it.
 
 **After**
 
-1. **Coach program**: **Copy for coach**, paste into the coach chat (save the
+1. **Drills**: **Copy for coach**, paste into the coach chat (save the
    down-the-line picture if one shows). Older runs: **Past runs**, each has its own button. From the
    house: review page **Tools > Week for coach** lists the week's runs, each with **Copy this run for coach**.
-2. **Stop** under Record (each phone says "Stopped"), or just close the apps.
+2. **Close everything** on the laptop's Golf window (stops both phones recording, then Square Golf and the
+   watcher), or **Stop** under Record (each phone says "Stopped").
 3. Leave the server alone: about 10 minutes after the last swing it re-analyzes the session the
    careful way (the review page's Ready bar shows "deep pass: n clips to go").
 4. Look back on the **review page** (`http://192.168.86.250:8000`): **Progress** (the three steps:

@@ -4,10 +4,12 @@ The Square watcher, the GSPro-connector option, and the ball-flight fill-in. (Mo
 
 ## `relay/` - launch monitor to server (runs on the sim laptop, nothing to install)
 - **`golf-launcher.ps1`** (+ **`Golf launcher.cmd`**): the golf launcher window, the owner's way in: a
-  **Golf** icon on the desktop (the window's "Put an icon on the desktop" makes it) opens four buttons:
-  **Driving range** (Square Golf's app + the watcher), **GSPro connector** (closes Square's app, starts
-  the connector + the shot listener), **Drills, no ball** (nothing), **Close everything**. Each then
-  opens the Start page. While the window is open it runs `golf-agent.ps1` hidden, so the Start page's
+  **Golf** icon on the desktop (the window's "Put an icon on the desktop" makes it) opens five buttons:
+  **Driving range** (Square Golf's app + the watcher), **Drills with the ball** (the same, the Start page
+  opened at Drills: `?do=program`), **GSPro connector** (closes Square's app, starts the connector + the
+  shot listener), **Drills, no ball** (nothing), **Close everything** (stops both phones recording through
+  the server's `POST /api/phones/command`, `Stop-PhoneRecording` in `golf-common.ps1`, then Square Golf,
+  the watcher and the connector). Each other button opens the Start page. While the window is open it runs `golf-agent.ps1` hidden, so the Start page's
   launcher buttons work; closing the window stops it. Nothing starts at Windows sign-in. `-DryRun`
   logs instead of acting; `-SelfTest` presses every button in dry run and closes. On opening it
   brings the folder's scripts up to date from the server (`Update-RelayFiles` in `golf-common.ps1`:

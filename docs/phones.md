@@ -255,7 +255,10 @@ review page starts them and one of them does the talking.
   "no clip", "the Square watcher isn't running"). After that only problems, once each until they
   clear: no Square shot on 2 swings in a row, a missing clip on 2 in a row, the same camera problem
   on 3 in a row, a phone that stops answering while recording, 3+ clips waiting on a phone, a
-  battery under 10%. Not a phone running hot (since Oct 22).
+  battery under 10%. Not a phone running hot (since Oct 22). Swings after the first don't wait for the
+  clip quality (light: dark, grainy, flicker): it's measured only when the pose worker is idle, so with a
+  ball every ~25 s it came after 2 minutes on nearly every swing and held up what was said about Square
+  and the clips (Oct 22). A swing whose light isn't measured yet leaves the light warnings as they were.
 - **No swing found**: said when key positions couldn't be found in a clip (phases.js). Why is on
   the swing page ("No swing found in this clip: ...") and in the **events log**
   (`D:\SwingClips\events.jsonl`, one JSON object per line), with the server window printing

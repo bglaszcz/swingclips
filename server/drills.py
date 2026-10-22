@@ -34,6 +34,8 @@ DRILLS = {
     "pausetop": {"name": "Pause at the top", "pre": 2},
     # Brace and turn (Oct 6): Tier 1 no ball, Tier 2 at 3/4 speed.
     "braceturn": {"name": "Brace and turn", "pre": 2},
+    # The warm-up before a coach program (programs.py): recorded, but not the golfer's swing to measure.
+    "warmup": {"name": "Warm-up", "pre": 2},
 }
 # The phones' usual seconds before the strike (capture app MainActivity PRE_S).
 PRE_S = 2

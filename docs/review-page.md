@@ -954,7 +954,17 @@ toward the ball". The phones face away from you, so voice is the channel.
   against centred strikes, each against that club's median that day (the camera setup moves it between days).
   Why heel and hands: on the owner's irons Sep 23 - Oct 21 heel strikes were the biggest miss, and within club and
   day the hands to plane went with them (r +0.31, 320 swings, positive on 10 of 11 days, ~6 mm per inch).
-- **Coach program** (`programs.py`, `programs.json`, `/api/program*`, Start page "Coach program"): a coach's drill
+- **Drills** (Start page; was "Coach program". `POST /api/program` {program, warmup = true}): today's ball plan
+  session is picked first ("Today's session: ..."), the rest is the library. One green **Start**: a drill that hits
+  balls starts both phones recording (those not already) and Square's app and watcher through the golf agent
+  (`app.start_recording_for`), then the warm-up (`Programs.warm_up`: drill mode `warmup`, so its swings are recorded
+  but left out of the trends, gates and cap; counted on the card; skipped for `"warmup": false` cold tests,
+  `balltest` and `retention`, and no-ball drills). **Warm-up done** (`POST /api/program/warmup-done`) starts block 1.
+  Each block card ends in a green **Next: <block> →** (**Finish** on the last); the card is drawn again only when
+  the run changed (the 2 s poll made buttons vanish under a click). The 4-week ball plan's **Start** is the same
+  green button and goes the same way. Pages (`/start`, `/tripods`, ...) are served `Cache-Control: no-cache`
+  like the review page, so an update reaches the open laptop on reload.
+- **Coach program** (`programs.py`, `programs.json`, `/api/program*`, Start page "Drills"): a coach's drill
   ladder as data: blocks in order, each with its drill (drill mode, so rehearsals stay out of the trends;
   a block without one, like the transfer block, counts as normal swings), ball or no ball, reps, and a gate
   (`count`: need of reps, or `streak`: need in a row) of checks on Square's numbers (`strikeV`, `attack`,

@@ -5,7 +5,7 @@
       "name": "Ball plan: practice day",
       "from": "The 4-week ball plan (ballplan.json), Oct 22 - Nov 18 2026: the owner practises to Square's numbers only. Solid = smash 1.25 or more: on the owner's 7 irons Sep 23 - Oct 21, smash 1.25+ came up more than 15% short 3-4% of the time, under 1.20 most of the time. Fairway = within 15 yd of the line (games.js, the Driving game's 30 yd fairway). Swings in the ball blocks are normal swings (no drill): they count in the trends and the plan's scoreboard.",
       "cap": 50,
-      "clubs": "warm up first (10 easy wedges, before you start); then 7 iron, then driver",
+      "clubs": "easy wedges to warm up, then 7 iron, then driver",
       "bringBack": "Solid 7 irons and fairways per block, smash, attack angle and strike for each shot.",
       "blocks": [
         {
@@ -79,7 +79,7 @@
       "name": "Ball plan: centred strike day",
       "from": "The 4-week ball plan (ballplan.json), Oct 22 - Nov 18 2026, its practice day when off-centre strikes led the last two weeks' iron misses (ballplan.emphasis). On the owner's 7 irons Sep 23 - Oct 21, 37% were struck more than 12 mm toward the heel (36% of those solid, 81% within 6 mm); within a session the hands to plane in the downswing went with the heel strike (about 6 mm per inch, r +0.31 over 320 iron swings). Centred = Square's toe/heel within 10 mm (+ = heel). Pump drill balls are drill swings: out of the trends and the plan's scoreboard.",
       "cap": 45,
-      "clubs": "warm up first (10 easy wedges, before you start); then 7 iron, then driver",
+      "clubs": "easy wedges to warm up, then 7 iron, then driver",
       "bringBack": "Centred 7 irons and fairways per block, strike toe to heel, smash and carry for each shot.",
       "blocks": [
         {
@@ -136,7 +136,7 @@
       ]
     },
     {
-      "id": "balltest",
+      "id": "balltest", "warmup": false,
       "name": "Ball plan: test day",
       "from": "The 4-week ball plan (ballplan.json), Oct 22 - Nov 18 2026: the owner practises to Square's numbers only. Solid = smash 1.25 or more: on the owner's 7 irons Sep 23 - Oct 21, smash 1.25+ came up more than 15% short 3-4% of the time, under 1.20 most of the time. Fairway = within 15 yd of the line (games.js, the Driving game's 30 yd fairway). Swings in the ball blocks are normal swings (no drill): they count in the trends and the plan's scoreboard.",
       "cap": 30,
@@ -372,7 +372,7 @@
       }
     },
     {
-      "id": "retention",
+      "id": "retention", "warmup": false,
       "name": "Low point retention check",
       "from": "Golf coach chat, Oct 1 2026: does the steeper strike hold with no drill? After a day off, first 7 irons of the session; again after a second day off before retiring the drill",
       "cap": 12,

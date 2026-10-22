@@ -275,5 +275,45 @@ class PlanStepApi(unittest.TestCase):
             app.session_status.set_pre(drills.PRE_S)
 
 
+class ProgramStartApi(unittest.TestCase):
+    """One Start on the Start page: both phones recording and the warm-up on (owner, Oct 22)."""
+
+    def test_start_warm_up_then_block_one(self):
+        from fastapi.testclient import TestClient
+        from unittest import mock
+        import app
+        import programs
+        saved = app.drills_state, app.programs_state, app.session_status
+        app.drills_state = drills.Drills(TMP / "drills-start.json")
+        app.programs_state = programs.Programs(TMP / "program-start.json", TMP / "programs-start.jsonl",
+                                               app.practice_state.new_id, on_block=app.program_block_drill)
+        app.session_status = status.Status()
+        client = TestClient(app.app)
+        try:
+            for a in status.ANGLES:
+                app.session_status.heartbeat(a, hb(recording=False))
+            with mock.patch.object(app, "save_plan_step"):
+                out = client.post("/api/program", json={"program": "ballpractice"}).json()
+            self.assertEqual(out["warmup"]["program"], "ballpractice")
+            self.assertEqual({(r["action"], r["angle"]) for r in out["phones"]}, {("start", "face"), ("start", "dtl")})
+            self.assertEqual(app.drills_state.state()["current"]["drill"], "warmup")
+            self.assertEqual(client.get("/api/program").json()["program"]["warmup"]["program"], "ballpractice")
+            out = client.post("/api/program/warmup-done").json()
+            self.assertEqual(out["blocks"][out["block"]]["id"], "toetap")
+            self.assertEqual(app.drills_state.state()["current"]["drill"], "toetap")
+            self.assertEqual(client.post("/api/program/warmup-done").status_code, 400)
+            # A cold test starts at once, and phones already recording aren't told again.
+            for a in status.ANGLES:
+                app.session_status.heartbeat(a, hb(recording=True))
+            with mock.patch.object(app, "save_plan_step"):
+                out = client.post("/api/program", json={"program": "balltest"}).json()
+            self.assertNotIn("warmup", out)
+            self.assertEqual(out["phones"], [])
+            # The Start page is checked for a newer copy on every load (it came from the cache after an update).
+            self.assertEqual(client.get("/start").headers.get("cache-control"), "no-cache")
+        finally:
+            app.programs_state.stop()
+            app.drills_state, app.programs_state, app.session_status = saved
+
 if __name__ == "__main__":
     unittest.main()

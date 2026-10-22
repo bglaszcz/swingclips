@@ -69,6 +69,11 @@
                border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
   .go button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
   .go button:disabled { opacity: 0.5; cursor: default; }
+  /* The one thing to press next (Start, Warm-up done, Next block): green, easy to spot (owner, Oct 22). */
+  button.go-btn, #sec-ballplan button.bp-go { font: inherit; font-size: 16px; font-weight: 700; padding: 10px 22px;
+    border-radius: 9px; cursor: pointer; background: var(--accent); border: 1px solid var(--accent); color: var(--accent-text); }
+  button.go-btn:disabled, #sec-ballplan button.bp-go:disabled { opacity: 0.5; cursor: default; }
+  .prog-go { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
   .go .state { font-size: 16px; font-weight: 600; }
   .go .note { flex: 0 0 100%; color: var(--muted); font-size: 13px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -373,12 +378,12 @@
   </section>
 
   <section id="sec-program" hidden>
-    <h2><span class="n" id="n5">4</span>Coach program</h2>
-    <p class="hint" id="prog-hint">Drill blocks from your coach, each with a gate to pass. The phone says each shot's verdict.</p>
+    <h2><span class="n" id="n5">4</span>Drills</h2>
+    <p class="hint" id="prog-hint">Today's session or a drill from the library, each block with a gate to pass. The phone says each shot's verdict.</p>
     <div id="prog-idle">
       <div class="go">
-        <label>Program <select class="game-select" id="prog-select"></select></label>
-        <button class="primary" id="prog-start">Start program</button>
+        <label>Drill <select class="game-select" id="prog-select"></select></label>
+        <button class="primary" id="prog-start">Start</button>
       </div>
       <div class="prog-blocks" id="prog-plan"></div>
       <div id="prog-history"></div>
@@ -389,8 +394,7 @@
       <div class="prog-now" id="prog-now"></div>
       <div class="prog-blocks" id="prog-blocks"></div>
       <div class="plan-act">
-        <button class="plan-btn on" id="prog-next">End this block, next</button>
-        <button class="plan-btn on" id="prog-stop">Stop the program</button>
+        <button class="plan-btn on" id="prog-stop">Stop</button>
       </div>
     </div>
     <div class="prog-report" id="prog-report-box">
@@ -1865,7 +1869,7 @@ function hidePelvisCard() {
 }
 
 function renderPelvisCard(clips) {
-  if (!isDrillOrProgramRunning()) {
+  if (!isDrillOrProgramRunning() || (programState && programState.program && programState.program.warmup)) {
     hidePelvisCard();
     return;
   }
@@ -2386,8 +2390,11 @@ function blockLine(b) {
 async function programPost(url, body) {
   try {
     const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
-    if (!r.ok) $("prog-copied").textContent = ((await r.json().catch(() => ({}))).detail) || `The server said ${r.status}`;
-  } catch { $("prog-copied").textContent = "Can't reach the server"; }
+    if (!r.ok) {
+      $("prog-copied").textContent = ((await r.json().catch(() => ({}))).detail) || `The server said ${r.status}`;
+      $("prog-now").dataset.sig = "";   // drawn again: the button pressed comes back
+    }
+  } catch { $("prog-copied").textContent = "Can't reach the server"; $("prog-now").dataset.sig = ""; }
   pollProgram();
   pollGame();
 }
@@ -2405,21 +2412,56 @@ function renderProgram(data) {
   $("prog-report-box").hidden = !run && !(data.log || []).length;
   if (!run) {
     const sel = $("prog-select");
-    if (!sel.options.length) sel.replaceChildren(...(data.programs || []).map(x =>
-      Object.assign(document.createElement("option"), { value: x.id, textContent: x.name })));
+    const today = todaysSession();
+    const optSig = `${(data.programs || []).map(x => x.id).join(",")}|${today || ""}`;
+    if (sel.dataset.sig !== optSig) {
+      // Today's ball plan session first (picked), then the library.
+      const was = sel.value;
+      sel.replaceChildren(...[...(data.programs || [])].sort((a, b) => (b.id === today) - (a.id === today)).map(x =>
+        Object.assign(document.createElement("option"), { value: x.id, textContent: x.id === today ? `Today's session: ${x.name}` : x.name })));
+      sel.value = !sel.dataset.picked && today ? today : (was || sel.value);
+      if (!sel.value && sel.options.length) sel.value = sel.options[0].value;
+      sel.dataset.sig = optSig;
+    }
     const cur = (data.programs || []).find(x => x.id === sel.value);
-    $("prog-hint").textContent = cur ? `${cur.from}. ${cur.cap} swings at most (every swing counts, no-ball reps too); ${cur.clubs}.`
-      : "No programs in programs.json.";
+    $("prog-hint").textContent = !cur ? "No drills in programs.json."
+      : (cur.blocks.some(b => b.ball) ? "Start turns both cameras on" + (wantsWarmup(cur) ? " and begins with a warm-up (recorded, left out of your numbers). " : ". ")
+        : "No ball: nothing records. ") + `${cur.cap} swings at most; ${cur.clubs}.`;
     $("prog-plan").replaceChildren(...(cur ? cur.blocks.map(b => blockLine(b)) : []));
     renderProgramHistory(data);
+    $("prog-now").dataset.sig = "";
     return;
   }
   $("prog-hint").textContent = "Drill blocks switch drill mode on (left out of your trends); Square's numbers still count for the gate and the report.";
   $("prog-name").textContent = run.name;
+  const box = $("prog-now");
+  // Drawn again only when something changed: the poll every 2 s made a button vanish under a click.
+  const runSig = JSON.stringify(run);
+  if (box.dataset.sig === runSig) return;
+  box.dataset.sig = runSig;
+  box.replaceChildren();
+  if (run.warmup) {
+    // The warm-up before block 1: recorded, left out of the numbers, ended by the golfer.
+    const n = run.warmup.swings || 0;
+    $("prog-used").textContent = `warm-up: ${n} swing${n === 1 ? "" : "s"}`;
+    const h = document.createElement("h3");
+    h.textContent = "Warm-up";
+    const how = document.createElement("div");
+    how.textContent = "Easy swings to get loose. They're recorded but left out of your trends, the gates and the swing count.";
+    const go = document.createElement("div");
+    go.className = "prog-go";
+    const done = document.createElement("button");
+    done.className = "go-btn";
+    done.id = "prog-warmup-done";
+    done.textContent = `Warm-up done: start ${run.blocks[0] ? run.blocks[0].name : "block 1"} →`;
+    done.onclick = () => { done.disabled = true; programPost("/api/program/warmup-done"); };
+    go.append(done);
+    box.append(h, how, go);
+    $("prog-blocks").replaceChildren(...run.blocks.map(blockLine));
+    return;
+  }
   $("prog-used").textContent = `${run.used} of ${run.cap} swings`;
   const b = run.blocks[run.block];
-  const box = $("prog-now");
-  box.replaceChildren();
   const h = document.createElement("h3");
   h.textContent = `Block ${run.block + 1}: ${b.name}`;
   const how = document.createElement("div");
@@ -2530,8 +2572,27 @@ function renderProgram(data) {
       }
     }
   }
+  // The next block, in green in the block's own card (it was a small outlined button below the list).
+  const go = document.createElement("div");
+  go.className = "prog-go";
+  const nextBtn = document.createElement("button");
+  nextBtn.className = "go-btn";
+  nextBtn.id = "prog-next";
+  nextBtn.textContent = run.block + 1 < run.blocks.length ? `Next: ${run.blocks[run.block + 1].name} →` : "Finish";
+  nextBtn.onclick = () => { nextBtn.disabled = true; programPost("/api/program/next"); };
+  go.append(nextBtn);
+  box.append(go);
   $("prog-blocks").replaceChildren(...run.blocks.map(blockLine));
 }
+
+/** Today's ball plan session (a program id), when the plan has one not done yet today. */
+function todaysSession() {
+  const t = ballPlan && ballPlan.today;
+  const step = t && (t.steps || []).find(st => st.program && !st.done);
+  return step ? step.program : null;
+}
+/** Whether a drill starts with a warm-up (programs.py wants_warmup). */
+function wantsWarmup(p) { return p.warmup !== false && p.blocks.some(b => b.ball); }
 
 let historyShown = "";
 function renderProgramHistory(data) {
@@ -2682,9 +2743,12 @@ $("prog-notes-save").onclick = async () => {
   $("prog-copied").textContent = "Notes saved.";
 };
 
-$("prog-select").onchange = () => renderProgram(programState);
-$("prog-start").onclick = () => programPost("/api/program", { program: $("prog-select").value });
-$("prog-next").onclick = () => programPost("/api/program/next");
+$("prog-select").onchange = () => { $("prog-select").dataset.picked = "1"; renderProgram(programState); };
+$("prog-start").onclick = async () => {
+  $("prog-start").disabled = true;
+  await programPost("/api/program", { program: $("prog-select").value });
+  $("prog-start").disabled = false;
+};
 $("prog-stop").onclick = () => { if (confirm("Stop the program? It's saved as it stands.")) programPost("/api/program/stop"); };
 $("prog-copy").onclick = () => copyProgramReport();
 
@@ -2695,7 +2759,7 @@ const CHOICE_KEY = "swingclips_activity";
 const CHOICES = [
   { id: "hit", title: "Just hit balls", desc: "Square and both cameras, nothing else" },
   { id: "plan", title: "Today's plan", desc: "Warm-up, your focus, scoring zone: from your data" },
-  { id: "program", title: "Coach program", desc: "Drill blocks with a gate to pass" },
+  { id: "program", title: "Drills", desc: "Today's session or the drill library" },
   { id: "game", title: "Play a game", desc: "Combine, wedge ladder and more, scored against tour" },
   { id: "noball", title: "Drills, no ball", desc: "No phones or Square: you judge each rep" },
 ];
@@ -2969,6 +3033,9 @@ function programNeeds3d(p) {
 
 function getProgramProgress(prog, data) {
   if (!data) return { text: "Loading…", level: "wait", currentBlockIndex: 0 };
+  if (data.program && data.program.id === prog.id && data.program.warmup) {
+    return { text: "Warm-up", level: "warn", inProgress: true, currentBlockIndex: 0 };
+  }
   if (data.program && data.program.id === prog.id) {
     const curBlock = data.program.blocks[data.program.block];
     return {

@@ -211,6 +211,21 @@ function Update-RelayFiles([string]$baseDir = "", [string]$server = "", [switch]
 }
 
 # $do picks what the Start page shows (start.html ?do=: hit, plan, program, game, noball).
+# Stops both phones recording (the server sends them Stop on their next poll).
+function Stop-PhoneRecording([string]$server = "", [switch]$DryRun) {
+    if (-not $server) { $server = "http://192.168.86.250:8000" }
+    if ($DryRun) { return "Would stop the phones recording" }
+    try {
+        $r = Invoke-RestMethod -Uri ($server.TrimEnd('/') + "/api/phones/command") -Method Post -ContentType "application/json" `
+            -Body '{"action":"stop","angle":"both"}' -TimeoutSec 5 -ErrorAction Stop
+        $bad = @($r.results | Where-Object { $_.error })
+        if ($bad.Count) { return "Phones: " + (($bad | ForEach-Object { "$($_.angle): $($_.error)" }) -join "; ") }
+        return "Phones told to stop recording"
+    } catch {
+        return "Couldn't reach the server to stop the phones: $($_.Exception.Message)"
+    }
+}
+
 function Open-StartPage([string]$server = "", [switch]$DryRun, [string]$do = "") {
     if (-not $server) { $server = "http://192.168.86.250:8000" }
     $url = $server.TrimEnd('/') + "/start"

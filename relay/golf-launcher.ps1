@@ -1,6 +1,8 @@
 # The golf launcher for the sim laptop: a small window with one button per kind of session. Each
 # starts only what that session needs (Square Golf's app and the Square watcher, or Square's GSPro
-# connector and the shot listener, or nothing for no-ball drills), then opens the server's Start page.
+# connector and the shot listener, or nothing for no-ball drills), then opens the server's Start page
+# ("Drills with the ball" opens it at Drills, where one Start turns the cameras on and begins the warm-up).
+# "Close everything" also stops the phones recording.
 # While the window is open, the golf agent (golf-agent.ps1) runs hidden too, so the Start page's
 # launcher buttons work; closing the window stops it. Nothing starts at Windows sign-in.
 #
@@ -47,16 +49,19 @@ function Stop-Agent {
 }
 
 # ---- The buttons ----
-function Start-Range {
+function Start-Range([string]$do = "") {
     Say "Driving range: starting Square Golf and the watcher..."
     if (Get-ConnectorProcess) { Say (Stop-GSProStack -DryRun:$DryRun) }   # one Bluetooth connection to the Omni
     Say (Set-ShotSource $here "square" -DryRun:$DryRun)
     Say (Start-SquareApp $here -DryRun:$DryRun)
     Say (Start-SquareWatcher $here -DryRun:$DryRun)
     Start-Agent
-    Say (Open-StartPage $Server -DryRun:$DryRun)
-    Say "Driving range ready: pick your session on the Start page."
+    Say (Open-StartPage $Server -DryRun:$DryRun -do $do)
+    if ($do -eq "program") { Say "Ready: pick today's session or a drill, then Start." }
+    else { Say "Driving range ready: pick your session on the Start page." }
 }
+
+function Start-RangeDrills { Start-Range "program" }
 
 function Start-GSPro {
     Say "GSPro connector: closing Square Golf, starting the connector and the shot listener..."
@@ -78,6 +83,7 @@ function Start-Drills {
 
 function Close-Everything {
     Say "Closing everything..."
+    Say (Stop-PhoneRecording $Server -DryRun:$DryRun)
     if (Get-WatcherProcess) { Say (Stop-SquareWatcher -DryRun:$DryRun) }
     if ((Get-ConnectorProcess) -or (Get-ListenerProcess)) { Say (Stop-GSProStack -DryRun:$DryRun) }
     if (Get-SquareProcess) { Say (Stop-SquareApp -DryRun:$DryRun) }
@@ -132,7 +138,7 @@ Add-Type -AssemblyName System.Drawing
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "SwingClips golf"
 $form.StartPosition = "CenterScreen"
-$form.ClientSize = New-Object System.Drawing.Size(460, 500)
+$form.ClientSize = New-Object System.Drawing.Size(460, 582)
 $form.FormBorderStyle = "FixedDialog"
 $form.MaximizeBox = $false
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
@@ -148,9 +154,10 @@ $y = 58
 $buttons = @()
 $choices = @(
     @{ text = "Driving range`nSquare Golf and the watcher"; act = "Start-Range" },
+    @{ text = "Drills with the ball`nSquare Golf, then Drills on the Start page"; act = "Start-RangeDrills" },
     @{ text = "GSPro connector`nInstead of Square Golf's app"; act = "Start-GSPro" },
     @{ text = "Drills, no ball`nNothing to start: just the Start page"; act = "Start-Drills" },
-    @{ text = "Close everything`nSquare Golf, watcher, connector"; act = "Close-Everything" })
+    @{ text = "Close everything`nStop recording, Square Golf, watcher, connector"; act = "Close-Everything" })
 foreach ($c in $choices) {
     $btn = New-Object System.Windows.Forms.Button
     $btn.Text = $c.text

@@ -1167,7 +1167,7 @@ def practice_worker(stop: threading.Event):
     """Forever, while practice is on or a game or coach program is in play: make each new swing's
     spoken result once its number is known."""
     while not stop.is_set():
-        if not practice_state.config["on"] and not games_state.game and not programs_state.run:
+        if not practice_state.config["on"] and not games_state.game and not programs_state.busy:
             stop.wait(2)
             continue
         try:
@@ -1175,7 +1175,7 @@ def practice_worker(stop: threading.Event):
                 practice_tick()
             if games_state.game:
                 game_tick()
-            if programs_state.run:
+            if programs_state.busy:
                 program_tick()
         except Exception:
             traceback.print_exc()
@@ -1214,8 +1214,8 @@ def game_tick() -> list[dict]:
 
 
 def program_tick() -> list[dict]:
-    """One look at the swings of the coach program in play; returns the reps added."""
-    run = programs_state.run
+    """One look at the swings of the coach program in play (or its warm-up); returns the reps added."""
+    run = programs_state.run or programs_state.warm
     if not run:
         return []
     made = programs_state.step(swings_since(run["started"]))
@@ -1300,7 +1300,9 @@ async def revalidate_page(request: Request, call_next):
     """The page and its scripts are checked for a newer copy on every load (a quick 304 when there
     isn't one): otherwise, after an update, a browser can run new HTML with an old cached script."""
     response = await call_next(request)
-    if request.url.path == "/" or request.url.path.startswith("/static/"):
+    # Every page too (/start, /tripods, ...): only "/" was, so after an update the Start page could come
+    # from the browser's cache, old buttons and all (Oct 22).
+    if request.url.path == "/" or request.url.path.startswith("/static/")             or response.headers.get("content-type", "").startswith("text/html"):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -2013,7 +2015,7 @@ async def set_practice(request: Request):
         raise HTTPException(400, str(e))
     if c["on"] and games_state.game:
         games_state.stop()  # one thing spoken after each swing
-    if c["on"] and programs_state.run:
+    if c["on"] and programs_state.busy:
         programs_state.stop()
     m = practice.BY_KEY[c["metric"]]
     print(f"Practice: {'on' if c['on'] else 'off'}, {m['label']} {practice.fmt_range(m, c['min'], c['max'])}", flush=True)
@@ -2034,7 +2036,7 @@ async def practice_latest(since: int | None = None, angle: str | None = Query(No
     give_up = time.monotonic() + wait
     while True:
         out = practice_state.latest(since, angle)
-        out["on"] = out["on"] or bool(games_state.game) or bool(programs_state.run)
+        out["on"] = out["on"] or bool(games_state.game) or programs_state.busy
         if since is not None:
             # Practice games and coach programs speak through the same phone, with ids from the same counter.
             out["results"] = sorted(out["results"] + [
@@ -2075,7 +2077,7 @@ async def start_game(request: Request):
         raise HTTPException(400, str(e))
     if practice_state.config["on"]:
         practice_state.set_config({**practice_state.config, "on": False})
-    if programs_state.run:
+    if programs_state.busy:
         programs_state.stop()
     print(f"Game: {g['name']} started, first target {g['target']} yd", flush=True)
     return g
@@ -2215,7 +2217,7 @@ def set_plan_step(body: PlanStep):
         raise HTTPException(400, "Unknown game")
     if practice_state.config["on"]:
         practice_state.set_config({**practice_state.config, "on": False})
-    if programs_state.run and body.block:
+    if programs_state.busy and body.block:
         programs_state.stop()
     if body.block or not programs_state.run:
         drills_state.set(body.drill)   # (ending the plan leaves a program's drill block as it is)
@@ -2254,13 +2256,47 @@ def get_program():
 
 class ProgramChoice(BaseModel):
     program: str
+    # Start with the warm-up (programs.wants_warmup): the Start page's Start. False goes straight to block 1.
+    warmup: bool = True
+
+
+def start_recording_for(program_id: str) -> list[dict]:
+    """A program that hits balls: both phones recording, and Square's app and its watcher on the laptop
+    (through the golf agent), unless already on. One press on the Start page does it all (owner, Oct 22)."""
+    p = programs_state.programs.get(program_id)
+    if not p or not any(b.get("ball") for b in p["blocks"]):
+        return []
+    out = []
+    phones = session_status.snapshot({}, {"queued": 0}, None).get("phones") or {}
+    angles = [a for a in status.ANGLES if not (phones.get(a) or {}).get("recording")]
+    if len(angles) == 2:
+        out = session_status.command("start", "both")
+    elif angles:
+        out = session_status.command("start", angles[0])
+    if out:
+        print("Phones: " + ", ".join(f"{r['action']} {r['angle']}: {r['error'] or 'sent'}" for r in out), flush=True)
+    agent = session_status.agent_snapshot(time.time())
+    if agent.get("connected") and (agent.get("source") or "square") == "square":
+        for action, running in (("start_square", agent.get("squareRunning")), ("start_watcher", agent.get("watcherRunning"))):
+            if not running:
+                try:
+                    session_status.agent_command(action)
+                except ValueError:
+                    pass
+    return out
 
 
 @app.post("/api/program")
 def start_program(body: ProgramChoice):
-    """Starts a coach program: practice voice, game and plan block off (one voice, one thing at a time)."""
+    """Starts a coach program, with its warm-up first unless `warmup` is false or it has none
+    (programs.wants_warmup); a program that hits balls starts the phones recording (and Square on the
+    laptop). Practice voice, game and plan block off (one voice, one thing at a time)."""
+    p = programs_state.programs.get(body.program)
     try:
-        run = programs_state.start(body.program)
+        if p and body.warmup and programs.wants_warmup(p):
+            run = programs_state.warm_up(body.program)
+        else:
+            run = programs_state.start(body.program)
     except ValueError as e:
         raise HTTPException(400, str(e))
     if practice_state.config["on"]:
@@ -2268,7 +2304,19 @@ def start_program(body: ProgramChoice):
     if games_state.game:
         games_state.stop()
     save_plan_step(None)
-    print(f"Program: {run['name']} started", flush=True)
+    phones = start_recording_for(body.program)
+    print(f"Program: {run['name']} {'warm-up' if run.get('warmup') else 'started'}", flush=True)
+    return {**run, "phones": phones}
+
+
+@app.post("/api/program/warmup-done")
+def program_warmup_done():
+    """Ends the warm-up and starts its program's first block."""
+    warm = programs_state.warm
+    if not warm:
+        raise HTTPException(400, "No warm-up in play")
+    run = programs_state.start(warm["program"])
+    print(f"Program: {run['name']} started after a warm-up of {warm['swings']} swings", flush=True)
     return run
 
 
@@ -2329,7 +2377,7 @@ def get_ballplan(frm: str | None = Query(None, alias="from", max_length=10), to:
         ballplan_cache.update(rows=ballplan_rows(), t=now, key=key)
     games_now = games_state.state(log_limit=100000)
     return ballplan.build(plan, ballplan_cache["rows"], programs_state.runs(), games_now["log"], now,
-                          program_now=(programs_state.run or {}).get("id"),
+                          program_now=(programs_state.run or {}).get("id") or (programs_state.warm or {}).get("program"),
                           game_now=(games_now["game"] or {}).get("id"), frm=frm, to=to)
 
 

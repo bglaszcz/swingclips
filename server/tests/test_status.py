@@ -535,6 +535,23 @@ class HealthTest(unittest.TestCase):
         self.assertEqual(self.step([swing(1, t, partner=False)], t + status.DTL_WAIT_S + 1),
                          ["First swing. Down the line: no clip."])
 
+    def test_later_swings_dont_wait_for_the_light(self):
+        # Oct 22: a ball every ~25 s, the light measured only after 2 minutes: what was said about Square
+        # waited that long too. Only the first swing waits for it now.
+        t = self.start + 10
+        dark = {"face": {"warnings": ["dark"]}, "dtl": {"warnings": []}}
+        self.assertEqual(self.step([swing(1, t, quality=dark)], t + 40), ["First swing. Face-on: too dark."])
+        unmeasured = {"face": None, "dtl": None}
+        swings_now = [swing(1, t, quality=dark), swing(2, t + 25, shot=False, quality=unmeasured),
+                      swing(3, t + 50, shot=False, quality=unmeasured)]
+        said = self.step(swings_now, t + 50 + 30)
+        self.assertEqual(said, ["Square: no shot on the last 2 swings."])   # not "Face-on looks good now"
+        self.assertIn("camera:face:too dark", self.s.health.streaks)
+        # Measured and light again: cleared, and said.
+        lit = {"face": {"warnings": []}, "dtl": {"warnings": []}}
+        said = self.step(swings_now + [swing(4, t + 75, quality=lit)], t + 75 + 30)
+        self.assertIn("Face-on looks good now.", said)
+
     def test_one_phone_session(self):
         self.s.heartbeat("dtl", hb(closing=True))
         t = self.start + 10

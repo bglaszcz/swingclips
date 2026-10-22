@@ -20,6 +20,10 @@ face centre; programs.json's gates are in those units.
 Drill blocks switch drill mode on (drills.py), so their swings stay out of the trends; their Square
 numbers stay here for the gate and the report for the coach (report()).
 
+A program with ball blocks starts with a warm-up (warm_up(); not one whose "warmup" is false, such as a
+cold test): drill mode "warmup", so its swings are recorded but left out of the trends, the gates and
+the cap. The golfer ends it with Warm-up done (start()), which starts the first block.
+
 Square's strike height can shift as a whole (about -14 mm on every club between Sep 16 and Sep 23 2026,
 and on Aug 21 alone), so a program may set a "calibration": the median of the session's first readable
 shots with that club must sit near the usual value, or the strike checks are dropped for the session
@@ -56,6 +60,13 @@ MARK_WAIT_S = 10.0
 IDLE_END_S = 45 * 60
 # The report splits each block's shots here: the first ones (cold?) and the rest.
 SPLIT_AT = 10
+# The drill mode of the warm-up before a program (drills.py): its swings are out of the trends.
+WARMUP_DRILL = "warmup"
+
+
+def wants_warmup(p: dict) -> bool:
+    """Whether a program starts with a warm-up: it hits balls, and isn't a cold test ("warmup": false)."""
+    return p.get("warmup", True) is not False and any(b.get("ball") for b in p["blocks"])
 
 # The 3D's numbers a gate can check. No program gates on them since Oct 21 2026 (the 3D hips follow the
 # camera setup more than the swing: docs/3d.md), but a block that does waits for the swing's 3D.
@@ -508,22 +519,46 @@ class Programs:
         self.lock = threading.Lock()
         doc = swings.load(state_file)
         self.run: dict | None = doc if doc.get("id") in self.programs else None
+        # The warm-up before a program: {"program", "started", "swings"} (kept in the state file while on).
+        warm = doc.get("warmup") if not self.run else None
+        self.warm: dict | None = warm if isinstance(warm, dict) and warm.get("program") in self.programs else None
         self.said: list[dict] = []
         # Clip name -> the drill of the block its swing was filed under (None: a block with no drill).
         self.clip_drills: dict[str, str | None] = {}
         for run in self._log() + ([self.run] if self.run else []):
             self._note_drills(run)
 
+    @property
+    def busy(self) -> bool:
+        """A program in play, or the warm-up before one."""
+        return bool(self.run or self.warm)
+
     def catalog(self) -> list[dict]:
         return list(self.programs.values())
 
     # ---- Starting, tapping, moving on ----
+
+    def warm_up(self, program_id: str) -> dict:
+        """The warm-up before a program: drill mode "warmup" until Warm-up done (start()) or Stop."""
+        if program_id not in self.programs:
+            raise ValueError("Unknown program")
+        p = self.programs[program_id]
+        with self.lock:
+            if self.run:
+                self._finish("stopped")
+            self.warm = {"program": p["id"], "started": self.clock(), "swings": 0}
+            self._say(f"Warm-up for {p['name']}. Easy swings: they're recorded but left out of your numbers. "
+                      "Tap Warm-up done on the Start page to start the first block.")
+            self._save()
+            self.on_block(WARMUP_DRILL)
+            return self._state()
 
     def start(self, program_id: str) -> dict:
         if program_id not in self.programs:
             raise ValueError("Unknown program")
         p = self.programs[program_id]
         with self.lock:
+            self.warm = None
             if self.run:
                 self._finish("stopped")
             now = self.clock()
@@ -537,6 +572,11 @@ class Programs:
     def stop(self) -> dict | None:
         with self.lock:
             if not self.run:
+                if self.warm:
+                    self.warm = None
+                    self._save()
+                    self.on_block(None)
+                    self._say("Warm-up stopped.")
                 return None
             done = self._finish("stopped")
             self._say(f"{done['name']} stopped. {done['spoken']}")
@@ -679,6 +719,13 @@ class Programs:
         """Adds each new swing of the program once its shot is in (or never came). `swings_now`:
         listed swings with "t" (strike, unix s), "name", "partner", "shot", "body3d", "why3d". Returns the reps made."""
         with self.lock:
+            if self.warm and not self.run:
+                # The warm-up's swings (one per swing: the listed clip of each), for the page's count.
+                n = sum(1 for s in swings_now if s["t"] >= self.warm["started"] - PAIR_SLACK_S)
+                if n != self.warm["swings"]:
+                    self.warm["swings"] = n
+                    self._save()
+                return []
             if not self.run:
                 return []
             p, _ = self._current()
@@ -975,6 +1022,14 @@ class Programs:
 
     def _state(self) -> dict | None:
         if not self.run:
+            if self.warm:
+                p = self.programs[self.warm["program"]]
+                # Shaped as a run that hasn't begun (block 1 next), with the warm-up's own line.
+                empty = {"reps": [], "marks": [], "results": {}}
+                blocks = [{**b, "now": False, "waiting3d": 0} for b in judged_blocks(p, empty)]
+                return {"id": p["id"], "name": p["name"], "warmup": dict(self.warm), "started": self.warm["started"],
+                        "cap": p["cap"], "used": 0, "block": 0, "blocks": blocks, "waiting3d": 0, "wrist": {},
+                        "notes": "", "calibration": None, "back": None, "progress": "warm-up"}
             return None
         p, block = self._current()
         waiting_count = sum(1 for r in self.run["reps"] if r.get("waiting3d"))
@@ -1014,7 +1069,7 @@ class Programs:
         return done
 
     def _save(self) -> None:
-        swings.save(self.state_file, self.run or {})
+        swings.save(self.state_file, self.run or ({"warmup": self.warm} if self.warm else {}))
 
     def _log(self) -> list[dict]:
         out = []

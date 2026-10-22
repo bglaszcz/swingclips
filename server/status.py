@@ -81,7 +81,10 @@ POSE_BEHIND = 3
 
 # Health check timing, as practice.py's: a Square shot comes 6-16 s after the strike (given up at
 # 25 s), a down-the-line clip is waited on for 90 s, and a swing that still isn't analyzed after 4
-# minutes is checked as it is. The clip quality record (quality.py) is waited on for 2 minutes.
+# minutes is checked as it is. The clip quality record (quality.py) is waited on for 2 minutes, on the
+# first swing only: it's measured when the pose worker has nothing else to do, so with a ball every ~25 s
+# it came after 2 minutes on nearly every swing, and held back what was said about the swings after it
+# (Oct 22). It only tells the light (dark, grainy, flicker), which doesn't change from swing to swing.
 SHOT_GIVE_UP_S = 25.0
 DTL_WAIT_S = 90.0
 BODY_GIVE_UP_S = 240.0
@@ -291,7 +294,9 @@ def swing_findings(s: dict, expect_dtl: bool, relay_ok: bool, relay: str = "the 
     q = rec.get("quality") or {}
     codes = q.get("camera") or {}
     main = s.get("angle") or "face"
-    out = {"cameras": {}, "clip": [], "square": None}
+    # unmeasured: angles whose light (the quality record) wasn't measured yet: their light problems stay as
+    # they were.
+    out = {"cameras": {}, "clip": [], "square": None, "unmeasured": []}
     angles = [main]
     if main == "face" and (s.get("partner") or expect_dtl):
         angles.append("dtl")
@@ -309,7 +314,10 @@ def swing_findings(s: dict, expect_dtl: bool, relay_ok: bool, relay: str = "the 
         if a == main and q.get("swingFound") is False:
             out["cameras"][a] = ["no swing found"]
             continue
-        found = camera_problems(a, codes.get(a), (s.get("quality") or {}).get(a))
+        measured = (s.get("quality") or {}).get(a)
+        if measured is None:
+            out["unmeasured"].append(a)
+        found = camera_problems(a, codes.get(a), measured)
         out["cameras"][a] = found or None
     if not s.get("shot"):
         out["square"] = "No Square shot" + ("" if relay_ok else f": {relay} isn't running")
@@ -396,7 +404,7 @@ class Health:
         if not s.get("shot") and age < SHOT_GIVE_UP_S:
             return False
         q = s.get("quality") or {}
-        if rec is not None and age < QUALITY_WAIT_S:
+        if rec is not None and age < QUALITY_WAIT_S and self.first is None:
             for a, pose in ((s.get("angle") or "face", s.get("pose")), ("dtl", s.get("partnerPose"))):
                 if pose == "done" and (a == s.get("angle") or s.get("partner")) and q.get(a) is None:
                     return False
@@ -460,7 +468,13 @@ class Health:
     def _later(self, f: dict) -> list[str]:
         keys = self._keys(f)
         out = []
+        # The light of an angle not measured yet on this swing: as it was (neither cleared nor counted again).
+        light = set(QUALITY_SAY.values())
+        kept = {k for k in self.streaks if k.startswith("camera:") and k.split(":")[1] in f.get("unmeasured", ())
+                and k.split(":", 2)[2] in light}
         for key in list(self.streaks):
+            if key in kept:
+                continue
             if key not in keys:
                 self.streaks.pop(key)
                 if key in self.active:
@@ -468,7 +482,7 @@ class Health:
                     # A problem said (on the first swing or later) that's gone: say so once.
                     if key == "square":
                         out.append("Square paired now.")
-                    elif not any(k.split(":")[:2] == key.split(":")[:2] for k in keys):
+                    elif not any(k.split(":")[:2] == key.split(":")[:2] for k in [*keys, *kept]):
                         good = f"{NAMES[key.split(':')[1]]} looks good now."
                         if good not in out:
                             out.append(good)
