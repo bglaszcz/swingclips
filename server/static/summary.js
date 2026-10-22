@@ -114,6 +114,10 @@
     ["xFactor", "X-factor at top", "°", "face", "p4", "separation"],
     // The club at the top, face-on: degrees short of parallel (+), past it (-). Backswing length.
     ["clubTop", "Club short of parallel at top", "°", "face", "p4", "clubShort"],
+    // The head from address to the top, face-on (+ = toward the target, - = away): on 40 blind stills it
+    // matched the eye (r 0.86), and on the owner's irons each inch further back went with a ~1.4 degree
+    // shallower attack angle, same club and day (claude-only/pivotwing, Oct 22 2026).
+    ["headTop", "Head move at top", "in", "face", "p4", "headSway"],
     ["hipSway", "Hip sway at impact", "in", "face", "p7", "hipSway"],
     ["leadHipP6", "Lead hip at P6", "in", "face", "p6", "leadHip"],
     ["trailHipTop", "Trail hip at top", "in", "face", "p4", "trailHip"],

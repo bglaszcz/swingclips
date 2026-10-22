@@ -346,6 +346,7 @@
     pelvisTop: { key: "pelvisTop", label: "Pelvis turn at top", unit: "°", dec: 1, pos: "p4" },
     xFactor: { key: "xFactor", label: "X-factor at top", unit: "°", dec: 1, pos: "p4" },
     clubTop: { key: "clubTop", label: "Club short of parallel at top", unit: "°", dec: 0, pos: "p4" },
+    headTop: { key: "headTop", label: "Head move at top", unit: "in", dec: 1, pos: "p4" },
     hipSway: { key: "hipSway", label: "Hip sway at impact", unit: "in", dec: 1, pos: "p7" },
     leadHipP6: { key: "leadHipP6", label: "Lead hip at P6", unit: "in", dec: 1, pos: "p6" },
     trailHipTop: { key: "trailHipTop", label: "Trail hip at top", unit: "in", dec: 1, pos: "p4" },

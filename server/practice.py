@@ -64,6 +64,9 @@ METRICS = [
     # Backswing length (e.g. three-quarter wedges): + = short of parallel, so under the range is too long.
     _m("clubTop", "Club short of parallel at the top of swing", "Club at the top", "°", "body", "face", 0,
        "too long", "too short"),
+    # The head from address to the top: + = toward the target. Under the range = it moved back further.
+    _m("headTop", "Head move at the top of swing", "Head at the top", "in", "body", "face", 1,
+       "too far back", "too far forward"),
     _m("headSway", "Head sway at impact", "Head sway", "in", "body", "face", 1, "too far back", "too far forward"),
     _m("hipSway", "Hip sway at impact", "Hip sway", "in", "body", "face", 1, "too far back", "too far forward"),
     _m("pelvisBall", "Pelvis vs ball at impact (+ = ahead of the ball)", "Pelvis", "in", "body", "face", 1,

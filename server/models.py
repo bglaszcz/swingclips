@@ -207,7 +207,12 @@ def session(path: Path, threads: int | None = None, where: str | None = None):
     GPU won't take the model (no driver, out of memory) it runs on the CPU, with a message."""
     import onnxruntime as ort
     where = where or provider()
+    # Errors only: ONNX Runtime 1.30 warns on every session ("No registered plugin EP device found for
+    # 'CUDAExecutionProvider'", then loads the built-in CUDA one; "Removing initializer ... not used"), once
+    # per worker process, all printed over each other (Oct 22). What a model got is still said (_tell_loaded).
+    ort.set_default_logger_severity(3)
     opts = ort.SessionOptions()
+    opts.log_severity_level = 3
     opts.intra_op_num_threads = threads or int(os.environ.get("SWINGCLIPS_ORT_THREADS", "1"))
     opts.inter_op_num_threads = 1
     if where == "cpu":

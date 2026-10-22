@@ -100,6 +100,20 @@
         drill: "Full-turn rehearsal: three slow backswings turning your back to the target until the shaft is close to level, then hit one at normal speed keeping that length. Repeat 5 times.",
         thought: "Turn your back to the target." },
     },
+    // The head at the top: neither way is a fault (no reverse pivot on 219 swings: the head always moves back,
+    // ~2 in; claude-only/pivotwing, Oct 22 2026). On the owner's irons, same club and day, each inch less back
+    // went with a ~1.4 degree steeper attack angle (r -0.55); smash and carry didn't move with it.
+    headTop: {
+      what: "how far the head moves from address by the top of the backswing (face-on; + = toward the target, - = away)",
+      more: { name: "the head staying more centred at the top",
+        how: "The head moves back less in the backswing: in your iron swings that goes with a steeper attack angle, about a degree for each inch.",
+        drill: "Nose over a tee: put a tee in the mat under your nose at address, make 5 slow backswings keeping your nose over it, then hit 10 balls with the same feel.",
+        thought: "Turn in a barrel." },
+      less: { name: "more shift back at the top",
+        how: "The head moves further away from the target by the top: more load into the trail side, and in your iron swings a shallower attack angle.",
+        drill: "Trail-heel load: three slow backswings feeling your weight settle into the trail heel and your head drift an inch back, then hit one ball with the same feel. Repeat 5 times.",
+        thought: "Load the trail heel." },
+    },
     hipSway: {
       what: "hip slide toward the target at impact (against address)",
       more: { name: "more of a hip bump toward the target",

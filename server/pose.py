@@ -1413,7 +1413,9 @@ def analyze(path, pool: ProcessPoolExecutor, workers: int, timing: dict | None =
 
 def low_priority():
     """For the pose workers (ProcessPoolExecutor's initializer): below normal priority, so recording
-    and uploads from the phones, and the pages, always come first while a clip is analyzed."""
+    and uploads from the phones, and the pages, always come first while a clip is analyzed. And quiet:
+    see quiet_libraries."""
+    quiet_libraries()
     try:
         if os.name == "nt":
             import ctypes
@@ -1423,6 +1425,26 @@ def low_priority():
         else:
             os.nice(5)
     except (OSError, AttributeError):
+        pass
+
+
+def quiet_libraries() -> None:
+    """In a worker process: what MediaPipe and TensorFlow Lite write straight to the error stream at start-up
+    ("Created TensorFlow Lite XNNPACK delegate", "inference_feedback_manager", "NORM_RECT ..."), once per
+    worker, goes nowhere; with 8 workers it printed over itself and buried the real lines (Oct 22). Python's
+    own messages (which model runs where, tracebacks) keep the real stream, and a worker's errors come back
+    to the main process anyway. SWINGCLIPS_WORKER_LOGS=show keeps it all."""
+    if os.environ.get("SWINGCLIPS_WORKER_LOGS") == "show":
+        return
+    import sys
+    try:
+        sys.stderr.flush()
+        saved = os.dup(2)
+        sys.stderr = os.fdopen(saved, "w", buffering=1, encoding="utf-8", errors="replace")
+        null = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(null, 2)
+        os.close(null)
+    except (OSError, ValueError):
         pass
 
 

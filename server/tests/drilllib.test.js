@@ -162,7 +162,7 @@ test("a way that is a fault gets no card", () => {
   assert.ok(find(m, "move:earlyExt:less"));
 });
 
-test("the real coach: 44 drills, every name and how, no P-numbers on screen", () => {
+test("the real coach: 46 drills, every name and how, no P-numbers on screen", () => {
   const Coach = require("../static/coach.js");
   const Ind = require("../static/indicators.js");
   const Story = require("../static/shotstory.js");
@@ -170,16 +170,17 @@ test("the real coach: 44 drills, every name and how, no P-numbers on screen", ()
     moves: Coach.MOVES, drillId: Coach.drillId, sets: [], verdict: () => null, focus: null, current: null,
     plain: Story.plain, fields: Ind.KNOWN_FIELDS, moment: Ind.moment,
   });
-  // 52 before Oct 20 2026, with the 10 ways coach.js marks as faults (ground-push, post-and-rotate...).
-  assert.strictEqual(m.drills.length, 44);
-  assert.strictEqual(m.counts.all, 44);
+  // 52 before Oct 20 2026, with the 10 ways coach.js marks as faults (ground-push, post-and-rotate...);
+  // 44 after; 46 with the head at the top (Oct 22).
+  assert.strictEqual(m.drills.length, 46);
+  assert.strictEqual(m.counts.all, 46);
   assert.ok(!m.drills.some(d => Coach.MOVES[d.move][d.aim].fault));
   for (const d of m.drills) {
     assert.ok(d.name, `${d.id} has a name`);
     assert.ok(d.how, `${d.id} has a how`);
     for (const k of ["trains", "how", "thought"]) assert.ok(!/\bP[1-8]\b/.test(d[k]), `${d.id} ${k}: ${d[k]}`);
   }
-  assert.strictEqual(m.groups.reduce((n, g) => n + g.drills.length, 0), 44);
+  assert.strictEqual(m.groups.reduce((n, g) => n + g.drills.length, 0), 46);
 });
 
 

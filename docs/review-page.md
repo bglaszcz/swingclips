@@ -693,6 +693,12 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   10-12 short, wedges 20-33). Within a club each degree shorter went with ~0.3 mph less club speed. It is in
   practice mode too ("Club at the top", e.g. for three-quarter wedges). Its 3D twin and across the line /
   laid off are in the 3D panel at the top (docs/3d.md).
+  **Head move at top** (face-on, `headSway` at P4 in `metrics.js`, inches from address, + = toward the target):
+  checked blind on 16 still sheets against the eye (r 0.86; the 3D's r 0.66). No reverse pivot on 219 of the
+  owner's swings (the head always moves back, median 2.1 in), so not a fault either way; on the irons, same club
+  and day, each inch further back went with a ~1.4 degree shallower attack angle (r -0.55; smash and carry
+  didn't move with it). In practice mode as "Head at the top". (The chest-over-hips lean and the 3D lead elbow
+  after impact didn't hold up against the eye: not shown. D:\SwingClips-dev\claude-only\pivotwing.)
   **Hands ahead of ball at impact** (face-on, `handsBall` in `metrics.js`, inches, + toward the target):
   the wrists' middle against where the ball sat, at P7. On 289 of the owner's swings (Sep 23 - Oct 1
   2026) more of it went with a steeper attack angle within each club (about 0.7 degrees per inch,
