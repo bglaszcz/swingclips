@@ -309,6 +309,8 @@
         drill: "In-front drill: rehearse backswings keeping the grip in front of your sternum; stop and check, then hit 5.",
         thought: "Hands in front of the chest." },
     },
+    // No fault names this since Oct 21 2026 (faults.js: the 3D it was judged on follows the camera setup); it
+    // stays for the Sequence program's drill and swing thought (plan.js) and the drill library.
     armsLed: {
       what: "downswing sequence: arms leading the downswing before the body",
       more: { name: "an arms-led downswing", fault: true,

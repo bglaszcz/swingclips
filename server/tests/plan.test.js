@@ -431,76 +431,19 @@ test("getBlockNeeds: no-ball block with no 3D gate -> phones=false, ball=false, 
   assert.strictEqual(needs.noball, true);
 });
 
-test("armsLed fault feeds focus block when no focus is set and it is the top fault", () => {
-  const makeArmsLedClip = (name, pelvisOpen) => ({
-    name,
-    recorded: "2026-09-29T14:00:00",
-    shot: makeShot("I7", 150, 0, 85),
-    body: null,
-    excluded: false,
-    body3d: {
-      numbers: { pelvisOpenImpact: pelvisOpen },
-      sequence: {
-        bodyLate: true,
-        segments: [
-          { key: "pelvis", beforeImpact: 33, t: 1.06 },
-          { key: "arm",    beforeImpact: 50, t: 1.0 }
-        ]
-      }
-    }
+test("3D swings that read arms-led don't pick the focus any more (retired Oct 21 2026)", () => {
+  const clip = name => ({
+    name, recorded: "2026-09-29T14:00:00", shot: makeShot("I7", 150, 0, 85), body: null, excluded: false,
+    body3d: { numbers: { pelvisOpenImpact: 5 },
+              sequence: { bodyLate: true, segments: [{ key: "pelvis", beforeImpact: 33, t: 1.06 }, { key: "arm", beforeImpact: 50, t: 1.0 }] } },
   });
-
-  const clips = [
-    makeArmsLedClip("s1",  5),
-    makeArmsLedClip("s2",  8),
-    makeArmsLedClip("s3",  3),
-    makeArmsLedClip("s4", 12),
-    makeArmsLedClip("s5",  7)
-  ];
-
-  // As on the page: /api/clips (face-on) and the swing records (/api/swings) that carry body3d.
+  const clips = ["s1", "s2", "s3", "s4", "s5"].map(clip);
   const swings = Object.fromEntries(clips.map(c => [c.name, { body3d: c.body3d }]));
   const plan = Plan.buildPlan({ clips: clips.map(c => ({ ...c, angle: "face", body3d: undefined })), swings });
   const fBlock = plan.blocks.find(b => b.id === "focus");
-
-  assert.ok(fBlock, "focus block not found");
-  assert.ok(
-    fBlock.title.toLowerCase().includes("arms") || fBlock.title.toLowerCase().includes("downswing"),
-    `Focus title should mention arms-led, got: "${fBlock.title}"`
-  );
-  assert.ok(fBlock.drill, "focus block should have a drill from coach.js armsLed");
-  assert.ok(fBlock.thought, "focus block should have a thought from coach.js armsLed");
-  assert.ok(
-    fBlock.why.includes("arms") || fBlock.why.includes("3D"),
-    `Focus why should mention arms or 3D, got: "${fBlock.why}"`
-  );
-  assert.ok(
-    fBlock.drill.includes("Step and fire") || fBlock.drill.includes("step") || fBlock.drill.includes("Pause"),
-    `Focus drill should be the sequence drill, got: "${fBlock.drill}"`
-  );
-});
-
-test("armsLed focus block needs body3d=true", () => {
-  const makeArmsLedClip = (name) => ({
-    name,
-    recorded: "2026-09-29T14:00:00",
-    shot: makeShot("I7", 150, 0, 85),
-    excluded: false,
-    body3d: {
-      numbers: { pelvisOpenImpact: 5 },
-      sequence: { bodyLate: true, segments: [
-        { key: "pelvis", beforeImpact: 33, t: 1.06 },
-        { key: "arm",    beforeImpact: 50, t: 1.0 }
-      ]}
-    }
-  });
-  const clips = Array.from({ length: 4 }, (_, i) => makeArmsLedClip(`s${i}`));
-  // As on the page: /api/clips (face-on) and the swing records (/api/swings) that carry body3d.
-  const swings = Object.fromEntries(clips.map(c => [c.name, { body3d: c.body3d }]));
-  const plan = Plan.buildPlan({ clips: clips.map(c => ({ ...c, angle: "face", body3d: undefined })), swings });
-  const fBlock = plan.blocks.find(b => b.id === "focus");
-  assert.ok(fBlock && fBlock.needs && fBlock.needs.body3d,
-    "armsLed focus block should declare body3d needed");
+  assert.equal(fBlock.title, "Focus block");
+  assert.match(fBlock.why, /No focus set yet/);
+  assert.equal(fBlock.needs.body3d, false);
 });
 
 test("explicit focus overrides auto-fault detection", () => {

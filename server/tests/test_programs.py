@@ -88,6 +88,17 @@ class ProgramsTest(unittest.TestCase):
     def block(self):
         return self.p.state()["program"]["blocks"][self.p.state()["program"]["block"]]["id"]
 
+    def old_3d_gates(self):
+        """The programs as they gated before Oct 21 2026, on the 3D hips (retired then: docs/3d.md). The
+        3D-waiting machinery stays for any block that checks the 3D; these tests keep it honest."""
+        seq = {b["id"]: b for b in self.p.programs["sequence"]["blocks"]}
+        seq["tier2"]["gate"]["checks"] = [{"key": "pelvisPeakMs", "max": 0}, {"key": "pelvisOpen", "min": 15}]
+        seq["tier3"]["gate"]["checks"] = ([{"key": "pelvisPeakMs", "max": -30}, {"key": "armAfterPelvis", "equals": True}]
+                                          + seq["tier3"]["gate"].get("checks", []))
+        for b in self.p.programs["braceturn"]["blocks"]:
+            if b["id"] in ("tier2", "tier3"):
+                b["gate"]["checks"].insert(2, {"key": "pelvisOpen", "min": 10})
+
     def test_face_to_path_is_face_minus_path(self):
         n = programs.numbers_of(shot(face=0.7, path=4.6))
         self.assertAlmostEqual(n["faceToPath"], -3.9)
@@ -261,8 +272,8 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual("Pass. 2 in a row.", self.said()[-1])
 
     def test_brace_and_turn(self):
-        # Oct 6 coach plan: attack -3 to -4.5, face to path within 2, pelvis open 10+ (3D) and the
-        # pelvis 3+ in ahead of the ball (the face-on camera's number, from the swing record).
+        # Oct 6 coach plan: attack -3 to -4.5, face to path within 2 and the pelvis 3+ in ahead of the ball
+        # (the face-on camera's number, from the swing record). Its 3D "hips open 10+" was retired Oct 21 2026.
         self.p.start("braceturn")
         self.assertEqual(self.drills[-1], "braceturn")
         self.p.tap_block(10, 0)
@@ -273,7 +284,7 @@ class ProgramsTest(unittest.TestCase):
         self.hit(shot(attack=-5.5, face=3.5, path=0.0), **good)
         self.assertEqual("Miss: attack too steep, face open to path.", self.said()[-1])
         self.hit(shot(attack=-4.0), body3d=body3d(pelvis_open=4), body={"pelvisBall": 1.0})
-        self.assertEqual("Miss: hips not open enough, hips not ahead enough.", self.said()[-1])
+        self.assertEqual("Miss: hips not ahead enough.", self.said()[-1])
         n = self.p.state()["program"]["blocks"][1]["judged"][0]["numbers"]
         self.assertEqual((n["pelvisBall"], n["path"], n["face"]), (4.5, 0.0, 0.5))
         rep = self.p.report()["text"]
@@ -534,6 +545,44 @@ class ProgramsTest(unittest.TestCase):
         again = programs.Programs(self.p.state_file, self.p.log_file, lambda: 99, self.clock)
         self.assertEqual(again.state()["program"]["blocks"][0]["state"]["reps"], 2)
 
+    def test_no_program_gates_on_the_3d_since_oct_21(self):
+        # Owner, Oct 21 2026: the 3D hips (open at impact, peak timing, arms after hips) follow the camera setup
+        # more than the swing (Gemini round 73), so no gate checks them.
+        for p in programs.load_programs().values():
+            for b in p["blocks"]:
+                self.assertFalse(programs.gate_keys(b) & programs.BODY3D_KEYS, f"{p['id']} {b['id']}")
+                self.assertFalse(programs.block_needs_3d(b), f"{p['id']} {b['id']}")
+
+    def test_brace_and_turn_waits_for_the_camera_not_the_3d(self):
+        self.p.start("braceturn")
+        self.p.tap_block(10, 0)
+        self.hit(shot(attack=-4.0))                                   # no swing record yet
+        self.assertEqual("Club good. Hips when the camera numbers are in.", self.said()[-1])
+        self.assertEqual(self.p.state()["program"]["waiting3d"], 1)
+        self.swings[-1]["body"] = {"pelvisBall": 4.5}                  # the record is in; no 3D (and none needed)
+        self.p.step(self.swings)
+        self.assertEqual("Shot 1: Pass.", self.said()[-1])
+        self.hit(shot(attack=-4.0), why3d="a camera seems to have moved since calibration x: 45 px",
+                 body={"pelvisBall": 4.0})                             # a failed 3D doesn't void it
+        self.assertEqual("Pass.", self.said()[-1])
+        self.hit(shot(attack=-4.0))                                   # the record never comes
+        self.clock.t += programs.BODY3D_GIVE_UP_S + 5
+        self.p.step(self.swings)
+        self.assertEqual("Shot 3: invalid read (no camera numbers): not counted.", self.said()[-1])
+        st = self.p.state()["program"]["blocks"][1]["state"]
+        self.assertEqual((st["reps"], st["passes"]), (2, 2))
+
+    def test_sequence_tier2_moves_on_after_its_ten_read_shots(self):
+        self.p.start("sequence")
+        self.taps(*[True] * 10)
+        self.assertEqual(self.block(), "tier2")
+        for _ in range(10):
+            self.hit(shot())
+        self.assertEqual(self.p.state()["program"]["waiting3d"], 0)
+        self.assertEqual(self.block(), "tier3")
+        self.hit(shot(attack=-7.0))
+        self.assertEqual("Miss: attack too steep.", self.said()[-1])
+
     def test_the_programs_file_is_well_formed(self):
         for p in programs.load_programs().values():
             ids = [b["id"] for b in p["blocks"]]
@@ -546,6 +595,7 @@ class ProgramsTest(unittest.TestCase):
                     self.assertIn(b["requires"], ids[:ids.index(b["id"])])
 
     def test_sequence_tier2_pass_and_fail(self):
+        self.old_3d_gates()
         self.p.start("sequence")
         # Tier 1: 10 taps in a row passes the block
         self.taps(*[True] * 10)
@@ -567,6 +617,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(self.block(), "tier3")
 
     def test_waiting_for_3d_and_late_arrival(self):
+        self.old_3d_gates()
         self.p.start("sequence")
         self.taps(*[True] * 10)
         self.assertEqual(self.block(), "tier2")
@@ -585,6 +636,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertTrue(self.said()[-1].startswith("Shot 1: Pass."))
 
     def test_3d_never_arrived_timeout_and_why3d(self):
+        self.old_3d_gates()
         self.p.start("sequence")
         self.taps(*[True] * 10)
         self.assertEqual(self.block(), "tier2")
@@ -619,6 +671,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertEqual(self.p.state()["program"]["waiting3d"], 0)
 
     def test_why_there_is_no_3d_in_a_few_words(self):
+        self.old_3d_gates()
         self.p.start("braceturn")
         self.p.tap_block(10, 0)
         self.hit(shot(), why3d="failed: Traceback (most recent call last):\n  File \"swing3d.py\", line 1")
@@ -631,6 +684,7 @@ class ProgramsTest(unittest.TestCase):
 
     def test_the_square_part_is_said_at_once_and_the_hips_with_the_3d(self):
         # Owner, Oct 19: the 3D can come minutes later; Square's part of the verdict shouldn't wait for it.
+        self.old_3d_gates()
         good = dict(body3d=body3d(pelvis_open=14), body={"pelvisBall": 4.5})
         self.p.start("braceturn")
         self.p.tap_block(10, 0)
@@ -649,6 +703,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertIn("pass", rep)
 
     def test_a_square_miss_stays_a_miss_when_the_3d_fails(self):
+        self.old_3d_gates()
         self.p.start("braceturn")
         self.p.tap_block(10, 0)
         self.hit(shot(attack=-6.0))
@@ -657,10 +712,11 @@ class ProgramsTest(unittest.TestCase):
         st = self.p.state()["program"]["blocks"][1]["state"]
         self.assertEqual((st["reps"], st["passes"]), (1, 0))      # counted as the miss it was
         self.assertEqual("Miss: attack too steep.", self.said()[-1])
-        self.assertIn("miss (3D: camera moved)", self.p.report()["text"])
+        self.assertIn("miss (camera moved)", self.p.report()["text"])
 
     def test_nothing_said_early_when_the_gate_is_all_3d(self):
         # Sequence Tier 2 checks only the hips' timing and turn: nothing of Square's to say first.
+        self.old_3d_gates()
         self.p.start("sequence")
         self.taps(*[True] * 10)
         n = len(self.said())
@@ -719,6 +775,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertNotIn("No Square numbers for that one: not counted.", self.said())
 
     def test_tier3_locked_until_tier2_passes(self):
+        self.old_3d_gates()
         self.p.start("sequence")
         self.taps(*[True] * 10)
         self.assertEqual(self.block(), "tier2")
@@ -732,6 +789,7 @@ class ProgramsTest(unittest.TestCase):
         self.assertIn("Skip Tier 3: full speed, no pause", " ".join(self.said()))
 
     def test_tier3_streak_gate_and_bring_back_report(self):
+        self.old_3d_gates()
         self.p.start("sequence")
         self.taps(*[True] * 10)
         for _ in range(7):

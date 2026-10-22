@@ -57,12 +57,14 @@ IDLE_END_S = 45 * 60
 # The report splits each block's shots here: the first ones (cold?) and the rest.
 SPLIT_AT = 10
 
+# The 3D's numbers a gate can check. No program gates on them since Oct 21 2026 (the 3D hips follow the
+# camera setup more than the swing: docs/3d.md), but a block that does waits for the swing's 3D.
 BODY3D_KEYS = {"pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs", "armAfterPelvis"}
-# The face-on camera's numbers a gate can check (the swing record's "body", summary.js). They're in
-# by the time the swing's 3D is, so a block checking them waits the way a 3D block does.
+# The face-on camera's numbers a gate can check (the swing record's "body", summary.js). A block checking
+# only these waits for the swing's record (~30 s after the strike), not its 3D (minutes).
 CAMERA_KEYS = {"pelvisBall", "chestBall", "handsAhead"}
-# The numbers that come with the swing's 3D (the 3D itself, and the face-on camera's, which are in by then):
-# a shot on a block checking them is judged in two parts, Square's at once and these when the 3D is in.
+# The numbers that come after Square's: a shot on a block checking them is judged in two parts, Square's at
+# once and these when they're in.
 LATER_KEYS = BODY3D_KEYS | CAMERA_KEYS
 
 
@@ -126,7 +128,22 @@ def block_needs_3d(block: dict) -> bool:
         return False
     if block.get("needs3d"):
         return True
-    return bool(gate_keys(block) & (BODY3D_KEYS | CAMERA_KEYS))
+    return bool(gate_keys(block) & BODY3D_KEYS)
+
+
+def block_waits_for(block: dict | None) -> str | None:
+    """What a block's shots wait for after Square's numbers: the swing's "body3d" (a 3D gate), its "body"
+    (the face-on camera's numbers only), or nothing."""
+    if not block or not block.get("ball"):
+        return None
+    if block_needs_3d(block):
+        return "body3d"
+    return "body" if gate_keys(block) & CAMERA_KEYS else None
+
+
+def waits_words(need: str | None) -> str:
+    """When a shot's hips are judged, for the phone: "the 3D is in" or "the camera numbers are in"."""
+    return "the camera numbers are in" if need == "body" else "the 3D is in"
 
 
 def camera_numbers(body: dict | None) -> dict:
@@ -650,7 +667,7 @@ class Programs:
             p, _ = self._current()
             now = self.clock()
 
-            # Check existing reps that are waiting for 3D
+            # Check existing reps that are waiting for their 3D or the face-on camera's numbers
             by_name = {s["name"]: s for s in swings_now}
             for r in list(self.run["reps"]):
                 if not self.run:
@@ -660,9 +677,12 @@ class Programs:
                 s = by_name.get(r.get("clip"))
                 if not s:
                     s = next((s for s in swings_now if abs(s["t"] - r["t"]) <= PAIR_SLACK_S), None)
-                if s and s.get("body3d"):
+                p0, _ = self._current()
+                need = block_waits_for(next((b for b in p0["blocks"] if b["id"] == r["block"]), None)) or "body3d"
+                if s and s.get(need) is not None:
                     r["waiting3d"] = False
-                    r["numbers"].update(body3d_numbers(s["body3d"]))
+                    if s.get("body3d"):
+                        r["numbers"].update(body3d_numbers(s["body3d"]))
                     r["numbers"].update(camera_numbers(s.get("body")))
                     p, block = self._current()
                     mine = next((b for b in p["blocks"] if b["id"] == r["block"]), None)
@@ -671,16 +691,17 @@ class Programs:
                     if block["id"] == r["block"] and not r.get("toldMiss"):
                         self._say_shot(block, r["t"], f"Shot {self._shot_no(r)}: ")
                     self._settle(p, now)
-                elif s and s.get("why3d"):
+                elif s and need == "body3d" and s.get("why3d"):
                     r.update(waiting3d=False, noRead=why_words(s["why3d"]), noRead3d=True)
                     if not r.get("toldMiss"):
                         self._say(f"Shot {self._shot_no(r)}: invalid read ({r['noRead']}): not counted.")
                     p, block = self._current()
                     self._settle(p, now)
                 elif now - r["t"] >= BODY3D_GIVE_UP_S:
-                    r.update(waiting3d=False, noRead="no 3D", noRead3d=True)
+                    gone = "no 3D" if need == "body3d" else "no camera numbers"
+                    r.update(waiting3d=False, noRead=gone, noRead3d=True)
                     if not r.get("toldMiss"):
-                        self._say(f"Shot {self._shot_no(r)}: invalid read (no 3D): not counted.")
+                        self._say(f"Shot {self._shot_no(r)}: invalid read ({gone}): not counted.")
                     p, block = self._current()
                     self._settle(p, now)
 
@@ -720,22 +741,22 @@ class Programs:
                 else:
                     n = numbers_of(s["shot"], s.get("body3d"), s.get("body"))
                     nr = no_read(n, gate_keys(block)) if block["ball"] else no_read(n)
-                    needs_3d = block_needs_3d(block)
+                    need = block_waits_for(block)
                     waiting = False
-                    if not nr and needs_3d:
-                        if s.get("body3d"):
+                    if not nr and need:
+                        if s.get(need) is not None:
                             pass
-                        elif s.get("why3d"):
+                        elif need == "body3d" and s.get("why3d"):
                             nr = why_words(s["why3d"])
                         elif now - t < BODY3D_GIVE_UP_S:
                             waiting = True
                         else:
-                            nr = "no 3D"
+                            nr = "no 3D" if need == "body3d" else "no camera numbers"
                     if not nr and not waiting and block["ball"]:
                         nr = missing(block, n)
                         late = nr is not None and missing_key(block, n) in LATER_KEYS
                     else:
-                        late = nr is not None and needs_3d and not no_read(n, gate_keys(block))
+                        late = nr is not None and bool(need) and not no_read(n, gate_keys(block))
                     r.update(kind="shot" if block["ball"] else "ball", club=s["shot"].get("club"),
                              numbers=n, noRead=nr, waiting3d=waiting)
                     if late and block["ball"]:
@@ -855,18 +876,19 @@ class Programs:
             self._say(f"{prefix}Miss: {why}.", tone=tone)
 
     def _say_square_part(self, block: dict, r: dict) -> None:
-        """A shot on a block that checks the 3D, as it comes in: a miss on Square's numbers is said at once
-        (it can't pass whatever the 3D says); otherwise that the club part is good and the hips come with
-        the 3D (owner, Oct 19: the 3D can come minutes later, after the next swings)."""
+        """A shot on a block that checks numbers coming after Square's (the 3D, or the face-on camera's), as
+        it comes in: a miss on Square's numbers is said at once (it can't pass whatever the rest says);
+        otherwise that the club part is good and the hips come later (owner, Oct 19: the 3D can come minutes
+        later, after the next swings; the camera's numbers ~30 s)."""
         if not any(c["key"] not in LATER_KEYS for c in block["gate"].get("checks", [])):
-            return   # nothing of Square's to say: it all waits for the 3D
+            return   # nothing of Square's to say: it all waits for the later numbers
         fails = square_fails(block, r["numbers"])
         if fails:
             r["toldMiss"] = True
             tone = gate_miss_tone(block, r)
             self._say(f"Miss: {', '.join(cue(c, r['numbers'][c['key']]) for c in fails)}.", tone=tone)
         else:
-            self._say("Club good. Hips when the 3D is in.")
+            self._say(f"Club good. Hips when {waits_words(block_waits_for(block))}.")
 
     def _shot_no(self, r: dict) -> int:
         """Which shot of its block this was (1 = the first), for a verdict said late."""
@@ -1178,10 +1200,10 @@ def report(p: dict, run: dict, body=None) -> dict:
         if shift:
             nums = f"{nums} | vs ball: " + ", ".join(shift)
 
-        verdict = ("miss" + (" (3D: " + r0["noRead"] + ")" if r0.get("noRead") else ", 3D still to come" if r.get("waiting3d") else "")
+        verdict = ("miss" + (" (" + r0["noRead"] + ")" if r0.get("noRead") else ", hips still to come" if r.get("waiting3d") else "")
                    if r.get("gate") is False and (r0.get("noRead") or r.get("waiting3d")) else
                    "invalid read, not counted (" + r0["noRead"] + ")" if r0.get("noRead") else
-                   "waiting for 3D" if r.get("waiting3d") else
+                   "hips still to come" if r.get("waiting3d") else
                    "pass" if r.get("gate") else "miss" if r.get("gate") is False else "")
         if r.get("mark") is not None:
             verdict += (", " if verdict else "") + ("mark ahead" if r["mark"] else "mark behind")

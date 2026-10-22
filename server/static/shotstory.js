@@ -63,7 +63,6 @@
     headToBall: "your head moved toward the ball at impact",
     hipSway: "your hips slid toward the target instead of turning",
     releaseArm: "the wrists let go of their hinge early in the downswing",
-    armsLed: "your arms started down before your hips",
   };
   const HEAD_WHY = { "head dip": "your head dropped through impact", "head lift": "your head lifted through impact" };
 

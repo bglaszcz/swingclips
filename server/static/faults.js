@@ -5,11 +5,10 @@
 (function (root) {
   const Coach = root.SwingCoach || (typeof require !== "undefined" && require("./coach.js"));
 
-  // Arms-led downswing (from 3D): pelvis reaches peak speed after impact (bodyLate) and hips are under
-  // PELVIS_OPEN_IMPACT_MAX (20 deg) open at impact. Round 73 check (Oct 21 2026, 268 swings): hips read median 22.8 deg
-  // open overall, but session medians shift (18.3 to 32.1 deg) with camera placement more than the swing does, naming
-  // 0% to 74% of swings by session, with no link to Square launch metrics (|r| <= 0.08).
-  const PELVIS_OPEN_IMPACT_MAX = 20;
+  // Retired (owner, Oct 21 2026): "arms-led downswing" from the 3D (pelvis peaking after impact and hips under
+  // 20 deg open at impact). Gemini round 73 on 268 swings: the 3D hips at impact follow the camera setup more than
+  // the swing (session medians 18 to 32 deg, the face-on camera a steady ~21), so it named 0% to 74% of swings by
+  // session, with no link to Square's numbers (|r| <= 0.08). docs/3d.md has the check.
 
   // Thresholds: named on roughly the owner's worst quarter of swings or fewer (on his 178 swings to
   // Sep 28: early extension 23%, standing up 24%, over the top 16%, the rest under 10%). Textbook
@@ -50,28 +49,8 @@
     { key: "lagP5", name: "casting", move: "lagP5", dir: "less", fix: "more", threshold: 70, test: v => v < 70 },
     // Head lift: head height rises at impact vs address (in) > 1.0
     { key: "headRise", name: "head lift", move: "headRise", dir: "more", fix: "less", threshold: 1.0, test: v => v > 1.0 },
-    // Arms-led downswing: from 3D (pelvis reaches peak speed after impact, hips under 20 deg open at impact).
-    // A standing pattern, not a per-swing fault (`standing`): named when pelvisOpenImpact < 20 and bodyLate is true.
-    // Round 73 check (Oct 21 2026, 268 swings after the Oct 19 far-side fix): hips read median 22.8 deg open overall,
-    // but day/session medians shift with calibration (18.3 deg on Oct 6-9, 32.1 deg on Oct 2), naming 0% to 74% of
-    // swings by session. Pelvis peak timing also shifts (-58 ms on Oct 2 to +100 ms on Oct 20). Neither correlates
-    // with Square launch metrics (|r| <= 0.08, all FDR p > 0.20). Today's plan and Week for coach ask for it.
-    {
-      key: "armsLed",
-      standing: true,
-      name: "arms-led downswing",
-      move: "armsLed",
-      dir: "more",
-      // coach.js keeps the sequence drill (step and fire) under armsLed.more, which Today's plan uses too.
-      fix: "more",
-      threshold: PELVIS_OPEN_IMPACT_MAX,
-      test: (v, row) => {
-        if (v == null || v >= PELVIS_OPEN_IMPACT_MAX) return false;
-        if (!row) return true;
-        const b3 = row.body3d || (row.rec && row.rec.body3d);
-        return !b3 || !!(b3.sequence && b3.sequence.bodyLate);
-      },
-    },
+    // A fault can be a standing pattern (`standing: true`): left out of the swing view and session lists unless
+    // asked for ({standing: true}). None today: the only one, arms-led downswing, was retired (top of file).
   ];
 
   // Minimum swings and minimum share of readable swings for a fault to count as "top" in a session.
@@ -91,13 +70,6 @@
   function valueOf(row, fault) {
     if (!row) return null;
     const key = fault.key;
-    if (key === "armsLed") {
-      const b3 = body3dOf(row);
-      if (b3 && b3.numbers && b3.numbers.pelvisOpenImpact != null) {
-        return finite(b3.numbers.pelvisOpenImpact) ? b3.numbers.pelvisOpenImpact : null;
-      }
-      return finite(row[key]) ? row[key] : null;
-    }
     if (fault.from3d) {
       const b3 = body3dOf(row);
       const v = b3 && b3.numbers ? b3.numbers[fault.from3d] : null;
@@ -111,13 +83,6 @@
   function isReadable(row, fault, shaky) {
     if (!row) return false;
     const key = fault.key;
-    if (key === "armsLed") {
-      const b3 = body3dOf(row);
-      if (b3) {
-        return !!(b3.sequence && typeof b3.sequence.bodyLate === "boolean" && valueOf(row, fault) != null);
-      }
-      return finite(row[key]);
-    }
     const v = valueOf(row, fault);
     if (v == null) return false;
     if (row.trust && row.trust[key] && row.trust[key].level === "none") return false;
@@ -196,7 +161,7 @@
     return results;
   }
 
-  const api = { FAULTS, faultsOf, sessionFaults, valueOf, isReadable, MIN_TOP_SWINGS, MIN_TOP_SHARE, PELVIS_OPEN_IMPACT_MAX };
+  const api = { FAULTS, faultsOf, sessionFaults, valueOf, isReadable, MIN_TOP_SWINGS, MIN_TOP_SHARE };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SwingFaults = api;
 })(typeof window !== "undefined" ? window : globalThis);

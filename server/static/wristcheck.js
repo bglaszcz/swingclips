@@ -55,7 +55,7 @@
       const wristCall = wristMap[r.clip] || (r.partner ? wristMap[r.partner] : null) || null;
       let verdict = "";
       if (r.noRead) verdict = `invalid read (${r.noRead})`;
-      else if (r.waiting3d) verdict = "waiting for 3D";
+      else if (r.waiting3d) verdict = "hips still to come";
       else if (r.gate === true) verdict = "pass";
       else if (r.gate === false) verdict = "miss";
 

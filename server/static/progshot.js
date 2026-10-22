@@ -205,7 +205,7 @@
 
     if (rep.waiting3d) {
       verdict = "waiting";
-      why = rep.why || "waiting for 3D";
+      why = rep.why || "hips still to come";
     } else if (rep.noRead) {
       verdict = "not counted";
       why = rep.noRead;

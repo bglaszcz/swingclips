@@ -9,7 +9,7 @@ const Faults = require("../static/faults.js");
 const t3 = thrust => ({ numbers: { pelvisThrustImpact: thrust } });
 
 test("names, drills and swing thoughts come from coach.js", () => {
-  assert.equal(Faults.FAULTS.length, 9);
+  assert.equal(Faults.FAULTS.length, 8);   // arms-led downswing retired Oct 21 2026
 
   const expected = [
     { key: "earlyExt", name: "early extension", move: "earlyExt", dir: "more", fix: "less" },
@@ -20,7 +20,6 @@ test("names, drills and swing thoughts come from coach.js", () => {
     { key: "headRise", name: "head dip", move: "headRise", dir: "less", fix: "more" },
     { key: "lagP5", name: "casting", move: "lagP5", dir: "less", fix: "more" },
     { key: "headRise", name: "head lift", move: "headRise", dir: "more", fix: "less" },
-    { key: "armsLed", name: "arms-led downswing", move: "armsLed", dir: "more", fix: "more" },
   ];
 
   for (let i = 0; i < expected.length; i++) {
@@ -39,9 +38,7 @@ test("names, drills and swing thoughts come from coach.js", () => {
 
     // In a swing row with this fault
     const testVal = f.test(f.threshold + 1) ? f.threshold + 1 : f.threshold - 1;
-    const testRow = exp.key === "armsLed"
-      ? { body3d: { sequence: { bodyLate: true }, numbers: { pelvisOpenImpact: testVal } } }
-      : f.from3d ? { body3d: { numbers: { [f.from3d]: testVal } } }
+    const testRow = f.from3d ? { body3d: { numbers: { [f.from3d]: testVal } } }
       : { [exp.key]: testVal };
     const faults = Faults.faultsOf(testRow, undefined, { standing: true });
     const match = faults.find(item => item.name === exp.name);
@@ -287,65 +284,10 @@ test("faultsOf returns multiple faults with thought and drill", () => {
   }
 });
 
-test("arms-led downswing from 3D: swing with 3D and fault, swing with 3D without it, swing without 3D", () => {
-  // 1. Swing with 3D and the fault: bodyLate true and pelvisOpenImpact < 20
-  const swingWithFault = {
-    body3d: {
-      sequence: { bodyLate: true, armsFirst: true },
-      numbers: { pelvisOpenImpact: 2.5 },
-    },
-  };
-  const faults1 = Faults.faultsOf(swingWithFault, undefined, { standing: true });
-  const f1 = faults1.find(f => f.key === "armsLed");
-  assert.ok(f1, "armsLed detected on 3D swing with bodyLate and square hips");
-  assert.equal(f1.name, "arms-led downswing");
-  assert.equal(f1.value, 2.5);
-  assert.ok(f1.drill.includes("step the lead foot to the target"));
-  assert.equal(f1.thought, "Buckle to the target first.");
-
-  // 2. Swing with 3D without the fault:
-  // (a) hips open (pelvisOpenImpact >= 20)
-  const swingWithOpenHips = {
-    body3d: {
-      sequence: { bodyLate: true, armsFirst: true },
-      numbers: { pelvisOpenImpact: 35.0 },
-    },
-  };
-  const faults2a = Faults.faultsOf(swingWithOpenHips, undefined, { standing: true });
-  assert.equal(faults2a.some(f => f.key === "armsLed"), false, "not named when hips are open at impact");
-
-  // (b) body not late (bodyLate false)
-  const swingBodyOnTime = {
-    body3d: {
-      sequence: { bodyLate: false, armsFirst: false },
-      numbers: { pelvisOpenImpact: 5.0 },
-    },
-  };
-  const faults2b = Faults.faultsOf(swingBodyOnTime, undefined, { standing: true });
-  assert.equal(faults2b.some(f => f.key === "armsLed"), false, "not named when body is not late");
-
-  // 3. Swing without 3D: never gets it and does not count against total in sessionFaults
-  const swingWithout3D = {
-    earlyExt: 2.0, body3d: t3(0),
-    bendLoss: -5.0,
-    trust: { earlyExt: { level: "good" } },
-  };
-  const faults3 = Faults.faultsOf(swingWithout3D, undefined, { standing: true });
-  assert.equal(faults3.some(f => f.key === "armsLed"), false, "swing without 3D never gets armsLed");
-
-  // In sessionFaults: swing without 3D does not count against total readable
-  const session = Faults.sessionFaults([swingWithFault, swingWithOpenHips, swingWithout3D], undefined, { standing: true });
-  const sf = session.find(f => f.key === "armsLed");
-  assert.ok(sf, "armsLed in sessionFaults");
-  assert.equal(sf.total, 2, "only the 2 swings with 3D count toward total readable");
-  assert.equal(sf.count, 1, "only 1 swing has the fault");
-  assert.equal(sf.share, 0.5, "share is 1/2, not 1/3");
-});
-
-test("arms-led downswing is a standing pattern: left out unless asked for", () => {
+test("arms-led downswing is retired (owner, Oct 21 2026): never named, standing patterns asked for or not", () => {
+  // The 3D it was judged on follows the camera setup (Gemini round 73: 0% to 74% of swings by session).
+  assert.equal(Faults.FAULTS.some(f => f.key === "armsLed"), false);
   const row = { body3d: { sequence: { bodyLate: true }, numbers: { pelvisOpenImpact: 2 } } };
-  assert.equal(Faults.faultsOf(row).some(f => f.key === "armsLed"), false);
-  assert.equal(Faults.sessionFaults([row, row, row]).some(f => f.key === "armsLed"), false);
-  assert.ok(Faults.faultsOf(row, undefined, { standing: true }).some(f => f.key === "armsLed"));
-  assert.ok(Faults.sessionFaults([row, row, row], undefined, { standing: true }).find(f => f.key === "armsLed").top);
+  assert.equal(Faults.faultsOf(row, undefined, { standing: true }).some(f => f.key === "armsLed"), false);
+  assert.equal(Faults.sessionFaults([row, row, row], undefined, { standing: true }).some(f => f.key === "armsLed"), false);
 });

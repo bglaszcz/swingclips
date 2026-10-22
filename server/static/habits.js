@@ -57,8 +57,6 @@
     const candidates = [];
 
     for (const f of flist) {
-      if (f.key === "armsLed") continue;
-
       // Extract readable swings
       const readable = [];
       for (let i = 0; i < subset.length; i++) {

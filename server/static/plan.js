@@ -69,12 +69,13 @@
   const Wedges = root.SwingWedges || (typeof require !== "undefined" && require("./wedges.js"));
   const Gapping = root.SwingGapping || (typeof require !== "undefined" && require("./gapping.js"));
   const DrillSets = root.SwingDrillSets || (typeof require !== "undefined" && require("./drillsets.js"));
-  const Faults = root.SwingFaults || (typeof require !== "undefined" && require("./faults.js"));
 
   const finite = v => typeof v === "number" && Number.isFinite(v);
 
+  // Program gate numbers from the 3D (programs.py BODY3D_KEYS). No program gates on them since Oct 21 2026
+  // (the 3D hips follow the camera setup: docs/3d.md), but a block that did would need the 3D.
   const BODY3D_KEYS = new Set([
-    "pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs", "armAfterPelvis", "armsLed"
+    "pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs", "armAfterPelvis"
   ]);
 
   /** Builds a prerequisite object declaring what hardware/environment a block needs. */
@@ -111,7 +112,7 @@
   function extract3dVal(b3, move) {
     if (!b3) return null;
     const nums = b3.numbers || {};
-    if (move === "armsLed" || move === "pelvisOpen") {
+    if (move === "pelvisOpen") {
       return finite(nums.pelvisOpenImpact) ? nums.pelvisOpenImpact : null;
     }
     if (move === "pelvisStartMs") {
@@ -128,67 +129,6 @@
       }
     }
     return finite(nums[move]) ? nums[move] : null;
-  }
-
-  // The latest session: face-on clips within this long of the newest one that has 3D.
-  const SESSION_HOURS = 12;
-
-  /** Rows for faults.js from the latest session's swings with 3D: {name, body3d}. */
-  function latestRows3d(clips, swings) {
-    if (!swings || typeof swings !== "object") return [];
-    const rows = (clips || []).filter(c => c && c.angle === "face" && !c.excluded && swings[c.name] && swings[c.name].body3d)
-      .map(c => ({ name: c.name, partner: c.partner, t: Date.parse(c.recorded), body3d: swings[c.name].body3d }));
-    if (!rows.length) return [];
-    const newest = Math.max(...rows.map(r => r.t));
-    return rows.filter(r => newest - r.t <= SESSION_HOURS * 3600e3);
-  }
-
-  /** Summarizes 3D downswing sequence across swing rows. */
-  function extractSequenceSummary(rows, swings) {
-    const list = rows || [];
-    const pelvisOpenVals = [];
-    const pelvisPeakVals = [];
-    const armPeakVals = [];
-    let bodyLateCount = 0;
-    let total3d = 0;
-
-    for (const r of list) {
-      if (!r || r.excluded || (r.c && r.c.excluded)) continue;
-      const name = r.name || (r.c && r.c.name);
-      const partner = r.partner || (r.c && r.c.partner);
-      const rec = (swings && ((name && swings[name]) || (partner && swings[partner]))) || null;
-      const b3 = r.body3d || (rec && rec.body3d) || null;
-      if (!b3) continue;
-
-      total3d++;
-      if (b3.sequence && b3.sequence.bodyLate) bodyLateCount++;
-
-      const nums = b3.numbers || {};
-      if (finite(nums.pelvisOpenImpact)) pelvisOpenVals.push(nums.pelvisOpenImpact);
-
-      if (b3.sequence && Array.isArray(b3.sequence.segments)) {
-        const pSeg = b3.sequence.segments.find(s => s.key === "pelvis");
-        const aSeg = b3.sequence.segments.find(s => s.key === "arm");
-        if (pSeg && finite(pSeg.beforeImpact)) pelvisPeakVals.push(Math.round(-pSeg.beforeImpact));
-        if (aSeg && finite(aSeg.beforeImpact)) armPeakVals.push(Math.round(-aSeg.beforeImpact));
-      }
-    }
-
-    if (total3d === 0) return null;
-
-    const med = arr => {
-      if (!arr.length) return null;
-      const s = [...arr].sort((a, b) => a - b);
-      return s[Math.floor(s.length / 2)];
-    };
-
-    return {
-      total: total3d,
-      bodyLateCount,
-      pelvisOpenMed: med(pelvisOpenVals),
-      pelvisPeakMed: med(pelvisPeakVals),
-      armPeakMed: med(armPeakVals)
-    };
   }
 
   /** Finds the active stage/block of a coach program run. */
@@ -227,7 +167,7 @@
     if (key === "backswing" || key === "downswing" || key === "smash") return 2;
     if (key === "spineTiltImpact" || key === "bendLoss" || key === "shaftPlaneP6"
         || key === "carry" || key === "offline" || key === "clubSpeed" || key === "ballSpeed"
-        || key === "pelvisPeakMs" || key === "armPeakMs" || key === "pelvisOpen" || key === "pelvisStartMs" || key === "armsLed") return 0;
+        || key === "pelvisPeakMs" || key === "armPeakMs" || key === "pelvisOpen" || key === "pelvisStartMs") return 0;
     return 1;
   }
 
@@ -436,15 +376,12 @@
     // -------------------------------------------------------------
     let effectiveFocus = focus;
     let autoFault = null;
-    let seqSummary = null;
 
     if (!effectiveFocus || !effectiveFocus.move) {
-      let sFaults = Array.isArray(inputs.sessionFaults) ? inputs.sessionFaults : null;
-      if (!sFaults && Faults && typeof Faults.sessionFaults === "function" && clips.length > 0) {
-        // Only the 3D fault picks the focus by itself: the 2D ones need the page's trust levels (trends.js)
-        // to be shown, and the plan doesn't have them.
-        sFaults = Faults.sessionFaults(latestRows3d(clips, inputs.swings), undefined, { standing: true }).filter(f => f.key === "armsLed");
-      }
+      // Only a fault the caller hands in picks the focus by itself: the 2D ones need the page's trust levels
+      // (trends.js), which the plan doesn't have. (The 3D "arms-led downswing" did, until it was retired on
+      // Oct 21 2026: faults.js.)
+      const sFaults = Array.isArray(inputs.sessionFaults) ? inputs.sessionFaults : null;
       if (inputs.topFault) {
         autoFault = inputs.topFault;
       } else if (sFaults && sFaults.length > 0) {
@@ -455,15 +392,10 @@
       if (autoFault) {
         effectiveFocus = {
           move: autoFault.move || autoFault.key,
-          aim: autoFault.dir || (autoFault.key === "armsLed" ? "more" : "less"),
+          aim: autoFault.dir || "less",
           fromFault: true,
           fault: autoFault
         };
-        if (autoFault.key === "armsLed") {
-          const swings = inputs.swings && typeof inputs.swings === "object" && !Array.isArray(inputs.swings)
-            ? inputs.swings : null;
-          seqSummary = extractSequenceSummary(latestRows3d(clips, swings), swings);
-        }
       }
     }
 
@@ -502,19 +434,7 @@
 
       let why;
       if (autoFault) {
-        if (autoFault.key === "armsLed") {
-          let seqDetail = "";
-          if (seqSummary) {
-            const parts = [];
-            if (seqSummary.pelvisPeakMed != null) parts.push(`pelvis peak ${seqSummary.pelvisPeakMed > 0 ? "+" : ""}${seqSummary.pelvisPeakMed} ms`);
-            if (seqSummary.armPeakMed != null) parts.push(`arm peak ${seqSummary.armPeakMed > 0 ? "+" : ""}${seqSummary.armPeakMed} ms`);
-            if (seqSummary.pelvisOpenMed != null) parts.push(`hips ${Math.round(seqSummary.pelvisOpenMed)}° open at impact`);
-            if (parts.length) seqDetail = ` (${parts.join(", ")})`;
-          }
-          why = `3D kinematics show an arms-led downswing on ${autoFault.count} of ${autoFault.total} swings${seqDetail}: the arms start down before the lower body.`;
-        } else {
-          why = `Fault in your swings: ${autoFault.name} on ${autoFault.count} of ${autoFault.total} swings.`;
-        }
+        why = `Fault in your swings: ${autoFault.name} on ${autoFault.count} of ${autoFault.total} swings.`;
       } else if (fix) {
         why = `Your current focus is to work on ${fix.name}${clubLower ? ` with the ${clubLower}` : ""}${resultNames ? ` to improve ${resultNames}` : ""}.`;
       } else {
@@ -541,7 +461,7 @@
         }
       }
 
-      const focusNeeds3d = !!(effectiveFocus.move === "armsLed" || BODY3D_KEYS.has(effectiveFocus.move) || ["pelvisTop", "shoulderTop", "xFactor"].includes(effectiveFocus.move));
+      const focusNeeds3d = !!(BODY3D_KEYS.has(effectiveFocus.move) || ["pelvisTop", "shoulderTop", "xFactor"].includes(effectiveFocus.move));
 
       focusBlock = {
         id: "focus",
@@ -559,7 +479,7 @@
         needs: makeNeeds({ phones: true, square: true, body3d: focusNeeds3d, ball: true }),
         button: {
           id: "practice",
-          label: autoFault && autoFault.key === "armsLed" ? "Practice sequence" : "Practice this",
+          label: "Practice this",
           disabled: !range,
           title: range
             ? `In range = ${effectiveFocus.aim === "more" ? "more" : "less"} than usual (${range.min} to ${range.max})`

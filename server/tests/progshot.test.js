@@ -195,7 +195,7 @@ test("lastShot: a not-counted shot (noRead)", () => {
   assert.equal(res.checks[2].text, "–");
 });
 
-test("lastShot: one waiting for 3D", () => {
+test("lastShot: one waiting for its hips", () => {
   const block = makeBraceTurnBlock([
     {
       kind: "shot",
@@ -214,7 +214,7 @@ test("lastShot: one waiting for 3D", () => {
   const res = lastShot(block);
   assert.ok(res);
   assert.equal(res.verdict, "waiting");
-  assert.equal(res.why, "waiting for 3D");
+  assert.equal(res.why, "hips still to come");
 
   assert.equal(res.checks[0].ok, true);
   assert.equal(res.checks[1].ok, true);

@@ -2408,13 +2408,13 @@ function renderProgram(data) {
   const gate = document.createElement("div");
   gate.className = "gate";
   const waitCount = (b.judged || []).filter(r => r.waiting3d).length;
-  const waitText = waitCount > 0 ? ` (waiting for 3D: ${waitCount})` : "";
+  const waitText = waitCount > 0 ? ` (hips still to come: ${waitCount})` : "";
   gate.textContent = `Gate: ${gateText(b)}. Now: ${run.progress}${waitText}`;
   box.append(h, how, gate);
   if (waitCount > 0) {
     const w = document.createElement("div");
     w.className = "plan-note";
-    w.textContent = `waiting for 3D (${waitCount})`;
+    w.textContent = `hips still to come (${waitCount})`;
     box.append(w);
   }
   const cal = run.calibration;
@@ -2454,7 +2454,7 @@ function renderProgram(data) {
   reps.append(...judged.map((r, i) => Object.assign(document.createElement("span"), {
     className: r.gate === false ? "n" : r.waiting3d ? "wait" : r.gate === true ? "y" : "",
     textContent: r.gate === false ? "✗" : r.waiting3d ? "…" : r.gate === true ? "✓" : "?",
-    title: r.waiting3d ? `rep ${i + 1}: waiting for 3D` : r.numbers ? `attack ${pgNum(r.numbers.attack)}, strike ${typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.vWords ? SwingStrikeMap.vWords(r.numbers.strikeV) : (pgNum(r.numbers.strikeV, 0) + " mm")}, face to path ${pgNum(r.numbers.faceToPath)}` +
+    title: r.waiting3d ? `rep ${i + 1}: hips still to come` : r.numbers ? `attack ${pgNum(r.numbers.attack)}, strike ${typeof SwingStrikeMap !== "undefined" && SwingStrikeMap.vWords ? SwingStrikeMap.vWords(r.numbers.strikeV) : (pgNum(r.numbers.strikeV, 0) + " mm")}, face to path ${pgNum(r.numbers.faceToPath)}` +
       (r.numbers.pelvisPeakMs != null ? `, pelvis peak ${pgNum(r.numbers.pelvisPeakMs, 0)} ms` : "") +
       (r.numbers.pelvisOpen != null ? `, pelvis open ${pgNum(r.numbers.pelvisOpen, 0)}°` : "") +
       (r.noRead ? ` (not counted: ${r.noRead})` : "") + (r.mark === false ? ", mark behind" : "") : `rep ${i + 1}`

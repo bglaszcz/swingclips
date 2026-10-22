@@ -51,7 +51,7 @@ test("shotsFromRun: extracts ordered ball shots with DTL partner, skips taps and
 
   assert.equal(shots[2].index, 3);
   assert.equal(shots[2].clip, "swing_face_3.mp4");
-  assert.equal(shots[2].verdict, "waiting for 3D");
+  assert.equal(shots[2].verdict, "hips still to come");
   assert.equal(shots[2].wrist, "bowed");
 
   assert.equal(shots[3].index, 4);

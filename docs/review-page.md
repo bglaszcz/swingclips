@@ -672,12 +672,13 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   the 17 it named was in the 3D's worst quarter; it named early extension on 116 of 505 normal swings
   (23%, 54% of the woods), the 3D on 3. The down-the-line number stays on the page as "hips to ball at
   impact" (it does go with a more in-to-out path, r +0.30), and practice mode calls it that too.
-  **Arms-led downswing** (3D) is a *standing pattern*, not a per-swing fault (2026-10-07, `standing` in
-  `faults.js`): it named 76 of the owner's 79 judged 3D swings; the 3D under-reads hip turn (32° at the top
-  against 42° face-on; X-factor 71°), hips read -9° to +9° open at impact, and good shots were as common at
-  either end. The swing view, scorecard, Compare, Progress and the session story leave it out;
-  `faultsOf` / `sessionFaults(rows, shaky, {standing: true})` ask for it, as Today's plan (its Practice
-  sequence block) and Week for coach do. Progress's most common fault also says how it compares with
+  **Arms-led downswing** (3D) was retired on Oct 21 2026 (owner, after Gemini round 73, docs/3d.md): it was a
+  *standing pattern* (pelvis peaking after impact and hips under 20° open at impact) that Today's plan picked as
+  the focus when none was set, but the 3D hips at impact follow the camera setup more than the swing (session
+  medians 18° to 32°, the face-on camera a steady ~21°), so it named 0% to 74% of swings by session, with no
+  link to Square's numbers. Nothing names it now and the plan doesn't pick it; coach.js keeps its moves for the
+  Sequence program's drill and swing thought. `faultsOf` / `sessionFaults(rows, shaky, {standing: true})` still
+  take the option (no standing pattern today). Progress's most common fault also says how it compares with
   last session ("Up from 66% of swings on Oct 4"; both sessions need 10+ readable swings).
   Casting comes from two face-on numbers (`metrics.js`): **Wrist hinge at P5**, the angle between the
   lead arm and the shaft (90 = an L) with the lead arm parallel coming down, and **Release point**,
@@ -937,7 +938,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   ladder as data: blocks in order, each with its drill (drill mode, so rehearsals stay out of the trends;
   a block without one, like the transfer block, counts as normal swings), ball or no ball, reps, and a gate
   (`count`: need of reps, or `streak`: need in a row) of checks on Square's numbers (`strikeV`, `attack`,
-  `faceToPath`, `loft`, ...: min/max) and 3D kinematic numbers (`pelvisPeakMs`, `pelvisOpen`, `armAfterPelvis`, `pelvisStartMs`), plus `mark` for the golfer's tap on what they saw. A gate can also check the block's
+  `faceToPath`, `loft`, ...: min/max) the face-on camera's (`pelvisBall`, `chestBall`, `handsAhead`) and 3D kinematic numbers (`pelvisPeakMs`, `pelvisOpen`, `armAfterPelvis`, `pelvisStartMs`; none gated since Oct 21 2026: they follow the camera setup, docs/3d.md), plus `mark` for the golfer's tap on what they saw. A gate can also check the block's
   medians (`medians`: e.g. median attack -3 or steeper, the retention check). Square's strike height is
   spoken and shown in words ("strike 8 millimetres low"), re-centred on the face since Oct 9 (`app.recentre_strike`: Square's
   reading + 14 mm for shots from Sep 17 2026; it had read about 14 mm low on every club, 7 iron median -13 as sent); the
@@ -946,21 +947,22 @@ toward the ball". The phones face away from you, so voice is the channel.
   (strike, 7 iron, usual 0 within 8 since Oct 9, 10 shots) checks the median of the session's first 10 readable 7
   irons: outside it, the phone says "Calibration shifted" and strike stops gating for that run (attack and
   loft still gate). Invalid reads (Square's null, or the CSV's H0.0 / club speed 0) are checked before any
-  comparison and left out of both sides of the count ("invalid read, not counted"). For 3D blocks (like Tier 2
-  and Tier 3 of `sequence`), 3D kinematics arrive after both phone angles are analyzed; until then a rep is
-  marked "waiting for 3D (n)" on the Start page, never counted as a miss. If 3D fails to arrive within 90 s
-  (`BODY3D_GIVE_UP_S`) or is flagged invalid ("camera moved"), it is left out of the gate as an invalid read.
-  **Moving Tier 3 pelvis stages:** In the `sequence` program, Tier 3's pelvis peak check starts at `max: -30`
-  (peaking at least 30 ms before impact). The coach progresses this in stages:
-  1. After impact: `{"key": "pelvisPeakMs", "max": 30}` (peaking within 30 ms after impact)
-  2. At impact: `{"key": "pelvisPeakMs", "max": 0}` (peaking at or before impact)
-  3. Before impact (initial): `{"key": "pelvisPeakMs", "max": -30}` (peaking at least 30 ms before impact)
-  4. Final target: `{"key": "pelvisPeakMs", "max": -100}` (peaking 100 ms before impact).
-  To advance the stage, edit the `pelvisPeakMs` check's `max` in `server/programs.json` under program `sequence`, block `tier3`.
+  comparison and left out of both sides of the count ("invalid read, not counted"). A block checking numbers that come after Square's
+  waits for them (`programs.block_waits_for`): the 3D's, after both phone angles are analyzed (minutes), or
+  only the face-on camera's, with the swing's record (~30 s; Brace and turn since Oct 21 2026). Until then a rep
+  is marked "hips still to come (n)" on the Start page and Square's part is said at once ("Club good. Hips when
+  the camera numbers are in."), never counted as a miss unless Square's part missed. If they don't come within
+  300 s (`BODY3D_GIVE_UP_S`), or the 3D is flagged invalid ("camera moved") on a 3D block, the rep is left out of
+  the gate as an invalid read.
+  **Sequence** (`sequence`): its 3D gates were retired on Oct 21 2026 (hips peak time, hips open at impact, arms
+  after hips: they passed 8% of swings on one camera setup and over 80% on another). Tier 1 is the tapped
+  pause-at-the-top reps; Tier 2 (blocked 3/4 7 irons) has no measured gate: its 10 shots Square reads move you
+  on; Tier 3 (full speed) is 5 in a row with attack -3 to -6 and face to path within 2, median loft 26.5 or less.
   **Brace and turn** (`braceturn`, Oct 6 coach plan): Tier 1 no-ball brace-and-turn reps (tapped: no-ball
   reps make no clips, so the coach's 3D gate can't apply there); Tier 2 3/4-speed 7 irons, 8 of 15 with attack
-  -3 to -4.5, face to path within 2, pelvis open 10+ (3D) and the pelvis 3+ in ahead of the ball (the face-on
-  camera's `pelvisBall`, `programs.CAMERA_KEYS`: the 3D's distances aren't trusted for it); Tier 3 full speed,
+  -3 to -4.5, face to path within 2 and the pelvis 3+ in ahead of the ball (the face-on camera's `pelvisBall`,
+  `programs.CAMERA_KEYS`: the 3D's distances aren't trusted for it; the 3D "pelvis open 10+" was retired Oct 21
+  2026, it passed 93% of swings); Tier 3 full speed,
   5 in a row on the same. Strike height is reported, not gated. Every program's shot order now also gives club
   path, face to target, start direction, ball speed, smash and carry per shot.
   **Setup notes** (Omni
