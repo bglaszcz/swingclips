@@ -95,7 +95,13 @@ NUMBERS = {
     "startDir": ("Start direction", "°", 1),
     "ballSpeed": ("Ball speed", " mph", 1),
     "smash": ("Smash", "", 2),
+    # Where the ball finished across the line (Square's side, + = right): the ball plan's fairway gate.
+    "offline": ("Offline", " yd", 0),
 }
+
+# Ball numbers: a gate on these alone judges a shot whether or not Square read the club (a drive is in the
+# fairway or not, club speed or no club speed).
+BALL_KEYS = {"carry", "offline", "ballSpeed", "startDir"}
 
 
 def body3d_numbers(body3d: dict | None) -> dict:
@@ -163,7 +169,7 @@ def numbers_of(shot: dict | None, body3d: dict | None = None, body: dict | None 
         "strikeV": _finite(c.get("faceImpactV")), "strikeH": _finite(c.get("faceImpactH")),
         "clubSpeed": _finite(c.get("speed")), "carry": _finite(b.get("carry")),
         "path": path, "face": face, "startDir": _finite(b.get("hla")), "ballSpeed": _finite(b.get("speed")),
-        "smash": _finite(c.get("smash")),
+        "smash": _finite(c.get("smash")), "offline": _finite(b.get("side")),
     }
     out.update(body3d_numbers(body3d))
     out.update(camera_numbers(body))
@@ -183,6 +189,8 @@ def no_read(n: dict, keys: set | None = None) -> str | None:
     """Why Square's shot can't be judged (None: it can). `keys`: the numbers the gate checks; a failed
     strike read only matters to a gate on the strike (None: any gate)."""
     # Checked before any gate compares numbers, so a missing reading is never taken as 0.
+    if keys and keys <= BALL_KEYS:
+        return None   # the ball's own numbers: missing() says if one isn't there
     if n["clubSpeed"] is None or n["clubSpeed"] == 0:
         return "no club speed"
     # Square's app flags a failed impact read (IsValidImpact*: the watcher sends null); its CSV export
@@ -303,6 +311,10 @@ def say_number(key: str, v) -> str:
         dist = abs(round(v))
         side = "heel" if v > 0 else "toe"
         return f"strike {dist} millimetres {side}"
+    if key == "offline":
+        if v is None:
+            return "offline –"
+        return "on the line" if abs(v) < 1.0 else f"{abs(round(v))} yards {'right' if v > 0 else 'left'}"
     dec = NUMBERS[key][2]
     s = f"{abs(v):.{dec}f}".rstrip("0").rstrip(".") if dec else f"{abs(round(v))}"
     sign = "minus " if v < 0 and s != "0" else "plus " if v > 0 and key in ("attack", "faceToPath") and s != "0" else ""
@@ -336,6 +348,8 @@ CUES = {
     "loft": ("too much loft", "too little loft"),
     "clubSpeed": ("too fast", "too slow"),
     "carry": ("long", "short"),
+    "smash": ("smash too high", "not solid"),
+    "offline": ("right of the fairway", "left of the fairway"),
     "pelvisPeakMs": ("hips peak late", "hips peak early"),
     "pelvisOpen": ("hips too open", "hips not open enough"),
     "pelvisStartMs": ("hips start late", "hips start early"),
@@ -799,6 +813,15 @@ class Programs:
                    for x in self._log()[-log_limit:]]
             return {"program": self._state(), "programs": self.catalog(), "log": log}
 
+    def runs(self) -> list[dict]:
+        """Every run in brief, finished ones and the one in play (ballplan.py counts the plan's sessions):
+        {id, started, how, shots (ball shots filed), running}."""
+        with self.lock:
+            out = [(x, False) for x in self._log()] + ([(self.run, True)] if self.run else [])
+            return [{"id": x.get("id"), "started": x["started"], "how": x.get("how"), "running": running,
+                     "shots": sum(1 for r in x.get("reps", []) if r.get("kind") == "shot")}
+                    for x, running in out if isinstance(x.get("started"), (int, float))]
+
     def report(self, started: float | None = None, body=None) -> dict | None:
         """The report for the coach, of the program in play (or the finished one started at `started`,
         or the last finished): {text, frame (the toe-tap ball swing's clips, for its impact frame)}."""
@@ -1032,6 +1055,8 @@ def fmt(key: str, v) -> str:
             return "centre"
         dist = round(abs(v))
         return f"{dist} mm high" if v > 0 else f"{dist} mm low"
+    if key == "offline":
+        return "on the line" if abs(v) < 1.0 else f"{round(abs(v))} yd {'right' if v > 0 else 'left'}"
     dec = NUMBERS[key][2]
     return f"{v:+.{dec}f}" if key in ("attack", "faceToPath", "pelvisPeakMs", "armPeakMs", "pelvisOpen",
                                        "pelvisStartMs", "pelvisBall", "chestBall", "handsAhead", "path", "face",
@@ -1044,7 +1069,7 @@ def spread(key: str, values: list) -> str:
         return f"{NUMBERS[key][0].lower()} –"
     med = statistics.median(v)
     rng = f" ({fmt(key, min(v))} to {fmt(key, max(v))})" if len(v) > 1 else ""
-    unit = "" if key in ("strikeV", "strikeH") else NUMBERS[key][1]
+    unit = "" if key in ("strikeV", "strikeH", "offline") else NUMBERS[key][1]
     return f"{NUMBERS[key][0].lower()} {fmt(key, med)}{unit}{rng}"
 
 
@@ -1182,7 +1207,7 @@ def report(p: dict, run: dict, body=None) -> dict:
         # Where the ball went (the coach's ask, Oct 6): path, face, start direction, ball speed, smash, carry.
         flight = [f"{word} {fmt(k, n.get(k))}{unit}" for k, word, unit in
                   (("path", "path", "°"), ("face", "face", "°"), ("startDir", "start", "°"), ("ballSpeed", "ball", " mph"),
-                   ("smash", "smash", ""), ("carry", "carry", " yd")) if n.get(k) is not None]
+                   ("smash", "smash", ""), ("carry", "carry", " yd"), ("offline", "offline", "")) if n.get(k) is not None]
         if n.get("path") is not None and flight:
             nums = f"{nums} ({', '.join(flight)})"
         if any(n.get(k) is not None for k in ("pelvisPeakMs", "armPeakMs", "pelvisOpen", "pelvisStartMs")):

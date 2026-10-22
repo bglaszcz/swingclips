@@ -20,6 +20,28 @@
   let currentSummary = null;
   let cachedData = null;
   const runReports = {};
+  // The 4-week ball plan's lines for each week shown ("from|to": lines; null while loading), fetched again
+  // each time the view loads its data.
+  const ballPlanWeeks = {};
+
+  const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  /** This week's ball plan lines for the brief (none outside the plan); drawn again once they arrive. */
+  function ballPlanLinesFor(weekStart) {
+    if (typeof SwingBallPlan === "undefined" || !weekStart) return [];
+    const from = isoDay(weekStart), to = isoDay(new Date(weekStart.getTime() + 6 * 86400000));
+    const key = `${from}|${to}`;
+    if (!(key in ballPlanWeeks)) {
+      ballPlanWeeks[key] = null;
+      fetch(`/api/ballplan?from=${from}&to=${to}`, { cache: "no-store" })
+        .then(r => r.ok ? r.json() : null).catch(() => null)
+        .then(m => {
+          ballPlanWeeks[key] = m ? SwingBallPlan.weekBriefLines(m) : [];
+          if (currentWeekStart && isoDay(currentWeekStart) === from && ballPlanWeeks[key].length) renderView();
+        });
+    }
+    return ballPlanWeeks[key] || [];
+  }
 
   let copyRunsPref = true;
   try {
@@ -76,6 +98,7 @@
       if (swingsRaw.noise && !nTable) nTable = swingsRaw.noise;
     }
 
+    for (const k of Object.keys(ballPlanWeeks)) delete ballPlanWeeks[k];
     cachedData = {
       clips: (typeof clips !== "undefined" && Array.isArray(clips)) ? clips : [],
       swings: sMap,
@@ -106,7 +129,9 @@
       currentWeekStart = SwingWeek.weekStartOf(new Date());
     }
 
-    currentSummary = SwingWeek.weekSummary(cachedData || {}, currentWeekStart);
+    const data = cachedData || {};
+    data.ballPlanLines = ballPlanLinesFor(currentWeekStart);
+    currentSummary = SwingWeek.weekSummary(data, currentWeekStart);
 
     if (weekTitle) {
       weekTitle.textContent = currentSummary.title;

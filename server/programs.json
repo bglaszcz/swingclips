@@ -1,6 +1,189 @@
 {
   "programs": [
     {
+      "id": "ballpractice",
+      "name": "Ball plan: practice day",
+      "from": "The 4-week ball plan (ballplan.json), Oct 22 - Nov 18 2026: the owner practises to Square's numbers only. Solid = smash 1.25 or more: on the owner's 7 irons Sep 23 - Oct 21, smash 1.25+ came up more than 15% short 3-4% of the time, under 1.20 most of the time. Fairway = within 15 yd of the line (games.js, the Driving game's 30 yd fairway). Swings in the ball blocks are normal swings (no drill): they count in the trends and the plan's scoreboard.",
+      "cap": 50,
+      "clubs": "warm up first (10 easy wedges, before you start); then 7 iron, then driver",
+      "bringBack": "Solid 7 irons and fairways per block, smash, attack angle and strike for each shot.",
+      "blocks": [
+        {
+          "id": "toetap",
+          "name": "Lead foot only",
+          "drill": "toetap",
+          "ball": false,
+          "reps": 5,
+          "how": "Pull the trail foot back so only its toe touches the mat. 3/4 swings, no ball, brush the mat in front of the ball spot.",
+          "ask": "Brush at or ahead of the ball spot?",
+          "gate": {
+            "kind": "count",
+            "need": 4
+          }
+        },
+        {
+          "id": "stepthrough",
+          "name": "Step through",
+          "drill": "stepthrough",
+          "ball": false,
+          "reps": 5,
+          "how": "Feet together, swing back, step the lead foot toward the target as the downswing starts. No ball.",
+          "ask": "All your weight on the lead foot at the finish?",
+          "gate": {
+            "kind": "count",
+            "need": 4
+          }
+        },
+        {
+          "id": "strike",
+          "name": "Solid 7 irons",
+          "ball": true,
+          "club": "I7",
+          "reps": 20,
+          "how": "Full 7 irons, full routine, one ball each. Swing thought: ball, then turf. A pass is a solid strike, smash 1.25 or more. After a miss, look at Square's attack angle: shallower than minus 2 means the bottom of the swing came before the ball.",
+          "gate": {
+            "kind": "count",
+            "need": 14,
+            "checks": [
+              {
+                "key": "smash",
+                "min": 1.25,
+                "max": 1.45
+              }
+            ]
+          }
+        },
+        {
+          "id": "fairway",
+          "name": "Driver fairway",
+          "ball": true,
+          "club": "DR",
+          "reps": 14,
+          "how": "Driver, full routine, one ball each. Aim at the right edge of the fairway: your drives lean left. A pass finishes within 15 yards of the line.",
+          "gate": {
+            "kind": "count",
+            "need": 8,
+            "checks": [
+              {
+                "key": "offline",
+                "min": -15,
+                "max": 15
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "ballcentre",
+      "name": "Ball plan: centred strike day",
+      "from": "The 4-week ball plan (ballplan.json), Oct 22 - Nov 18 2026, its practice day when off-centre strikes led the last two weeks' iron misses (ballplan.emphasis). On the owner's 7 irons Sep 23 - Oct 21, 37% were struck more than 12 mm toward the heel (36% of those solid, 81% within 6 mm); within a session the hands to plane in the downswing went with the heel strike (about 6 mm per inch, r +0.31 over 320 iron swings). Centred = Square's toe/heel within 10 mm (+ = heel). Pump drill balls are drill swings: out of the trends and the plan's scoreboard.",
+      "cap": 45,
+      "clubs": "warm up first (10 easy wedges, before you start); then 7 iron, then driver",
+      "bringBack": "Centred 7 irons and fairways per block, strike toe to heel, smash and carry for each shot.",
+      "blocks": [
+        {
+          "id": "pump",
+          "name": "Pump drill",
+          "drill": "pump",
+          "ball": true,
+          "club": "I7",
+          "reps": 5,
+          "how": "7 iron. Go to the top, pump the hands down to your trail pocket twice with the shaft parallel to the ground, then swing through and hit.",
+          "gate": {
+            "kind": "count",
+            "need": 5
+          }
+        },
+        {
+          "id": "centre",
+          "name": "Centred 7 irons",
+          "ball": true,
+          "club": "I7",
+          "reps": 20,
+          "how": "Set a headcover just outside the toe end of the club. Full 7 irons, full routine, one ball each, and miss the headcover. Swing thought: hands drop to the trail pocket. A pass is a strike within 10 mm of the centre, toe to heel.",
+          "gate": {
+            "kind": "count",
+            "need": 12,
+            "checks": [
+              {
+                "key": "strikeH",
+                "min": -10,
+                "max": 10
+              }
+            ]
+          }
+        },
+        {
+          "id": "fairway",
+          "name": "Driver fairway",
+          "ball": true,
+          "club": "DR",
+          "reps": 14,
+          "how": "Driver, full routine, one ball each. Your misses start on line and curve left: finish with the chest at the target and hold the face. A pass finishes within 15 yards of the line.",
+          "gate": {
+            "kind": "count",
+            "need": 8,
+            "checks": [
+              {
+                "key": "offline",
+                "min": -15,
+                "max": 15
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "balltest",
+      "name": "Ball plan: test day",
+      "from": "The 4-week ball plan (ballplan.json), Oct 22 - Nov 18 2026: the owner practises to Square's numbers only. Solid = smash 1.25 or more: on the owner's 7 irons Sep 23 - Oct 21, smash 1.25+ came up more than 15% short 3-4% of the time, under 1.20 most of the time. Fairway = within 15 yd of the line (games.js, the Driving game's 30 yd fairway). Swings in the ball blocks are normal swings (no drill): they count in the trends and the plan's scoreboard.",
+      "cap": 30,
+      "clubs": "no warm-up: 7 iron cold, then driver; the Combine after",
+      "bringBack": "Cold 7 irons solid and drives in the fairway, against the plan's start.",
+      "blocks": [
+        {
+          "id": "cold",
+          "name": "Cold 7 irons",
+          "ball": true,
+          "club": "I7",
+          "reps": 10,
+          "how": "No warm-up and no practice swings: the first balls of the day. Full 7 irons, full routine. A pass is smash 1.25 or more.",
+          "gate": {
+            "kind": "count",
+            "need": 7,
+            "checks": [
+              {
+                "key": "smash",
+                "min": 1.25,
+                "max": 1.45
+              }
+            ]
+          }
+        },
+        {
+          "id": "fairway",
+          "name": "Driver fairway",
+          "ball": true,
+          "club": "DR",
+          "reps": 14,
+          "how": "Driver, full routine, one ball each. Aim at the right edge of the fairway: your drives lean left. A pass finishes within 15 yards of the line.",
+          "gate": {
+            "kind": "count",
+            "need": 8,
+            "checks": [
+              {
+                "key": "offline",
+                "min": -15,
+                "max": 15
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "braceturn",
       "name": "Brace and turn",
       "from": "Golf coach chat, Oct 6 2026: the low point moved forward (pelvis ~5 in ahead, attack -3.6 at 3/4, -5 full) but steeper than about -4.5 the face stays open (7 iron, all sessions: face to path +3.4 median, 29% within 2, on 31 shots; -4.5 to -3: 50%). Likely a slide without a turn: stop adding slide, add spin. Strike height not gated (it scatters ~8 mm shot to shot). Lead foot only and step through are warm-ups now, not gates. Oct 21 2026 (owner): the 3D hips-open check (10 or more at impact) retired: the 3D hips follow the camera setup more than the swing, and the check passed 93% of swings (Gemini round 73, docs/3d.md); hips ahead of the ball stays (face-on camera).",

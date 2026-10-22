@@ -937,6 +937,23 @@ toward the ball". The phones face away from you, so voice is the channel.
   (ToneGenerator PROP_ACK), near = one beep, out = a low buzz (SUP_ERROR), then the words if set. The tone counts
   as the phone speaking, so the strike listener ignores it. A sentence with no tone (setup, a block's start,
   warnings) is always said. Phones on 0.13 ignore `tone` and keep saying the words.
+- **4-week ball plan** (`ballplan.py`, `ballplan.json`, `GET /api/ballplan[?from=&to=]`, `static/ballplan.js` drawn by
+  start.html "4-week ball plan", `static/ballplan-view.js` on Progress and Tools > 4-week ball plan, `week.js` "Ball
+  plan" section): Oct 22 - Nov 18 2026, practice judged on Square's numbers alone. While it runs it replaces Today's
+  plan, the focus card and the weekly-sessions line. Its sessions are coach programs: practice day `ballpractice`
+  (low point: lead foot only, step through, 20 solid 7 irons, 14 drives) or `ballcentre` (centred strike: 5 pump drill
+  balls, 20 7 irons gated on strike within 10 mm, 14 drives), picked by `emphasis()` from the bigger kind of iron miss
+  over the 14 days before today (a program already run today keeps the day); test day `balltest` + the Combine.
+  Scoreboard: 7 iron solid (smash 1.25+), irons heavy or thin (15% short of the club's usual), irons near the centre
+  (10 mm), drives in a 30 yd fairway, each against the four weeks before with a bootstrap verdict. Checks (`check()`,
+  last session, each week, the plan so far, the Week brief's week): each iron miss gets one cause (off the heel /
+  toe beyond 12 mm, else short from the centre by attack angle: heavy, digging, short) and each missed drive a
+  direction (started or curved left / right: carry x tan(start direction) against the rest of the side); "going
+  well" = a number at its target or 10 points up on the start (5+ shots); "struggling" = the biggest iron and drive
+  miss (2+ and 15%+), with coach-style drill and swing thought; on heel strikes, the hands to plane in the downswing
+  against centred strikes, each against that club's median that day (the camera setup moves it between days).
+  Why heel and hands: on the owner's irons Sep 23 - Oct 21 heel strikes were the biggest miss, and within club and
+  day the hands to plane went with them (r +0.31, 320 swings, positive on 10 of 11 days, ~6 mm per inch).
 - **Coach program** (`programs.py`, `programs.json`, `/api/program*`, Start page "Coach program"): a coach's drill
   ladder as data: blocks in order, each with its drill (drill mode, so rehearsals stay out of the trends;
   a block without one, like the transfer block, counts as normal swings), ball or no ball, reps, and a gate

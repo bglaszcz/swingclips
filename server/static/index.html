@@ -431,6 +431,8 @@
   .st-v-same { color: var(--text); }
   .st-v-na { color: var(--muted); font-weight: normal; }
   .st-card-note { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  /* The 4-week ball plan (ballplan-view.js) is the one plan while it runs. */
+  #progress.ballplan-on #pb-goal { display: none; }
   /* round 71: yardage card */
   #yardage { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 1000px; margin: 0 auto; width: 100%; }
   #yardage[hidden] { display: none; }
@@ -1814,6 +1816,7 @@
       <button class="tab menu-btn" id="tools-btn" title="Tools for testing the setup and the tracking"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>Tools</span></button>
       <span class="menu-pop right" hidden>
         <button class="small" data-page="/start" title="The session start page: checks, both cameras, Start / Stop recording, coach program, plan and games">Start a session</button>
+        <button id="ballplan-btn" class="small" title="The 4-week ball plan: today's session, the scoreboard (solid 7 irons, heavy or thin irons, strikes near the centre, fairways) and the plan week by week">4-week ball plan</button>
         <button id="setup-btn" class="small" title="Check both cameras before you start: live pictures from the phones">Check cameras</button>
         <button class="small" data-page="/tripods" title="Find the tripod spots: live pictures, framing meters, level and alignment-stick tools, saved spots">Tripod setup</button>
         <button id="drills-btn" class="small" hidden title="Every drill the coach has: what it trains, how to do it, and what your own reps of it did">Drills</button>
@@ -2432,6 +2435,8 @@
       <label title="Shaky numbers: tracking noise or the conditions could account for them. Numbers with no reading are always left out."><input type="checkbox" class="leave-shaky"> Leave out shaky</label>
     </div>
 
+    <!-- The 4-week ball plan (ballplan-view.js): above everything while it runs; the focus's goal steps aside. -->
+    <div class="t-card" id="ballplan-progress" hidden></div>
     <!-- The focus as a goal: its progress score, one tap from practising it (goal.js, board-view.js). -->
     <div class="t-card" id="pb-goal"></div>
     <!-- Steps 1-3: every club at once (sessionscore.js); one club at a time further down. -->
@@ -6356,7 +6361,7 @@ async function refresh() {
     try { wanted = pair ? wanted : decodeURIComponent(wanted); } catch {}
     // A link to a Tools view (#labels, #clubcheck, #p4check, #nightreport, #week: the Start page's "Since last time")
     // opens it over the newest swing (read before open() puts the swing's name in the address).
-    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", p4check: "p4check-btn", nightreport: "nightreport-btn", week: "week-btn", wristcheck: "wristcheck-btn", aicoach: "aicoach-btn", drills: "drills-btn", yardage: "yardage-btn" }[location.hash.slice(1)];
+    const view = { labels: "labels-btn", clubcheck: "clubcheck-btn", p4check: "p4check-btn", nightreport: "nightreport-btn", week: "week-btn", wristcheck: "wristcheck-btn", aicoach: "aicoach-btn", drills: "drills-btn", yardage: "yardage-btn", ballplan: "ballplan-btn" }[location.hash.slice(1)];
     open(clips.some(c => c.name === wanted) ? wanted : (filteredClips()[0] || shownClips()[0]).name);
     if (pair && clips.some(c => c.name === pair[0])) Compare.show(pair[0], pair[1]);
     if (view) setTimeout(() => document.getElementById(view)?.click(), 0);
@@ -6503,6 +6508,8 @@ setInterval(() => { if (!document.hidden) loadNoise(); }, 300000);
 <script src="/static/drills-view.js"></script>
 <script src="/static/yardage.js"></script>
 <script src="/static/yardage-view.js"></script>
+<script src="/static/ballplan.js"></script>
+<script src="/static/ballplan-view.js"></script>
 <script src="/static/compare.js"></script>
 <script src="/static/update.js"></script>
 </body>

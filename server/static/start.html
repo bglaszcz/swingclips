@@ -305,6 +305,7 @@
 <script src="/static/aicoach.js"></script>
 <script src="/static/graduate.js"></script>
 <script src="/static/weekplan.js"></script>
+<script src="/static/ballplan.js"></script>
 </head>
 <body>
 <header>
@@ -360,6 +361,15 @@
       <span class="note" id="go-note"></span>
     </div>
     <div id="record-pelvis-card" class="pelvis-card" hidden></div>
+  </section>
+
+  <section id="sec-ballplan" hidden>
+    <h2><span class="n" id="n8">4</span>4-week ball plan</h2>
+    <p class="hint">Practise to Square's numbers: a solid, centred iron strike and drives in the fairway. Every shot is judged as you go, each session is checked (what went well, where it struggled), and each practice day works on your biggest miss.</p>
+    <div id="bp-today"></div>
+    <div id="bp-check"></div>
+    <div id="bp-board"></div>
+    <p class="hint" style="margin: 10px 0 0;">Week by week: <a href="/#ballplan">Progress</a> on the review page.</p>
   </section>
 
   <section id="sec-program" hidden>
@@ -450,6 +460,9 @@ const BONES = [[11, 12], [11, 13], [13, 15], [12, 14], [14, 16], [11, 23], [12, 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 let status = null, note = "", lastChecksHtml = "";
+// The 4-week ball plan (GET /api/ballplan), once loaded: while it runs it is the session's plan.
+let ballPlan = null;
+const ballPlanOn = () => !!(ballPlan && ballPlan.plan && ballPlan.plan.active);
 
 // ---- 1. Checks ----
 function phoneCheck(a, s) {
@@ -1071,6 +1084,7 @@ function dnSame(card, sig) {
 function renderDrillNudge() {
   const card = $("drill-nudge");
   if (!card) return;
+  if (ballPlanOn()) { card.hidden = true; return; }
 
   const dState = window.drillState || drillState;
   const curDrill = (dState && dState.current && dState.current.drill) || "";
@@ -1323,6 +1337,11 @@ async function setFocusDrill(drill) {
 function renderFocusCard() {
   const box = $("focus-card");
   if (!box) return;
+  if (ballPlanOn()) {   // the ball plan is the one plan while it runs
+    focusCardSig = null;
+    box.hidden = true;
+    return;
+  }
 
   const focus = journalData && journalData.focus;
   if (!focus) {
@@ -2681,6 +2700,19 @@ const CHOICES = [
   { id: "noball", title: "Drills, no ball", desc: "No phones or Square: you judge each rep" },
 ];
 let choice = null, readyOpen = null, calibStatus = null, setupStatus = null, camsGood = false, checksGood = false;
+// Picked by what's running (or the ball plan), not by a tap here: looked at again as things change.
+let choiceAuto = false;
+
+/** The choices: while the ball plan runs it comes first, in place of Today's plan. */
+function choiceList() {
+  if (!ballPlanOn()) return CHOICES;
+  const p = ballPlan.plan, t = ballPlan.today;
+  return [{ id: "ballplan", title: "4-week ball plan", desc: `Week ${p.week} of ${p.weeks}` + (t ? ` · today: ${t.title.toLowerCase()}` : "") },
+    ...CHOICES.filter(c => c.id !== "plan")];
+}
+const isChoice = id => id === "ballplan" || CHOICES.some(c => c.id === id);
+/** A ball plan program (practice or test day). */
+const isBallPlanProgram = id => !!(ballPlan && ballPlan.plan && (ballPlan.plan.programs || []).includes(id));
 
 function todayKey() {
   const d = new Date();
@@ -2689,16 +2721,17 @@ function todayKey() {
 
 function loadChoice() {
   const asked = new URLSearchParams(location.search).get("do");
-  if (CHOICES.some(c => c.id === asked)) { choose(asked, false); return; }
+  if (isChoice(asked)) { choose(asked, false); return; }
   if (new URLSearchParams(location.search).get("demo")) { choose("hit", false); return; }
   try {
     const d = JSON.parse(localStorage.getItem(CHOICE_KEY) || "null");
-    if (d && d.date === todayKey() && CHOICES.some(c => c.id === d.id)) choice = d.id;
+    if (d && d.date === todayKey() && isChoice(d.id)) choice = d.id;
   } catch { /* none kept */ }
 }
 
 function choose(id, scroll = true) {
   choice = id;
+  choiceAuto = false;
   readyOpen = null;
   try { localStorage.setItem(CHOICE_KEY, JSON.stringify({ date: todayKey(), id })); } catch { /* not kept */ }
   if (id === "noball") pickNoBallProgram();
@@ -2729,15 +2762,21 @@ function programBadge() {
 }
 
 function renderChoices() {
-  // What's running on the server says what's being done, when nothing was picked here today.
-  if (!choice) {
-    if (programState && programState.program) choice = "program";
-    else if (planStep) choice = "plan";
-    else if (gameState && gameState.game) choice = "game";
+  // What's running on the server says what's being done, when nothing was picked here today; the ball
+  // plan while it runs. Looked at again until something is picked here (kept as it was when nothing fits).
+  if (!choice || choiceAuto) {
+    const prog = programState && programState.program;
+    const auto = prog ? (isBallPlanProgram(prog.id) ? "ballplan" : "program")
+      : gameState && gameState.game && !ballPlanOn() ? "game"
+      : ballPlanOn() ? "ballplan"
+      : planStep ? "plan"
+      : gameState && gameState.game ? "game" : null;
+    if (auto) { choice = auto; choiceAuto = true; }
   }
+  if (choice === "plan" && ballPlanOn()) choice = "ballplan";   // Today's plan gives way to the ball plan
   if (choice === "noball") pickNoBallProgram();
   const box = $("choices");
-  const html = CHOICES.map(c => `<button class="choice${choice === c.id ? " on" : ""}" data-id="${c.id}"><b>${esc(c.title)}</b>` +
+  const html = choiceList().map(c => `<button class="choice${choice === c.id ? " on" : ""}" data-id="${c.id}"><b>${esc(c.title)}</b>` +
     `<span>${esc(c.id === "program" && programBadge() || c.desc)}</span></button>`).join("");
   if (box.dataset.html !== html) {
     box.innerHTML = html;
@@ -2748,11 +2787,14 @@ function renderChoices() {
   const balls = !!choice && choice !== "noball";
   $("sec-record").hidden = !balls;
   $("sec-swings").hidden = !balls;
-  $("sec-program").hidden = !(choice === "program" || choice === "noball");
+  const bp = choice === "ballplan";
+  $("sec-ballplan").hidden = !bp;
+  // The ball plan's sessions run as coach programs: the program's card shows while one plays.
+  $("sec-program").hidden = !(choice === "program" || choice === "noball" || (bp && programState && programState.program));
   $("sec-plan").hidden = choice !== "plan";
   $("sec-game").hidden = !(choice === "game" || (gameState && gameState.game));
   $("n7").textContent = choice === "game" ? "4" : "5";  // after Today's plan when a plan block plays one
-  $("n5").textContent = balls ? "4" : "3";
+  $("n5").textContent = balls ? (bp ? "5" : "4") : "3";
   renderReady();
   renderPelvisCard(recentClips);
   renderDrillNudge();
@@ -2785,6 +2827,7 @@ function renderWeekPlan() {
   if (typeof SwingWeekPlan === "undefined" || !allClips) return;
   const box = $("week-plan");
   if (!box) return;
+  if (ballPlanOn()) { box.hidden = true; weekPlanSig = null; return; }   // the ball plan counts its own sessions
   let need = 3;
   try {
     const raw = localStorage.getItem("week-plan-need");
@@ -2969,12 +3012,54 @@ async function pollProgram() {
   drillState = drill;
   renderProgram(data);
   fillNotes(data);
+  ballPlanCheck();
   renderChoices();
   renderPelvisCard(recentClips);
   renderDrillNudge();
   const dsig = JSON.stringify(drillState && drillState.current);
   if (dsig !== focusDrillSig) { focusDrillSig = dsig; renderFocusCard(); }
   programTimer = setTimeout(pollProgram, document.hidden ? 20000 : 2000);
+}
+
+// ---- 4-week ball plan (ballplan.js draws it; the server's /api/ballplan does the sums) ----
+let ballPlanTimer = 0, ballPlanSig = "", ballPlanRunning = "";
+async function pollBallPlan() {
+  clearTimeout(ballPlanTimer);
+  const data = await getJson("/api/ballplan");
+  if (data) {
+    ballPlan = data.plan ? data : null;
+    renderBallPlan();
+    renderChoices();
+    renderFocusCard();
+    renderWeekPlan();
+  }
+  ballPlanTimer = setTimeout(pollBallPlan, document.hidden ? 60000 : 15000);
+}
+/** Looks again once a program or game starts or ends (a step done, or running). */
+function ballPlanCheck() {
+  const sig = `${(programState && programState.program && programState.program.id) || ""}|${(gameState && gameState.game && gameState.game.id) || ""}`;
+  if (sig !== ballPlanRunning) {
+    ballPlanRunning = sig;
+    pollBallPlan();
+  }
+}
+function renderBallPlan() {
+  if (typeof SwingBallPlan === "undefined") return;
+  SwingBallPlan.injectStyles(document);
+  const sig = JSON.stringify(ballPlan);
+  if (sig === ballPlanSig) return;
+  ballPlanSig = sig;
+  $("bp-today").innerHTML = ballPlan ? SwingBallPlan.todayHtml(ballPlan) : "";
+  $("bp-check").innerHTML = ballPlan ? SwingBallPlan.checkHtml(ballPlan.checks && ballPlan.checks.last, SwingBallPlan.lastTitle(ballPlan)) : "";
+  $("bp-board").innerHTML = ballPlan ? SwingBallPlan.boardHtml(ballPlan) : "";
+  for (const b of $("bp-today").querySelectorAll(".bp-go")) {
+    b.onclick = async () => {
+      b.disabled = true;
+      if (b.dataset.program) await programPost("/api/program", { program: b.dataset.program });
+      else if (b.dataset.game) await commandGame("/api/game", { game: b.dataset.game });
+      pollBallPlan();
+    };
+  }
 }
 
 // ---- Polling ----
@@ -3044,6 +3129,7 @@ async function pollGame() {
   if (st) planStep = st.step;
   if (data) {
     renderGame(data);
+    ballPlanCheck();
     renderPlan();
     renderWeekPlan();
     renderChoices();
@@ -3057,6 +3143,7 @@ document.addEventListener("visibilitychange", () => {
     pollSwings();
     pollGame();
     pollProgram();
+    pollBallPlan();
     loadPlanData();
   }
 });
@@ -3077,6 +3164,7 @@ pollStatus();
 pollSwings();
 pollGame();
 pollProgram();
+pollBallPlan();
 loadPlanData();
 renderDrillNudge();
 </script>

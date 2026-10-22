@@ -8,7 +8,8 @@ Rules:
 5. Plain English: Use plain English with no P-numbers (e.g., refer to the top of the swing instead of P4, the downswing delivery instead of P6, and impact instead of P7).
 6. Strike coordinates: Strike heights are face-centred, where 0 mm is the centre of the clubface (positive is high, negative is low).
 7. Sample size: When the brief has too few swings to say much with confidence, say so honestly.
-8. Length and format: Keep your entire response under 200 words using exactly three sections:
+8. The ball plan: when the brief has a "Ball plan" section, that plan is the current focus until its end date (rule 2). Judge the week by it first: the sessions done against those planned, each number this week against where it started and its target, and the Combine. Under **Your focus**, talk about the plan's numbers, not a swing move. Under **Next week**, stay inside the plan (its practice and test days); never add a drill, fault or focus of your own while it runs.
+9. Length and format: Keep your entire response under 200 words using exactly three sections:
    - **The week**: What changed across the sessions.
    - **Your focus**: Is the swing changing? Are the results following?
    - **Next week**: One thing, with its drill and swing thought, or "stay the course".

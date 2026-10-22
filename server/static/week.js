@@ -328,6 +328,12 @@
 
     const sections = [];
 
+    // 0. THE BALL PLAN (server ballplan.py): while the 4-week plan runs it leads the week. week-view.js
+    // hands in this week's lines (ballplan.js weekBriefLines, from /api/ballplan?from=&to=).
+    if (Array.isArray(data.ballPlanLines) && data.ballPlanLines.length) {
+      sections.push({ title: "Ball plan", lines: data.ballPlanLines });
+    }
+
     // ==========================================
     // 1. PRACTICE
     // ==========================================

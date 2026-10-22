@@ -47,6 +47,7 @@ from pydantic import BaseModel, Field
 
 import aicoach
 import ballflight
+import ballplan
 import bodycalib
 import calib
 import calibrun
@@ -2266,6 +2267,67 @@ def start_program(body: ProgramChoice):
     save_plan_step(None)
     print(f"Program: {run['name']} started", flush=True)
     return run
+
+
+# ---- The 4-week ball plan (ballplan.py, ballplan.json) ----
+
+# Every shot is re-read at most this often (listed_clips walks the clips folder).
+BALLPLAN_ROWS_S = 20.0
+ballplan_cache: dict = {"t": 0.0, "rows": None, "key": None}
+
+
+def ballplan_rows() -> list[dict]:
+    """Every Square shot as the ball plan reads it: a paired one with its swing's standing (left out of the
+    trends or not) and the club as corrected; one no clip paired with by what was on when it was struck
+    (a drill, or a practice game other than the usual full swing, leaves it out)."""
+    rows, used = [], set()
+    with records_lock:
+        hands = {k: (v.get("body") or {}).get("handsPlaneP6") for k, v in swing_records.items()}
+    for c in listed_clips():
+        s = c.get("shot")
+        if not s or not SWING_NAME.match(c["name"]) or (c["partner"] and c["angle"] != "face"):
+            continue
+        used.add(s.get("received"))
+        r = ballplan.row_of(s, datetime.fromisoformat(c["recorded"]).timestamp(), c["excluded"],
+                            (c.get("game") or {}).get("id"), hands.get(c["name"]))
+        if r:
+            rows.append(r)
+    for s in load_shots():
+        if s.get("received") in used:
+            continue
+        t = s["_t"] - SHOT_DELAY_S.get(s.get("source"), DEFAULT_SHOT_DELAY_S)
+        g = games_state.game_at(t)
+        r = ballplan.row_of(s, t, bool(drills_state.drill_at(t)) or bool(g and not g["inTrends"]), g and g["id"])
+        if r:
+            rows.append(r)
+    return rows
+
+
+@app.get("/api/ballplan")
+def get_ballplan(frm: str | None = Query(None, alias="from", max_length=10), to: str | None = Query(None, max_length=10)):
+    """The 4-week ball plan: today's session and its steps, this week's sessions, and the scoreboard (each
+    number at the start, so far and this week, against its target). `from`/`to` (YYYY-MM-DD): a range of
+    days to sum as well (the Week brief's week)."""
+    plan = ballplan.load_plan()
+    if not plan:
+        return {"plan": None}
+    for d in (frm, to):
+        if d is not None:
+            try:
+                datetime.strptime(d, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(400, "from and to are dates: YYYY-MM-DD")
+    now = time.time()
+    try:
+        key = (SHOTS_FILE.stat().st_size, len(clip_paths()))
+    except OSError:
+        key = None
+    if ballplan_cache["rows"] is None or key != ballplan_cache["key"] or now - ballplan_cache["t"] > BALLPLAN_ROWS_S:
+        ballplan_cache.update(rows=ballplan_rows(), t=now, key=key)
+    games_now = games_state.state(log_limit=100000)
+    return ballplan.build(plan, ballplan_cache["rows"], programs_state.runs(), games_now["log"], now,
+                          program_now=(programs_state.run or {}).get("id"),
+                          game_now=(games_now["game"] or {}).get("id"), frm=frm, to=to)
 
 
 @app.post("/api/program/stop")

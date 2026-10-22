@@ -35,6 +35,7 @@ end).
 
 | You picked... | What shows | What you do |
 |---|---|---|
+| 4-week ball plan | Record, today's session, the last session's check, the scoreboard | While the plan runs (Oct 22 - Nov 18 2026) it comes first. **Start** on today's session (a practice day or the test day, picked for you; the practice day works on your biggest iron miss of the last two weeks). After it, the check says what went well and what struggled, with the drill and swing thought for the miss. Week by week: Progress. |
 | Just hit balls | Record, focus card, swings | Hit. Everything is recorded and analyzed. The focus card tracks today's progress score against your goal and gives swing-by-swing feedback. |
 | Today's plan | Record, the plan | **Start** on the first block, hit its balls, **Next**. With a focus set, its drill is a block of reps (each one shows against your target, out of your trends), then 10 normal swings, then what the reps did. |
 | Coach program | Record, the program | Pick it, **Start program**. Follow the block on screen: no-ball reps, tap **Pass / Miss**; ball shots, listen for the verdict (flush line: tap where the mark started). Blocks move on by themselves. |

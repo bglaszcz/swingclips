@@ -288,7 +288,7 @@ class ProgramsTest(unittest.TestCase):
         n = self.p.state()["program"]["blocks"][1]["judged"][0]["numbers"]
         self.assertEqual((n["pelvisBall"], n["path"], n["face"]), (4.5, 0.0, 0.5))
         rep = self.p.report()["text"]
-        self.assertIn("-4.0 / 24.0 / +0.5 / 2 mm high (path +0.0°, face +0.5°, carry 150 yd)", rep)
+        self.assertIn("-4.0 / 24.0 / +0.5 / 2 mm high (path +0.0°, face +0.5°, carry 150 yd, offline 1 yd right)", rep)
         self.assertIn("(in brackets: club path", rep)
 
     def test_finished_runs_keep_their_gates_and_calibration(self):
