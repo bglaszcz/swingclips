@@ -392,6 +392,30 @@ class SwingWorkerTest(unittest.TestCase):
         self.assertIn("face-on camera seems to have moved", self.app.swing_records[later]["why3d"])
         self.assertFalse(self.app.file_3d(later).exists())
 
+    def test_teed_driver_has_its_own_ball_place(self):
+        # Irons off the ground first, then drives: the teed ball sits higher in the down-the-line picture
+        # (Oct 22: 1.7% of its height) and further forward. Not a camera that moved.
+        _, face, dtl = render_swing(seed=8)
+        face["ball"], dtl["ball"] = {"x": 0.5, "y": 0.86, "r": 0.008}, {"x": 0.5, "y": 0.74, "r": 0.006}
+        irons = [self.add_swing(1789000000 + 20 * i, face, dtl)[0] for i in range(3)]
+        tee_face, tee_dtl = dict(face, ball=dict(face["ball"], x=0.52)), dict(dtl, ball=dict(dtl["ball"], y=0.72))
+        drives = [self.add_swing(1789000100 + 20 * i, tee_face, tee_dtl)[0] for i in range(4)]
+        # A drive with the face-on camera turned: still told by the other drives.
+        turned = self.add_swing(1789000200, dict(tee_face, ball=dict(tee_face["ball"], x=0.44)), tee_dtl)[0]
+        self.session(1788999000)
+        clips = self.records()
+        real = self.app.listed_clips
+        club = {n: "I7" for n in irons} | {n: "DR" for n in drives + [turned]}
+        with_shot = lambda *a, **k: [dict(c, shot={"club": club[c["name"]]}) if c["name"] in club else c for c in real(*a, **k)]
+        with mock.patch.object(self.app, "listed_clips", with_shot):
+            self.app.pass_3d(clips, self.js, mock.Mock(is_set=lambda: False))
+        for n in irons + drives:
+            self.assertIsNone(self.app.swing_records[n]["why3d"], n)
+        self.assertIn("face-on camera seems to have moved", self.app.swing_records[turned]["why3d"])
+        self.assertEqual(swing3d.ball_group("DR"), "tee")
+        self.assertEqual(swing3d.ball_group("W3"), "ground")
+        self.assertEqual(swing3d.ball_group(None), "ground")
+
     def test_moved_from_the_fit(self):
         doc = {"reprojection": {"address": {"median": 9.0}}}
         self.assertIn("camera seems to have moved", swing3d.moved(doc, {"id": "s"}))

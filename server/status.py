@@ -68,8 +68,10 @@ PENDING_WARN = 3
 # A phone losing frames: the S23 Ultra's camera drops 4 at a time between bursts, from ~1% to over a
 # quarter of them depending on the run (its own camera software falls behind; Android's heat level stays
 # 0, Oct 2026), the S21 none. Nothing to be done about it (the owner, Oct 20: "I don't care about that"), so
-# it's only shown, grey, in the phone's Ready row: never amber and never spoken. Running hot (this heat level,
-# PowerManager.THERMAL_STATUS_MODERATE) still is: that one can be fixed (off the charger, out of the case).
+# it's only shown, grey, in the phone's Ready row: never amber and never spoken. The same for running hot
+# (from this heat level, PowerManager.THERMAL_STATUS_MODERATE): the owner, Oct 22, "I don't care about the
+# heat on the phone" (the face-on phone reached level 3 that day losing no frames). A camera the heat stops
+# still shows as one: not answering, or its camera error.
 HOT_THERMAL = 2
 DROPPED_WARN_PCT = 5.0
 # The battery's temperature is shown from this warm (degrees C).
@@ -1055,8 +1057,6 @@ class Status:
                 found[f"pending:{a}"] = f"{name} phone: {hb['pending']} clips waiting to upload."
             if hb.get("battery") is not None and hb["battery"] < LOW_BATTERY_SAY and not hb.get("charging"):
                 found[f"battery:{a}"] = f"{name} phone battery at {hb['battery']} percent."
-            if hb.get("recording") and running_hot(hb):
-                found[f"hot:{a}"] = f"{name} phone is running hot. Take it off the charger or out of its case."
         out = [text for key, text in found.items() if key not in self.phone_problems]
         self.phone_problems = set(found)
         return out
@@ -1175,8 +1175,7 @@ class Status:
         if (p.get("droppedPct") or 0) >= 1:
             bits.append(f"losing {p['droppedPct']:g}% of frames")
         if running_hot(p):
-            level = "warn" if level == "ok" else level
-            problems.append("running hot")
+            bits.append(f"hot (Android heat level {p['thermal']})")
         if p.get("freeMb") is not None and p["freeMb"] < 1000:
             bits.append(f"{p['freeMb']} MB free")
             level = "warn" if level == "ok" else level

@@ -344,6 +344,7 @@ LIMIT_WORDS = {
 CUES = {
     "attack": ("attack too shallow", "attack too steep"),
     "strikeV": ("strike high on the face", "strike low on the face"),
+    "strikeH": ("strike toward the heel", "strike toward the toe"),
     "faceToPath": ("face open to path", "face closed to path"),
     "loft": ("too much loft", "too little loft"),
     "clubSpeed": ("too fast", "too slow"),
@@ -354,6 +355,8 @@ CUES = {
     "pelvisOpen": ("hips too open", "hips not open enough"),
     "pelvisStartMs": ("hips start late", "hips start early"),
     "pelvisBall": ("hips too far ahead", "hips not ahead enough"),
+    "chestBall": ("chest too far ahead", "chest not ahead enough"),
+    "handsAhead": ("hands too far ahead", "hands not ahead enough"),
 }
 
 

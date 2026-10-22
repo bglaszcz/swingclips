@@ -6,8 +6,10 @@ Which session: the latest one made before the swing. Whether a camera has moved 
 the swing's own fit: at address the core joints (tri.CORE) of a still-placed pair of phones land
 within ~1-2 px of their rays in both pictures; after a tripod moves they miss by much more
 (MOVED_PX). But a phone turned sideways is mostly taken up by the fit, so the ball is checked too:
-it sits on the same spot whatever the club, so where it is in each picture is compared with the
-first swings after the calibration (BALL_SWINGS). On the first real session it held within +-0.005
+it sits on the same spot for every club off the ground, so where it is in each picture is compared
+with the first swings after the calibration (BALL_SWINGS). A teed driver sits higher and further
+forward (Oct 22: 1.7% of the height up in the down-the-line picture, past BALL_MOVED, on 16 of 19
+drives), so driver swings are compared with the first driver swings instead (ball_group). On the first real session it held within +-0.005
 of the picture up and down and +-0.02 across (where the ball was put down), so a camera counts as
 moved past BALL_MOVED. The golfer's place in the picture isn't used: it changes with the club (a 5
 iron after 7 irons counted as "camera moved" there).
@@ -30,10 +32,17 @@ MOVED_PX = 5.0
 # either picture), while a camera that really moved missed by 43-50 px.
 MOVED_PX_BODY = 12.0
 # In the 3D key (app.pass_3d): changing how "moved" is judged checks the swings again.
-CHECK_VERSION = 6
+CHECK_VERSION = 7
 # The ball's place in a picture (share of its width, height) moved more than this: that camera moved.
 BALL_MOVED = (0.04, 0.015)
 BALL_SWINGS = 5
+# Clubs hit off a tee: their ball has its own place in each picture.
+TEED_CLUBS = {"DR"}
+
+
+def ball_group(club: str | None) -> str:
+    """Which ball reference a swing with this club is compared with: "tee" or "ground"."""
+    return "tee" if club in TEED_CLUBS else "ground"
 
 
 def session_for(name: str, times: dict, all_sessions: list[dict]) -> tuple[dict | None, str]:

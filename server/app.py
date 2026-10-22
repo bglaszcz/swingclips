@@ -1085,7 +1085,7 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
         records = dict(swing_records)
     times = {n: recorded_at(CLIPS_DIR / n) for n in both}
     shots = None
-    refs: dict[str, dict | None] = {}
+    refs: dict[tuple[str, str], dict | None] = {}
 
     def ball_of(name: str) -> dict | None:
         try:
@@ -1093,17 +1093,20 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
         except (OSError, ValueError):
             return None
 
-    def ball_ref(session: dict) -> dict | None:
-        """Where the ball was in each picture on the first swings after this calibration."""
-        if session["id"] not in refs:
-            after = sorted((n for n in both if times[n] >= session["created"]), key=lambda n: times[n])
+    def ball_ref(session: dict, group: str, shots: dict) -> dict | None:
+        """Where the ball was in each picture on the first swings after this calibration with the ball
+        off the ground, or on a tee (swing3d.ball_group)."""
+        key = (session["id"], group)
+        if key not in refs:
+            after = sorted((n for n in both if times[n] >= session["created"]
+                            and swing3d.ball_group((shots.get(n) or {}).get("club")) == group), key=lambda n: times[n])
             balls = []
             for n in after:
                 balls.append((ball_of(n), ball_of(both[n]["partner"])))
                 if sum(1 for f, d in balls if f and d) >= swing3d.BALL_SWINGS:
                     break
-            refs[session["id"]] = swing3d.ball_reference(balls)
-        return refs[session["id"]]
+            refs[key] = swing3d.ball_reference(balls)
+        return refs[key]
     made = 0
     for name, c in sorted(both.items(), key=lambda kv: times[kv[0]]):
         if stop.is_set():
@@ -1142,7 +1145,7 @@ def pass_3d(clips: dict[str, dict], summarizer: swings.Summarizer, stop: threadi
                     swing3d.read_pose(analysis_pose_file(name)), swing3d.read_pose(analysis_pose_file(other["name"])),
                     session, summarizer, shot.get("club"), swings.LEAD_SIDE)
                 why_not = swing3d.moved(doc, session) or swing3d.ball_moved(
-                    ball_ref(session), swing3d.read_pose(pose_file(name)).get("ball"),
+                    ball_ref(session, swing3d.ball_group(shot.get("club")), shots), swing3d.read_pose(pose_file(name)).get("ball"),
                     swing3d.read_pose(pose_file(other["name"])).get("ball"))
                 if why_not:
                     rec["why3d"] = why_not

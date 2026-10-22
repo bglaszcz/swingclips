@@ -212,9 +212,9 @@ review page starts them and one of them does the talking.
   each (it remembers open or closed):
   - **each phone**: connected, recording, mode, shutter setting and what the camera really used,
     battery (amber under 20% when not charging), clips waiting to upload (amber from 3), free
-    storage, how warm it is (from 38 C) and the frames it's losing (from 1%, grey only: never amber or spoken
-    since Oct 20, nothing can be done about it; "running hot" at Android's moderate heat level, `HOT_THERMAL`, is
-    amber), which phone speaks, and its **Start** / **Stop** with how the last command went
+    storage, how warm it is (from 38 C), "hot" from Android's moderate heat level (`HOT_THERMAL`) and the
+    frames it's losing (from 1%): heat and lost frames are grey only, never amber or spoken (the owner
+    won't act on either: Oct 20, Oct 22), which phone speaks, and its **Start** / **Stop** with how the last command went
     ("Starting...", "Started", "Couldn't start: the camera isn't running yet", "no answer from the
     phone"). A phone seen in the last 12 hours is expected: Ready needs it recording.
   - **Square**: the laptop's heartbeat (the watcher), whether Square's app is running, the last shot.
@@ -255,8 +255,7 @@ review page starts them and one of them does the talking.
   "no clip", "the Square watcher isn't running"). After that only problems, once each until they
   clear: no Square shot on 2 swings in a row, a missing clip on 2 in a row, the same camera problem
   on 3 in a row, a phone that stops answering while recording, 3+ clips waiting on a phone, a
-  battery under 10%, a phone running hot ("take it off the
-  charger or out of its case").
+  battery under 10%. Not a phone running hot (since Oct 22).
 - **No swing found**: said when key positions couldn't be found in a clip (phases.js). Why is on
   the swing page ("No swing found in this clip: ...") and in the **events log**
   (`D:\SwingClips\events.jsonl`, one JSON object per line), with the server window printing

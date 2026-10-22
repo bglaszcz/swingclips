@@ -50,6 +50,18 @@ def body3d(pelvis_peak=-10, arm_peak=-50, pelvis_open=18.0, pelvis_start=-100.0)
     }
 
 
+class CueTest(unittest.TestCase):
+    def test_every_gate_number_has_its_words(self):
+        # Without its own words a miss came out as "strike heel/toe too high" (Oct 22).
+        for key in programs.NUMBERS:
+            if key in ("armAfterPelvis", "armPeakMs", "path", "face", "startDir", "ballSpeed"):
+                continue
+            self.assertIn(key, programs.CUES, key)
+        check = {"key": "strikeH", "min": -10, "max": 10}
+        self.assertEqual(programs.cue(check, 12.0), "strike toward the heel")   # + is the heel in Square's data
+        self.assertEqual(programs.cue(check, -12.0), "strike toward the toe")
+
+
 class ProgramsTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()

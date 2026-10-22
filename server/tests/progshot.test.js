@@ -290,3 +290,17 @@ test("start.html includes progshot.js script, last shot CSS, and removes old las
   assert.ok(html.includes(".prog-shot-extra"), "includes .prog-shot-extra CSS");
   assert.ok(!html.includes("Last shot: attack"), "old one-line last shot string removed");
 });
+
+test("miss cues: the same words on the screen as the phone says (programs.py CUES)", () => {
+  const { CUES } = require("../static/progshot.js");
+  const py = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "programs.py"), "utf8");
+  const block = py.slice(py.indexOf("CUES = {"), py.indexOf("}", py.indexOf("CUES = {")));
+  const said = {};
+  for (const m of block.matchAll(/"(\w+)": \("([^"]+)", "([^"]+)"\)/g)) said[m[1]] = [m[2], m[3]];
+  assert.ok(Object.keys(said).length >= 10);
+  assert.deepEqual(CUES, said);
+  // Square's heel/toe: + is the heel.
+  const { cue } = require("../static/progshot.js");
+  assert.equal(cue({ key: "strikeH", min: -10, max: 10 }, 12), "strike toward the heel");
+  assert.equal(cue({ key: "strikeH", min: -10, max: 10 }, -12), "strike toward the toe");
+});

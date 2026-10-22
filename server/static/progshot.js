@@ -67,17 +67,23 @@
     smash: { unit: "", dec: 2, signed: false },
   };
 
+  // As programs.py CUES: what the phone says.
   const CUES = {
     attack: ["attack too shallow", "attack too steep"],
     strikeV: ["strike high on the face", "strike low on the face"],
+    strikeH: ["strike toward the heel", "strike toward the toe"],
     faceToPath: ["face open to path", "face closed to path"],
     loft: ["too much loft", "too little loft"],
     clubSpeed: ["too fast", "too slow"],
     carry: ["long", "short"],
-    pelvisPeakMs: ["pelvis peaks late", "pelvis peaks early"],
-    pelvisOpen: ["pelvis too open", "pelvis not open enough"],
-    pelvisStartMs: ["pelvis starts late", "pelvis starts early"],
-    pelvisBall: ["pelvis too far ahead", "pelvis not ahead enough"],
+    smash: ["smash too high", "not solid"],
+    offline: ["right of the fairway", "left of the fairway"],
+    pelvisPeakMs: ["hips peak late", "hips peak early"],
+    pelvisOpen: ["hips too open", "hips not open enough"],
+    pelvisStartMs: ["hips start late", "hips start early"],
+    pelvisBall: ["hips too far ahead", "hips not ahead enough"],
+    chestBall: ["chest too far ahead", "chest not ahead enough"],
+    handsAhead: ["hands too far ahead", "hands not ahead enough"],
   };
 
   const EXTRA_CANDIDATES = [
@@ -174,7 +180,7 @@
 
   function cue(c, v) {
     if (!c) return "";
-    if (c.key === "armAfterPelvis") return "arms before pelvis";
+    if (c.key === "armAfterPelvis") return "arms before hips";
     const pair = CUES[c.key] || [`${c.key} too high`, `${c.key} too low`];
     const hi = c.max;
     return (hi !== undefined && hi !== null && (v === null || v === undefined || v > hi)) ? pair[0] : pair[1];
