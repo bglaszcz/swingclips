@@ -7,9 +7,9 @@ The Square watcher, the GSPro-connector option, and the ball-flight fill-in. (Mo
   **Golf** icon on the desktop (the window's "Put an icon on the desktop" makes it) opens five buttons:
   **Driving range** (Square Golf's app + the watcher), **Drills with the ball** (the same, the Start page
   opened at Drills: `?do=program`), **GSPro connector** (closes Square's app, starts the connector + the
-  shot listener), **Drills, no ball** (nothing), **Close everything** (stops both phones recording through
-  the server's `POST /api/phones/command`, `Stop-PhoneRecording` in `golf-common.ps1`, then Square Golf,
-  the watcher and the connector). Each other button opens the Start page. While the window is open it runs `golf-agent.ps1` hidden, so the Start page's
+  shot listener), **Drills, no ball** (nothing), **Close everything** (`Stop-PhoneRecording` in `golf-common.ps1`:
+  the server's `POST /api/session/close` stops both phones recording and ends a drill or its warm-up, a game,
+  Today's plan block and drill mode, saved as they stand; then Square Golf, the watcher and the connector). Each other button opens the Start page. While the window is open it runs `golf-agent.ps1` hidden, so the Start page's
   launcher buttons work; closing the window stops it. Nothing starts at Windows sign-in. `-DryRun`
   logs instead of acting; `-SelfTest` presses every button in dry run and closes. On opening it
   brings the folder's scripts up to date from the server (`Update-RelayFiles` in `golf-common.ps1`:

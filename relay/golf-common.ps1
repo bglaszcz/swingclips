@@ -211,16 +211,18 @@ function Update-RelayFiles([string]$baseDir = "", [string]$server = "", [switch]
 }
 
 # $do picks what the Start page shows (start.html ?do=: hit, plan, program, game, noball).
-# Stops both phones recording (the server sends them Stop on their next poll).
+# Ends the session on the server: both phones stop recording (on their next poll), and a drill, game or
+# plan block still running ends, saved as it stands (POST /api/session/close).
 function Stop-PhoneRecording([string]$server = "", [switch]$DryRun) {
     if (-not $server) { $server = "http://192.168.86.250:8000" }
-    if ($DryRun) { return "Would stop the phones recording" }
+    if ($DryRun) { return "Would stop the phones recording and end what's running" }
     try {
-        $r = Invoke-RestMethod -Uri ($server.TrimEnd('/') + "/api/phones/command") -Method Post -ContentType "application/json" `
-            -Body '{"action":"stop","angle":"both"}' -TimeoutSec 5 -ErrorAction Stop
+        $r = Invoke-RestMethod -Uri ($server.TrimEnd('/') + "/api/session/close") -Method Post -ContentType "application/json" `
+            -Body '{}' -TimeoutSec 5 -ErrorAction Stop
         $bad = @($r.results | Where-Object { $_.error })
-        if ($bad.Count) { return "Phones: " + (($bad | ForEach-Object { "$($_.angle): $($_.error)" }) -join "; ") }
-        return "Phones told to stop recording"
+        $said = if ($bad.Count) { "Phones: " + (($bad | ForEach-Object { "$($_.angle): $($_.error)" }) -join "; ") } else { "Phones told to stop recording" }
+        if (@($r.ended).Count) { $said += "; ended " + (@($r.ended) -join ", ") }
+        return $said
     } catch {
         return "Couldn't reach the server to stop the phones: $($_.Exception.Message)"
     }

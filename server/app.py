@@ -2079,6 +2079,7 @@ async def start_game(request: Request):
         practice_state.set_config({**practice_state.config, "on": False})
     if programs_state.busy:
         programs_state.stop()
+    start_recording()
     print(f"Game: {g['name']} started, first target {g['target']} yd", flush=True)
     return g
 
@@ -2230,6 +2231,8 @@ def set_plan_step(body: PlanStep):
         games_state.start(body.game, {})
     step = {"block": body.block, "drill": body.drill, "game": body.game, "since": round(time.time(), 3)} if body.block else None
     save_plan_step(step)
+    if step:
+        start_recording()
     print(f"Plan: {body.block or 'ended'}" + (f", drill {body.drill}" if body.drill else "") + (f", game {body.game}" if body.game else ""), flush=True)
     return {"step": step, "drill": drills_state.state(), "game": games_state.game}
 
@@ -2261,11 +2264,17 @@ class ProgramChoice(BaseModel):
 
 
 def start_recording_for(program_id: str) -> list[dict]:
-    """A program that hits balls: both phones recording, and Square's app and its watcher on the laptop
-    (through the golf agent), unless already on. One press on the Start page does it all (owner, Oct 22)."""
+    """A program that hits balls: start_recording(). A no-ball one records nothing."""
     p = programs_state.programs.get(program_id)
     if not p or not any(b.get("ball") for b in p["blocks"]):
         return []
+    return start_recording()
+
+
+def start_recording() -> list[dict]:
+    """Anything that hits balls (a drill, a game, a plan block, Just hit balls): both phones recording, and
+    Square's app and its watcher on the laptop (through the golf agent), unless already on. One press on the
+    Start page does it all (owner, Oct 22). Returns the phone commands sent."""
     out = []
     phones = session_status.snapshot({}, {"queued": 0}, None).get("phones") or {}
     angles = [a for a in status.ANGLES if not (phones.get(a) or {}).get("recording")]
@@ -3144,6 +3153,34 @@ async def phone_poll(angle: str, request: Request, wait: float = Query(0, ge=0, 
 class PhoneCommand(BaseModel):
     action: str
     angle: str = "both"
+
+
+@app.post("/api/session/start")
+def session_start():
+    """Just hit balls, picked on the Start page: both phones recording and Square on the laptop (start_recording)."""
+    return {"results": start_recording()}
+
+
+@app.post("/api/session/close")
+def session_close():
+    """The laptop's Close everything: both phones stop recording, and whatever was running ends, saved as it
+    stands (a drill or its warm-up, a game, Today's plan block, drill mode)."""
+    out = session_status.command("stop", "both")
+    print("Phones: " + ", ".join(f"{r['action']} {r['angle']}: {r['error'] or 'sent'}" for r in out), flush=True)
+    ended = []
+    if programs_state.busy:
+        done = programs_state.stop()
+        ended.append(done["name"] if done else "warm-up")
+    if games_state.game:
+        done = games_state.stop()
+        ended.append(done["name"] if done else "game")
+    if load_plan_step():
+        save_plan_step(None)
+        ended.append("Today's plan")
+    drills_state.set(None)
+    drills_tick()
+    print("Session closed" + (": " + ", ".join(ended) + " ended" if ended else ""), flush=True)
+    return {"results": out, "ended": ended}
 
 
 @app.post("/api/phones/command")

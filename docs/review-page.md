@@ -957,7 +957,8 @@ toward the ball". The phones face away from you, so voice is the channel.
 - **Drills** (Start page; was "Coach program". `POST /api/program` {program, warmup = true}): today's ball plan
   session is picked first ("Today's session: ..."), the rest is the library. One green **Start**: a drill that hits
   balls starts both phones recording (those not already) and Square's app and watcher through the golf agent
-  (`app.start_recording_for`), then the warm-up (`Programs.warm_up`: drill mode `warmup`, so its swings are recorded
+  (`app.start_recording`; also on a game's Start, a Today's plan block, and picking **Just hit balls**, through
+  `POST /api/session/start`), then the warm-up (`Programs.warm_up`: drill mode `warmup`, so its swings are recorded
   but left out of the trends, gates and cap; counted on the card; skipped for `"warmup": false` cold tests,
   `balltest` and `retention`, and no-ball drills). **Warm-up done** (`POST /api/program/warmup-done`) starts block 1.
   Each block card ends in a green **Next: <block> →** (**Finish** on the last); the card is drawn again only when

@@ -311,6 +311,16 @@ class ProgramStartApi(unittest.TestCase):
             self.assertEqual(out["phones"], [])
             # The Start page is checked for a newer copy on every load (it came from the cache after an update).
             self.assertEqual(client.get("/start").headers.get("cache-control"), "no-cache")
+            # The laptop's Close everything: phones stop, the drill ends (saved), drill mode off.
+            app.programs_state.warm_up("ballpractice")
+            out = client.post("/api/session/close").json()
+            self.assertEqual({(r["action"], r["angle"]) for r in out["results"]}, {("stop", "face"), ("stop", "dtl")})
+            self.assertFalse(app.programs_state.busy)
+            self.assertIsNone(app.drills_state.state()["current"])
+            # Just hit balls (and a game, a plan block): the phones not recording are started.
+            app.session_status.heartbeat("face", hb(recording=False))
+            out = client.post("/api/session/start").json()
+            self.assertEqual([(r["action"], r["angle"]) for r in out["results"]], [("start", "face")])
         finally:
             app.programs_state.stop()
             app.drills_state, app.programs_state, app.session_status = saved

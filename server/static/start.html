@@ -699,6 +699,10 @@ async function command(action) {
   }
 }
 $("start").onclick = () => command("start");
+async function startSession() {
+  try { await fetch("/api/session/start", { method: "POST" }); } catch { /* Start recording is still there */ }
+  pollStatus();
+}
 $("stop").onclick = () => command("stop");
 
 // ---- 4. Swings ----
@@ -2799,6 +2803,9 @@ function choose(id, scroll = true) {
   readyOpen = null;
   try { localStorage.setItem(CHOICE_KEY, JSON.stringify({ date: todayKey(), id })); } catch { /* not kept */ }
   if (id === "noball") pickNoBallProgram();
+  // Just hit balls: nothing more to pick, so the cameras (and Square on the laptop) start now. The other
+  // ball choices start them with their own Start.
+  if (id === "hit") startSession();
   renderChoices();
   const next = id === "noball" ? $("sec-program") : $("sec-record");
   if (scroll && next) next.scrollIntoView({ block: "start" });

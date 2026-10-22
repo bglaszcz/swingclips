@@ -28,7 +28,8 @@ end).
 4. **2 What are you doing?**: pick one. Only what it needs shows below it (the launcher's **Drills with
    the ball** and **Drills, no ball** buttons pick for you).
 5. **3 Record: Start recording.** Each phone says "Recording". (A phone that joins late starts by itself.)
-   For Drills and the 4-week ball plan there's nothing to press here: their **Start** does it.
+   Usually there's nothing to press here: picking **Just hit balls**, or the **Start** of a drill, the
+   4-week ball plan, a game or a plan block, starts both phones (and Square on the laptop) itself.
 6. **Hit one ball.** "Swings and Square shots" at the bottom lists it with "both" and its Square
    shot; about a minute later the phone says "First swing: both cameras saw you, Square paired" (or what's wrong).
 
@@ -51,8 +52,9 @@ Working on your focus: **Do the drill** on the focus card records your reps as d
 1. **Drills**: **Copy for coach**, paste into the coach chat (save the
    down-the-line picture if one shows). Older runs: **Past runs**, each has its own button. From the
    house: review page **Tools > Week for coach** lists the week's runs, each with **Copy this run for coach**.
-2. **Close everything** on the laptop's Golf window (stops both phones recording, then Square Golf and the
-   watcher), or **Stop** under Record (each phone says "Stopped").
+2. **Close everything** on the laptop's Golf window (stops both phones recording, ends a drill, game or plan
+   block still running, saved as it stands, then closes Square Golf and the watcher), or **Stop** under Record
+   (each phone says "Stopped").
 3. Leave the server alone: about 10 minutes after the last swing it re-analyzes the session the
    careful way (the review page's Ready bar shows "deep pass: n clips to go").
 4. Look back on the **review page** (`http://192.168.86.250:8000`): **Progress** (the three steps:
