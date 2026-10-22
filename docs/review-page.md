@@ -683,6 +683,12 @@ shots with that club** (`static/goodshots.js`; the rules are kept on the server)
   lead arm and the shaft (90 = an L) with the lead arm parallel coming down, and **Release point**,
   the lead arm's angle to horizontal when that hinge first drops under 70 degrees coming down (higher
   = an earlier release). Named casting when the release point is above -22 degrees.
+  **Club short of parallel at top** (face-on, `clubShort` in `metrics.js`, degrees, + = short of parallel,
+  - = past it): the club model's shaft at the top, pointing toward the target; a half swing reads 90 or more.
+  Backswing length, not a fault either way (the owner went past parallel on 1 of 268 swings, Oct 2026; irons
+  10-12 short, wedges 20-33). Within a club each degree shorter went with ~0.3 mph less club speed. It is in
+  practice mode too ("Club at the top", e.g. for three-quarter wedges). Its 3D twin and across the line /
+  laid off are in the 3D panel at the top (docs/3d.md).
   **Hands ahead of ball at impact** (face-on, `handsBall` in `metrics.js`, inches, + toward the target):
   the wrists' middle against where the ball sat, at P7. On 289 of the owner's swings (Sep 23 - Oct 1
   2026) more of it went with a steeper attack angle within each club (about 0.7 degrees per inch,
@@ -1035,7 +1041,7 @@ toward the ball". The phones face away from you, so voice is the channel.
   `counts`. In a group and in `mine`: the focus's first, then drills with sets, newest first, then by
   name. `render` draws chips (**Yours**, shown and chosen by default when there is anything in it, **All**,
   one per moment; the choice is remembered in `localStorage["drill-lib-filter"]`) with their counts and
-  "42 drills · 2 tried", and a card per drill: the moment, the name, what it trains, how, the swing
+  "44 drills · 2 tried", and a card per drill: the moment, the name, what it trains, how, the swing
   thought, then "1 set, 10 reps · last Oct 5: clear carry-over into your swings" (a button: opens that
   set's first swing) or "Not tried yet". One action a card: **Do this drill** on the focus's (Practice,
   with the reps switched on), **Make this my focus** on the rest (Progress's focus picker on that move):

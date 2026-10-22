@@ -15,6 +15,9 @@
     ["Shoulder tilt", "thoraxSideBend", "shoulderTilt", "°"], ["Hip tilt", "pelvisSideBend", "pelvisTilt", "°"],
     ["Hip slide", "pelvisSway", "hipSway", "in"], ["Hips toward the ball", "pelvisThrust", null, "in"],
     ["Hip lift", "pelvisLift", null, "in"], ["Chest slide", "thoraxSway", null, "in"],
+    // The club at the top only (metrics3d.js clubShort / clubAcross): elsewhere these angles mean other things.
+    ["Club short of parallel", "clubShort", "clubShort", "°", ["p4"]],
+    ["Club across the line (+) / laid off (-)", "clubAcross", null, "°", ["p4"]],
   ];
 
   const SEGMENTS3D = (root.SwingMetrics3D && root.SwingMetrics3D.SEGMENTS) || [["pelvis", "Hips"], ["thorax", "Chest"], ["arm", "Lead arm"], ["club", "Club"]];
@@ -174,13 +177,13 @@
       head.append(el("th", { title: p.tag }, name[0].toUpperCase() + name.slice(1)));
     }
     t.append(head);
-    for (const [label, key, key2, unit] of ROWS) {
+    for (const [label, key, key2, unit, only] of ROWS) {
       const tr = el("tr");
       tr.append(el("td", {}, label));
       const isBlanked = blankedKeys && blankedKeys.has(key);
       for (const p of cols) {
         const isOrig = ORIGINAL_POSITIONS.has(p.key);
-        const heldUp = isOrig || (HELD_UP[p.key] && HELD_UP[p.key].has(key));
+        const heldUp = only ? only.includes(p.key) : (isOrig || (HELD_UP[p.key] && HELD_UP[p.key].has(key)));
         const td = el("td");
         if (!heldUp) {
           td.append(el("span", { class: "muted" }, "·"));

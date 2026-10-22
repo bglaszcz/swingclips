@@ -160,6 +160,20 @@
     if (club && out.hands) {
       out.clubDir = unit(sub(club, out.hands));
       out.clubReach = norm(sub(club, out.hands));
+      const d = out.clubDir, h = out.hands;
+      if (d) {
+        // Short of parallel (+) or past it (-): the shaft's angle above level, pointing toward the target
+        // (past straight up it keeps counting, as metrics.js clubShort does).
+        out.clubShort = Math.atan2(d[1], Math.sign(d[0] || 1) * Math.hypot(d[0], d[2])) * DEG;
+        // Across the line (+) or laid off (-): the shaft's angle out of the plane through the target line
+        // (the x axis through the ball) and the hands, i.e. whether the shaft, extended past the grip,
+        // points at the target line. A plain heading against the target line reads every short wedge
+        // swing as laid off (a shaft short of parallel points up the plane); this doesn't. Meant for the
+        // top. On 40 blind stills (Oct 21 2026) the eye agreed within ~2 degrees; the 3D's clubhead
+        // direction at impact matches Square's club path within ~2 (claude-only/topfaults).
+        const n = unit([0, -h[2], h[1]]);
+        if (n) out.clubAcross = Math.asin(Math.max(-1, Math.min(1, dot(d, n)))) * DEG;
+      }
     }
     return out;
   }
@@ -356,6 +370,8 @@
           r.thoraxThrust = inch(d[2]);
         }
       }
+      if (v.clubShort != null) r.clubShort = v.clubShort;
+      if (v.clubAcross != null) r.clubAcross = v.clubAcross;
       for (const [seg] of SEGMENTS) if (speed[seg][i] != null) r[seg + "Speed"] = speed[seg][i];
       return r;
     });
@@ -463,7 +479,7 @@
       const within = ["p1", "p2", "p3", "p4"].includes(p.key) ? POSITION_FILL_SECONDS : POSITION_FAST_SECONDS;
       if (Math.abs(doc.frames[i].t - p.t) <= Math.max(within, 0.01)) {
         const v = Object.assign({}, result.values[i]);
-        for (const k of ["pelvisTurn", "thoraxTurn", "separation", "pelvisSideBend", "thoraxSideBend", "thoraxBend", "pelvisSway", "thoraxSway", "pelvisThrust", "pelvisLift", "pelvisBall", "thoraxBall"]) {
+        for (const k of ["pelvisTurn", "thoraxTurn", "separation", "pelvisSideBend", "thoraxSideBend", "thoraxBend", "pelvisSway", "thoraxSway", "pelvisThrust", "pelvisLift", "pelvisBall", "thoraxBall", "clubShort", "clubAcross"]) {
           if (v[k] == null) {
             for (let dt = 1; dt <= 6; dt++) {
               const prev = result.values[i - dt];
@@ -487,6 +503,8 @@
     ["pelvisSideBendImpact", "p7", "pelvisSideBend"], ["thoraxSideBendImpact", "p7", "thoraxSideBend"],
     ["thoraxBendImpact", "p7", "thoraxBend"],
     ["pelvisSwayTop", "p4", "pelvisSway"], ["pelvisSwayImpact", "p7", "pelvisSway"],
+    // The club at the top: short of parallel (+) and across the line (+) / laid off (-), degrees.
+    ["clubShortTop", "p4", "clubShort"], ["clubAcrossTop", "p4", "clubAcross"],
     ["pelvisThrustImpact", "p7", "pelvisThrust"], ["pelvisLiftImpact", "p7", "pelvisLift"],
     ["thoraxSwayImpact", "p7", "thoraxSway"],
     // Along the target line from the ball at impact, + = ahead of it (the coach's pelvis / chest shift).

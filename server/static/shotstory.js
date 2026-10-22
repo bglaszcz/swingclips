@@ -43,6 +43,7 @@
     tempo: "Tempo", backswing: "Backswing time", downswing: "Downswing time",
     shoulderTop: "Shoulder turn at the top of swing", pelvisTop: "Hip turn at the top of swing",
     xFactor: "Shoulders turned past the hips at the top of swing", hipSway: "Hip slide at impact",
+    clubTop: "How far the club is short of parallel at the top of swing",
     leadHipP6: "Lead hip in the downswing", trailHipTop: "Trail hip at the top of swing",
     handsAhead: "Hands ahead of the ball at impact", pelvisBall: "Hips vs the ball at impact",
     chestBall: "Chest vs the ball at impact", headSway: "Head slide at impact", headRise: "Head height at impact",

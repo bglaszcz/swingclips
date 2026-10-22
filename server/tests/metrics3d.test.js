@@ -461,7 +461,8 @@ test("View3D.table renders only held-up numbers at new positions and muted dot f
   // 8: Hip lift ("pelvisLift") -> HELD UP at P2 -> formatted number
   // 9: Chest slide ("thoraxSway") -> HELD UP at P2 -> formatted number
   const dataRows = tbl.children.slice(1);
-  assert.equal(dataRows.length, 10, "10 rows of metrics");
+  // 10, 11: the club short of parallel and across the line, at the top only (clubtop.test.js)
+  assert.equal(dataRows.length, 12, "12 rows of metrics");
 
   // Row 0: Hip turn
   const p2HipTurnTd = dataRows[0].children[2];

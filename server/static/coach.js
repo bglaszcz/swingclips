@@ -88,6 +88,18 @@
         drill: "Flared-foot drill: flare the lead foot 30° at address and let the hips turn freely with the chest. 10 balls.",
         thought: "Turn together." },
     },
+    // Backswing length: neither way is a fault (the owner never went past parallel on 268 swings, Oct 2026).
+    clubTop: {
+      what: "how far the club is short of parallel at the top (face-on; + = short of parallel, - = past it)",
+      more: { name: "a shorter backswing (the club further from parallel)",
+        how: "The club stops further short of parallel at the top: a more compact swing that is easier to control, with a little less speed.",
+        drill: "Three-quarter swings: stop when your lead arm is parallel to the ground and the shaft points up. 10 balls.",
+        thought: "Stop at three-quarters." },
+      less: { name: "a longer backswing (the club nearer parallel)",
+        how: "The club gets closer to parallel at the top: a longer arc and more time to build club speed.",
+        drill: "Full-turn rehearsal: three slow backswings turning your back to the target until the shaft is close to level, then hit one at normal speed keeping that length. Repeat 5 times.",
+        thought: "Turn your back to the target." },
+    },
     hipSway: {
       what: "hip slide toward the target at impact (against address)",
       more: { name: "more of a hip bump toward the target",

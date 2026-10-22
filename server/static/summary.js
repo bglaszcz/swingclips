@@ -112,6 +112,8 @@
     ["shoulderTop", "Shoulder turn at top", "°", "face", "p4", "shoulderTurn"],
     ["pelvisTop", "Pelvis turn at top", "°", "face", "p4", "pelvisTurn"],
     ["xFactor", "X-factor at top", "°", "face", "p4", "separation"],
+    // The club at the top, face-on: degrees short of parallel (+), past it (-). Backswing length.
+    ["clubTop", "Club short of parallel at top", "°", "face", "p4", "clubShort"],
     ["hipSway", "Hip sway at impact", "in", "face", "p7", "hipSway"],
     ["leadHipP6", "Lead hip at P6", "in", "face", "p6", "leadHip"],
     ["trailHipTop", "Trail hip at top", "in", "face", "p4", "trailHip"],

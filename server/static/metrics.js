@@ -87,6 +87,14 @@
       // Shaft above (+) or below (-) horizontal: pointing straight down at address is -90.
       out.club = Math.asin(-Math.sin(f.club[0] / DEG)) * DEG;
       out.clubSeen = f.club[1] >= 0.35;
+      // How far the shaft is short of parallel, pointing toward the target: + = short (the clubhead above
+      // the hands), - = past parallel; past straight up it keeps counting (a half swing reads 90-120).
+      // Read at the top (summary.js clubTop). On 40 blind stills it matched the eye within 2-3 degrees
+      // and the 3D's within 0.5 median (claude-only/topfaults, Oct 21 2026).
+      if (out.clubSeen) {
+        const a = f.club[0] / DEG;
+        out.clubShort = Math.atan2(-Math.sin(a), s.m * Math.cos(a)) * DEG;
+      }
       // Wrist hinge (lag): the angle between the lead arm (shoulder to wrist) and the shaft (hands
       // to clubhead; f.club[0] is its direction, 0 = right, 90 = down), 0 = one straight line,
       // 90 = an L. Casting loses it early in the downswing.

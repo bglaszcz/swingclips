@@ -61,6 +61,9 @@ METRICS = [
     _m("tempo", "Tempo (backswing : downswing)", "Tempo", ":1", "body", "face", 1, "too low", "too high"),
     _m("backswing", "Backswing time", "Backswing", "s", "body", "face", 2, "too quick", "too slow"),
     _m("downswing", "Downswing time", "Downswing", "s", "body", "face", 2, "too quick", "too slow"),
+    # Backswing length (e.g. three-quarter wedges): + = short of parallel, so under the range is too long.
+    _m("clubTop", "Club short of parallel at the top of swing", "Club at the top", "°", "body", "face", 0,
+       "too long", "too short"),
     _m("headSway", "Head sway at impact", "Head sway", "in", "body", "face", 1, "too far back", "too far forward"),
     _m("hipSway", "Hip sway at impact", "Hip sway", "in", "body", "face", 1, "too far back", "too far forward"),
     _m("pelvisBall", "Pelvis vs ball at impact (+ = ahead of the ball)", "Pelvis", "in", "body", "face", 1,
