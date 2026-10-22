@@ -512,3 +512,76 @@ test("weekSummary includes the This week plan line (sessions, reps, Combine, hel
 });
 
 
+
+test("What held up does not pool across clubs: differing only between clubs reports no held-up link", () => {
+  const rowsMixed = [];
+  for (let s = 0; s < 5; s++) {
+    const baseT = new Date("2026-09-15T12:00:00").getTime() + s * 86400000;
+    // 15 Driver swings: pelvisBall ~ -1.0, carry ~ 230 (orthogonal within club)
+    for (let i = 0; i < 15; i++) {
+      const pb = -1.0 + ((i % 5) - 2) * 0.1;
+      const carry = 230 + ((i % 2 === 0 ? 1 : -1) * 2);
+      rowsMixed.push({
+        name: `dr_${s}_${i}`,
+        t: baseT + i * 1000,
+        club: "DR",
+        carry,
+        body: { pelvisBall: pb }
+      });
+    }
+    // 15 7I swings: pelvisBall ~ 4.0, carry ~ 150 (orthogonal within club)
+    for (let i = 0; i < 15; i++) {
+      const pb = 4.0 + ((i % 5) - 2) * 0.1;
+      const carry = 150 + ((i % 2 === 0 ? 1 : -1) * 2);
+      rowsMixed.push({
+        name: `7i_${s}_${i}`,
+        t: baseT + (15 + i) * 1000,
+        club: "7I",
+        carry,
+        body: { pelvisBall: pb }
+      });
+    }
+  }
+  // Current week swing to satisfy rowsThisWeek.length > 0
+  rowsMixed.push({
+    name: "cur_mixed",
+    t: new Date("2026-09-29T12:00:00").getTime(),
+    club: "7I",
+    carry: 150,
+    body: { pelvisBall: 4.0 }
+  });
+
+  const summary = Week.weekSummary({ rows: rowsMixed }, "2026-09-28");
+  const huSection = summary.sections.find(s => s.title === "What held up");
+  assert.equal(huSection, undefined, "Should not report any held-up findings from club mixing");
+});
+
+test("What held up per club: real within-club link names club and displays", () => {
+  const rowsReal = [];
+  for (let s = 0; s < 5; s++) {
+    const baseT = new Date("2026-09-15T12:00:00").getTime() + s * 86400000;
+    for (let i = 0; i < 15; i++) {
+      const pb = 2.0 + (i % 5) * 0.8;
+      const carry = 140 + pb * 3.5;
+      rowsReal.push({
+        name: `7i_real_${s}_${i}`,
+        t: baseT + i * 1000,
+        club: "7I",
+        carry,
+        body: { pelvisBall: pb }
+      });
+    }
+  }
+  rowsReal.push({
+    name: "cur_real",
+    t: new Date("2026-09-29T12:00:00").getTime(),
+    club: "7I",
+    carry: 155,
+    body: { pelvisBall: 4.0 }
+  });
+
+  const summary = Week.weekSummary({ rows: rowsReal }, "2026-09-28");
+  const huSection = summary.sections.find(s => s.title === "What held up");
+  assert.ok(huSection, "Should report held-up section for real within-club link");
+  assert.ok(huSection.lines[0].startsWith("7 iron: hips vs the ball at impact → carry:"), "Line should name the club");
+});

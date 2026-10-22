@@ -668,13 +668,32 @@
     // 5. WHAT HELD UP
     // ==========================================
     // findings from What helps, what hurts that held up in later sessions (holdup.js),
-    // with their sentence; not the ones that didn't.
+    // with their sentence; not the ones that didn't. Replayed per club (never pooled).
     let replayed = data.holdUp || data.heldUp || null;
     if (!replayed && HoldUp && rowsThisWeek.length > 0 && allSessions.length >= 4) {
       try {
         const sessionsForReplay = allSessions.filter(s => s.start < endMs);
-        if (sessionsForReplay.length >= 4) {
-          replayed = HoldUp.replay(sessionsForReplay);
+        const clubs = new Set();
+        for (const s of sessionsForReplay) {
+          for (const r of s.rows || []) {
+            if (r && r.club) clubs.add(r.club);
+          }
+        }
+        replayed = [];
+        for (const c of clubs) {
+          const clubSessions = [];
+          for (const s of sessionsForReplay) {
+            const rows = (s.rows || []).filter(r => r && r.club === c);
+            if (rows.length > 0) {
+              clubSessions.push({ key: s.key, start: s.start, end: s.end, rows, club: c });
+            }
+          }
+          if (clubSessions.length >= 4) {
+            const list = HoldUp.replay(clubSessions) || [];
+            for (const item of list) {
+              replayed.push({ ...item, club: c });
+            }
+          }
         }
       } catch {}
     }
@@ -698,7 +717,16 @@
             const rName = rs ? rs.label : x.result;
             desc = `${mName} → ${rName}`;
           }
-          heldLines.push(`${desc}: ${sText}`);
+          const cName = x.club ? clubName(x.club) : "";
+          if (cName && !desc.toLowerCase().startsWith(cName.toLowerCase())) {
+            const dWords = desc.split(" → ");
+            const mPart = dWords[0] ? (dWords[0].charAt(0).toLowerCase() + dWords[0].slice(1)) : "";
+            const rPart = dWords[1] ? (dWords[1].charAt(0).toLowerCase() + dWords[1].slice(1)) : "";
+            const formattedDesc = dWords.length === 2 ? `${mPart} → ${rPart}` : (desc.charAt(0).toLowerCase() + desc.slice(1));
+            heldLines.push(`${cName}: ${formattedDesc}: ${sText}`);
+          } else {
+            heldLines.push(`${desc}: ${sText}`);
+          }
         }
         if (held.length > HELD_SHOWN) heldLines.push(`And ${held.length - HELD_SHOWN} more (What helps, what hurts).`);
         if (heldLines.length > 0) {
