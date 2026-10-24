@@ -7,7 +7,6 @@ the real fixtures' pose files for what the numbers read.
   cd server && python -m unittest tests.test_speed
 """
 import contextlib
-import copy
 import importlib.util
 import io
 import json
@@ -163,29 +162,36 @@ class ExactTest(unittest.TestCase):
                     got = pose.grown_mask(person, w, h, (x0, y0, x1, y1), grow)
                     self.assertTrue(np.array_equal(got, whole[y0:y1, x0:x1]), (h, w, grow, x0, y0, x1, y1))
 
+    # The speed settings as before: the pose file exactly as the code before them gave it, in every
+    # rotation, with and without a body model on every other frame and a strike in the clip. One test per
+    # case, so a parallel run (run_tests.py) does them side by side.
     def test_pipeline_as_before(self):
-        """The speed settings as before: the pose file exactly as the code before them gave it, in
-        every rotation, with and without a body model on every other frame and a strike in the clip."""
+        self.pipeline_as_before({}, "clip{}.mp4")
+
+    def test_pipeline_as_before_with_a_strike(self):
+        self.pipeline_as_before({}, STRIKE_CLIP)
+
+    @needs_ort
+    def test_pipeline_as_before_with_a_body_model(self):
+        self.pipeline_as_before(fake_models(), STRIKE_CLIP)
+
+    def pipeline_as_before(self, extra, name):
         ref = reference()
         if ref is None:
             self.skipTest(f"needs git and commit {REFERENCE_COMMIT[:7]}")
-        cases = [({}, "clip{}.mp4"), ({}, STRIKE_CLIP)]
-        if onnxruntime is not None:
-            cases.append((fake_models(), STRIKE_CLIP))
-        for extra, name in cases:
-            for rotation in (0, 90, 180, 270):
-                path = TMP / "before" / str(rotation) / name.format(rotation)
-                path.parent.mkdir(parents=True, exist_ok=True)
-                if not path.is_file():
-                    fakes.clip(path, rotation)
-                env = {**NO_MODELS, **pose.SPEED_AS_BEFORE, **extra}
-                with mock.patch.dict(os.environ, env), mock.patch.object(pose, "BODY_AFTER_STRIKE", AFTER), \
-                        mock.patch.object(ref["pose"], "BODY_AFTER_STRIKE", AFTER), \
-                        mock.patch.object(pose, "BODY_STRIDE", 2), mock.patch.object(ref["pose"], "BODY_STRIDE", 2):
-                    before, now = analyze(ref["pose"], path), analyze(pose, path)
-                self.assertNotIn("speed", now)
-                self.assertTrue(any(f["club"] for f in now["frames"]))
-                self.assertEqual(json.dumps(now), json.dumps(before), (extra, name, rotation))
+        for rotation in (0, 90, 180, 270):
+            path = TMP / "before" / str(rotation) / name.format(rotation)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not path.is_file():
+                fakes.clip(path, rotation)
+            env = {**NO_MODELS, **pose.SPEED_AS_BEFORE, **extra}
+            with mock.patch.dict(os.environ, env), mock.patch.object(pose, "BODY_AFTER_STRIKE", AFTER), \
+                    mock.patch.object(ref["pose"], "BODY_AFTER_STRIKE", AFTER), \
+                    mock.patch.object(pose, "BODY_STRIDE", 2), mock.patch.object(ref["pose"], "BODY_STRIDE", 2):
+                before, now = analyze(ref["pose"], path), analyze(pose, path)
+            self.assertNotIn("speed", now)
+            self.assertTrue(any(f["club"] for f in now["frames"]))
+            self.assertEqual(json.dumps(now), json.dumps(before), (extra, name, rotation))
 
 
 class SettingsTest(unittest.TestCase):
@@ -461,7 +467,7 @@ class PipelineTest(unittest.TestCase):
 def thinned(inp: dict, stride: int) -> dict:
     """A pose input with MediaPipe's frames after the swing kept only every `stride`-th, the rest
     filled in as pose.fill_skipped does."""
-    inp = copy.deepcopy(inp)
+    inp = json.loads(json.dumps(inp))   # a deep copy, several times quicker than copy.deepcopy here
     until = inp["strike"] + pose.BODY_AFTER_STRIKE
     frames = inp["frames"]
     rows = [(f["t"], None if f["lm"] is None else [tuple(f["lm"][i:i + 3]) for i in range(0, 99, 3)],
@@ -474,31 +480,54 @@ def thinned(inp: dict, stride: int) -> dict:
     return inp
 
 
+def each_call(js: swings.Summarizer, calls: tuple, inp: dict) -> list:
+    """js.call(c, inp, None, LEAD_SIDE) for each of `calls`, with the swing handed to V8 once: handing over
+    ~1.5 MB of pose is most of a call's time. Each call gets its own copy (JSON.parse), as js.call's do."""
+    js.call("aspectOf", "x", 0)   # the engine is up
+    js.ctx.eval("globalThis.__swing = " + json.dumps(json.dumps(inp, separators=(",", ":"))) + "; 0")
+    return [json.loads(js.ctx.eval(f"JSON.stringify(SwingSummary.{c}(JSON.parse(__swing), null, {json.dumps(swings.LEAD_SIDE)}))"))
+            for c in calls]
+
+
 @unittest.skipUnless((REAL / "pose-rtmpose-m").is_dir(), "no real fixtures")
 class AfterTheSwingTest(unittest.TestCase):
     """Nothing the page or the server measures reads MediaPipe after the swing: on the real swings,
     with only every 4th frame there kept (and the rest filled), every number summary.js works out
-    (body numbers, noise floor, setup, camera check, key positions) is the same."""
+    (body numbers, noise floor, setup, camera check, key positions) is the same. In PARTS parts (every
+    PARTS-th swing each), so a parallel run (run_tests.py) does them side by side."""
+    PARTS = 4
 
-    def test_numbers_unchanged(self):
+    def test_numbers_unchanged_part_1(self):
+        self.numbers_unchanged(0)
+
+    def test_numbers_unchanged_part_2(self):
+        self.numbers_unchanged(1)
+
+    def test_numbers_unchanged_part_3(self):
+        self.numbers_unchanged(2)
+
+    def test_numbers_unchanged_part_4(self):
+        self.numbers_unchanged(3)
+
+    def numbers_unchanged(self, part):
         clips = {c["name"]: c for c in json.loads((REAL / "clips.json").read_text(encoding="utf-8"))}
         js = swings.Summarizer(HERE.parent / "static")
         checked = 0
         try:
-            for f in sorted((REAL / "pose-rtmpose-m").glob("*.json.gz")):
-                clip = clips.get(f.name.split(".v")[0])
-                if clip is None or clip.get("strike") is None:
-                    continue
+            files = [f for f in sorted((REAL / "pose-rtmpose-m").glob("*.json.gz"))
+                     if (clips.get(f.name.split(".v")[0]) or {}).get("strike") is not None]
+            for f in files[part::self.PARTS]:
+                clip = clips[f.name.split(".v")[0]]
                 inp = swings.pose_input(clip, f)
                 thin = thinned(inp, pose.MP_STRIDE_AFTER)
                 self.assertNotEqual(thin["frames"], inp["frames"])
-                for call in ("summarize", "positionTimes"):
-                    self.assertEqual(js.call(call, thin, None, swings.LEAD_SIDE), js.call(call, inp, None, swings.LEAD_SIDE),
-                                     (call, clip["name"]))
+                calls = ("summarize", "positionTimes")
+                for call, got, want in zip(calls, each_call(js, calls, thin), each_call(js, calls, inp)):
+                    self.assertEqual(got, want, (call, clip["name"]))
                 checked += 1
         finally:
             js.close()
-        self.assertGreater(checked, 20)
+        self.assertGreater(checked, 20 // self.PARTS)
 
 
 class BenchTest(unittest.TestCase):

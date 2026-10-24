@@ -50,7 +50,7 @@ to `pose.py`, `club.py` or `phases.js` can be shown to help (or not) instead of 
   - `--no-quality`: skip the clip quality table.
   - With the club model (see [club-model.md](club-model.md)), a clubhead table too: its distance
     from the labeled clubhead, by phase.
-- Tests (no clips needed; a made-up swing): `cd server` then `python -m unittest discover tests`;
+- Tests (no clips needed; a made-up swing): `cd server` then `python run_tests.py` (all of them);
   the compare view's time mapping and the trust rules: `node --test tests/compare.test.js
   tests/trust.test.js`. Practice mode's sentences,
   camera gating and waits (synthetic swings and shots): `python -m unittest tests.test_practice`;

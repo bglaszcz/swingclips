@@ -194,10 +194,6 @@ class Pairing(unittest.TestCase):
             app.load_shots = orig
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class StrikeHeight(unittest.TestCase):
     def test_recentred_since_the_shift(self):
         """Square's height read about 14 mm low on every club from mid-September 2026: shots from then on
@@ -214,3 +210,7 @@ class StrikeHeight(unittest.TestCase):
         none = {"_t": datetime(2026, 10, 8).timestamp(), "clubData": {"faceImpactV": None}}
         self.assertIsNone(app.recentre_strike(none)["clubData"]["faceImpactV"])
         self.assertEqual(app.recentre_strike({"_t": 0})["_t"], 0)   # no club data
+
+
+if __name__ == "__main__":
+    unittest.main()

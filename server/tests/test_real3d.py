@@ -6,11 +6,13 @@ and bone length spread do not degrade.
 """
 import gzip
 import json
-import os
+import sys
 import unittest
 from pathlib import Path
 
 HERE = Path(__file__).parent
+sys.path[:0] = [str(HERE.parent)]
+
 import tri  # noqa: E402
 
 FIXTURES_DIR = HERE / "fixtures" / "real3d"

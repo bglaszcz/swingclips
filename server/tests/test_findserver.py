@@ -1,14 +1,17 @@
 """findserver.py: what counts as the server, the networks looked round, and a sweep that finds a server
 answering on this PC (127.0.0.x), not the network."""
 import json
+import sys
 import tempfile
 import threading
 import unittest
-from unittest import mock
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from unittest import mock
 
-import findserver
+sys.path[:0] = [str(Path(__file__).parent.parent)]
+
+import findserver  # noqa: E402
 
 
 class Answer(BaseHTTPRequestHandler):
@@ -68,10 +71,12 @@ class Find(unittest.TestCase):
         self.srv = serve()
         self.url = f"http://127.0.0.1:{self.srv.server_port}"
         self.last = Path(tempfile.mkdtemp()) / "last.txt"
-        # Only this PC's 127.0.0.x is looked round, never the real network.
-        patcher = mock.patch.object(findserver, "own_networks", lambda: [])
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        # Only a few of this PC's 127.0.0.x are looked round (Windows takes a second or so to refuse each
+        # one), never the real network.
+        for name, value in (("own_networks", lambda: []), ("SWEEP_HOSTS", range(1, 4)), ("CHECK_S", 0.5)):
+            patcher = mock.patch.object(findserver, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def tearDown(self):
         self.srv.shutdown()

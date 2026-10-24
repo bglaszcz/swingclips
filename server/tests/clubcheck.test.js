@@ -784,7 +784,9 @@ test("queue and balanceSwings: face-on clips come up too, each clip judged by it
   assert.ok(firstClips.slice(0, 2).some(n => n.startsWith("f")));
 });
 
-test("ClubCheck.back: does not revert frame index if closed while fetch is pending", async () => {
+test("ClubCheck.back: does not revert frame index if closed while fetch is pending", async (t) => {
+  // The page's 4 s status-message timer: mocked, so it doesn't hold this file open for 4 s after the tests.
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const origWindow = global.window;
   const origDoc = global.document;
   const origFetch = global.fetch;

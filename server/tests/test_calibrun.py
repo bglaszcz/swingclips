@@ -90,8 +90,11 @@ class Api(unittest.TestCase):
         import app
         saved = app.calib_runs
         app.calib_runs = calibrun.Runs(app.calib.CALIB_DIR / "recordings-api.json")
+        # A clips folder of its own: a clip another test saved a moment before the recording started would
+        # count as left over (it did, run beside other tests by run_tests.py).
+        saved_clips = app.CLIPS_DIR
+        app.CLIPS_DIR = Path(tempfile.mkdtemp(prefix="swingclips-calibrun-api-"))
         client = TestClient(app.app)
-        app.CLIPS_DIR.mkdir(parents=True, exist_ok=True)
         made = []
         try:
             self.assertEqual(client.post("/api/calib/run", json={"kind": "lens", "angle": "face"}).status_code, 400)
@@ -132,6 +135,7 @@ class Api(unittest.TestCase):
             for p in made:
                 p.unlink(missing_ok=True)
             app.calib_runs = saved
+            app.CLIPS_DIR = saved_clips
             app.drills_tick()
 
 

@@ -281,10 +281,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb mdns services                       # the face-on S21 over Wi-Fi (Wireless debugging): its address and port
 adb connect <address>:<port>
 
-# Server tests (Python + the page's JavaScript)
+# Server tests: Python (in parallel), the page's JavaScript and the relay scripts' check, ~1 minute
 cd server
-.venv/Scripts/python.exe -m unittest discover tests
-node --test tests/*.test.js     # PowerShell: node --test (Get-ChildItem tests\*.test.js).FullName
+.venv/Scripts/python.exe run_tests.py
+.venv/Scripts/python.exe run_tests.py test_status   # just one file (or test_x.Class, tests/x.test.js)
 
 # Refresh the labeled swings in the repo from the server, then tune key positions on them
 .venv/Scripts/python.exe fixtures_export.py

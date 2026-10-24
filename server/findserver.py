@@ -29,6 +29,8 @@ HOST = 250
 LAST_FILE = Path(__file__).with_name("last-server.txt")
 # Seconds to wait for an address tried on its own, and for each one looked at in a sweep.
 CHECK_S = 2.0
+# The last numbers looked at on each network (HOST first).
+SWEEP_HOSTS = range(1, 255)
 SWEEP_CONNECT_S = 0.5
 SWEEP_THREADS = 64
 
@@ -43,10 +45,10 @@ def is_server(body) -> bool:
             and got.get("app", "swingclips") == "swingclips")
 
 
-def check(url: str, timeout: float = CHECK_S) -> bool:
-    """Whether a SwingClips server answers at this address."""
+def check(url: str, timeout: float | None = None) -> bool:
+    """Whether a SwingClips server answers at this address (within `timeout` s, CHECK_S by default)."""
     try:
-        with urllib.request.urlopen(url.rstrip("/") + "/api/time", timeout=timeout) as r:
+        with urllib.request.urlopen(url.rstrip("/") + "/api/time", timeout=timeout or CHECK_S) as r:
             return r.status == 200 and is_server(r.read(4096))
     except (OSError, ValueError):
         return False
@@ -104,7 +106,7 @@ def sweep(nets: list[str], port: int = PORT, connect_s: float = SWEEP_CONNECT_S,
         url = f"http://{ip}:{port}"
         return url if check(url) else None
 
-    rounds = [[f"{n}.{HOST}" for n in nets], [f"{n}.{i}" for n in nets for i in range(1, 255) if i != HOST]]
+    rounds = [[f"{n}.{HOST}" for n in nets], [f"{n}.{i}" for n in nets for i in SWEEP_HOSTS if i != HOST]]
     ex = ThreadPoolExecutor(threads)
     try:
         for ips in rounds:

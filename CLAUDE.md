@@ -23,12 +23,19 @@ and `docs/key-positions.md` the key-position rules. Update the doc for the part 
 
 ## Tests (all must pass)
 
-From `server/` (PowerShell; the unittest run takes ~3 minutes, some tests skip without a GPU):
+From `server/`, one command runs everything: the Python tests spread over worker processes, the page's
+JavaScript tests and a check of the relay scripts (ASCII, and they parse in PowerShell 5.1). About a
+minute; it prints only a summary, and the output of anything that fails:
 
 ```
-.venv\Scripts\python.exe -m unittest discover tests
-node --test (Get-ChildItem tests\*.test.js).FullName
+.venv\Scripts\python.exe run_tests.py
 ```
+
+`run_tests.py test_status` (or `test_status.Class`, `tests\x.test.js`) runs only those. The old commands
+still work (`.venv\Scripts\python.exe -m unittest discover tests`, ~4 minutes in one process; `node --test
+(Get-ChildItem tests\*.test.js).FullName`). New tests must pass on their own (each test is run in any
+order, beside others: `run_tests.py --shuffle 1` checks). Changes in `capture/`: also its JVM tests
+(README, "Dev PC": `gradle testDebugUnitTest`).
 
 ## Layout
 

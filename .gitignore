@@ -20,6 +20,9 @@ node_modules/
 /server/last-server.txt
 /relay/server.txt
 
+# each test's time on the last full run (server/run_tests.py)
+/server/tests/.last-times.json
+
 # local secrets
 .env*
 certificates

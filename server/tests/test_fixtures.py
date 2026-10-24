@@ -43,28 +43,41 @@ class KeyPositionsTest(unittest.TestCase):
     key-positions.json (tune_positions.py --baseline, after a change that makes them better): per
     body model, angle and key position, the median and 90th percentile of the error."""
 
-    def test_no_worse_than_saved(self):
+    # One test per body model's pose folder, so a parallel run (run_tests.py) does the two side by side.
+    FOLDERS = ("pose-rtmpose-m", "pose")
+
+    def test_every_saved_folder_is_checked(self):
         saved = json.loads(tune_positions.BASELINE.read_text(encoding="utf-8"))
+        self.assertEqual(set(saved["errors"]), set(self.FOLDERS))
+
+    def test_no_worse_than_saved_rtmpose_m(self):
+        self.no_worse_than_saved("pose-rtmpose-m")
+
+    def test_no_worse_than_saved_mediapipe(self):
+        self.no_worse_than_saved("pose")
+
+    def no_worse_than_saved(self, folder):
+        saved = json.loads(tune_positions.BASELINE.read_text(encoding="utf-8"))
+        clips = saved["errors"][folder]
         swing_list = tune_positions.load_swings(REAL / "labels", REAL / "clips.json")
-        for folder, clips in saved["errors"].items():
-            scorer = tune_positions.Scorer(REAL / folder, swing_list)
-            try:
-                rows = [r for rs in scorer.errors(scorer.tuning()) for r in rs
-                        if r["event"] in clips.get(r["clip"], {})]
-            finally:
-                scorer.close()
-            groups = {}
-            for r in rows:
-                was = clips[r["clip"]][r["event"]]
-                g = groups.setdefault((r["angle"], r["event"]), ([], []))
-                g[0].append(500.0 if was is None else abs(was))
-                g[1].append(500.0 if r["ms"] is None else abs(r["ms"]))
-            self.assertTrue(groups, folder)
-            for (angle, event), (was, now) in sorted(groups.items()):
-                for name, stat in (("median", np.median), ("90th percentile", lambda v: np.percentile(v, 90))):
-                    with self.subTest(folder=folder, angle=angle, event=event, stat=name):
-                        self.assertLessEqual(stat(now), stat(was) + TOLERANCE_MS,
-                                             f"{folder} {angle} {event}: {name} {stat(now):.1f} ms, was {stat(was):.1f} ms")
+        scorer = tune_positions.Scorer(REAL / folder, swing_list)
+        try:
+            rows = [r for rs in scorer.errors(scorer.tuning()) for r in rs
+                    if r["event"] in clips.get(r["clip"], {})]
+        finally:
+            scorer.close()
+        groups = {}
+        for r in rows:
+            was = clips[r["clip"]][r["event"]]
+            g = groups.setdefault((r["angle"], r["event"]), ([], []))
+            g[0].append(500.0 if was is None else abs(was))
+            g[1].append(500.0 if r["ms"] is None else abs(r["ms"]))
+        self.assertTrue(groups, folder)
+        for (angle, event), (was, now) in sorted(groups.items()):
+            for name, stat in (("median", np.median), ("90th percentile", lambda v: np.percentile(v, 90))):
+                with self.subTest(folder=folder, angle=angle, event=event, stat=name):
+                    self.assertLessEqual(stat(now), stat(was) + TOLERANCE_MS,
+                                         f"{folder} {angle} {event}: {name} {stat(now):.1f} ms, was {stat(was):.1f} ms")
 
 
 if __name__ == "__main__":

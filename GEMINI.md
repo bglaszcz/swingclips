@@ -13,5 +13,6 @@ worktree, `D:\SwingClips-dev\swingclips-gemini`, on branch `gemini/work`:
 4. When done, add "Gemini's report" to your task in `gemini-prompts.md`: what changed, what you
    checked, anything left open.
 
-The Python venv lives in the main checkout: from the worktree, run the tests with
-`..\..\swingclips\server\.venv\Scripts\python.exe` in place of `.venv\Scripts\python.exe`.
+The Python venv lives in the main checkout: from the worktree's `server` folder, run every test with
+`..\..\swingclips\server\.venv\Scripts\python.exe run_tests.py` (it runs the worktree's own tests, the
+page's JavaScript tests and the relay check; about a minute). `run_tests.py test_x` runs one file.
