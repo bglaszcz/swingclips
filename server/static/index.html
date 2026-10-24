@@ -6336,7 +6336,9 @@ async function refresh() {
     return;
   }
   if (!res.ok) {
-    list.innerHTML = `<div class="empty">${(await res.json()).detail || "Couldn't load clips."}</div>`;
+    const why = await res.json().then(b => b.detail).catch(() => null);
+    list.innerHTML = `<div class="empty"></div>`;
+    list.firstChild.textContent = why || "Couldn't load clips.";
     return;
   }
   const before = clips.find(c => c.name === current);

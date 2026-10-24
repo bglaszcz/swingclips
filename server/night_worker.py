@@ -5,7 +5,10 @@ sets it up and starts it; it runs until closed.
   .venv-gpu\\Scripts\\python.exe night_worker.py                       the home server, any time
   .venv-gpu\\Scripts\\python.exe night_worker.py --hours 23-7          only from 11 pm to 7 am
   .venv-gpu\\Scripts\\python.exe night_worker.py --stop-at 7           until 7:00, then exit (the 2 am task)
-  .venv-gpu\\Scripts\\python.exe night_worker.py --server http://192.168.86.250:8000 --once
+  .venv-gpu\\Scripts\\python.exe night_worker.py --server http://192.168.7.250:8000 --once
+
+Without --server (or SWINGCLIPS_SERVER) it finds the server on the network by itself (findserver.py), and
+again whenever it stops answering for a while: the server can move to another address.
 
 The server says which clip and how (/api/night/next), and nothing while a session is on. Once every
 clip is done, the improve step (night_improve.py) runs once: a new club model when the labels changed,
@@ -30,7 +33,8 @@ from concurrent.futures.process import BrokenProcessPool
 from datetime import datetime, timedelta
 from pathlib import Path
 
-SERVER = "http://192.168.86.250:8000"
+import findserver
+
 # How long to wait after the server can't be reached (s).
 OFFLINE_WAIT_S = 120
 # The longest single wait, so --hours and a closed window are noticed.
@@ -126,7 +130,8 @@ def parse_hours(text: str | None) -> tuple[int, int] | None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--server", default=os.environ.get("SWINGCLIPS_SERVER", SERVER))
+    ap.add_argument("--server", default=os.environ.get("SWINGCLIPS_SERVER"),
+                    help="the home server, e.g. http://192.168.7.250:8000 (default: found on the network)")
     ap.add_argument("--hours", type=parse_hours, help="only between these hours, e.g. 23-7")
     ap.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 4) // 2))
     ap.add_argument("--provider", default=os.environ.get("SWINGCLIPS_ORT_PROVIDER") or "cuda",
@@ -139,7 +144,7 @@ def main(argv=None) -> int:
     if lock is None:
         print("Night worker: another one is already running on this PC; nothing to do", flush=True)
         return 0
-    server = args.server.rstrip("/")
+    server = findserver.find(args.server)
     # Before pose and models are loaded, and before the worker processes start (they read it too).
     os.environ["SWINGCLIPS_ORT_PROVIDER"] = args.provider
     import models
@@ -203,6 +208,12 @@ def main(argv=None) -> int:
                 print(f"{datetime.now():%H:%M} server not reached ({e}); trying again in {OFFLINE_WAIT_S // 60} min",
                       flush=True)
                 nap(OFFLINE_WAIT_S)
+                if not args.server:
+                    # It may have moved to another address: looked for again (quietly, unless it's found).
+                    moved = findserver.find(None, say=lambda m: None)
+                    if moved != server:
+                        print(f"{datetime.now():%H:%M} the server is at {moved} now", flush=True)
+                        server = moved
                 continue
             if "name" not in job and job.get("allDone") and night["improve"] is None and not args.once:
                 pool.shutdown()

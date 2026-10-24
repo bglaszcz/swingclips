@@ -11,8 +11,10 @@
 # in golf-common.ps1) and, if there were any, opens the new launcher instead (-NoUpdate skips it).
 # -DryRun only logs what each button would do; -SelfTest opens the window, presses every button in
 # dry-run, prints the log and closes (for testing on another PC). Log: golf-launcher-log.txt here.
+# -Server http://<address>:8000 says where the server is; without it the server is found on the network
+# (Resolve-SwingServer in golf-common.ps1) and handed to everything this starts.
 
-param([string]$Server = "http://192.168.86.250:8000", [switch]$DryRun, [switch]$SelfTest, [switch]$NoUpdate,
+param([string]$Server = "", [switch]$DryRun, [switch]$SelfTest, [switch]$NoUpdate,
       [string]$Updated = "")
 
 $ErrorActionPreference = "Continue"
@@ -20,6 +22,7 @@ $here = $PSScriptRoot
 . (Join-Path $here "golf-common.ps1")
 $log = Join-Path $here "golf-launcher-log.txt"
 if ($SelfTest) { $DryRun = $true }
+$Server = Resolve-SwingServer $Server $here
 $script:message = $null
 
 function Say([string]$text, [string]$color = "Gray") {
@@ -54,7 +57,7 @@ function Start-Range([string]$do = "") {
     if (Get-ConnectorProcess) { Say (Stop-GSProStack -DryRun:$DryRun) }   # one Bluetooth connection to the Omni
     Say (Set-ShotSource $here "square" -DryRun:$DryRun)
     Say (Start-SquareApp $here -DryRun:$DryRun)
-    Say (Start-SquareWatcher $here -DryRun:$DryRun)
+    Say (Start-SquareWatcher $here $Server -DryRun:$DryRun)
     Start-Agent
     Say (Open-StartPage $Server -DryRun:$DryRun -do $do)
     if ($do -eq "program") { Say "Ready: pick today's session or a drill, then Start." }

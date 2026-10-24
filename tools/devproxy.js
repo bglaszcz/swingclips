@@ -1,5 +1,6 @@
 // Dev preview for anyone working on the review page (Claude, Gemini, you).
-//   node tools/devproxy.js --static <path to a checkout's server/static> [--port 8765] [--upstream 192.168.86.250:8000]
+//   node tools/devproxy.js --static <path to a checkout's server/static> [--port 8765] [--upstream 192.168.7.250:8000]
+// The home server is --upstream, else SWINGCLIPS_SERVER (http://host:port or host:port), else 192.168.7.250:8000.
 // Serves that folder's pages, so an edit shows on reload. Every other GET (clips, pose, swings, labels...)
 // goes to the home server, so the page has real data. Anything that is not a GET is refused, so a preview
 // can never write to the real data. Listens on 127.0.0.1 only.
@@ -9,7 +10,8 @@ const args = {};
 for (let i = 2; i < process.argv.length; i += 2) args[process.argv[i].replace(/^--/, "")] = process.argv[i + 1];
 if (!args.static) { console.error("Usage: node tools/devproxy.js --static <server/static folder> [--port 8765] [--upstream host:port]"); process.exit(1); }
 const STATIC = path.resolve(args.static), PORT = Number(args.port || 8765);
-const [UP_HOST, UP_PORT] = (args.upstream || "192.168.86.250:8000").split(":");
+const [UP_HOST, UP_PORT] = (args.upstream || (process.env.SWINGCLIPS_SERVER || "").replace(/^https?:\/\//, "").replace(/\/+$/, "")
+  || "192.168.7.250:8000").split(":");
 const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon" };
 
 http.createServer((req, res) => {

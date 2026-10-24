@@ -316,7 +316,7 @@ def body_model() -> str:
 # What made each pose file, by clip name: (file's mtime, body model, ball search version, deep pass,
 # clubhead onset looked for, hip edges version, club model).
 # The worker checks every clip.
-_pose_models: dict[str, tuple[int, str, int, bool]] = {}
+_pose_models: dict[str, tuple] = {}
 # Clips that failed to be analyzed again with the current model, or to have the ball found again
 # (kept as they were until a restart).
 _again_failed: set[str] = set()
@@ -326,7 +326,7 @@ _onset_failed: set[str] = set()
 _hip_failed: set[str] = set()
 
 
-def _pose_stamp(name: str) -> tuple[str, int, bool, bool, int] | None:
+def _pose_stamp(name: str) -> tuple | None:
     f = pose_file(name)
     try:
         mtime = f.stat().st_mtime_ns
@@ -635,94 +635,101 @@ def pose_worker(stop: threading.Event):
     summarizer = None
     try:
         while not stop.is_set():
-            # Anything that comes in from here on cuts the wait at the end of this round short.
-            pose_wake.clear()
-            if quality_job is not None and quality_job["future"].done():
-                pool = finish_quality(pool)
-            retry_pending_trash()
-            queued = [p for p in clip_paths() if pose_state(p.name) == "queued"]
-            pose_queued = len(queued)
-            todo = ready_for_pose(queued, time.time())
-            busy = session_on()
-            waiting = busy and DURING_SESSION == "wait"
-            deep = None if busy else deep_profile()
-            deep_club = deep and deep_club_stamp(deep)
-            pose_deep_left = 0 if deep is None else sum(
-                1 for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done"
-                and needs_deep(p.name, deep_club))
-            if todo and not waiting:
-                # After a session a new clip goes straight to the deep pass; during one, the quick way (when a
-                # deep pass will redo it after), lighter for a pump drill rep (long_drill). A quality measure
-                # running carries on beside it.
-                clip = next_to_analyze(todo)
-                quick = pose.quick_profile(long_drill=long_drill(clip)) if busy else None
-                # Down the line, the club model's look at the shaft at address (hands to plane's line).
-                shaft_at = None
-                club_model = quick is not None and (pose.deep_profile() or {}).get("clubModel")
-                if club_model:
-                    if summarizer is None:
-                        summarizer = swings.Summarizer(STATIC_DIR)
-                    at = dtl_address_time(clip, summarizer)
-                    shaft_at = None if at is None else (at, club_model)
-                pool = analyze_clip(clip, pool, deep=deep, quick=quick, shaft_at=shaft_at)
-                continue
-            if not busy and quality_job is None:
-                # Analyze again, newest first, a clip whose pose came from another body model (after
-                # SWINGCLIPS_POSE_BACKEND changed), so every swing is measured the same way.
-                model = body_model()
-                again = [p for p in clip_paths() if p.name not in _again_failed and pose_state(p.name) == "done"
-                         and pose_model(p.name) not in (None, model)]
-                if again:
-                    pool = analyze_clip(max(again, key=recorded_at), pool, again=True, deep=deep)
+            try:
+                # Anything that comes in from here on cuts the wait at the end of this round short.
+                pose_wake.clear()
+                if quality_job is not None and quality_job["future"].done():
+                    pool = finish_quality(pool)
+                retry_pending_trash()
+                queued = [p for p in clip_paths() if pose_state(p.name) == "queued"]
+                pose_queued = len(queued)
+                todo = ready_for_pose(queued, time.time())
+                busy = session_on()
+                waiting = busy and DURING_SESSION == "wait"
+                deep = None if busy else deep_profile()
+                deep_club = deep and deep_club_stamp(deep)
+                pose_deep_left = 0 if deep is None else sum(
+                    1 for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done"
+                    and needs_deep(p.name, deep_club))
+                if todo and not waiting:
+                    # After a session a new clip goes straight to the deep pass; during one, the quick way (when a
+                    # deep pass will redo it after), lighter for a pump drill rep (long_drill). A quality measure
+                    # running carries on beside it.
+                    clip = next_to_analyze(todo)
+                    quick = pose.quick_profile(long_drill=long_drill(clip)) if busy else None
+                    # Down the line, the club model's look at the shaft at address (hands to plane's line).
+                    shaft_at = None
+                    club_model = quick is not None and (pose.deep_profile() or {}).get("clubModel")
+                    if club_model:
+                        if summarizer is None:
+                            summarizer = swings.Summarizer(STATIC_DIR)
+                        at = dtl_address_time(clip, summarizer)
+                        shaft_at = None if at is None else (at, club_model)
+                    pool = analyze_clip(clip, pool, deep=deep, quick=quick, shaft_at=shaft_at)
                     continue
-                # Then the ball search again, newest first, on clips from an older one (pose.BALL_VERSION).
-                reball = [p for p in clip_paths() if p.name not in _ball_failed and pose_state(p.name) == "done"
-                          and (_pose_stamp(p.name) or (None, pose.BALL_VERSION))[1] != pose.BALL_VERSION]
-                if reball:
-                    pool = find_ball_again(max(reball, key=recorded_at), pool)
-                    continue
-                # Then the deep pass, newest first: the last session's swings are ready first. Clips
-                # deep-analyzed with an older club model too.
-                if deep is not None:
-                    deepen = [p for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done"
-                              and needs_deep(p.name, deep_club)]
-                    if deepen:
-                        pool = analyze_clip(max(deepen, key=recorded_at), pool, again=True, deep=deep)
+                if not busy and quality_job is None:
+                    # Analyze again, newest first, a clip whose pose came from another body model (after
+                    # SWINGCLIPS_POSE_BACKEND changed), so every swing is measured the same way.
+                    model = body_model()
+                    again = [p for p in clip_paths() if p.name not in _again_failed and pose_state(p.name) == "done"
+                             and pose_model(p.name) not in (None, model)]
+                    if again:
+                        pool = analyze_clip(max(again, key=recorded_at), pool, again=True, deep=deep)
                         continue
-                # Then the clubhead onset (the takeaway) of face-on clips without one, and of down-the-line
-                # clips with no face-on partner, newest first.
-                onsets = [c for c in listed_clips(with_shots=False)
-                          if (c["angle"] == "face" or not c["partner"]) and c["pose"] == "done"
-                          and c["name"] not in _onset_failed and not (_pose_stamp(c["name"]) or (0, 0, 0, True))[3]]
-                if onsets:
-                    if summarizer is None:
-                        summarizer = swings.Summarizer(STATIC_DIR)
-                    pool = add_club_onset(max(onsets, key=lambda c: c["recorded"]), pool, summarizer)
+                    # Then the ball search again, newest first, on clips from an older one (pose.BALL_VERSION).
+                    reball = [p for p in clip_paths() if p.name not in _ball_failed and pose_state(p.name) == "done"
+                              and (_pose_stamp(p.name) or (None, pose.BALL_VERSION))[1] != pose.BALL_VERSION]
+                    if reball:
+                        pool = find_ball_again(max(reball, key=recorded_at), pool)
+                        continue
+                    # Then the deep pass, newest first: the last session's swings are ready first. Clips
+                    # deep-analyzed with an older club model too.
+                    if deep is not None:
+                        deepen = [p for p in clip_paths() if p.name not in _deep_failed and pose_state(p.name) == "done"
+                                  and needs_deep(p.name, deep_club)]
+                        if deepen:
+                            pool = analyze_clip(max(deepen, key=recorded_at), pool, again=True, deep=deep)
+                            continue
+                    # Then the clubhead onset (the takeaway) of face-on clips without one, and of down-the-line
+                    # clips with no face-on partner, newest first.
+                    onsets = [c for c in listed_clips(with_shots=False)
+                              if (c["angle"] == "face" or not c["partner"]) and c["pose"] == "done"
+                              and c["name"] not in _onset_failed and not (_pose_stamp(c["name"]) or (0, 0, 0, True))[3]]
+                    if onsets:
+                        if summarizer is None:
+                            summarizer = swings.Summarizer(STATIC_DIR)
+                        pool = add_club_onset(max(onsets, key=lambda c: c["recorded"]), pool, summarizer)
+                        continue
+                    # Then the outer hip edges (the lead hip line) of face-on clips, newest first.
+                    hips = [c for c in listed_clips(with_shots=False) if c["angle"] == "face" and c["pose"] == "done"
+                            and c["name"] not in _hip_failed
+                            and (_pose_stamp(c["name"]) or (0, 0, 0, 0, pose.HIP_EDGE_VERSION))[4] != pose.HIP_EDGE_VERSION]
+                    if hips:
+                        if summarizer is None:
+                            summarizer = swings.Summarizer(STATIC_DIR)
+                        pool = add_hip_edges(max(hips, key=lambda c: c["recorded"]), pool, summarizer)
+                        continue
+                if waiting:
+                    pose_wake.wait(5)
                     continue
-                # Then the outer hip edges (the lead hip line) of face-on clips, newest first.
-                hips = [c for c in listed_clips(with_shots=False) if c["angle"] == "face" and c["pose"] == "done"
-                        and c["name"] not in _hip_failed
-                        and (_pose_stamp(c["name"]) or (0, 0, 0, 0, pose.HIP_EDGE_VERSION))[4] != pose.HIP_EDGE_VERSION]
-                if hips:
-                    if summarizer is None:
-                        summarizer = swings.Summarizer(STATIC_DIR)
-                    pool = add_hip_edges(max(hips, key=lambda c: c["recorded"]), pool, summarizer)
-                    continue
-            if waiting:
+                # Then measure a clip's quality (new ones first, then older clips), beside this loop: a measure
+                # decodes the whole clip (~6 s), and a clip uploaded meanwhile shouldn't wait for it.
+                if quality_job is None:
+                    try:
+                        if summarizer is None:
+                            summarizer = swings.Summarizer(STATIC_DIR)
+                        started = start_quality(pool, summarizer)
+                    except BrokenProcessPool:
+                        pool, started = new_pool(), True
+                    if started:
+                        continue
                 pose_wake.wait(5)
-                continue
-            # Then measure a clip's quality (new ones first, then older clips), beside this loop: a measure
-            # decodes the whole clip (~6 s), and a clip uploaded meanwhile shouldn't wait for it.
-            if quality_job is None:
-                try:
-                    if summarizer is None:
-                        summarizer = swings.Summarizer(STATIC_DIR)
-                    started = start_quality(pool, summarizer)
-                except BrokenProcessPool:
-                    pool, started = new_pool(), True
-                if started:
-                    continue
-            pose_wake.wait(5)
+            except Exception:
+                # Anything unforeseen in one round (a clip moved to the trash while it was looked at, a file
+                # Windows held): logged, and the next round goes on. It used to end the worker, and no clip
+                # was analyzed again until a restart.
+                traceback.print_exc()
+                stop.wait(5)
     except KeyboardInterrupt:
         # Ctrl+C reaches the pool's processes too, and comes back here out of the clip they were on.
         # Nothing half done was saved: that clip is simply analyzed (or measured) again at the next start.
@@ -846,65 +853,70 @@ def swing_worker(stop: threading.Event):
     noise_at = 0.0
     try:
         while not stop.is_set():
-            # A clip analyzed or a shot in from here on cuts the wait at the end of this round short.
-            swing_wake.clear()
-            clips = {c["name"]: c for c in listed_clips(with_shots=False)}
-            done = 0
-            for c in clips.values():
-                if stop.is_set() or c["pose"] != "done" or (c["partner"] and c["angle"] != "face"):
-                    continue
-                other = clips.get(c["partner"] or "")
-                if other and other["pose"] not in ("done", "failed"):
-                    continue  # wait for the other angle
-                other = other if other and other["pose"] == "done" else None
-                old = swing_records.get(c["name"])
-                made_by = [pose_made(c["name"]), other and pose_made(other["name"])]
-                if not swing_record_stale(old, c, other, made_by):
-                    continue
-                try:
-                    record = summarizer.summarize(swings.pose_input(c, analysis_pose_file(c["name"])),
-                                                  swings.pose_input(other, analysis_pose_file(other["name"])) if other else None)
-                except FileNotFoundError:
-                    continue  # just deleted
-                except Exception:
-                    record = {"error": traceback.format_exc(limit=2)}
-                record.update(code=swings_code, partner=other and other["name"], poseModel=made_by, drillAs=c["drill"])
-                note_no_swing(c, other, record, again=old is not None)
-                with records_lock:
-                    swing_records[c["name"]] = record
-                done += 1
-                if done % 25 == 0:
-                    swings.save(SWINGS_FILE, swing_records)
-            if done:
-                with records_lock:
-                    swings.save(SWINGS_FILE, swing_records)
-                print(f"Swings: worked out the numbers of {done} swing(s)", flush=True)
-            # The 3D straight after the numbers it needs, before the noise table and the night files.
-            if calib_runs.pending_job("body") and not stop.is_set():
-                place_cameras(clips, summarizer)
-            if calib.enabled() and not stop.is_set():
-                try:
-                    made = pass_3d(clips, summarizer, stop)
-                except Exception:
-                    traceback.print_exc()
-                    made = 0
-                if made:
+            try:
+                # A clip analyzed or a shot in from here on cuts the wait at the end of this round short.
+                swing_wake.clear()
+                clips = {c["name"]: c for c in listed_clips(with_shots=False)}
+                done = 0
+                for c in clips.values():
+                    if stop.is_set() or c["pose"] != "done" or (c["partner"] and c["angle"] != "face"):
+                        continue
+                    other = clips.get(c["partner"] or "")
+                    if other and other["pose"] not in ("done", "failed"):
+                        continue  # wait for the other angle
+                    other = other if other and other["pose"] == "done" else None
+                    old = swing_records.get(c["name"])
+                    made_by = [pose_made(c["name"]), other and pose_made(other["name"])]
+                    if not swing_record_stale(old, c, other, made_by):
+                        continue
+                    try:
+                        record = summarizer.summarize(swings.pose_input(c, analysis_pose_file(c["name"])),
+                                                      swings.pose_input(other, analysis_pose_file(other["name"])) if other else None)
+                    except FileNotFoundError:
+                        continue  # just deleted
+                    except Exception:
+                        record = {"error": traceback.format_exc(limit=2)}
+                    record.update(code=swings_code, partner=other and other["name"], poseModel=made_by, drillAs=c["drill"])
+                    note_no_swing(c, other, record, again=old is not None)
+                    with records_lock:
+                        swing_records[c["name"]] = record
+                    done += 1
+                    if done % 25 == 0:
+                        swings.save(SWINGS_FILE, swing_records)
+                if done:
                     with records_lock:
                         swings.save(SWINGS_FILE, swing_records)
-                    print(f"3D: triangulated {made} swing(s)", flush=True)
-            if done or noise_table.get("code") != swings_code or time.time() - noise_at > NOISE_EVERY_S:
-                try:
-                    noise_table = work_out_noise(summarizer)
-                    swings.save(NOISE_FILE, noise_table)
-                except Exception:
-                    traceback.print_exc()
-                noise_at = time.time()
-            if not stop.is_set():
-                try:
-                    night_compare(clips, summarizer, stop)
-                except Exception:
-                    traceback.print_exc()
-            swing_wake.wait(5)
+                    print(f"Swings: worked out the numbers of {done} swing(s)", flush=True)
+                # The 3D straight after the numbers it needs, before the noise table and the night files.
+                if calib_runs.pending_job("body") and not stop.is_set():
+                    place_cameras(clips, summarizer)
+                if calib.enabled() and not stop.is_set():
+                    try:
+                        made = pass_3d(clips, summarizer, stop)
+                    except Exception:
+                        traceback.print_exc()
+                        made = 0
+                    if made:
+                        with records_lock:
+                            swings.save(SWINGS_FILE, swing_records)
+                        print(f"3D: triangulated {made} swing(s)", flush=True)
+                if done or noise_table.get("code") != swings_code or time.time() - noise_at > NOISE_EVERY_S:
+                    try:
+                        noise_table = work_out_noise(summarizer)
+                        swings.save(NOISE_FILE, noise_table)
+                    except Exception:
+                        traceback.print_exc()
+                    noise_at = time.time()
+                if not stop.is_set():
+                    try:
+                        night_compare(clips, summarizer, stop)
+                    except Exception:
+                        traceback.print_exc()
+                swing_wake.wait(5)
+            except Exception:
+                # As the pose worker: one bad round is logged, and the numbers go on being worked out.
+                traceback.print_exc()
+                stop.wait(5)
     finally:
         summarizer.close()
 
@@ -1302,7 +1314,8 @@ async def revalidate_page(request: Request, call_next):
     response = await call_next(request)
     # Every page too (/start, /tripods, ...): only "/" was, so after an update the Start page could come
     # from the browser's cache, old buttons and all (Oct 22).
-    if request.url.path == "/" or request.url.path.startswith("/static/")             or response.headers.get("content-type", "").startswith("text/html"):
+    if request.url.path == "/" or request.url.path.startswith("/static/") \
+            or response.headers.get("content-type", "").startswith("text/html"):
         response.headers["Cache-Control"] = "no-cache"
     return response
 
@@ -1424,8 +1437,21 @@ def pair_angles(swings: list[dict]) -> None:
 
 @app.get("/api/time")
 def server_time():
-    """The server's clock, so each capture phone names its clips on the same clock."""
-    return {"ms": int(time.time() * 1000)}
+    """The server's clock, so each capture phone names its clips on the same clock. "app" tells the
+    phones, the sim laptop and the night worker that this is the server when they look for it on the
+    network (findserver.py, ServerFinder.kt, golf-common.ps1)."""
+    return {"ms": int(time.time() * 1000), "app": "swingclips"}
+
+
+def lan_addresses() -> list[str]:
+    """This PC's private IPv4 addresses, for the start-up line (the phones and laptop find it anyway)."""
+    import findserver
+    import socket
+    try:
+        ips = [a[4][0] for a in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)]
+    except OSError:
+        return []
+    return [ip for ip in dict.fromkeys(ips) if findserver.network_of(ip) and not ip.startswith(("127.", "169.254."))]
 
 
 def checked_clip(name: str) -> Path:
@@ -1444,6 +1470,9 @@ def get_clip(name: str):
 
 
 UPLOAD_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,120}\.(mp4|mov|webm)$")
+# An upload whose body stops coming for this long is given up (the phone went off the Wi-Fi mid-clip and
+# its retry is already on the way): without it the request waited for ever, holding its part file.
+UPLOAD_STALL_S = 60
 
 
 # What the camera used for a clip, kept next to it as <clip>.camera.json (capture app 0.4 and later).
@@ -1495,16 +1524,25 @@ async def upload(name: str, request: Request, shutter: str | None = Query(None, 
         if not (CLIPS_DIR / (name + CAMERA_SUFFIX)).exists():
             save_camera(name, *camera)
         return {"ok": True, "size": final.stat().st_size, "duplicate": True}
-    # Written under a name the clip list and pose worker ignore, then renamed once complete.
-    part = CLIPS_DIR / (name + ".part")
+    # Written under a name the clip list and pose worker ignore, then renamed once complete. Its own name
+    # per request: a retry while the first try was still coming in wrote into the same file (a clip made of
+    # both), and Windows then refused the rename while the other held it, every retry after.
+    part = CLIPS_DIR / f"{name}.{os.urandom(4).hex()}.part"
     size = 0
     try:
         with open(part, "wb") as f:
-            async for chunk in request.stream():
+            chunks = request.stream().__aiter__()
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(chunks.__anext__(), UPLOAD_STALL_S)
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    raise HTTPException(408, f"Upload stalled: nothing for {UPLOAD_STALL_S} s after {size} bytes")
                 f.write(chunk)
                 size += len(chunk)
         expected = request.headers.get("x-clip-size")
-        if expected is not None and int(expected) != size:
+        if expected is not None and expected.isdigit() and int(expected) != size:
             raise HTTPException(400, f"Upload cut short: got {size} of {expected} bytes")
         # The camera info first, so the clip never shows up without it.
         save_camera(name, *camera)
@@ -1515,7 +1553,7 @@ async def upload(name: str, request: Request, shutter: str | None = Query(None, 
         part.unlink(missing_ok=True)
     shot = f", {exposure} 1/{round(1e9 / exposure_ns)} s ISO {iso}" if exposure_ns else ""
     if dropped:
-        shot += f", {dropped} of {frames + dropped} frames lost" + (f" (hot: level {thermal})" if thermal and thermal >= 2 else "")
+        shot += f", {dropped} of {(frames or 0) + dropped} frames lost" + (f" (hot: level {thermal})" if thermal and thermal >= 2 else "")
     m, t = SWING_NAME.match(name), UNIX_TIME_SUFFIX.search(Path(name).stem)
     angle = (m.group(1) or "face") if m else "face"
     echo = speech_before(angle, float(t.group(1))) if t else None
@@ -2855,7 +2893,8 @@ def calib_clips(kind: str, angle: str | None) -> list[dict]:
             continue
         a = m.group(1) or "face"
         t = recorded_at(p)
-        if t >= rec["from"] - calibrun.START_SLACK_S and t <= rec.get("until", float("inf"))                 and calib_runs.kind_at(t) == kind:
+        if t >= rec["from"] - calibrun.START_SLACK_S and t <= rec.get("until", float("inf")) \
+                and calib_runs.kind_at(t) == kind:
             out.append({"name": p.name, "angle": a, "t": t})
     return sorted(out, key=lambda c: c["t"])
 
@@ -3639,7 +3678,8 @@ if __name__ == "__main__":
               f"{models.provider_setting()}), body model on "
               + ("every frame" if pose.body_stride() == 1 else f"every {pose.body_stride()} frames")
               + f", {POSE_WORKERS} workers")
-    print(f"Open http://localhost:{PORT} here, or http://<this PC's name>:{PORT} from other devices")
+    here = ", ".join(f"http://{ip}:{PORT}" for ip in lan_addresses()) or f"http://<this PC's address>:{PORT}"
+    print(f"Open http://localhost:{PORT} here, or {here} from other devices (the phones and the laptop find it by themselves)")
     logging.getLogger("uvicorn.access").addFilter(QuietPolling())
     logging.getLogger("uvicorn.error").addFilter(QuietShutdown())
     # Ctrl+C: don't wait on open browser connections (a review page or a video keeps one open).

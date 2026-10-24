@@ -67,6 +67,15 @@ The Square watcher, the GSPro-connector option, and the ball-flight fill-in. (Mo
 - Not used, on purpose: the unofficial Bluetooth connector `brentyates/squaregolf-connector` was
   taken down by a DMCA notice (Sept 2026) alleging code taken from Square's private systems.
 
+## Where the scripts send
+
+Every script finds the server itself (`Resolve-SwingServer` in `golf-common.ps1`): the `-Server` given, else
+`server.txt` next to the scripts (the last address that worked), else `http://192.168.7.250:8000`; when none
+answers, a look round this laptop's networks and 192.168.7.x for whatever answers `/api/time` as SwingClips.
+The launcher, agent and Start golf hand what they found to everything they start (the Square watcher was
+always started without it before, so it sent to its own built-in address). The agent, watcher and shot
+listener look again after a minute without the server. `-Server off` on the watcher or listener sends nothing.
+
 ## Checking Square's CSV export against the database
 
 `python tools/square_compare.py <Square CSV export> <Dropbox\SwingClips\square-shots-DATE.jsonl>` matches

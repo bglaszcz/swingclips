@@ -7,13 +7,15 @@ param(
     [switch]$Startup,
     [switch]$DryRun,
     [switch]$Once,
-    [string]$Server = "http://192.168.86.250:8000"
+    # The home server; "" = found on the network (Resolve-SwingServer in golf-common.ps1).
+    [string]$Server = ""
 )
 
 $ErrorActionPreference = "Continue"
 $here = $PSScriptRoot
 . (Join-Path $here "golf-common.ps1")
 $log = Join-Path $here "golf-agent-log.txt"
+$Server = Resolve-SwingServer $Server $here
 
 function Say([string]$text, [string]$color = "Gray") {
     Write-Host $text -ForegroundColor $color
@@ -63,9 +65,13 @@ while ($true) {
     } catch {
         Say "Server poll failed: $($_.Exception.Message)" "Yellow"
         if ($Once) { break }
+        # After a minute without it, it's looked for again: it may have moved to another address.
+        $found = Step-SwingServer $Server $false $here
+        if ($found -ne $Server) { Say "The server is at $found now" "Green"; $Server = $found }
         Start-Sleep -Seconds 5
         continue
     }
+    [void](Step-SwingServer $Server $true $here)
 
     if ($resp -and $resp.commands) {
         foreach ($c in $resp.commands) {
@@ -78,7 +84,7 @@ while ($true) {
             } elseif ($act -eq "stop_square") {
                 $res = Stop-SquareApp -DryRun:$DryRun
             } elseif ($act -eq "start_watcher") {
-                $res = Start-SquareWatcher $here -DryRun:$DryRun
+                $res = Start-SquareWatcher $here $Server -DryRun:$DryRun
             } elseif ($act -eq "stop_watcher") {
                 $res = Stop-SquareWatcher -DryRun:$DryRun
             } elseif ($act -eq "switch_source") {

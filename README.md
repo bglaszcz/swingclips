@@ -6,7 +6,7 @@ a home server analyzes every clip and serves a review page to any browser on the
 swing is tagged with the Square Omni's numbers for that shot.
 
 ```
- Phones (capture app)         Home server (http://192.168.86.250:8000)       Sim laptop (Square Omni)
+ Phones (capture app)         Home server (http://192.168.7.250:8000)        Sim laptop (Square Omni)
  face-on + down the line:     clips, pose, key positions, review page  <---  Square watcher: each new
  each hears the strike ->     (pairs the two angles of each swing)           shot from Square's app
  2 s + 2 s clip, uploads      Ready bar: starts/stops both phones
@@ -136,11 +136,11 @@ swing is tagged with the Square Omni's numbers for that shot.
    downloads on the first start.
 2. **Phones**: build the capture app on the dev PC and install it on both (see "Dev PC" below). In
    the app, set one phone to **Face-on** and the other to **Down the line**. The server address is
-   `http://192.168.86.250:8000`.
+   `http://192.168.7.250:8000`; the phones, the laptop's scripts and the night worker find it by themselves when it moves (see HOME-SETUP.md, "Network").
 3. **Sim laptop**: the `Dropbox\SwingClips` folder holds `Start golf.cmd`, `square-watcher.ps1`
    and `start-golf.ps1` (copies of `relay/`). Run `Start golf.cmd -Startup` once to have it start at
    every sign-in.
-4. **Review page**: `http://homeserver:8000` on a PC, or `http://192.168.86.250:8000` on a phone.
+4. **Review page**: `http://192.168.7.250:8000` (the server prints its addresses when it starts).
 
 Full setup, build, deploy and network details are in **[HOME-SETUP.md](HOME-SETUP.md)**.
 
@@ -238,7 +238,7 @@ cd /d D:\SwingClips\app\server
 - After a reboot the auto-start task runs the server **in the background**, with no window. It
   only shows as `python.exe` on Task Manager's Details tab. `Stop server.cmd` stops it anyway (it
   finds the server by port 8000), and starting a second copy fails with "only one usage of each
-  socket address". To check auto-start after a reboot, open http://192.168.86.250:8000 on your
+  socket address". To check auto-start after a reboot, open http://192.168.7.250:8000 on your
   phone without logging in to the server.
 
 ### Sim laptop

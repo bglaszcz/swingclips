@@ -24,8 +24,9 @@ param(
     [string]$LogDir = $PSScriptRoot,
     [string]$Club = "DR",
     [ValidateSet("RH", "LH")] [string]$Handed = "RH",
-    # The SwingClips home server, which matches each shot to its swing clip. "" = don't send.
-    [string]$Server = "http://192.168.86.250:8000"
+    # The SwingClips home server, which matches each shot to its swing clip. "" = found on the network
+    # (Resolve-SwingServer in golf-common.ps1), "off" = don't send.
+    [string]$Server = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,6 +46,9 @@ trap {
     Say "  at: $($_.InvocationInfo.PositionMessage -replace '\s+', ' ')" "Red"
     exit 1
 }
+. (Join-Path $PSScriptRoot "golf-common.ps1")
+if ($Server -eq "off") { $Server = "" } else { $Server = Resolve-SwingServer $Server $PSScriptRoot }
+Say "Shots go to $(if ($Server) { $Server } else { 'nowhere (-Server off)' })"
 
 function Split-JsonObjects([System.Text.StringBuilder]$buf) {
     # Pulls every complete top-level {...} out of $buf (string-aware), leaving any partial tail.
@@ -135,29 +139,36 @@ function Add-ClubData($shot, $msg) {
 }
 
 function Send-Shot($shot) {
-    if (-not $Server) { return }
+    if (-not $Server) { return $true }
     try {
         $body = $shot | ConvertTo-Json -Depth 5 -Compress
         Invoke-RestMethod -Uri ($Server.TrimEnd('/') + "/api/shots") -Method Post -Body $body `
             -ContentType "application/json" -TimeoutSec 3 | Out-Null
         Say "         sent to the server" "DarkGray"
+        return $true
     } catch {
         $unsent.Add($shot)
         Say "         couldn't reach the server ($($_.Exception.Message)) - will retry" "Yellow"
+        return $false
     }
 }
 
 function Flush-Pending([bool]$force) {
     if ($script:pending -and ($force -or ((Get-Date) - [datetime]$script:pending.received).TotalSeconds -gt 2.5)) {
         $script:lastShotAt = $script:pending.received
-        Send-Shot $script:pending
+        [void](Send-Shot $script:pending)
         $script:pending = $null
     }
     Send-Heartbeat
     if ($unsent.Count -gt 0 -and ((Get-Date) - $script:lastRetry).TotalSeconds -gt 15) {
         $script:lastRetry = Get-Date
         $retry = @($unsent); $unsent.Clear()
-        foreach ($s in $retry) { Send-Shot $s }
+        # Stop at the first that fails (the server is still down): the connector waits on this loop's replies.
+        for ($k = 0; $k -lt $retry.Count; $k++) {
+            if (Send-Shot $retry[$k]) { continue }
+            for ($j = $k + 1; $j -lt $retry.Count; $j++) { $unsent.Add($retry[$j]) }
+            break
+        }
     }
 }
 
@@ -179,10 +190,14 @@ function Send-Heartbeat([bool]$force = $false) {
     $beat = [ordered]@{ source = "shot-listener"; monitorConnected = $script:monitorConnected
                         monitorReady = $script:monitorReady; squareRunning = (Test-SquareAppRunning)
                         lastShotAt = $script:lastShotAt; version = "2" }
+    $ok = $true
     try {
         Invoke-RestMethod -Uri ($Server.TrimEnd('/') + "/api/relay/heartbeat") -Method Post -ContentType "application/json" `
             -Body ($beat | ConvertTo-Json -Compress) -TimeoutSec 3 | Out-Null
-    } catch {}
+    } catch { $ok = $false }
+    # A minute without the server: it's looked for again (it may have moved to another address).
+    $found = Step-SwingServer $Server $ok $PSScriptRoot
+    if ($found -ne $Server) { Say "The server is at $found now" "Green"; $script:Server = $found }
 }
 
 function Send-Json($stream, [string]$json) {

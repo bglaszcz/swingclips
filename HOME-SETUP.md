@@ -6,7 +6,7 @@ page's tabs and the common commands; the details behind each part are in `docs/`
 end).
 
 ```
- Phones (capture app)         Home server (http://192.168.86.250:8000)       Sim laptop (Square Omni)
+ Phones (capture app)         Home server (http://192.168.7.250:8000)        Sim laptop (Square Omni)
  face-on + down the line:     clips, pose, key positions, review page  <---  Square watcher: each new
  each hears the strike ->     (pairs the two angles of each swing)           shot from Square's app
  2 s + 2 s clip, uploads
@@ -57,7 +57,7 @@ Working on your focus: **Do the drill** on the focus card records your reps as d
    (each phone says "Stopped").
 3. Leave the server alone: about 10 minutes after the last swing it re-analyzes the session the
    careful way (the review page's Ready bar shows "deep pass: n clips to go").
-4. Look back on the **review page** (`http://192.168.86.250:8000`): **Progress** (the three steps:
+4. Look back on the **review page** (`http://192.168.7.250:8000`): **Progress** (the three steps:
    how did it go / what to work on / is it working; one club at a time below) and each swing's coaching card and numbers.
 5. **AI coach (sessions, weekly reviews, questions)**: on **Tools > AI coach**, pick a provider (Anthropic Claude, OpenAI, Google Gemini, or any other OpenAI-compatible service by its API base URL: xAI, Mistral, DeepSeek, OpenRouter, a local Ollama), paste its API key (kept on the home server, never shown again) and pick a model from the provider's own list. The coach serves three uses:
    - **Session take**: the Start page shows the **Coach's take** after your session ends (and Progress step 1 folds it under **Coach's take**). Under 150 words: How it went, Your focus, Next session. One call per session, cached.
@@ -78,7 +78,9 @@ plan", "Plan steps", "Drill mode").
 - **Face-on**: portrait, facing the golfer, far enough back to fit the club at the top.
   **Down the line**: behind the golfer on the target line (through the hands or the
   ball), at about hand height, also portrait. In the app's **Settings**, set one to **Face-on** and
-  the other to **Down the line**; the server address is `http://192.168.86.250:8000`.
+  the other to **Down the line**. The server address is `http://192.168.7.250:8000` (the app's default
+  from 0.16); if it doesn't answer there, the app looks for it on the network by itself, and the
+  **Server** setting's **Find it** looks now.
 - **Finding the spots**: the **Tripod setup** page (review page **Tools** menu, or the Start page) shows
   what each phone sees (the setup stills, while not recording) with a grid, your outline, and
   meters for size, room above and below, and centring. Its line tools check the phone is level
@@ -161,7 +163,7 @@ Only one phone talks (the one with Practice voice on). What it can say:
   then `Stop server.cmd` and `Start server.cmd` (Stop also finds the background copy the auto-start
   task runs).
 - **After a reboot** the auto-start task runs the server in the background, with no window (only
-  `python.exe` in Task Manager's Details tab). Check it from a phone: http://192.168.86.250:8000.
+  `python.exe` in Task Manager's Details tab). Check it from a phone: http://192.168.7.250:8000.
 - **During a session** new clips get a quick analysis, face-on first, so the spoken checks and
   practice numbers keep up (~9.5 s a clip with 8 workers). The careful deep pass runs after the
   session. Why and how it was measured: [docs/performance.md](docs/performance.md).
@@ -225,14 +227,32 @@ are read: [docs/relay.md](docs/relay.md).
 
 ## Network
 
-- Android can't resolve Windows PC names, so the phones use the server's IP. 192.168.86.250 is
-  reserved for the server in the router.
-- The server needs inbound TCP 8000 allowed on private networks.
+- The server is **192.168.7.250** (reserved for it in the router; the 192.168.7.0/24 network is reachable
+  from the other subnets and VLANs). It moved there from 192.168.86.250 in Oct 2026.
+- **Nothing depends on that address.** Android can't look up Windows PC names (and the router only
+  answers reverse lookups), so each client finds the server itself: the address given, else the one
+  that worked last time, else 192.168.7.250; when none answers, it looks round its own network, the
+  last address's network and 192.168.7.x, host .250 first on each, for whatever answers `/api/time`
+  as SwingClips (`"app": "swingclips"`). What it finds it keeps. A look round takes 2-4 s.
+  - **Phones** (capture app 0.16): on start, at Start recording, and every 3 minutes while the server
+    isn't answering. The address is in **Settings > Server**; **Find it** looks now.
+  - **Sim laptop**: every script (launcher, agent, Start golf, watcher, shot listener) resolves it
+    at start (`Resolve-SwingServer` in `relay/golf-common.ps1`) and keeps it in `server.txt` next to
+    them; `-Server http://<address>:8000` gives it by hand. The agent, watcher and listener look again
+    after a minute without the server.
+  - **Night worker / tools** (`server/findserver.py`): `--server` or `SWINGCLIPS_SERVER`, else found;
+    kept in `server/last-server.txt`. The night worker looks again when the server stops answering.
+  - Another subnet for the server later: add its network to `DEFAULT` / `HOME_NETWORKS` in
+    `server/findserver.py`, `capture/.../ServerFinder.kt` and `relay/golf-common.ps1` (the clients
+    already find it on their own network and on the last one they knew without that).
+- The server needs inbound TCP 8000 allowed on private networks (a Windows network marked Public
+  blocks it: the server then answers on localhost only).
 
 ## Troubleshooting
 
-- **A phone shows "not connected"** in the Ready bar: is the app open, on the Wi-Fi, with the
-  server address `http://192.168.86.250:8000`? A phone not heard from for 30 s shows as gone;
+- **A phone shows "not connected"** in the Ready bar: is the app open and on the Wi-Fi? Its status
+  line says whether it reached the server or is looking for it; **Settings > Server > Find it**
+  looks now (the address is normally `http://192.168.7.250:8000`). A phone not heard from for 30 s shows as gone;
   closing the app shows it closed at once. Is the server up (`curl http://localhost:8000/api/time`
   on the server)?
 - **"No Square shot"**: the Ready bar's Square row says whether the watcher is running and
@@ -243,7 +263,7 @@ are read: [docs/relay.md](docs/relay.md).
   numbers from the top on are marked shaky (~).
 - **"No swing found"**: the swing page says why ("No swing found in this clip: ..."), and so does
   `D:\SwingClips\events.jsonl` (the server window prints `No swing: <clip>: <why>`; from another PC:
-  `http://192.168.86.250:8000/api/events?since=2026-10-04&kind=noswing`): `tracking`
+  `http://192.168.7.250:8000/api/events?since=2026-10-04&kind=noswing`): `tracking`
   (the body seen in under 20 frames: out of the picture, dark, or nobody there), `window` (nothing
   tracked around the strike), `no-backswing`, `impact-before-top`, `timing` (not a swing's
   timing).

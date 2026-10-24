@@ -15,7 +15,8 @@ Use it on the Night report.
      candidate sent to the server, with the scores and report.
 
 night_worker.py runs it once a night, after the clips are done and with enough time left (MINUTES).
-By hand: .venv-gpu\\Scripts\\python.exe night_improve.py [--server URL] [--force]
+By hand: .venv-gpu\\Scripts\\python.exe night_improve.py [--server URL] [--force] (without --server the
+server is found on the network: findserver.py)
 """
 import argparse
 import glob
@@ -191,13 +192,14 @@ def counts(info: dict) -> dict:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--server", default=os.environ.get("SWINGCLIPS_SERVER", "http://192.168.86.250:8000"))
+    ap.add_argument("--server", default=os.environ.get("SWINGCLIPS_SERVER"), help="default: found on the network")
     ap.add_argument("--force", action="store_true", help="train even if the labels haven't changed")
     args = ap.parse_args(argv)
     os.environ.setdefault("SWINGCLIPS_ORT_PROVIDER", "cuda")
     import models
+    import findserver
     import night_worker
-    server = args.server.rstrip("/")
+    server = findserver.find(args.server)
     print(try_once(server, lambda stamp: night_worker.club_model(server, stamp, models), force=args.force))
     return 0
 

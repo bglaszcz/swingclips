@@ -4,8 +4,8 @@
 // using the aerodynamic flightPath model, constrained to physically achievable delivery
 // (within the middle 80% of the golfer's own launch and spin, widened by 1° and 250 rpm).
 (function (root) {
-  const LAUNCH_MARGIN = 1, SPIN_MARGIN = 250;   // degrees, rpm beyond the middle 80% of your shots
   "use strict";
+  const LAUNCH_MARGIN = 1, SPIN_MARGIN = 250;   // degrees, rpm beyond the middle 80% of your shots
 
   const TracerAtLoad = typeof SwingTracer !== "undefined"
     ? SwingTracer

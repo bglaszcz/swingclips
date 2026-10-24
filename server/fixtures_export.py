@@ -3,7 +3,7 @@ scorecard (eval.py) runs on real swings anywhere: no clips, no server. Only pose
 in (skeleton points, ball, shaft angle, key moments), never video.
 
   .venv\\Scripts\\python.exe fixtures_export.py                       from the server on this network
-  .venv\\Scripts\\python.exe fixtures_export.py --server http://192.168.86.250:8000
+  .venv\\Scripts\\python.exe fixtures_export.py --server http://192.168.7.250:8000
 
 Run it again after labeling more: it replaces what's there. Then score with (see the folder's README):
   SWINGCLIPS_LABELS=tests/fixtures/real/labels SWINGCLIPS_POSE=tests/fixtures/real/pose python eval.py --no-noise --no-quality
@@ -11,11 +11,13 @@ Run it again after labeling more: it replaces what's there. Then score with (see
 import argparse
 import gzip
 import json
+import os
 import re
 import shutil
 import urllib.request
 from pathlib import Path
 
+import findserver
 import models
 import pose
 
@@ -43,9 +45,10 @@ def pose_folder(body: bytes) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--server", default="http://192.168.86.250:8000")
+    ap.add_argument("--server", default=os.environ.get("SWINGCLIPS_SERVER"), help="default: found on the network")
     ap.add_argument("--out", type=Path, default=OUT)
     args = ap.parse_args(argv)
+    args.server = findserver.find(args.server)
 
     listing = {c["name"]: c for c in json.loads(get(args.server, "/api/clips"))}
     passes = json.loads(get(args.server, "/api/labels"))

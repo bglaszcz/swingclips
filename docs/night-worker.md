@@ -169,7 +169,8 @@ night something to learn. Trying the step out without the GPU: `SWINGCLIPS_IMPRO
    CUDA through pip, ~1 GB; needs NVIDIA driver 580 or newer) and downloads RTMW (~220 MB).
 3. It runs until the window is closed, below normal priority. To keep it to the night (the PC is
    used for games): `"Night worker.cmd" --hours 23-7`. Other options: `--workers N` (default half
-   the cores), `--server URL`, `--once`, `--stop-at 7` (exit at 7:00, after the clip it's on).
+   the cores), `--server URL` (default: found on the network, `server/findserver.py`, and looked for
+   again when the server stops answering), `--once`, `--stop-at 7` (exit at 7:00, after the clip it's on).
 4. Every night: a Task Scheduler task **SwingClips night worker** (on the gaming PC) starts
    `Night worker.cmd --stop-at 7` at 2:00 and wakes the PC for it (Power Options must allow wake
    timers). It doesn't start late if the PC was off at 2:00. Only one worker runs on a PC at a time:

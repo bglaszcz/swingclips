@@ -89,7 +89,12 @@ class ImpactListener(
         try {
             while (running) {
                 val n = rec.read(buf, 0, WINDOW, AudioRecord.READ_BLOCKING)
-                if (n <= 0) continue
+                if (n <= 0) {
+                    // An error (the microphone taken, Android's audio restarting) comes back at once: a
+                    // short nap, so the loop doesn't spin a core (and heat the phone) until it clears.
+                    if (n < 0) Thread.sleep(50)
+                    continue
+                }
                 val windowStart = framesRead
                 framesRead += n
 

@@ -50,7 +50,8 @@ How the capture app records, how the two angles pair, the shutter and clip quali
 - Opens **not recording**; settings are locked while recording. Clips wait in an outbox and upload
   to `POST /api/upload`, retrying until the server confirms. Named
   `swing_<angle>_WxH_FPSfps_<unix>_<strike>ms.mp4`: angle `face` or `dtl`, the unix time of the
-  strike on the **server's** clock (each phone reads it from `/api/time` at launch and at Start), and
+  strike on the **server's** clock (each phone reads it from `/api/time` at launch and at Start; with no
+  server at its address it looks for it on the network, `ServerFinder.kt`), and
   how many ms into the clip the strike was heard. Older clips, `swing_WxH_FPSfps_<unix>.mp4`, are
   face-on.
 - Runs on Android 9+ (minSdk 28), so an old Galaxy S8 works as the second camera. Its modes are

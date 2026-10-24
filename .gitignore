@@ -16,6 +16,10 @@ node_modules/
 # the server's local settings (Start server.cmd calls it)
 /server/settings.cmd
 
+# where the server was last found (server/findserver.py, relay/golf-common.ps1)
+/server/last-server.txt
+/relay/server.txt
+
 # local secrets
 .env*
 certificates

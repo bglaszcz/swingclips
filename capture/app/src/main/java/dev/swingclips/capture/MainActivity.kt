@@ -173,6 +173,8 @@ class MainActivity : Activity() {
         phoneLink.start()
         main.removeCallbacks(watchForCall)
         checkCallResume()
+        main.removeCallbacks(serverWatch)
+        main.postDelayed(serverWatch, SERVER_WATCH_MS)
     }
 
     override fun onPause() {
@@ -183,6 +185,7 @@ class MainActivity : Activity() {
         setArmed(false)
         callResume.left(wasRecording, inCall(), android.os.SystemClock.elapsedRealtime())
         main.removeCallbacks(resumeAfterCall)
+        main.removeCallbacks(serverWatch)
         if (wasRecording) main.postDelayed(watchForCall, 1000)
         cameraSetup.stop()
         practiceVoice.stop()
@@ -540,7 +543,7 @@ class MainActivity : Activity() {
 
     // ---- Settings ----
 
-    private fun serverUrl() = prefs.getString("server", DEFAULT_SERVER) ?: DEFAULT_SERVER
+    private fun serverUrl() = prefs.getString("server", ServerFinder.DEFAULT) ?: ServerFinder.DEFAULT
 
     private fun sensitivity() = Trigger.clamp(prefs.getInt("sensitivity", Trigger.DEFAULT))
 
@@ -707,18 +710,63 @@ class MainActivity : Activity() {
         }
         AlertDialog.Builder(this)
             .setTitle("Home server address")
-            .setMessage("Where the SwingClips server runs, e.g. $DEFAULT_SERVER or http://192.168.86.50:8000")
+            .setMessage("Where the SwingClips server runs, e.g. ${ServerFinder.DEFAULT}. When it doesn't answer " +
+                "there, the phone looks for it on the network by itself; Find it looks now.")
             .setView(input)
             .setPositiveButton("Save") { _, _ ->
                 val url = input.text.toString().trim().let { if (it.startsWith("http")) it else "http://$it" }
-                prefs.edit().putString("server", url).apply()
-                checkServer()
-                uploader.poke()
-                practiceVoice.restart()
+                serverChanged(url)
             }
+            .setNeutralButton("Find it") { _, _ -> findServer("asked on the phone") }
             .setNegativeButton("Cancel", null)
             .showSetting()
     }
+
+    /** A new server address (typed, or found): saved, checked, and everything that talks to the server told. */
+    private fun serverChanged(url: String) {
+        prefs.edit().putString("server", url).apply()
+        checkServer(lookRound = false)
+        uploader.poke()
+        practiceVoice.restart()
+        if (::phoneLink.isInitialized) phoneLink.poke()
+    }
+
+    // ---- Finding the server when its address changes (ServerFinder) ----
+    @Volatile private var finding = false
+    @Volatile private var lastFindMs = 0L
+
+    /** Looks round the network for the server, off the main thread; a different address found is saved. */
+    private fun findServer(why: String) {
+        if (finding) return
+        finding = true
+        lastFindMs = System.currentTimeMillis()
+        showUpload(pendingClips(), "Looking for the server on the network…")
+        Thread({
+            val was = serverUrl()
+            val found = runCatching { ServerFinder.find(was) }.getOrNull()
+            main.post {
+                finding = false
+                when {
+                    found == null -> showUpload(pendingClips(), "Can't find the server on the network — is it on? (Server: its address)")
+                    found != was -> {
+                        android.util.Log.i(ReplayRecorder.TAG, "server moved: $was -> $found ($why)")
+                        serverChanged(found)
+                    }
+                    else -> checkServer(lookRound = false)
+                }
+            }
+        }, "server-finder").start()
+    }
+
+    /** While the app is open: the server not heard from for a while (it may have moved) is looked for. */
+    private val serverWatch: Runnable = Runnable {
+        if (!resumed) return@Runnable
+        if (::phoneLink.isInitialized && !phoneLink.linked && !finding &&
+            System.currentTimeMillis() - lastFindMs > FIND_EVERY_MS) checkServer()
+        main.postDelayed(serverWatch, SERVER_WATCH_MS)
+    }
+
+    private fun pendingClips() = outbox.listFiles { f -> f.name.endsWith(".mp4") }?.size ?: 0
 
     /**
      * Whether this phone says practice results (the review page's Practice panel turns practice on).
@@ -811,12 +859,14 @@ class MainActivity : Activity() {
 
     /**
      * Quick reachability check so a wrong address shows up right away, not at the first swing. Also
-     * reads the server's clock, so this phone can name clips on it.
+     * reads the server's clock, so this phone can name clips on it. With [lookRound], no server at the
+     * address sets off a look round the network for it (findServer): it may have moved.
      */
-    private fun checkServer() {
+    private fun checkServer(lookRound: Boolean = true) {
         val url = serverUrl()
         serverButton.text = url.removePrefix("http://")
         Thread {
+            var answered = false
             val msg = try {
                 val sent = System.currentTimeMillis()
                 val conn = URL(url.trimEnd('/') + "/api/time").openConnection() as HttpURLConnection
@@ -832,17 +882,21 @@ class MainActivity : Activity() {
                     clockOffsetMs = serverMs - (sent + back) / 2
                     android.util.Log.i(ReplayRecorder.TAG, "clock offset ${clockOffsetMs} ms (round trip ${back - sent} ms)")
                 }
+                answered = code == 200 && ServerFinder.isServer(body)
                 when {
                     code == 404 -> "Server needs updating (no /api/time)"
                     code != 200 -> "Server answered $code"
+                    !answered -> "Something else answered there, not the SwingClips server"
                     else -> "Server connected"
                 }
             } catch (e: Exception) {
                 "Can't reach the server — check the address (${e.javaClass.simpleName})"
             }
             main.post {
-                val pending = outbox.listFiles { f -> f.name.endsWith(".mp4") }?.size ?: 0
+                val pending = pendingClips()
                 showUpload(pending, if (pending > 0 && msg == "Server connected") "Uploading $pending…" else msg)
+                // Not after a look round a moment ago (it found nothing, or this is its own check).
+                if (!answered && lookRound && System.currentTimeMillis() - lastFindMs > FIND_AGAIN_MS) findServer("no server at $url")
             }
         }.start()
     }
@@ -855,7 +909,8 @@ class MainActivity : Activity() {
     }
 
     private fun showUpload(pending: Int, message: String) {
-        val bad = message.startsWith("Can't") || message.startsWith("Server answered") || message.startsWith("Server needs")
+        val bad = message.startsWith("Can't") || message.startsWith("Server answered") || message.startsWith("Server needs") ||
+            message.startsWith("Something else")
         val connected = message == "Server connected"
         uploadView.text = (if (bad || connected) "●  " else "↑  ") + message
         uploadView.setTextColor(if (bad) AMBER else if (connected) GREEN_TEXT else MUTED)
@@ -1170,8 +1225,11 @@ class MainActivity : Activity() {
         private const val POST_S = 2.0
         // Said when recording starts again by itself after a phone call (CallResume).
         private const val CALL_RESUMED = "Call over. Recording again."
-        // Android can't look up Windows PC names, so the home server's LAN address.
-        private const val DEFAULT_SERVER = "http://192.168.86.250:8000"
+        // The server not heard from (the link down): looked for on the network at most this often, checked
+        // every SERVER_WATCH_MS; a look round after a failed check waits FIND_AGAIN_MS after the last one.
+        private const val FIND_EVERY_MS = 180_000L
+        private const val SERVER_WATCH_MS = 30_000L
+        private const val FIND_AGAIN_MS = 30_000L
         // Camera angles, by the key that goes in clip names. With a phone at each, the server pairs
         // their clips of the same swing.
         private val ANGLES = linkedMapOf("face" to "Face-on", "dtl" to "Down the line")

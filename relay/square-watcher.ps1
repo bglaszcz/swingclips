@@ -12,7 +12,8 @@
 # flipped here to match GSPro's convention (positive = right).
 
 param(
-    [string]$Server = "http://192.168.86.250:8000",
+    # The home server; "" = found on the network (Resolve-SwingServer in golf-common.ps1), "off" = don't send.
+    [string]$Server = "",
     [string]$Database = (Join-Path $env:USERPROFILE "AppData\LocalLow\Invant\Square Golf\SQGDB.bytes"),
     [string]$LogDir = $PSScriptRoot
 )
@@ -31,6 +32,8 @@ trap {
     Say "  at: $($_.InvocationInfo.PositionMessage -replace '\s+', ' ')" "Red"
     exit 1
 }
+. (Join-Path $PSScriptRoot "golf-common.ps1")
+if ($Server -eq "off") { $Server = "" } else { $Server = Resolve-SwingServer $Server $PSScriptRoot }
 
 Add-Type -TypeDefinition @'
 using System;
@@ -166,10 +169,14 @@ function Send-Heartbeat {
     if (-not $Server) { return }
     $beat = [ordered]@{ source = "square-watcher"; squareRunning = (Test-SquareRunning)
                         lastShotAt = $lastShotAt; version = "1" }
+    $ok = $true
     try {
         Invoke-RestMethod -Uri ($Server.TrimEnd('/') + "/api/relay/heartbeat") -Method Post -ContentType "application/json" `
             -Body ($beat | ConvertTo-Json -Compress) -TimeoutSec 3 | Out-Null
-    } catch {}
+    } catch { $ok = $false }
+    # A minute without the server: it's looked for again (it may have moved to another address).
+    $found = Step-SwingServer $Server $ok $PSScriptRoot
+    if ($found -ne $Server) { Say "The server is at $found now" "Green"; $script:Server = $found }
 }
 
 if (-not (Test-Path -LiteralPath $Database)) {
@@ -198,7 +205,12 @@ while ($true) {
         if ($unsent.Count -gt 0 -and ((Get-Date) - $lastRetry).TotalSeconds -gt 15) {
             $lastRetry = Get-Date
             $retry = @($unsent); $unsent.Clear()
-            foreach ($s in $retry) { if (Send-Shot $s) { Say "         sent #$($s.shotNumber) (retry)" "DarkGray" } }
+            for ($k = 0; $k -lt $retry.Count; $k++) {
+                if (Send-Shot $retry[$k]) { Say "         sent #$($retry[$k].shotNumber) (retry)" "DarkGray"; continue }
+                # Still not reached (Send-Shot put this one back): the rest wait for the next retry.
+                for ($j = $k + 1; $j -lt $retry.Count; $j++) { $unsent.Add($retry[$j]) }
+                break
+            }
         }
         $now = Stamp
         if ($now -eq $seen) { continue }

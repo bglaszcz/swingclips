@@ -18,14 +18,18 @@
 #           or club speed: the server works carry out, and smash stays missing. "Start golf
 #           (GSPro).cmd" runs this. The connector is found like Square's app; if it isn't, put its
 #           shortcut, .exe or Start menu app ID in connector-app.txt next to this file.
+#
+# -Server http://<address>:8000 says where the home server is; without it, it is found on the network
+# (Resolve-SwingServer in golf-common.ps1).
 
-param([switch]$Startup, [switch]$NoCameras, [switch]$StartCameras, [string]$Server = "http://192.168.86.250:8000",
+param([switch]$Startup, [switch]$NoCameras, [switch]$StartCameras, [string]$Server = "",
       [ValidateSet("", "square", "gspro")] [string]$Source = "")
 
 $ErrorActionPreference = "Continue"
 $here = $PSScriptRoot
 . (Join-Path $here "golf-common.ps1")
 $log = Join-Path $here "start-golf-log.txt"
+$Server = Resolve-SwingServer $Server $here
 
 function Say([string]$text, [string]$color = "Gray") {
     Write-Host $text -ForegroundColor $color
@@ -41,7 +45,7 @@ if (-not $Source) {
     }
 }
 
-Say "Start golf ($env:COMPUTERNAME, PowerShell $($PSVersionTable.PSVersion)), shots from: $Source"
+Say "Start golf ($env:COMPUTERNAME, PowerShell $($PSVersionTable.PSVersion)), shots from: $Source, server $Server"
 
 if ($Startup) {
     $targetCmd = if ($Source -eq "gspro") { "Start golf (GSPro).cmd" } else { "Start golf.cmd" }
@@ -104,7 +108,7 @@ if ($Source -eq "gspro") {
         $db = Join-Path $env:USERPROFILE "AppData\LocalLow\Invant\Square Golf\SQGDB.bytes"
         for ($i = 0; $i -lt 30 -and -not (Test-Path -LiteralPath $db); $i++) { Start-Sleep -Seconds 1 }
         Say "Starting the Square watcher (minimized window: 'Square watcher')" "Green"
-        Start-Process -FilePath (Join-Path $here "Square watcher.cmd") -WorkingDirectory $here -WindowStyle Minimized
+        Start-Process -FilePath (Join-Path $here "Square watcher.cmd") -ArgumentList "-Server", $Server -WorkingDirectory $here -WindowStyle Minimized
     }
 }
 
