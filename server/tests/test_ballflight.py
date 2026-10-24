@@ -148,6 +148,51 @@ class Pairing(unittest.TestCase):
         self.assertEqual(app.shot_time(retry), sent)
         self.assertEqual(app.shot_time(old), sent)
 
+    def test_the_same_pairs_as_every_shot_against_every_clip(self):
+        """match_shots looks only at the clips near each shot (Oct 2026): the same pairs as the way before
+        it, every shot against every clip, on random sessions with ties, lone clips and both sources."""
+        import random
+        import app
+
+        def every_against_every(clip_times, lone, shots):
+            pairs = []
+            for s in shots:
+                delay = app.SHOT_DELAY_S.get(s.get("source"), app.DEFAULT_SHOT_DELAY_S)
+                for name, t in clip_times.items():
+                    gap = s["_t"] - t
+                    if gap >= -1.0 and abs(gap - delay) <= app.SHOT_SLACK_S:
+                        pairs.append((abs(gap - delay) + (app.LONE_PENALTY_S if name in lone else 0.0), name, s))
+            matched, used = {}, set()
+            for _, name, s in sorted(pairs, key=lambda p: p[0]):
+                if name in matched or id(s) in used:
+                    continue
+                matched[name] = {k: v for k, v in s.items() if k != "_t"}
+                matched[name]["gap"] = round(s["_t"] - clip_times[name], 1)
+                used.add(id(s))
+            return matched
+
+        rnd = random.Random(7)
+        orig = app.load_shots
+        try:
+            for trial in range(40):
+                t, clips, shots = 1_790_000_000.0, {}, []
+                for i in range(rnd.randint(1, 60)):
+                    t += rnd.choice([1, 2, 3, 8, 20, 30, 45])   # close swings make ties and overlaps
+                    if rnd.random() < 0.9:
+                        clips[f"c{trial}_{i}"] = float(int(t))
+                    if rnd.random() < 0.9:
+                        source = rnd.choice(["square-app", "gspro-connect", None])
+                        gap = rnd.choice([-1.0, 0.0, 6.0, 13.0, 20.0, 21.0, rnd.uniform(-3, 25)])
+                        shots.append({"_t": t + gap, "source": source, "received": str(i)})
+                lone = {n for n in clips if rnd.random() < 0.3}
+                names = list(clips)
+                rnd.shuffle(names)   # clip_times in any order, as listed_clips gives them
+                clips = {n: clips[n] for n in names}
+                app.load_shots = lambda: shots
+                self.assertEqual(app.match_shots(clips, lone), every_against_every(clips, lone, shots), f"trial {trial}")
+        finally:
+            app.load_shots = orig
+
 
 if __name__ == "__main__":
     unittest.main()

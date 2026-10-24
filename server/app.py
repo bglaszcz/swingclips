@@ -1284,8 +1284,30 @@ def move_clip(name: str, to_trash: bool) -> bool:
     return True
 
 
+# The part files an upload writes (upload: the clip's, per request; save_camera: its camera info's).
+UPLOAD_PART = re.compile(r"^[A-Za-z0-9_.-]{1,120}\.(mp4|mov|webm)(\.[0-9a-f]{8}|\.camera\.json)?\.part$")
+
+
+def clear_partial_uploads() -> int:
+    """Uploads cut off when the server stopped mid-clip leave their part files in the clips folder. The
+    phone keeps a clip until the server has said it has it whole, and sends it again, so they're only
+    fragments: removed at start, before any upload can be coming in. Returns how many."""
+    n = 0
+    for f in CLIPS_DIR.glob("*.part") if CLIPS_DIR.is_dir() else []:
+        if UPLOAD_PART.match(f.name):
+            try:
+                f.unlink()
+                n += 1
+            except OSError:
+                pass
+    if n:
+        print(f"Uploads: removed {n} part file(s) of uploads cut off when the server last stopped", flush=True)
+    return n
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    clear_partial_uploads()
     stop = threading.Event()
     threading.Thread(target=pose_worker, args=(stop,), daemon=True).start()
     worker = threading.Thread(target=swing_worker, args=(stop,), daemon=True)
@@ -1710,15 +1732,24 @@ def load_shots() -> list[dict]:
 def match_shots(clip_times: dict[str, float], lone: set[str] = frozenset()) -> dict[str, dict]:
     """Clip name -> the shot reported just after its strike. Each shot goes to one clip at most.
     `lone`: clips only one phone recorded, picked only when no two-phone swing fits better."""
+    # Each shot looks only at the clips near its time (by a bisect on their times, a second wider than the
+    # window so the test below has the last word), not at every clip: ~10x quicker on 1,500 swings. Ties go
+    # as before, by the shot's order in the file and then the clip's in clip_times.
+    names = list(clip_times)
+    by_time = sorted(range(len(names)), key=lambda i: clip_times[names[i]])
+    times = [clip_times[names[i]] for i in by_time]
     pairs = []
-    for s in load_shots():
+    for k, s in enumerate(load_shots()):
         delay = SHOT_DELAY_S.get(s.get("source"), DEFAULT_SHOT_DELAY_S)
-        for name, t in clip_times.items():
+        lo = bisect.bisect_left(times, s["_t"] - delay - SHOT_SLACK_S - 1.0)
+        hi = bisect.bisect_right(times, s["_t"] - delay + SHOT_SLACK_S + 1.0)
+        for j in range(lo, hi):
+            name, t = names[by_time[j]], times[j]
             gap = s["_t"] - t
             if gap >= -1.0 and abs(gap - delay) <= SHOT_SLACK_S:
-                pairs.append((abs(gap - delay) + (LONE_PENALTY_S if name in lone else 0.0), name, s))
+                pairs.append((abs(gap - delay) + (LONE_PENALTY_S if name in lone else 0.0), k, by_time[j], name, s))
     matched, used = {}, set()
-    for _, name, s in sorted(pairs, key=lambda p: p[0]):
+    for *_, name, s in sorted(pairs, key=lambda p: p[:3]):
         if name in matched or id(s) in used:
             continue
         matched[name] = {k: v for k, v in s.items() if k != "_t"}

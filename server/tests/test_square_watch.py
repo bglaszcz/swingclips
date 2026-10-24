@@ -139,6 +139,27 @@ class Watching(unittest.TestCase):
         self.assertEqual([s["shotNumber"] for s in self.w.poll()], [3])
         self.assertTrue(any("#2" in line for line in self.said))
 
+    def test_a_shot_the_server_couldnt_keep_is_kept_later_with_its_own_time(self):
+        full = [True]
+
+        def keep(shot):
+            if full[0]:
+                raise OSError("no space left")
+            self.shots.append(shot)
+        self.w.on_shot = keep
+        self.w.start()
+        add_row(self.db, 2)
+        with mock.patch.object(square_watch, "RETRY_S", 0.0):
+            self.assertEqual(self.w.poll(), [])
+            self.assertEqual(self.w.poll(), [])          # still failing: kept for later
+            self.assertEqual([s["shotNumber"] for s in self.w.unsent], [2])
+            full[0] = False
+            add_row(self.db, 3)
+            self.assertEqual([s["shotNumber"] for s in self.w.poll()], [2, 3])   # the old one first
+        self.assertEqual(self.shots[0]["received"], "2026-10-09T18:30:05.250+00:00")
+        self.assertEqual(self.w.unsent, [])
+        self.assertEqual(self.w.poll(), [])
+
     def test_heartbeat_reports_squares_app_and_the_last_shot(self):
         self.w.start()
         add_row(self.db, 2)

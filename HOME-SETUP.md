@@ -122,8 +122,9 @@ plan", "Plan steps", "Drill mode").
 - **Auto-start** (off by default): starts recording once its own camera check has held good for
   two stills, once per opening of the app.
 - **Install or update the app**: on the dev PC (README, "Dev PC"). `adb install -r` keeps the
-  phone's settings. The down-the-line S21 also installs over Wi-Fi (`adb connect 192.168.86.17:5555`);
-  the face-on S23 needs its USB cable.
+  phone's settings. The face-on S21 also installs over Wi-Fi (Wireless debugging: `adb mdns services`
+  shows its address and port, then `adb connect <address>:<port>`); the down-the-line S23 needs its USB
+  cable. (They swapped in Oct 2026: the S23's camera loses frames at 240 fps, the S21's doesn't.)
 
 How the app records, pairs the angles, and talks to the server: [docs/phones.md](docs/phones.md).
 

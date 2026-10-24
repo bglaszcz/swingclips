@@ -22,7 +22,8 @@ How the capture app records, how the two angles pair, the shutter and clip quali
   sometimes misses the start of the next burst: 4 frames in a row never taken (its own frame
   timestamps jump; the frame numbers don't, and nothing is lost on the way to the encoder). From ~1% to
   over 25% of frames depending on the run (Oct 19, on the desk; 145 clips from 5 long sessions: a median
-  5-7% from the first swings), the S21 down the line none. A system trace (`adb shell atrace camera
+  5-7% from the first swings), the S21 none (so since late Oct 2026 the S21 films face-on and the S23
+  down the line). A system trace (`adb shell atrace camera
   gfx hal sched freq`) shows why: the camera service gathers each batch's buffers in under 2 ms (it never
   waits on the preview or the encoder), but Samsung's camera software holds the next batch 30-48 ms
   instead of 16.7 (`process_capture_request` waiting for its image processor), and the frames that

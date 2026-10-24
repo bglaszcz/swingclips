@@ -278,7 +278,8 @@ to it. Copy `Start golf (GSPro).cmd`, `Shot listener.cmd` and `shot-listener.ps1
 cd capture
 JAVA_HOME=~/.jdks/jbr-21.0.11 ~/.gradle/wrapper/dists/gradle-8.9-bin/*/gradle-8.9/bin/gradle assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb connect 192.168.86.17:5555          # the down-the-line phone over Wi-Fi (after adb tcpip 5555)
+adb mdns services                       # the face-on S21 over Wi-Fi (Wireless debugging): its address and port
+adb connect <address>:<port>
 
 # Server tests (Python + the page's JavaScript)
 cd server

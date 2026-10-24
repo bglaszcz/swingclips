@@ -140,5 +140,22 @@ class StalledUpload(unittest.TestCase):
         self.assertEqual(list(app.CLIPS_DIR.glob(self.name + "*.part")), [])   # neither left a part behind
 
 
+class PartialUploads(unittest.TestCase):
+    def test_left_over_part_files_are_cleared_at_start_and_nothing_else(self):
+        app.CLIPS_DIR.mkdir(parents=True, exist_ok=True)
+        clip = "swing_face_1280x720_240fps_1789000701_2000ms.mp4"
+        parts = [clip + ".1a2b3c4d.part", clip + ".part", clip + ".camera.json.part"]
+        keep = [clip, clip + ".camera.json", "notes.part", clip + ".backup.part"]
+        try:
+            for name in parts + keep:
+                (app.CLIPS_DIR / name).write_bytes(b"x")
+            self.assertEqual(app.clear_partial_uploads(), 3)
+            self.assertEqual([n for n in parts if (app.CLIPS_DIR / n).exists()], [])
+            self.assertEqual([n for n in keep if (app.CLIPS_DIR / n).exists()], keep)
+        finally:
+            for name in parts + keep:
+                (app.CLIPS_DIR / name).unlink(missing_ok=True)
+
+
 if __name__ == "__main__":
     unittest.main()

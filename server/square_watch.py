@@ -32,6 +32,11 @@ SOURCE = "square-app"
 HEARTBEAT_SOURCE = "square-watcher"
 POLL_S = 0.5
 HEARTBEAT_S = 20.0
+# A shot the server couldn't keep (shots.jsonl held by another program, a full disk) is handed on again
+# this often, with the time it first appeared, as the laptop's watcher retries its unsent shots; at most
+# UNSENT_MAX are kept for it. It used to be skipped for good.
+RETRY_S = 15.0
+UNSENT_MAX = 200
 
 # Square's club numbers -> the codes the rest of SwingClips uses (as in square-watcher.ps1; 23, lob
 # wedge, is inferred from the order and not yet seen).
@@ -133,6 +138,8 @@ class SquareWatcher:
         self.last_shot_at: str | None = None
         self.seen: tuple = ()
         self.last_beat = 0.0
+        self.unsent: list[dict] = []
+        self.last_retry = 0.0
 
     def _query(self, sql: str, args: tuple = ()) -> list[tuple]:
         # Read-only, and wait a little if Square is mid-write rather than fail.
@@ -173,17 +180,17 @@ class SquareWatcher:
         """One look: the new shots handed on (none if the files haven't changed)."""
         if self.last_id is None and not self.start():
             return []
+        sent = self._retry()
         stamp = self._stamp()
         if stamp == self.seen:
-            return []
+            return sent
         received = self.now()
         try:
             rows = self._query(NEW_SHOTS_SQL, (self.last_id,))
         except (sqlite3.Error, OSError) as e:
             self.log(f"Square watcher: couldn't read Square's database just now ({e}); will try again")
-            return []  # self.seen not updated, so the next look tries again
+            return sent  # self.seen not updated, so the next look tries again
         self.seen = stamp
-        sent = []
         for row in rows:
             self.last_id = int(row[0])
             try:
@@ -195,9 +202,28 @@ class SquareWatcher:
             try:
                 self.on_shot(shot)
             except Exception as e:  # the rest of this read still goes, with its own time
-                self.log(f"Square watcher: couldn't keep shot #{self.last_id} ({e!r})")
+                self.log(f"Square watcher: couldn't keep shot #{self.last_id} ({e!r}); will try again")
+                self.unsent = (self.unsent + [shot])[-UNSENT_MAX:]
                 continue
             sent.append(shot)
+        return sent
+
+    def _retry(self) -> list[dict]:
+        """The shots the server couldn't keep, handed on again (every RETRY_S), oldest first; stops at the
+        first that still fails."""
+        if not self.unsent or time.monotonic() - self.last_retry < RETRY_S:
+            return []
+        self.last_retry = time.monotonic()
+        sent = []
+        while self.unsent:
+            try:
+                self.on_shot(self.unsent[0])
+            except Exception as e:
+                self.log(f"Square watcher: still couldn't keep shot #{self.unsent[0].get('shotNumber')} ({e!r})")
+                break
+            sent.append(self.unsent.pop(0))
+        if sent:
+            self.log(f"Square watcher: kept {len(sent)} shot(s) it couldn't before")
         return sent
 
     def run(self, stop: threading.Event) -> None:
