@@ -20,7 +20,8 @@
       require("./sincelast.js"),
       require("./weekplan.js"),
       require("./goal.js"),
-      require("./graduate.js")
+      require("./graduate.js"),
+      require("./ballscore.js")
     );
   } else {
     root.SwingWeek = factory(
@@ -37,7 +38,8 @@
       root.SwingSinceLast,
       root.SwingWeekPlan,
       root.SwingGoal,
-      root.SwingGraduate
+      root.SwingGraduate,
+      root.SwingBallScore
     );
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function (
@@ -54,7 +56,8 @@
   SinceLast,
   WeekPlan,
   Goal,
-  Graduate
+  Graduate,
+  BallScore
 ) {
   "use strict";
 
@@ -332,6 +335,16 @@
     // hands in this week's lines (ballplan.js weekBriefLines, from /api/ballplan?from=&to=).
     if (Array.isArray(data.ballPlanLines) && data.ballPlanLines.length) {
       sections.push({ title: "Ball plan", lines: data.ballPlanLines });
+    }
+
+    // 0b. THE BALL SCOREBOARD (ballscore.js): ball numbers per club group, this week against the 4
+    // weeks right before it, with "too early" until there are enough sessions. Only in a week with
+    // shots, so an empty week still says there was no practice.
+    if (BallScore) {
+      const board = BallScore.build(BallScore.shotsFromRows(allRows), startMs);
+      if (board.rows.some(r => r.week.n > 0)) {
+        sections.push({ title: "Ball scoreboard", lines: BallScore.lines(board) });
+      }
     }
 
     // ==========================================

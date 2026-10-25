@@ -161,7 +161,7 @@ test("a held-up finding listed and a not-clear one not", () => {
   assert.doesNotMatch(huSection.lines[0], /Release arm/);
 });
 
-test("a normal week with all 7 sections populated", () => {
+test("a normal week with all 8 sections populated", () => {
   const rows = [];
   // Swings across 3 days: Mon Sep 28, Wed Sep 30, Fri Oct 2
   for (let i = 0; i < 20; i++) {
@@ -239,10 +239,11 @@ test("a normal week with all 7 sections populated", () => {
   const summary = Week.weekSummary(data, "2026-09-28");
 
   assert.equal(summary.title, "Week of Sep 28 – Oct 4, 2026");
-  assert.equal(summary.sections.length, 7, "All 7 sections should be present");
+  assert.equal(summary.sections.length, 8, "All 8 sections should be present");
 
   const titles = summary.sections.map(s => s.title);
   assert.deepEqual(titles, [
+    "Ball scoreboard",
     "Practice",
     "Ball flight",
     "The focus move",
